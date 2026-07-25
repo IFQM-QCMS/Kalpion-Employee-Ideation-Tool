@@ -149,11 +149,11 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                   <div className="form-group">
                     <label>{t('detail.situation')}</label>
-                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13 }}>{idea.present_situation}</div>
+                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.present_situation}</div>
                   </div>
                   <div className="form-group">
                     <label>{t('detail.solution')}</label>
-                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13 }}>{idea.proposed_solution}</div>
+                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
                   </div>
                   <div className="form-row" style={{ marginBottom:10 }}>
                     <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>

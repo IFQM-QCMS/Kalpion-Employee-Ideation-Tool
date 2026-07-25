@@ -90,6 +90,10 @@ const clampThreshold = (v) => Math.max(1, Math.min(100, parseInt(v ?? '100', 10)
 export async function getSettings(db, user) {
   const settings = await getOrgSettings(db);
 
+  // The QCMS API key is a secret managed on its own screen (integrationService,
+  // masked there). It must never travel through the general settings response.
+  delete settings.qcms_api_key;
+
   if (!isAdmin(user.role)) {
     delete settings.smtp_pass;
   } else if (settings.smtp_pass) {

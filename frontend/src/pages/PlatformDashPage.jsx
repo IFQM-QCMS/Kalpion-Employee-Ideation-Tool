@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi, saveBlob } from '../services/api';
+import { Donut, Legend, colorAt, STATUS_COLORS } from '../components/Charts';
 
 /*
  * Platform → Organizations (tenant management).
@@ -88,9 +89,22 @@ export default function PlatformDashPage() {
     total:     tenants.length,
     active:    tenants.filter((x) => x.status === 'active').length,
     suspended: tenants.filter((x) => x.status === 'suspended').length,
+    pending:   tenants.filter((x) => x.status === 'pending').length,
     users:     tenants.reduce((s, x) => s + (x.user_count || 0), 0),
     ideas:     tenants.reduce((s, x) => s + (x.idea_count || 0), 0),
   };
+
+  // Chart data — a status donut and the busiest organisations by idea volume.
+  const statusDonut = [
+    { label: t('pa.status_active'),    value: counts.active,    color: STATUS_COLORS.active },
+    { label: t('pa.status_suspended'), value: counts.suspended, color: STATUS_COLORS.suspended },
+    { label: t('pa.status_pending'),   value: counts.pending,   color: STATUS_COLORS.pending },
+  ].filter((d) => d.value > 0);
+  const topByIdeas = [...tenants]
+    .sort((a, b) => (b.idea_count || 0) - (a.idea_count || 0))
+    .slice(0, 6)
+    .filter((o) => (o.idea_count || 0) > 0);
+  const maxIdeas = Math.max(...topByIdeas.map((o) => o.idea_count || 0), 1);
 
   /* Client-side CSV: this data is already in the browser, so exporting it needs
    * no endpoint. Values are quoted and internal quotes doubled — an org named
@@ -128,7 +142,7 @@ export default function PlatformDashPage() {
       {/* KPI strip */}
       <div className="kpi-grid" id="pa-kpi-strip">
         {kpis.map(([icon, label, val, color, bg]) => (
-          <div key={label} className="kpi-card" style={{ borderLeftColor:color }}>
+          <div key={label} className="kpi-card" style={{ '--kpi-accent':color }}>
             <div className="kpi-icon" style={{ background:bg, color }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
                 {KPI_ICONS[icon]}
@@ -141,6 +155,36 @@ export default function PlatformDashPage() {
           </div>
         ))}
       </div>
+
+      {/* Analytics charts */}
+      {!loading && !error && tenants.length > 0 && (
+        <div style={{ display:'grid',gridTemplateColumns:'minmax(280px,360px) 1fr',gap:18,marginTop:18 }}>
+          <div className="card">
+            <div className="card-title" style={{ margin:'0 0 12px' }}>{t('pa.chart_status')}</div>
+            <div style={{ display:'flex',alignItems:'center',gap:18,flexWrap:'wrap' }}>
+              <Donut size={150} thickness={24} data={statusDonut} centerValue={counts.total} centerLabel={t('pa.kpi_total_orgs')} />
+              <div style={{ flex:1,minWidth:120 }}><Legend items={statusDonut} /></div>
+            </div>
+          </div>
+          <div className="card">
+            <div className="card-title" style={{ margin:'0 0 12px' }}>{t('pa.chart_ideas_by_org')}</div>
+            <div className="bar-chart">
+              {topByIdeas.length
+                ? topByIdeas.map((o, i) => (
+                  <div className="bar-row" key={o.id}>
+                    <span className="bar-label" title={o.name}>{o.name}</span>
+                    <div className="bar-track">
+                      <div className="bar-fill" style={{ width:`${Math.round((o.idea_count||0)/maxIdeas*100)}%`,background:`linear-gradient(90deg,${colorAt(i)}cc,${colorAt(i)})` }}></div>
+                    </div>
+                    <span className="bar-val">{o.idea_count||0}</span>
+                  </div>
+                ))
+                : <div className="empty-state">{t('pa.no_activity')}</div>
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar */}
       <div className="card" style={{ marginTop:18,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap' }}>

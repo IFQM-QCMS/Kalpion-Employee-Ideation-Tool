@@ -92,6 +92,10 @@ CREATE TABLE IF NOT EXISTS ideas (
   challenge_id             INT NULL,
   template_type            VARCHAR(50) NULL,
   points_awarded           INT DEFAULT 0,
+  -- QCMS integration: approved ideas are pushed to the QCMS tool for implementation.
+  qcms_pushed_at           DATETIME NULL DEFAULT NULL,
+  qcms_push_status         VARCHAR(30) NULL DEFAULT NULL,
+  qcms_push_message        VARCHAR(255) NULL DEFAULT NULL,
   status                   ENUM('Draft','Submitted','Under Review','Approved','Rejected','Implemented') DEFAULT 'Draft',
   submitter_id             INT NOT NULL,
   co_suggester_1_id       INT NULL,

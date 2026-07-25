@@ -3,13 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { usersApi } from '../services/api';
 import { isPrivileged, translateStatus, translateArea } from '../utils/helpers';
+import { Donut, Legend, AreaChart, Gauge, STATUS_COLORS, colorAt } from '../components/Charts';
 
-const STATUS_COLORS = {
-  'Submitted':'#2563eb','Under Review':'#d97706','Approved':'#16a34a',
-  'Rejected':'#dc2626','Implemented':'#4f46e5','Draft':'#94a3b8',
-};
-// A categorical ramp in the brand hue — not a grey gradient.
-const IMP_COLORS = ['#4f46e5','#6366f1','#0ea5e9','#14b8a6','#f59e0b','#f43f5e','#8b5cf6'];
+// Distinct accent per KPI card — colourful but each hue is validated.
+const KPI_ACCENTS = ['#2a78d6', '#1baf7a', '#4a3aa7', '#eda100'];
 
 export default function AnalyticsPage() {
   const { user }   = useAuth();
@@ -36,7 +33,7 @@ export default function AnalyticsPage() {
     setLoading(false);
   }
 
-  // Animate bars and counters after data
+  // Animate KPI counters + bar widths once data lands.
   useEffect(() => {
     if (!data) return;
     document.querySelectorAll('#analytics-kpis .kpi-val[data-target]').forEach(el => {
@@ -51,13 +48,11 @@ export default function AnalyticsPage() {
       })(start);
     });
     setTimeout(() => {
-      ['#analytics-status','#analytics-trend'].forEach(sel => {
-        document.querySelectorAll(`${sel} .bar-fill[data-w]`).forEach((bar, i) => {
-          setTimeout(() => {
-            bar.style.transition = 'width .7s cubic-bezier(.4,0,.2,1)';
-            bar.style.width = bar.dataset.w + '%';
-          }, i * 80);
-        });
+      document.querySelectorAll('.analytics-bars .bar-fill[data-w]').forEach((bar, i) => {
+        setTimeout(() => {
+          bar.style.transition = 'width .7s cubic-bezier(.4,0,.2,1)';
+          bar.style.width = bar.dataset.w + '%';
+        }, i * 70);
       });
     }, 150);
   }, [data]);
@@ -81,101 +76,63 @@ export default function AnalyticsPage() {
   const impDist  = Object.entries(data.impact_distribution||{});
   const maxImp   = Math.max(...impDist.map(([,v])=>v), 1);
 
+  // Donut data for the status split.
+  const statusDonut = (data.status_summary||[])
+    .map(s => ({ label: translateStatus(s.status, t), value: Number(s.cnt), color: STATUS_COLORS[s.status] || '#94a3b8' }))
+    .filter(d => d.value > 0);
+
+  const kpis = [
+    [t('dash.total'), total, '', paletteIcon('bulb')],
+    [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check')],
+    [t('analytics.impl_rate'), total ? Math.round(impl/total*100) : 0, '%', paletteIcon('rocket')],
+    [t('analytics.avg_score'), ss.overall_avg||0, '', paletteIcon('star')],
+  ];
+
   return (
     <>
       {/* KPI Grid */}
       <div className="kpi-grid" id="analytics-kpis">
-        <div className="kpi-card">
-          <div className="kpi-icon" style={{ background:'var(--primary-light)',color:'var(--primary)' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
-              <path d="M9 21h6M12 3a6 6 0 016 6c0 2.2-1.1 3.8-2.5 5L15 16H9l-.5-2C7 12.8 6 11.2 6 9a6 6 0 016-6z"/>
-            </svg>
-          </div>
-          <div className="kpi-body">
-            <div className="kpi-val" data-target={total}>0</div>
-            <div className="kpi-label">{t('dash.total')}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon" style={{ background:'var(--success-light)',color:'var(--success)' }}>
-            <svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-          </div>
-          <div className="kpi-body">
-            <div className="kpi-val" data-target={total ? Math.round(approved/total*100) : 0} data-suffix="%">0%</div>
-            <div className="kpi-label">{t('analytics.approval_rate')}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon" style={{ background:'var(--surface-2)',color:'var(--text-muted)' }}>
-            <svg viewBox="0 0 24 24">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-            </svg>
-          </div>
-          <div className="kpi-body">
-            <div className="kpi-val" data-target={total ? Math.round(impl/total*100) : 0} data-suffix="%">0%</div>
-            <div className="kpi-label">{t('analytics.impl_rate')}</div>
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div className="kpi-icon" style={{ background:'var(--primary-light)',color:'var(--primary)' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
-              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
-            </svg>
-          </div>
-          <div className="kpi-body">
-            <div className="kpi-val" data-target={ss.overall_avg||0}>0</div>
-            <div className="kpi-label">{t('analytics.avg_score')}</div>
-          </div>
-        </div>
+        {kpis.map(([label, val, suffix, icon], i) => {
+          const c = KPI_ACCENTS[i % KPI_ACCENTS.length];
+          return (
+            <div key={label} className="kpi-card" style={{ '--kpi-accent': c }}>
+              <div className="kpi-icon" style={{ background: tint(c), color: c }}>{icon}</div>
+              <div className="kpi-body">
+                <div className="kpi-val" data-target={val} data-suffix={suffix} style={{ color: c }}>0{suffix}</div>
+                <div className="kpi-label">{label}</div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:20 }}>
-        {/* Status Distribution */}
+      <div className="analytics-bars" style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:20 }}>
+        {/* Status Distribution — donut */}
         <div className="card">
           <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('analytics.status_dist')}</div>
-          <div className="bar-chart" id="analytics-status">
-            {(data.status_summary||[]).map(s => (
-              <div className="bar-row" key={s.status}>
-                <span className="bar-label">{translateStatus(s.status,t)}</span>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width:'0%',background:STATUS_COLORS[s.status]||'#ccc' }}
-                    data-w={Math.round(s.cnt/Math.max(total,1)*100)}></div>
-                </div>
-                <span className="bar-val">{s.cnt}</span>
+          {total === 0
+            ? <div className="empty-state">{t('analytics.no_trend')}</div>
+            : (
+              <div style={{ display:'flex',alignItems:'center',gap:22,flexWrap:'wrap' }}>
+                <Donut data={statusDonut} centerValue={total} centerLabel={t('dash.total')} />
+                <div style={{ flex:1,minWidth:150 }}><Legend items={statusDonut} /></div>
               </div>
-            ))}
-          </div>
+            )
+          }
         </div>
 
-        {/* Impact Distribution */}
+        {/* Impact Distribution — colourful bars */}
         <div className="card">
           <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('analytics.impact_dist')}</div>
           <div className="bar-chart" id="analytics-impact">
-            {impDist.map(([k,v], i) => (
-              <div className="bar-row" key={k}>
-                <span className="bar-label">{translateArea(k, t)}</span>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width:`${Math.round(v/maxImp*100)}%`,background:IMP_COLORS[i%IMP_COLORS.length] }}></div>
-                </div>
-                <span className="bar-val">{v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Monthly Trend */}
-        <div className="card">
-          <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('analytics.monthly_trend')}</div>
-          <div className="bar-chart" id="analytics-trend">
-            {trend.length
-              ? trend.map(row => (
-                <div className="bar-row" key={row.month}>
-                  <span className="bar-label">{row.month}</span>
+            {impDist.length
+              ? impDist.map(([k,v], i) => (
+                <div className="bar-row" key={k}>
+                  <span className="bar-label">{translateArea(k, t)}</span>
                   <div className="bar-track">
-                    <div className="bar-fill" style={{ width:'0%',background:'linear-gradient(90deg,#374151,#6b7280)' }}
-                      data-w={Math.round(row.total/maxTrend*100)}></div>
+                    <div className="bar-fill" style={{ width:'0%',background:grad(colorAt(i)) }} data-w={Math.round(v/maxImp*100)}></div>
                   </div>
-                  <span className="bar-val">{row.total}</span>
+                  <span className="bar-val">{v}</span>
                 </div>
               ))
               : <div className="empty-state">{t('analytics.no_trend')}</div>
@@ -183,33 +140,60 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Score Distribution */}
+        {/* Monthly Trend — smooth gradient area chart */}
+        <div className="card">
+          <div style={{ fontWeight:700,fontSize:13,marginBottom:8 }}>{t('analytics.monthly_trend')}</div>
+          {trend.length
+            ? <AreaChart data={trend.map(r => ({ label: r.month.slice(5), value: r.total }))} color="#2a78d6" />
+            : <div className="empty-state">{t('analytics.no_trend')}</div>
+          }
+        </div>
+
+        {/* Score Distribution — gauge + quality split */}
         <div className="card">
           <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('analytics.score_dist')}</div>
-          <div id="analytics-score-dist">
-            <div className="bar-chart">
+          <div style={{ display:'flex',alignItems:'center',gap:20,flexWrap:'wrap' }}>
+            <div style={{ textAlign:'center' }}>
+              <Gauge value={Math.round(ss.overall_avg||0)} color={scoreColor(ss.overall_avg||0)} label="/ 100" />
+            </div>
+            <div className="bar-chart" style={{ flex:1,minWidth:170 }}>
               <div className="bar-row">
                 <span className="bar-label">{t('analytics.high')}</span>
-                <div className="bar-track"><div className="bar-fill" style={{ width:`${Math.round(hq/maxQ*100)}%`,background:'#10b981' }}></div></div>
+                <div className="bar-track"><div className="bar-fill" style={{ width:'0%',background:grad('#1baf7a') }} data-w={Math.round(hq/maxQ*100)}></div></div>
                 <span className="bar-val">{hq}</span>
               </div>
               <div className="bar-row">
                 <span className="bar-label">{t('analytics.med')}</span>
-                <div className="bar-track"><div className="bar-fill" style={{ width:`${Math.round(mq/maxQ*100)}%`,background:'#f59e0b' }}></div></div>
+                <div className="bar-track"><div className="bar-fill" style={{ width:'0%',background:grad('#eda100') }} data-w={Math.round(mq/maxQ*100)}></div></div>
                 <span className="bar-val">{mq}</span>
               </div>
               <div className="bar-row">
                 <span className="bar-label">{t('analytics.low_score')}</span>
-                <div className="bar-track"><div className="bar-fill" style={{ width:`${Math.round(lq/maxQ*100)}%`,background:'#ef4444' }}></div></div>
+                <div className="bar-track"><div className="bar-fill" style={{ width:'0%',background:grad('#e34948') }} data-w={Math.round(lq/maxQ*100)}></div></div>
                 <span className="bar-val">{lq}</span>
               </div>
-            </div>
-            <div style={{ fontSize:11,color:'var(--subtle)',marginTop:8 }}>
-              {t('analytics.avg_note')} <strong>{ss.overall_avg||0}/100</strong>
             </div>
           </div>
         </div>
       </div>
     </>
   );
+}
+
+// A 12%-opacity tint of a hex colour, for the icon chip background.
+function tint(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.14)`;
+}
+// A subtle same-hue gradient for a bar fill (lighter → base).
+function grad(hex) { return `linear-gradient(90deg,${hex}cc,${hex})`; }
+// Gauge colour by AI-score band (green / amber / red; grey when unscored).
+function scoreColor(v) { const n = Number(v) || 0; return n <= 0 ? '#94a3b8' : n >= 75 ? '#1baf7a' : n >= 50 ? '#eda100' : '#e34948'; }
+
+function paletteIcon(name) {
+  const common = { viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:2, strokeLinecap:'round', strokeLinejoin:'round', width:22, height:22 };
+  if (name === 'bulb')   return <svg {...common}><path d="M9 21h6M12 3a6 6 0 016 6c0 2.2-1.1 3.8-2.5 5L15 16H9l-.5-2C7 12.8 6 11.2 6 9a6 6 0 016-6z"/></svg>;
+  if (name === 'check')  return <svg {...common}><polyline points="20 6 9 17 4 12"/></svg>;
+  if (name === 'rocket') return <svg {...common}><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 00-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 012-3.95A12.88 12.88 0 0122 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 01-4 2z"/></svg>;
+  return <svg {...common}><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/></svg>;
 }

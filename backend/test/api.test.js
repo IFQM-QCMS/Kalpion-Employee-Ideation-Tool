@@ -11,10 +11,13 @@
  */
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import {
   setupSuite, teardownSuite, api, login, sql, signToken,
   tinyPng, fakePng, PASSWORDS,
 } from './helpers.js';
+import { mapIdeaToQcms, pushIdeaToQcms } from '../src/services/qcmsService.js';
+import config from '../src/config/index.js';
 
 let PA;       // platform admin token
 let AADMIN;   // org A admin token
@@ -418,4 +421,126 @@ test('the dashboard reports monthly submission activity', async () => {
   const r = await api('GET', '/api/ideas/dashboard', { token: AADMIN });
   assert.equal(r.data.success, true);
   assert.ok(Array.isArray(r.data.monthly), 'a monthly submission series must be present');
+});
+
+// ── QCMS integration (push approved ideas) ──────────────────────────────────
+
+test('QCMS payload maps our idea onto the documented field shape', () => {
+  const p = mapIdeaToQcms({
+    idea_code: 'IDA-2026-006', title: 'Reduce Paint Defects', impact_areas: 'Quality',
+    present_situation: 'Paint rejection rose 2%→6%.', proposed_solution: 'Automatic viscosity monitoring.',
+    department: 'Production', submitter_name: 'John Doe', is_anonymous: 0,
+    co_suggester_names: 'Smith, David', roi_value: 100000, intangible_benefit: 'Customer satisfaction',
+    investment_required: '₹ 2,50,000', implementation_duration: '8 Weeks', impact_level: 'Medium',
+  });
+  assert.equal(p.ideaCode, 'IDA-2026-006');
+  assert.equal(p.status, 'Approved');
+  assert.equal(p.category, 'Quality');
+  assert.equal(p.submittedBy, 'John Doe');
+  assert.deepEqual(p.coSuggesters, ['Smith', 'David']);
+  assert.equal(p.tangibleBenefit, 100000);
+  assert.equal(p.investmentRequired, 250000);       // parsed out of "₹ 2,50,000"
+  assert.equal(p.implementationTime, '8 Weeks');
+  assert.equal(p.impactLevel, 'Medium');
+});
+
+test('QCMS integration: approved-ideas list, key masking, and the push flow', async () => {
+  // Approved-ideas + config are org-admin only.
+  const asUser = await api('GET', '/api/integrations/approved-ideas', { token: AUSER });
+  assert.equal(asUser.status, 403);
+
+  // Seed an approved idea in org A.
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Reduce paint defects', present_situation: 'Paint rejection rose from 2% to 6% on line 3.',
+      proposed_solution: 'Install automatic viscosity monitoring on the paint line.',
+      roi_value: 100000, investment_required: '250000',
+    },
+  });
+  const ideaId = submit.data.idea_id;
+  await sql('ifqm_test_a', "UPDATE ifqm_test_a.ideas SET status = 'Approved' WHERE id = ?", [ideaId]);
+
+  const list = await api('GET', '/api/integrations/approved-ideas', { token: AADMIN });
+  assert.ok(list.data.ideas.some((i) => i.id === ideaId), 'the approved idea must appear in the list');
+
+  // A stand-in QCMS server: checks the Bearer key, 409s a repeat ideaCode, else 201.
+  const VALID = 'qcms_live_testkey';
+  const seen = new Set();
+  const qcms = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const auth = req.headers.authorization || '';
+      const send = (code, obj) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
+      if (auth !== `Bearer ${VALID}`) return send(401, { error: 'Unauthorized', message: 'Invalid or disabled API Key.' });
+      let body = {}; try { body = JSON.parse(raw); } catch { /* */ }
+      if (seen.has(body.ideaCode)) return send(409, { message: 'Idea already imported.' });
+      seen.add(body.ideaCode);
+      return send(201, { success: true, message: 'Idea imported successfully.', ideaCode: body.ideaCode });
+    });
+  });
+  await new Promise((r) => qcms.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${qcms.address().port}/api/v1/integrations`;
+  // The base URL is env-managed (not settable per-tenant), so point the runtime
+  // config at the mock server for the duration of this test.
+  const savedBase = config.qcms.baseUrl;
+  config.qcms.baseUrl = base;
+
+  try {
+    // Save config; the key comes back masked, never in the clear.
+    await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { api_key: VALID, enabled: true } });
+    const cfg = await api('GET', '/api/integrations/qcms', { token: AADMIN });
+    assert.equal(cfg.data.config.api_key, '••••••••');
+    assert.equal(cfg.data.config.api_key_set, true);
+    assert.equal(cfg.data.config.enabled, true);
+
+    // Saving with the mask (an untouched field) must NOT wipe the stored key.
+    await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { enabled: true, api_key: '••••••••' } });
+
+    // First push → imported, and recorded on the idea.
+    const push1 = await api('POST', '/api/integrations/push', { token: AADMIN, body: { idea_ids: [ideaId] } });
+    assert.equal(push1.data.imported, 1);
+    const rows = await sql('ifqm_test_a', 'SELECT qcms_push_status FROM ifqm_test_a.ideas WHERE id = ?', [ideaId]);
+    assert.equal(rows[0].qcms_push_status, 'imported');
+
+    // Second push of the same idea → duplicate (QCMS 409).
+    const push2 = await api('POST', '/api/integrations/push', { token: AADMIN, body: { idea_ids: [ideaId] } });
+    assert.equal(push2.data.duplicate, 1);
+
+    // A bad key → failed (QCMS 401), never a server crash.
+    await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { api_key: 'wrong-key', enabled: true } });
+    const push3 = await api('POST', '/api/integrations/push', { token: AADMIN, body: { idea_ids: [ideaId] } });
+    assert.equal(push3.data.failed, 1);
+
+    // An employee cannot push.
+    const pushAsUser = await api('POST', '/api/integrations/push', { token: AUSER, body: { idea_ids: [ideaId] } });
+    assert.equal(pushAsUser.status, 403);
+  } finally {
+    config.qcms.baseUrl = savedBase;
+    await new Promise((r) => qcms.close(r));
+  }
+});
+
+test('a QCMS duplicate-key leak (HTTP 500) is treated as a duplicate, not a failure', async () => {
+  // Some QCMS builds return a raw Postgres unique-constraint error with a 500
+  // instead of the documented 409 when an idea already exists. The idea IS in
+  // QCMS, so we must classify it as a duplicate — never a hard failure.
+  const server = http.createServer((_req, res) => {
+    res.writeHead(500, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      message: '(psycopg2.errors.UniqueViolation) duplicate key value violates unique constraint "imported_ideas_idea_code_key"\nDETAIL:  Key (idea_code)=(IDA-2026-006) already exists.',
+    }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const r = await pushIdeaToQcms({
+      baseUrl: `http://127.0.0.1:${server.address().port}/api/v1/integrations`,
+      apiKey: 'qcms_live_x',
+      idea: { idea_code: 'IDA-2026-006', title: 'x', impact_areas: 'Quality', impact_level: 'Medium' },
+    });
+    assert.equal(r.status, 'duplicate', 'a leaked unique-constraint error must be read as a duplicate');
+  } finally {
+    await new Promise((r) => server.close(r));
+  }
 });

@@ -104,6 +104,13 @@ const config = {
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     geminiApiKey: process.env.GEMINI_API_KEY || '',
   },
+
+  // ── QCMS integration (approved ideas are pushed to the QCMS tool) ──
+  // Default base URL; a tenant may override it in the org admin screen. The
+  // per-tenant QCMS API key lives in that tenant's org_settings, never here.
+  qcms: {
+    baseUrl: (process.env.QCMS_BASE_URL || 'http://localhost:5000/api/v1/integrations').replace(/\/+$/, ''),
+  },
 };
 
 /**

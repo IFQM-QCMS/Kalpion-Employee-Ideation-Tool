@@ -206,6 +206,18 @@ export const settingsApi = {
   testEmail: () => api.get('/settings/test-email'),
 };
 
+// ── QCMS integration (org admin only) ─────────────────────────────
+// Approved ideas are pushed to the QCMS tool. The QCMS API key is stored and
+// used server-side — it is returned masked and never sent to the browser in the
+// clear. See the QCMS Developer Portal & API Documentation.
+export const integrationApi = {
+  approvedIdeas: () => api.get('/integrations/approved-ideas'),
+  getConfig: () => api.get('/integrations/qcms'),
+  saveConfig: (data) => api.put('/integrations/qcms', data),
+  // body: { idea_ids?: number[], only_pending?: boolean }
+  push: (data) => api.post('/integrations/push', data || {}),
+};
+
 // ── Challenges ────────────────────────────────────────────────────
 export const challengesApi = {
   list: () => api.get('/challenges'),

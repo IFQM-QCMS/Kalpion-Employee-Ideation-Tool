@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useBranding } from '../context/BrandingContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { usersApi, ideasApi, settingsApi, scoreApi, brandingApi, categoriesApi } from '../services/api';
+import { usersApi, ideasApi, settingsApi, scoreApi, brandingApi, categoriesApi, integrationApi } from '../services/api';
 import { formatRole, statusBadge, translateStatus, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import BulkImportModal from '../components/BulkImportModal';
@@ -27,7 +27,7 @@ const ROLE_BADGE_STYLE = {
   trainee:        { background:'var(--success-light)', color:'var(--success)', border:'1px solid var(--success-dim)' },
 };
 
-const TAB_KEYS = ['admin.tab_overview','admin.tab_ideas','admin.tab_users','admin.tab_hierarchy','admin.tab_categories','admin.tab_system'];
+const TAB_KEYS = ['admin.tab_overview','admin.tab_ideas','admin.tab_users','admin.tab_hierarchy','admin.tab_categories','admin.tab_system','admin.tab_approved','admin.tab_integration'];
 
 export default function AdminPage() {
   const { user }      = useAuth();
@@ -331,6 +331,12 @@ export default function AdminPage() {
 
       {/* Idea categories */}
       {tab === 4 && <CategoriesTab t={t} showToast={showToast} />}
+
+      {/* Approved ideas (pushable to QCMS) */}
+      {tab === 6 && <ApprovedIdeasTab t={t} showToast={showToast} />}
+
+      {/* API & Integration (QCMS) */}
+      {tab === 7 && <IntegrationTab t={t} showToast={showToast} />}
 
       {/* System */}
       {tab === 5 && <BrandingCard t={t} showToast={showToast} />}
@@ -1208,6 +1214,198 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           <button className="btn btn-primary" id="uf-submit-btn" disabled={saving} onClick={handleSubmit}>
             {saving ? t('btn.saving') : t(isEdit ? 'admin.uf_save_changes' : 'admin.uf_save_user')}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Approved Ideas tab — this tenant's approved ideas, pushable to QCMS ──────
+const QCMS_BADGE = {
+  imported:  ['#16a34a', '#dcfce7'],
+  duplicate: ['#2563eb', '#dbeafe'],
+  failed:    ['#dc2626', '#fee2e2'],
+};
+function qcmsBadge(status, t) {
+  const [c, bg] = QCMS_BADGE[status] || ['#64748b', '#f1f5f9'];
+  const label = status ? t('admin.qcms_status_' + status) : t('admin.qcms_status_none');
+  return <span style={{ fontSize:11,fontWeight:700,padding:'2px 9px',borderRadius:20,color:c,background:bg,whiteSpace:'nowrap' }}>{label}</span>;
+}
+
+function ApprovedIdeasTab({ t, showToast }) {
+  const [ideas,   setIdeas]   = useState([]);
+  const [config,  setConfig]  = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pushing, setPushing] = useState(false);
+  const [viewId,  setViewId]  = useState(null);
+
+  useEffect(() => { load(); }, []);
+  async function load() {
+    setLoading(true);
+    try {
+      const [ir, cr] = await Promise.all([integrationApi.approvedIdeas(), integrationApi.getConfig()]);
+      setIdeas(ir.data.ideas || []);
+      setConfig(cr.data.config || null);
+    } catch { showToast(t('msg.network_error'), 'danger'); }
+    setLoading(false);
+  }
+  async function push(ideaIds) {
+    setPushing(true);
+    try {
+      const res = await integrationApi.push(ideaIds ? { idea_ids: ideaIds } : { only_pending: true });
+      if (res.data.success) {
+        showToast(t('admin.qcms_push_result', { i: res.data.imported, d: res.data.duplicate, f: res.data.failed }),
+          res.data.failed ? 'warning' : 'success');
+        load();
+      } else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (err) { showToast(err.response?.data?.error || t('msg.server_error'), 'danger'); }
+    setPushing(false);
+  }
+
+  if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
+  const notReady = !config?.enabled || !config?.api_key_set;
+
+  return (
+    <div style={{ marginTop:16 }}>
+      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:12 }}>
+        <div>
+          <div style={{ fontWeight:700,fontSize:14 }}>{t('admin.approved_heading')}</div>
+          <div style={{ fontSize:12,color:'var(--subtle)' }}>{t('admin.approved_sub')}</div>
+        </div>
+        <button className="btn btn-primary btn-sm" disabled={pushing || !ideas.length || notReady} onClick={() => push(null)}>
+          {pushing ? t('msg.loading') : `⇪ ${t('admin.qcms_push_all')}`}
+        </button>
+      </div>
+
+      {notReady && <div className="alert alert-warning" style={{ fontSize:12 }}>{t('admin.qcms_not_configured')}</div>}
+
+      {!ideas.length
+        ? <div className="empty-state">{t('admin.approved_none')}</div>
+        : (
+          <div style={{ overflowX:'auto',border:'1px solid var(--border)',borderRadius:'var(--r)' }}>
+            <table style={{ width:'100%',borderCollapse:'collapse',fontSize:13 }}>
+              <thead>
+                <tr style={{ background:'var(--panel-bg)',textAlign:'left' }}>
+                  <th style={{ padding:'9px 12px' }}>{t('admin.col_code')}</th>
+                  <th style={{ padding:'9px 12px' }}>{t('admin.col_title')}</th>
+                  <th style={{ padding:'9px 12px' }}>{t('detail.submitted_by')}</th>
+                  <th style={{ padding:'9px 12px' }}>{t('admin.uf_dept')}</th>
+                  <th style={{ padding:'9px 12px' }}>QCMS</th>
+                  <th style={{ padding:'9px 12px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {ideas.map(i => (
+                  <tr key={i.id} style={{ borderTop:'1px solid var(--border)' }}>
+                    <td style={{ padding:'9px 12px',fontWeight:600 }}>{i.idea_code}</td>
+                    <td style={{ padding:'9px 12px' }}>{i.title}</td>
+                    <td style={{ padding:'9px 12px' }}>{i.is_anonymous ? t('form.anonymous') : i.submitter_name}</td>
+                    <td style={{ padding:'9px 12px' }}>{i.department || '–'}</td>
+                    <td style={{ padding:'9px 12px' }}>{qcmsBadge(i.qcms_push_status, t)}</td>
+                    <td style={{ padding:'9px 12px',whiteSpace:'nowrap' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => setViewId(i.id)}>{t('admin.view')}</button>{' '}
+                      <button className="btn btn-primary btn-sm" disabled={pushing || notReady} onClick={() => push([i.id])}>{t('admin.qcms_push')}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      {viewId && <IdeaDetailModal ideaId={viewId} onClose={() => setViewId(null)} />}
+    </div>
+  );
+}
+
+// ── API & Integration tab — paste the QCMS key; push approved ideas ─────────
+function IntegrationTab({ t, showToast }) {
+  const [config,  setConfig]  = useState(null);
+  const [apiKey,  setApiKey]  = useState('');
+  const [enabled, setEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [pushing, setPushing] = useState(false);
+
+  useEffect(() => { load(); }, []);
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await integrationApi.getConfig();
+      const c = res.data.config || {};
+      setConfig(c); setEnabled(!!c.enabled); setApiKey('');
+    } catch { showToast(t('msg.network_error'), 'danger'); }
+    setLoading(false);
+  }
+  async function save() {
+    setSaving(true);
+    try {
+      const body = { enabled };
+      if (apiKey.trim()) body.api_key = apiKey.trim(); // sent only when actually typed
+      const res = await integrationApi.saveConfig(body);
+      if (res.data.success) { showToast(t('admin.qcms_saved'), 'success'); setConfig(res.data.config); setApiKey(''); }
+      else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (err) { showToast(err.response?.data?.error || t('msg.server_error'), 'danger'); }
+    setSaving(false);
+  }
+  async function pushAll() {
+    setPushing(true);
+    try {
+      const res = await integrationApi.push({ only_pending: true });
+      if (res.data.success) showToast(t('admin.qcms_push_result', { i: res.data.imported, d: res.data.duplicate, f: res.data.failed }),
+        res.data.failed ? 'warning' : 'success');
+      else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (err) { showToast(err.response?.data?.error || t('msg.server_error'), 'danger'); }
+    setPushing(false);
+  }
+
+  if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
+  // Endpoint is derived from the .env base URL (read-only here). Tolerate a base
+  // that already ends in /ideas so we never show /ideas/ideas.
+  const rawBase = (config?.base_url || '').replace(/\/+$/, '');
+  const ideasUrl = /\/ideas$/i.test(rawBase) ? rawBase : `${rawBase}/ideas`;
+  const endpoint = `POST ${ideasUrl}\nAuthorization: Bearer qcms_live_...\nContent-Type: application/json`;
+
+  return (
+    <div style={{ maxWidth:720,marginTop:16 }}>
+      <div style={{ fontWeight:700,fontSize:14 }}>{t('admin.qcms_heading')}</div>
+      <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:16 }}>{t('admin.qcms_sub')}</div>
+
+      <div className="form-group">
+        <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
+          <input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)} style={{ accentColor:'var(--primary)' }} />
+          {t('admin.qcms_enabled')}
+        </label>
+      </div>
+
+      <div className="form-group">
+        <label>{t('admin.qcms_api_key')}</label>
+        <input className="form-control" type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)}
+          autoComplete="off"
+          placeholder={config?.api_key_set ? `•••••••• (${t('admin.qcms_key_set')})` : t('admin.qcms_key_ph')} />
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.qcms_key_hint')}</div>
+      </div>
+
+      <div className="form-group">
+        <label>{t('admin.qcms_base_url')}</label>
+        <div className="form-control" style={{ background:'var(--panel-bg)',color:'var(--text-muted)',cursor:'default',userSelect:'all' }}>{ideasUrl}</div>
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.qcms_base_managed')}</div>
+      </div>
+
+      <div style={{ display:'flex',gap:10,marginTop:8 }}>
+        <button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? t('btn.saving') : t('btn.save')}</button>
+        <button className="btn btn-outline" disabled={pushing || !enabled || !config?.api_key_set} onClick={pushAll}>
+          {pushing ? t('msg.loading') : `⇪ ${t('admin.qcms_push_all')}`}
+        </button>
+      </div>
+
+      <div className="card" style={{ marginTop:22,background:'var(--panel-bg)' }}>
+        <div style={{ fontWeight:700,fontSize:12.5,marginBottom:4 }}>{t('admin.qcms_endpoint_title')}</div>
+        <div style={{ fontSize:11.5,color:'var(--subtle)',marginBottom:10 }}>{t('admin.qcms_endpoint_sub')}</div>
+        <pre style={{ fontSize:11,background:'#0f172a',color:'#e2e8f0',padding:'12px 14px',borderRadius:8,overflowX:'auto',margin:0,whiteSpace:'pre' }}>{endpoint}</pre>
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:10,lineHeight:1.7 }}>
+          <strong>201</strong> {t('admin.qcms_code_201')} &nbsp;·&nbsp; <strong>409</strong> {t('admin.qcms_code_409')} &nbsp;·&nbsp;
+          <strong>401</strong> {t('admin.qcms_code_401')} &nbsp;·&nbsp; <strong>429</strong> {t('admin.qcms_code_429')}
         </div>
       </div>
     </div>

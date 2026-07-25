@@ -255,7 +255,9 @@ export default function SubmitPage() {
         ))}
       </div>
 
-      <div className="card" style={{ marginTop:20,maxWidth:720 }}>
+      {/* Full-width: the wizard fills the content area rather than a narrow
+          720px column, so long text and the two-column rows have room. */}
+      <div className="card" style={{ marginTop:20 }}>
         {error && <div className="alert alert-danger" style={{ marginBottom:16 }}>{error}</div>}
 
         {/* Step 1: Situation */}
