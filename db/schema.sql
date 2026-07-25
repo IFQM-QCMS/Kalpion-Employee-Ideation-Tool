@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS user_import_jobs (
 CREATE TABLE IF NOT EXISTS user_import_errors (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   job_id       INT NOT NULL,
-  row_number   INT NOT NULL,
+  `row_number` INT NOT NULL,
   employee_id  VARCHAR(191) NULL,
   email        VARCHAR(191) NULL,
   message      VARCHAR(255) NOT NULL,

@@ -705,7 +705,7 @@ async function saveErrors(db, jobId, errors) {
   for (let i = 0; i < errors.length; i += INSERT_CHUNK) {
     const chunk = errors.slice(i, i + INSERT_CHUNK);
     await db.query(
-      'INSERT INTO user_import_errors (job_id, row_number, employee_id, email, message) VALUES ?',
+      'INSERT INTO user_import_errors (job_id, `row_number`, employee_id, email, message) VALUES ?',
       [chunk.map((e) => [jobId, e.row_number, e.employee_id || null, e.email || null, e.message])]
     );
   }
@@ -746,7 +746,7 @@ export async function getJob(db, jobId) {
 
 async function topErrors(db, jobId, limit = 200) {
   const [rows] = await db.execute(
-    'SELECT row_number, employee_id, email, message FROM user_import_errors WHERE job_id=? ORDER BY row_number LIMIT ?',
+    'SELECT `row_number`, employee_id, email, message FROM user_import_errors WHERE job_id=? ORDER BY `row_number` LIMIT ?',
     [jobId, limit]
   );
   return rows;
@@ -756,7 +756,7 @@ async function topErrors(db, jobId, limit = 200) {
 export async function errorsCsv(db, jobId) {
   const id = Number(jobId) || 0;
   const [rows] = await db.execute(
-    'SELECT row_number, employee_id, email, message FROM user_import_errors WHERE job_id=? ORDER BY row_number',
+    'SELECT `row_number`, employee_id, email, message FROM user_import_errors WHERE job_id=? ORDER BY `row_number`',
     [id]
   );
 
