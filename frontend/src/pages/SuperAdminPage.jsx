@@ -141,6 +141,7 @@ export default function SuperAdminPage() {
 
       {/* Overview */}
       {tab === 0 && (
+        <>
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:16 }}>
           <div className="card">
             <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('dash.status_dist')}</div>
@@ -174,6 +175,31 @@ export default function SuperAdminPage() {
             </div>
           </div>
         </div>
+
+        {/* Monthly submission activity (last 12 months) */}
+        <div className="card" style={{ marginTop:20 }}>
+          <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('sa.monthly_activity')}</div>
+          {!(dash?.monthly?.length)
+            ? <div style={{ color:'var(--subtle)',fontSize:13,padding:'10px 0' }}>{t('msg.no_ideas')}</div>
+            : (
+              <div className="bar-chart" id="sa-monthly-activity">
+                {dash.monthly.map((m) => {
+                  const max = Math.max(...dash.monthly.map(x => x.count), 1);
+                  return (
+                    <div className="bar-row" key={m.month}>
+                      <span className="bar-label">{m.month}</span>
+                      <div className="bar-track">
+                        <div className="bar-fill" style={{ width:`${Math.round(m.count/max*100)}%`,background:'var(--primary)' }}></div>
+                      </div>
+                      <span className="bar-val">{m.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          }
+        </div>
+        </>
       )}
 
       {/* Hierarchy */}

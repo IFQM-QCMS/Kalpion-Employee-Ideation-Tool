@@ -761,4 +761,25 @@ export default {
   'pw.need_help':'ಸಹಾಯ ಬೇಕೇ?',
   'sa.too_many_tree':'ಈ ಸಂಸ್ಥೆಯಲ್ಲಿ {total} ಜನರಿದ್ದಾರೆ — ಮೊದಲ {shown} ತೋರಿಸಲಾಗುತ್ತಿದೆ. ಪೂರ್ಣ ಸಂಸ್ಥೆ ಚಾರ್ಟ್ ತುಂಬಾ ದೊಡ್ಡದು; ಯಾರನ್ನಾದರೂ ಹುಡುಕಲು ಬಳಕೆದಾರರ ಟ್ಯಾಬ್ ಬಳಸಿ.',
 
+
+  // ── INR amount hint + support-required attachment label ──
+  'form.attach_support':'ಪೂರಕ ದಾಖಲೆ — ಅಗತ್ಯವಿರುವ ಬೆಂಬಲ (ಐಚ್ಛಿಕ)',
+  'form.amount_inr':'ಮೊತ್ತ ಭಾರತೀಯ ರೂಪಾಯಿಗಳಲ್ಲಿ (₹).',
+
+  'detail.export_pdf':'PDF ರಫ್ತು ಮಾಡಿ',
+
+  'login.identifier':'ಇಮೇಲ್ ಅಥವಾ ಫೋನ್ ಸಂಖ್ಯೆ',
+  'login.identifier_ph':'you@company.com ಅಥವಾ 98765 43210',
+
+  'admin.uf_phone':'ಫೋನ್',
+  'admin.uf_phone_ph':'ಐಚ್ಛಿಕ',
+  'admin.uf_dob':'ಹುಟ್ಟಿದ ದಿನಾಂಕ',
+  'admin.uf_dob_hint':'ಮೊದಲ-ಲಾಗಿನ್ ಪಾಸ್‌ವರ್ಡ್ ಇದರಿಂದ ರಚನೆಯಾಗುತ್ತದೆ: ಹೆಸರಿನ ಮೊದಲ 4 ಅಕ್ಷರಗಳು + ಹುಟ್ಟಿದ ವರ್ಷ.',
+  'admin.uf_temp_pw':'ತಾತ್ಕಾಲಿಕ ಪಾಸ್‌ವರ್ಡ್',
+
+  'form.co_suggesters':'ಸಹ-ಸಲಹೆಗಾರರು',
+  'form.co_hint':'ಕೊಡುಗೆ ನೀಡಿದ ಸಹೋದ್ಯೋಗಿಗಳನ್ನು ಹುಡುಕಿ ಸೇರಿಸಿ. ನಿಮಗೆ ಬೇಕಾದಷ್ಟು ಸೇರಿಸಿ.',
+  'form.attach_benefits':'ಪೂರಕ ದಾಖಲೆ — ನಿರೀಕ್ಷಿತ ಪ್ರಯೋಜನಗಳು (ಐಚ್ಛಿಕ)',
+
+  'sa.monthly_activity':'ಮಾಸಿಕ ಸಲ್ಲಿಕೆ ಚಟುವಟಿಕೆ',
 };

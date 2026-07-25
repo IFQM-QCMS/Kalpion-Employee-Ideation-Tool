@@ -1114,7 +1114,8 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
   const [name,    setName]    = useState(editUser?.name||'');
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
   const [email,   setEmail]   = useState(editUser?.email||'');
-  const [pass,    setPass]    = useState('');
+  const [dob,     setDob]     = useState('');
+  const [phone,   setPhone]   = useState(editUser?.phone||'');
   const [role,    setRole]    = useState(editUser?.role||'employee');
   const [mgr,     setMgr]     = useState(editUser?.manager_id||'');
   const [dept,    setDept]    = useState(editUser?.department||'');
@@ -1132,12 +1133,20 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
   async function handleSubmit() {
     setError('');
     setSaving(true);
-    const payload = { name, email, employee_id: empId, role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc };
+    const payload = { name, email, employee_id: empId, role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
     if (isEdit) { payload.id = editUser.id; payload.status = status; }
-    else payload.password = pass;
+    else payload.date_of_birth = dob; // first-login password = first 4 letters of name + birth year
     try {
       const res = await usersApi[isEdit ? 'updateUser' : 'createUser'](payload);
-      if (res.data.success) { showToast(t(isEdit ? 'admin.user_updated' : 'admin.user_created'),'success'); onSaved(); }
+      if (res.data.success) {
+        // Show the derived first-login password so the admin can pass it on.
+        if (!isEdit && res.data.temp_password) {
+          showToast(`${t('admin.user_created')} · ${t('admin.uf_temp_pw')}: ${res.data.temp_password}`, 'success');
+        } else {
+          showToast(t(isEdit ? 'admin.user_updated' : 'admin.user_created'),'success');
+        }
+        onSaved();
+      }
       else { setError(res.data.error||t('admin.user_save_failed')); }
     } catch (err) { setError(err.response?.data?.error || t('msg.server_error')); }
     setSaving(false);
@@ -1156,8 +1165,17 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
             <div className="form-group"><label>{t('admin.uf_name')} *</label><input className="form-control" value={name} onChange={e=>setName(e.target.value)} id="uf-name" /></div>
             <div className="form-group"><label>{t('admin.uf_emp_id')} *</label><input className="form-control" value={empId} onChange={e=>setEmpId(e.target.value)} id="uf-emp-id" /></div>
           </div>
-          <div className="form-group"><label>{t('admin.uf_email')} *</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
-          {!isEdit && <div className="form-group" id="uf-pass-group"><label>{t('admin.uf_password')} *</label><input className="form-control" type="password" value={pass} onChange={e=>setPass(e.target.value)} id="uf-password" /></div>}
+          <div className="form-row">
+            <div className="form-group"><label>{t('admin.uf_email')} *</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
+            <div className="form-group"><label>{t('admin.uf_phone')}</label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} /></div>
+          </div>
+          {!isEdit && (
+            <div className="form-group" id="uf-dob-group">
+              <label>{t('admin.uf_dob')} *</label>
+              <input className="form-control" type="date" value={dob} onChange={e=>setDob(e.target.value)} id="uf-dob" />
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_dob_hint')}</div>
+            </div>
+          )}
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_role')}</label>
               <select className="form-control" id="uf-role" value={role} onChange={e=>setRole(e.target.value)}>

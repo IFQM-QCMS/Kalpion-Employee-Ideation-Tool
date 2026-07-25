@@ -761,4 +761,25 @@ export default {
   'pw.need_help':'मदद चाहिए?',
   'sa.too_many_tree':'इस संगठन में {total} लोग हैं — पहले {shown} दिखाए जा रहे हैं। पूरा संगठन चार्ट बहुत बड़ा है; किसी को खोजने के लिए उपयोगकर्ता टैब का उपयोग करें।',
 
+
+  // ── INR amount hint + support-required attachment label ──
+  'form.attach_support':'सहायक दस्तावेज़ — आवश्यक सहयोग (वैकल्पिक)',
+  'form.amount_inr':'राशि भारतीय रुपये (₹) में।',
+
+  'detail.export_pdf':'PDF निर्यात करें',
+
+  'login.identifier':'ईमेल या फ़ोन नंबर',
+  'login.identifier_ph':'you@company.com या 98765 43210',
+
+  'admin.uf_phone':'फ़ोन',
+  'admin.uf_phone_ph':'वैकल्पिक',
+  'admin.uf_dob':'जन्म तिथि',
+  'admin.uf_dob_hint':'पहली-लॉगिन का पासवर्ड इससे बनता है: नाम के पहले 4 अक्षर + जन्म वर्ष।',
+  'admin.uf_temp_pw':'अस्थायी पासवर्ड',
+
+  'form.co_suggesters':'सह-सुझावकर्ता',
+  'form.co_hint':'योगदान देने वाले सहकर्मियों को खोजें और जोड़ें। जितने चाहें उतने जोड़ें।',
+  'form.attach_benefits':'सहायक दस्तावेज़ — अपेक्षित लाभ (वैकल्पिक)',
+
+  'sa.monthly_activity':'मासिक सबमिशन गतिविधि',
 };

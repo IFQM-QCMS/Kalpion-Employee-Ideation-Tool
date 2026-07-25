@@ -143,29 +143,18 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleLogin}>
-            <div className="form-group" id="login-org-group">
-              <label>{t('login.org_code')}</label>
+            {/* Organisation code is gone — the platform identifies the org from
+                the email or the registered phone number itself. Any ?org= in the
+                URL (e.g. an old reset link) is still honoured silently. */}
+            <div className="form-group">
+              <label>{t('login.identifier')}</label>
               <input
                 className="form-control"
                 type="text"
-                value={orgSlug}
-                onChange={e => setOrgSlug(e.target.value)}
-                placeholder={t('login.org_ph')}
-                autoComplete="organization"
-                style={{ textTransform:'lowercase' }}
-              />
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('login.org_hint')}</div>
-            </div>
-
-            <div className="form-group">
-              <label>{t('login.email')}</label>
-              <input
-                className="form-control"
-                type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder={t('login.email_ph')}
-                autoComplete="email"
+                placeholder={t('login.identifier_ph')}
+                autoComplete="username"
                 required
               />
             </div>

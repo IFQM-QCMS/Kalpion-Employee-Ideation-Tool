@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { ideasApi, votesApi, uploadApi } from '../services/api';
+import { ideasApi, votesApi, uploadApi, exportApi } from '../services/api';
 import {
   statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas,
   fmtDate, actionLabel, isPrivileged, communityScore,
@@ -27,6 +27,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const [showReview,      setShowReview]      = useState(false);
   const [showAssign,      setShowAssign]      = useState(false);
   const [showRvDecision,  setShowRvDecision]  = useState(false);
+  const [exporting,       setExporting]       = useState(false);
 
   useEffect(() => { load(); }, [ideaId]);
 
@@ -68,6 +69,19 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
         showToast(`${t('community.rating_ok')}: ${rating}/5 ⭐`, 'success');
       } else showToast(res.data.error || t('msg.error'), 'danger');
     } catch { showToast(t('msg.network_error'), 'danger'); }
+  }
+
+  // Higher authorities in the review hierarchy can export the employee's idea as
+  // a pre-formatted Closure Summary PDF. Gated server-side too — the button just
+  // hides it from people who would get a 403.
+  async function handleExportPdf() {
+    setExporting(true);
+    try {
+      await exportApi.ideaPdf(ideaId, idea?.idea_code);
+    } catch {
+      showToast(t('msg.network_error'), 'danger');
+    }
+    setExporting(false);
   }
 
   if (!idea && !loading && !error) return null;
@@ -147,8 +161,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   </div>
                   {idea.tangible_benefit   && <div style={{ marginTop:8 }}><strong>{t('detail.tangible')}:</strong> {idea.tangible_benefit}</div>}
                   {idea.intangible_benefit && <div style={{ marginTop:8 }}><strong>{t('detail.intangible')}:</strong> {idea.intangible_benefit}</div>}
-                  {idea.co1_name && (
-                    <div style={{ marginTop:8 }}><strong>{t('detail.co_suggesters')}:</strong> {idea.co1_name}{idea.co2_name?', '+idea.co2_name:''}</div>
+                  {(idea.co_suggesters_display || idea.co1_name) && (
+                    <div style={{ marginTop:8 }}><strong>{t('detail.co_suggesters')}:</strong> {idea.co_suggesters_display || (idea.co1_name + (idea.co2_name?', '+idea.co2_name:''))}</div>
                   )}
 
                   {/* Business case. Ideas submitted before these fields existed
@@ -156,7 +170,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       rather than rendering five empty rows. */}
                   {(() => {
                     const bc = [
-                      [t('form.investment'),  idea.investment_required],
+                      [t('form.investment'),  idea.investment_required ? `₹ ${idea.investment_required}` : ''],
                       [t('form.feasibility'), idea.feasibility ? translateImpact(idea.feasibility, t) : ''],
                       [t('form.impl_time'),   [idea.implementation_duration,
                                                idea.expected_implementation_date ? fmtDate(idea.expected_implementation_date) : '']
@@ -324,6 +338,12 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
           <div className="modal-footer" id="idea-detail-footer">
             <button className="btn btn-outline" onClick={onClose}>{t('detail.close')}</button>
+            {isPriv && idea && (
+              <button className="btn btn-outline" style={{ borderColor:'#1a7d6b',color:'#136052' }}
+                disabled={exporting} onClick={handleExportPdf}>
+                {exporting ? t('msg.loading') : `⤓ ${t('detail.export_pdf')}`}
+              </button>
+            )}
             {selfNote && <span style={{ fontSize:12,color:'#f59e0b',marginRight:10 }}>{t('review.cannot_own')}</span>}
             {canRouteReviewers && (
               <button className="btn btn-outline" style={{ borderColor:'#0284c7',color:'#0284c7' }}

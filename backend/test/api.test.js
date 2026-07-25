@@ -49,7 +49,7 @@ test('wrong password is 401 and counts toward lockout', async () => {
 test('nonexistent email gets the same 401 as a wrong password (no enumeration)', async () => {
   const r = await login('nobody@orga.test', 'whatever', 'orga');
   assert.equal(r.status, 401);
-  assert.match(r.error, /Invalid email, password, or organization code/);
+  assert.match(r.error, /Invalid email\/phone or password/);
 });
 
 test('5 failures lock the account for 15 minutes', async () => {
@@ -282,4 +282,140 @@ test('notification polling as a platform admin returns empty, not 500', async ()
   const r = await api('GET', '/api/notifications', { token: PA });
   assert.equal(r.status, 200);
   assert.deepEqual(r.data, { success: true, notifications: [], unread_count: 0 });
+});
+
+// ── Support-required attachment + single-idea PDF export ─────────────────────
+
+test('an employee can attach a document to the Support Required section', async () => {
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Recirculate coolant on line 3',
+      present_situation: 'Coolant is drained weekly regardless of condition, wasting usable fluid and driving cost.',
+      proposed_solution: 'Add an inline filtration loop and replace coolant only on measured breakdown.',
+      investment_required: '85000', support_required: 'Maintenance team plus a 4-hour line stop.',
+    },
+  });
+  assert.equal(submit.data.success, true, 'the idea must submit');
+  const ideaId = submit.data.idea_id;
+
+  // The new 'support' section is accepted and stored under that label.
+  const fd = new FormData();
+  fd.append('file', new Blob([tinyPng()], { type: 'image/png' }), 'quote.png');
+  fd.append('idea_id', String(ideaId));
+  fd.append('section', 'support');
+  const up = await api('POST', '/api/upload', { token: AUSER, raw: fd });
+  assert.equal(up.data.success, true, 'a support-section upload must succeed');
+
+  const rows = await sql('ifqm_test_a',
+    `SELECT section FROM ifqm_test_a.idea_attachments WHERE idea_id = ? AND filename = 'quote.png'`, [ideaId]);
+  assert.equal(rows[0]?.section, 'support', 'the attachment must be stored under the support section');
+
+  // A section outside the whitelist is still refused.
+  const fd2 = new FormData();
+  fd2.append('file', new Blob([tinyPng()], { type: 'image/png' }), 'x.png');
+  fd2.append('idea_id', String(ideaId));
+  fd2.append('section', 'bogus');
+  const bad = await api('POST', '/api/upload', { token: AUSER, raw: fd2 });
+  assert.equal(bad.status, 400, 'an unknown section must be rejected');
+});
+
+test('the single-idea Closure Summary PDF honours the review hierarchy and tenant boundary', async () => {
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Laser-mark part numbers instead of ink stamping',
+      present_situation: 'Ink stamps smudge and fail traceability audits on about three percent of parts.',
+      proposed_solution: 'Replace the ink stamp with an inline fibre laser marker tied to the MES part record.',
+      roi_value: 450000, roi_type: 'quality_improvement',
+    },
+  });
+  const ideaId = submit.data.idea_id;
+
+  // A reviewer (the org admin) gets an actual PDF back.
+  const asAdmin = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: AADMIN });
+  assert.equal(asAdmin.status, 200);
+  assert.match(asAdmin.contentType, /application\/pdf/);
+  assert.ok(asAdmin.text.startsWith('%PDF'), 'the body must be a PDF document');
+
+  // The employee who submitted it is not in the review hierarchy → forbidden.
+  const asUser = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: AUSER });
+  assert.equal(asUser.status, 403);
+
+  // An admin in another tenant cannot reach org A's idea at all.
+  const asOrgB = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: BADMIN });
+  assert.equal(asOrgB.status, 404);
+});
+
+// ── Login with no org code — email or registered phone ──────────────────────
+
+test('a user signs in with just their email — no organisation code needed', async () => {
+  // Note the missing third argument: org_slug is empty, so the platform must
+  // work out the tenant from the email itself (login directory → tenant scan).
+  const r = await login('user@orga.test', PASSWORDS.orgaUser);
+  assert.ok(r.token, 'email-only login must succeed');
+  assert.equal(r.user.org_slug, 'orga', 'the correct organisation must be resolved from the email');
+});
+
+test('a user signs in with their registered phone number', async () => {
+  await sql('ifqm_test_a', "UPDATE ifqm_test_a.users SET phone = '+91-98765 43210' WHERE email = 'user@orga.test'");
+  const r = await login('9876543210', PASSWORDS.orgaUser); // typed as a phone, no org code
+  assert.ok(r.token, 'phone-number login must succeed');
+  assert.equal(r.user.email, 'user@orga.test', 'the phone must resolve to the right account');
+});
+
+test('an unknown email is refused generically, exactly like a wrong password', async () => {
+  const r = await login('does-not-exist@nowhere.test', 'whatever'); // no org code
+  assert.equal(r.status, 401);
+  assert.match(r.error, /Invalid email\/phone or password/);
+});
+
+// ── Co-suggesters beyond two, benefits attachment, monthly dashboard ────────
+
+test('an idea can credit more than two co-suggesters', async () => {
+  await sql('ifqm_test_a', `INSERT INTO ifqm_test_a.users (employee_id,name,email,password_hash,role,status,password_changed_at) VALUES
+    ('C1','Co One','co1@orga.test','x','employee','active',NOW()),
+    ('C2','Co Two','co2@orga.test','x','employee','active',NOW()),
+    ('C3','Co Three','co3@orga.test','x','employee','active',NOW())`);
+  const rows = await sql('ifqm_test_a', "SELECT id FROM ifqm_test_a.users WHERE email IN ('co1@orga.test','co2@orga.test','co3@orga.test') ORDER BY email");
+  const coIds = rows.map((r) => r.id);
+  assert.equal(coIds.length, 3);
+
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Idea crediting three colleagues',
+      present_situation: 'A present situation described in enough detail to pass the validation checks.',
+      proposed_solution: 'A proposed solution described here in a sentence.',
+      co_suggester_ids: coIds,
+    },
+  });
+  assert.equal(submit.data.success, true);
+
+  const got = await api('GET', `/api/ideas/${submit.data.idea_id}`, { token: AADMIN });
+  assert.equal(got.data.idea.co_suggesters.length, 3, 'all three co-suggesters must be stored, not just two');
+});
+
+test('a document can be attached to the Benefits Expected section', async () => {
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Idea with a benefits document',
+      present_situation: 'A present situation described in enough detail to pass validation.',
+      proposed_solution: 'A proposed solution.',
+      benefits_expected: 'Projected savings attached.',
+    },
+  });
+  const fd = new FormData();
+  fd.append('file', new Blob([tinyPng()], { type: 'image/png' }), 'projection.png');
+  fd.append('idea_id', String(submit.data.idea_id));
+  fd.append('section', 'benefits');
+  const up = await api('POST', '/api/upload', { token: AUSER, raw: fd });
+  assert.equal(up.data.success, true, 'a benefits-section upload must succeed');
+});
+
+test('the dashboard reports monthly submission activity', async () => {
+  const r = await api('GET', '/api/ideas/dashboard', { token: AADMIN });
+  assert.equal(r.data.success, true);
+  assert.ok(Array.isArray(r.data.monthly), 'a monthly submission series must be present');
 });

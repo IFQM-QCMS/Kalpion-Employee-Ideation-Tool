@@ -120,11 +120,25 @@ CREATE TABLE IF NOT EXISTS idea_reviewers (
 CREATE TABLE IF NOT EXISTS idea_attachments (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   idea_id     INT NOT NULL,
-  section     ENUM('situation','solution') NOT NULL,
+  section     ENUM('situation','solution','support','benefits') NOT NULL,
   filename    VARCHAR(255) NOT NULL,
   filepath    VARCHAR(500) NOT NULL,
   uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
+);
+
+-- Co-suggesters beyond the two legacy ideas.co_suggester_*_id columns. An idea
+-- can credit any number of colleagues; the first two are also mirrored into the
+-- legacy columns so existing read paths keep working.
+CREATE TABLE IF NOT EXISTS idea_co_suggesters (
+  id         INT AUTO_INCREMENT PRIMARY KEY,
+  idea_id    INT NOT NULL,
+  user_id    INT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_idea_cosuggester (idea_id, user_id),
+  KEY idx_cosuggester_idea (idea_id),
+  FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS idea_workflow (

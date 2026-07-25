@@ -39,7 +39,10 @@ export async function tenantUploadDir(slug) {
  */
 export async function upload(db, slug, user, { ideaId, section, file }) {
   ideaId = Number(ideaId) || 0;
-  if (!ideaId || !['situation', 'solution'].includes(section)) {
+  // 'support' and 'benefits' let an employee attach the document(s) that back up
+  // the Support Required and Benefits Expected they described on the business-case
+  // step — alongside the existing situation/solution attachments.
+  if (!ideaId || !['situation', 'solution', 'support', 'benefits'].includes(section)) {
     throw badRequest('Invalid parameters.');
   }
 

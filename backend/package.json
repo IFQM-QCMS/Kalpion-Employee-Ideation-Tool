@@ -1,7 +1,7 @@
 {
   "name": "ifqm-backend",
   "version": "1.0.0",
-  "description": "IFQM Ideation Platform \u2014 Node/Express/MySQL backend (migration of the PHP api/*.php layer)",
+  "description": "IFQM Ideation Platform — Node/Express/MySQL backend (migration of the PHP api/*.php layer)",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -27,9 +27,11 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.11.0",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1"
   },
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "brace-expansion": "^5.0.8"
   }
 }

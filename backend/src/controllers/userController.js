@@ -19,11 +19,11 @@ export const adminUsers = asyncHandler(async (req, res) =>
 );
 
 export const createUser = asyncHandler(async (req, res) =>
-  respond(res, await userService.createUser(req.db, req.user, req.body || {}))
+  respond(res, await userService.createUser(req.db, req.user, req.body || {}, req.tenant))
 );
 
 export const updateUser = asyncHandler(async (req, res) =>
-  respond(res, await userService.updateUser(req.db, req.user, req.params.id ?? req.body?.id, req.body || {}))
+  respond(res, await userService.updateUser(req.db, req.user, req.params.id ?? req.body?.id, req.body || {}, req.tenant))
 );
 
 export const updateManager = asyncHandler(async (req, res) =>
@@ -31,7 +31,7 @@ export const updateManager = asyncHandler(async (req, res) =>
 );
 
 export const deleteUser = asyncHandler(async (req, res) =>
-  respond(res, await userService.deleteUser(req.db, req.user, req.params.id ?? req.body?.id))
+  respond(res, await userService.deleteUser(req.db, req.user, req.params.id ?? req.body?.id, req.tenant))
 );
 
 export const managers = asyncHandler(async (req, res) =>

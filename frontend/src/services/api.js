@@ -241,6 +241,9 @@ export const exportApi = {
   ideasCsv: () => downloadBlob('/export/ideas', 'ideas.csv'),
   leaderboardCsv: () => downloadBlob('/export/leaderboard', 'leaderboard.csv'),
   analyticsHtml: () => downloadBlob('/export/analytics', 'analytics.html'),
+  // Single idea → pre-formatted Closure Summary PDF (reviewer/hierarchy only,
+  // enforced server-side). Downloads a fresh PDF each time.
+  ideaPdf: (id, code) => downloadBlob(`/export/idea/${id}/pdf`, `idea_${code || id}_closure_summary.pdf`),
 };
 
 /** Trigger a browser "save as" for an in-memory blob. */

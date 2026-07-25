@@ -171,6 +171,16 @@ export async function get(db, user, id) {
   const [att] = await db.execute('SELECT * FROM idea_attachments WHERE idea_id = ?', [id]);
   idea.attachments = att;
 
+  // Full co-suggester list (beyond the two legacy columns).
+  const [cosug] = await db.execute(
+    `SELECT cs.user_id AS id, u.name, u.employee_id
+       FROM idea_co_suggesters cs JOIN users u ON u.id = cs.user_id
+      WHERE cs.idea_id = ? ORDER BY cs.id`,
+    [id]
+  );
+  idea.co_suggesters = cosug;
+  idea.co_suggesters_display = cosug.map((c) => c.name).join(', ');
+
   const [wf] = await db.execute(
     `SELECT w.*, u.name AS actor_name, u.role AS actor_role
      FROM idea_workflow w JOIN users u ON u.id = w.actor_id
@@ -216,8 +226,17 @@ export async function submitOrDraft(db, user, action, b) {
   const impLvl = b.impact_level ?? 'Medium';
   const tangible = String(b.tangible_benefit ?? '').trim();
   const intang = String(b.intangible_benefit ?? '').trim();
-  const co1 = b.co_suggester_1_id ? Number(b.co_suggester_1_id) : null;
-  const co2 = b.co_suggester_2_id ? Number(b.co_suggester_2_id) : null;
+  // Co-suggesters: accept a full array (co_suggester_ids) OR the two legacy
+  // fields. The first two are mirrored into the legacy ideas.co_suggester_*_id
+  // columns (so existing read paths keep working); the complete list is written
+  // to the idea_co_suggesters junction after the row is saved. Self-references
+  // and duplicates are dropped.
+  const rawCoIds = Array.isArray(b.co_suggester_ids)
+    ? b.co_suggester_ids
+    : [b.co_suggester_1_id, b.co_suggester_2_id];
+  const coIds = [...new Set(rawCoIds.map((v) => Number(v)).filter((n) => n && n !== Number(user.id)))];
+  const co1 = coIds[0] ?? null;
+  const co2 = coIds[1] ?? null;
   const editId = b.id ? Number(b.id) : null;
   const isAnon = b.is_anonymous ? 1 : 0;
   const challengeId = b.challenge_id ? Number(b.challenge_id) : null;
@@ -320,6 +339,12 @@ export async function submitOrDraft(db, user, action, b) {
         aiScore, aiReason]
     );
     ideaId = result.insertId;
+  }
+
+  // Sync the co-suggester junction with the full list (idempotent per save).
+  await db.execute('DELETE FROM idea_co_suggesters WHERE idea_id=?', [ideaId]);
+  for (const uid of coIds) {
+    await db.execute('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) VALUES (?,?)', [ideaId, uid]);
   }
 
   if (action === 'submit' && !wasAlreadySubmitted) {
@@ -513,11 +538,28 @@ export async function dashboard(db, user) {
   const [pts] = await db.execute('SELECT points FROM users WHERE id=?', [uid]);
   const userPoints = Number(pts[0]?.points ?? user.points);
 
+  // Monthly submission activity (last 12 months) — for the org-wide dashboards
+  // (admin / super_admin etc.). Individuals get their own submissions.
+  let monthly = [];
+  {
+    const [m] = INDIVIDUAL_ROLES.includes(role)
+      ? await db.execute(
+        `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS count
+           FROM ideas WHERE submitted_at IS NOT NULL AND submitter_id = ?
+           GROUP BY month ORDER BY month DESC LIMIT 12`, [uid])
+      : await db.query(
+        `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS count
+           FROM ideas WHERE submitted_at IS NOT NULL
+           GROUP BY month ORDER BY month DESC LIMIT 12`);
+    monthly = m.map((r) => ({ month: r.month, count: Number(r.count) })).reverse();
+  }
+
   return {
     success: true,
     total,
     counts,
     recent,
+    monthly,
     user_points: userPoints,
     pending_reviews: pendingReviews,
     overdue_reviews: overdueReviews,

@@ -18,6 +18,7 @@ import config from '../config/index.js';
 import { signToken } from '../utils/jwt.js';
 import { masterDb } from '../database/master.js';
 import { resolveTenant, getTenantPool, sanitizeSlug } from '../database/tenant.js';
+import { resolveTenantByLogin, indexUser, isEmail, normalizePhone } from './directoryService.js';
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
@@ -152,20 +153,49 @@ export async function login({ email, password, orgSlug, host }) {
   }
 
   // ── Tenant user auth ──
-  const tenant = await resolveTenant({ slug: cleanSlug, host });
+  // The organisation code is optional now. With one, we open exactly that
+  // organisation's database (an explicit assertion — see resolveTenant). Without
+  // one, we identify the organisation from the login itself: the email, or the
+  // registered phone number, resolved through the global login directory.
+  const tenant = cleanSlug
+    ? await resolveTenant({ slug: cleanSlug, host })
+    : await resolveTenantByLogin(email);
+
+  // The identifier matched no organisation. Answer exactly like a wrong password
+  // — a dummy compare for constant time, a counted failure, one generic message
+  // — so login never reveals which emails or numbers are registered.
+  if (!tenant) {
+    await bcrypt.compare(password, DUMMY_HASH);
+    await recordFailedAttempt(loginId);
+    const after = await getFailedAttempts(loginId);
+    const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
+    throw unauthorized(
+      remaining > 0
+        ? `Invalid email/phone or password. ${remaining} attempt(s) remaining.`
+        : 'Too many failed attempts. Please try again in 15 minutes.'
+    );
+  }
+
   const db = getTenantPool(tenant);
 
-  const [rows] = await db.execute(
-    // password_changed_ts is stamped into the token (see signSession) so the
-    // auth middleware can tell a current session from one opened before the
-    // password last changed — without comparing clocks.
+  // Match on email OR phone, whichever the person typed. Phones are stored in
+  // assorted formats, so compare on digits only (last-10 suffix).
+  const base =
     `SELECT u.*, UNIX_TIMESTAMP(u.password_changed_at) AS password_changed_ts,
             m.name AS manager_name
        FROM users u
        LEFT JOIN users m ON m.id = u.manager_id
-      WHERE u.email = ? AND u.status = 'active' LIMIT 1`,
-    [email]
-  );
+      WHERE `;
+  const phoneKey = normalizePhone(email);
+  let where; let params;
+  if (!isEmail(email) && phoneKey) {
+    where = "REPLACE(REPLACE(REPLACE(REPLACE(u.phone,' ',''),'-',''),'+',''),'(','') LIKE ?";
+    params = [`%${phoneKey}`];
+  } else {
+    where = 'LOWER(u.email) = ?';
+    params = [email.toLowerCase()];
+  }
+  const [rows] = await db.execute(`${base}${where} AND u.status = 'active' LIMIT 1`, params);
   const user = rows[0];
 
   // Always run the compare, even when the email matched nothing — against a
@@ -180,7 +210,7 @@ export async function login({ email, password, orgSlug, host }) {
     logger.warn(`auth: failed login for ${loginId} (${after.count}/${MAX_ATTEMPTS})`);
     const err =
       remaining > 0
-        ? `Invalid email, password, or organization code. ${remaining} attempt(s) remaining.`
+        ? `Invalid email/phone or password. ${remaining} attempt(s) remaining.`
         : 'Too many failed attempts. Please try again in 15 minutes.';
     throw unauthorized(err);
   }
@@ -209,6 +239,9 @@ export async function login({ email, password, orgSlug, host }) {
   };
 
   await clearFailedAttempts(loginId);
+  // Keep the login directory current (and self-heal it for a pre-existing user
+  // who was resolved by the tenant scan rather than a directory row).
+  indexUser(tenant, user).catch(() => {});
   const token = signToken({
     user: session,
     org_slug: tenant.slug,
@@ -232,11 +265,15 @@ export async function forgotPassword({ email, orgSlug, host }) {
     message: 'If an account with that email exists, a reset link has been sent.',
   };
 
-  const tenant = await resolveTenant({ slug: cleanSlug, host });
+  // Resolve the organisation from the email itself when no org code was given.
+  const tenant = cleanSlug
+    ? await resolveTenant({ slug: cleanSlug, host })
+    : await resolveTenantByLogin(email);
+  if (!tenant) return generic; // unknown email → same generic answer (no enumeration)
   const db = getTenantPool(tenant);
 
   const [rows] = await db.execute(
-    "SELECT id, name FROM users WHERE email = ? AND status = 'active' LIMIT 1",
+    "SELECT id, name FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1",
     [email]
   );
   const user = rows[0];
@@ -265,9 +302,9 @@ export async function forgotPassword({ email, orgSlug, host }) {
     const settings = await getOrgSettings(db);
     if (settings.email_enabled === '1' && String(settings.smtp_host || '').trim()) {
       const base = config.frontendBaseUrl.replace(/\/+$/, '');
-      const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}${
-        cleanSlug ? `&org=${cleanSlug}` : ''
-      }`;
+      // Embed the resolved org slug so the reset link opens the right tenant even
+      // though the user no longer types an org code anywhere.
+      const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}&org=${encodeURIComponent(tenant.slug)}`;
       const subject = 'Reset Your IFQM Password';
       const htmlBody =
         '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +

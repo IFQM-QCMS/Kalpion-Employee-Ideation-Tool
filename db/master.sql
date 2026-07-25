@@ -58,6 +58,23 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   INDEX idx_login_attempts_last (last_attempt)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ── Global login directory ──────────────────────────────────────────────────
+-- Login no longer asks for an organisation code. A user signs in with just their
+-- email OR their registered phone number; this table maps that globally-unique
+-- identifier (lowercased email, or a phone reduced to its last 10 digits) to the
+-- tenant that owns it. Maintained as users are created/imported/updated, and
+-- self-healed for pre-existing users on their first sign-in (see directoryService).
+CREATE TABLE IF NOT EXISTS login_directory (
+  identifier   VARCHAR(190) NOT NULL,
+  id_type      ENUM('email','phone') NOT NULL,
+  tenant_id    INT NOT NULL,
+  tenant_slug  VARCHAR(50)  NOT NULL,
+  user_id      INT NOT NULL,
+  updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (identifier),
+  KEY idx_login_dir_tenant_user (tenant_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ── Tenant branding (organisation display name + PNG logo) ───────────────────
 -- `name` and `logo_url` already exist above. logo_url was declared but never
 -- populated; it now holds the *stored filename* of the tenant's uploaded PNG,

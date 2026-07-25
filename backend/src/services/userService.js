@@ -13,6 +13,8 @@
 import bcrypt from 'bcryptjs';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
+import { tempPasswordFor } from './userImportService.js';
+import { indexUser, deindexUser } from './directoryService.js';
 
 // Role sets used across create/update/managers (mirrors the PHP literals).
 const ROLES_ADMIN_CAN_ASSIGN = [
@@ -116,22 +118,32 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50 } = {}) {
 }
 
 /** POST action=create_user. */
-export async function createUser(db, actor, body) {
+export async function createUser(db, actor, body, tenant = null) {
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
-  const password = body.password || '';
   const employeeId = String(body.employee_id || '').trim();
   const department = String(body.department || '').trim();
   const businessUnit = String(body.business_unit || '').trim();
   const location = String(body.location || '').trim();
+  const phone = String(body.phone || '').trim();
   const role = body.role || 'employee';
   const managerId = body.manager_id ? parseInt(body.manager_id, 10) : null;
 
-  if (!name || !email || !password || !employeeId) {
-    throw badRequest('Name, email, employee ID, and password are required.');
+  // Date of birth drives the first-login password (first 4 letters of the name +
+  // birth year), exactly like the bulk import — so every new account, however it
+  // is created, starts on the same derived temporary credential and is forced to
+  // change it. A plain YYYY or a full YYYY-MM-DD are both accepted.
+  const dobRaw = String(body.date_of_birth || '').trim();
+  const birthYear = (dobRaw.match(/\d{4}/) || [])[0] || '';
+  const explicitPassword = body.password || ''; // legacy/optional override
+
+  if (!name || !email || !employeeId) {
+    throw badRequest('Name, email, and employee ID are required.');
   }
   if (!isValidEmail(email)) throw badRequest('Invalid email address.');
-  assertPasswordStrength(password);
+  if (!birthYear && !explicitPassword) {
+    throw badRequest('Date of birth is required — the first-login password is built from it.');
+  }
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
 
   const [dup] = await db.execute(
@@ -141,23 +153,43 @@ export async function createUser(db, actor, body) {
   if (dup.length) throw new ApiError(409, 'Email or employee ID already exists.');
 
   const initials = avatarInitials(name) || firstCharUpper(name);
-  const hash = await bcrypt.hash(password, 12);
+
+  // Derived temp password (must be changed on first login) unless the admin
+  // explicitly supplied a real one.
+  const usingDerived = !!birthYear && !explicitPassword;
+  const tempPassword = usingDerived ? tempPasswordFor(name, birthYear, employeeId) : explicitPassword;
+  if (!usingDerived) assertPasswordStrength(explicitPassword);
+  const hash = await bcrypt.hash(tempPassword, usingDerived ? 10 : 12);
+  const dob = /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null;
 
   const [result] = await db.execute(
-    `INSERT INTO users (employee_id, name, email, password_hash, department, business_unit,
-                        location, role, manager_id, avatar_initials, status, password_changed_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,'active',NOW())`,
-    [employeeId, name, email, hash, department, businessUnit, location, role, managerId, initials]
+    `INSERT INTO users (employee_id, name, email, password_hash, phone, date_of_birth,
+                        department, business_unit, location, role, manager_id, avatar_initials,
+                        status, must_change_password, password_changed_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'active',?,NOW())`,
+    [employeeId, name, email, hash, phone || null, dob, department, businessUnit, location,
+      role, managerId, initials, usingDerived ? 1 : 0]
   );
-  return { success: true, user_id: result.insertId };
+
+  // Register the account in the global login directory so it can sign in with
+  // email or phone and no org code (best-effort; login self-heals otherwise).
+  if (tenant) indexUser(tenant, { id: result.insertId, email, phone }).catch(() => {});
+
+  return {
+    success: true,
+    user_id: result.insertId,
+    // Surfaced so the admin can hand the credential to the employee. Only the
+    // derived temporary password is returned — never an admin-set real one.
+    ...(usingDerived ? { temp_password: tempPassword } : {}),
+  };
 }
 
 /** POST action=update_user. */
-export async function updateUser(db, actor, id, body) {
+export async function updateUser(db, actor, id, body, tenant = null) {
   id = parseInt(id, 10) || 0;
   if (!id) throw badRequest('Missing user ID.');
 
-  const [tgtRows] = await db.execute('SELECT id, role FROM users WHERE id=? LIMIT 1', [id]);
+  const [tgtRows] = await db.execute('SELECT id, role, email FROM users WHERE id=? LIMIT 1', [id]);
   const target = tgtRows[0];
   if (!target) throw notFound('User not found.');
   if (target.role === 'super_admin') throw forbidden('Cannot edit super admin.');
@@ -167,6 +199,7 @@ export async function updateUser(db, actor, id, body) {
   const department = String(body.department || '').trim();
   const businessUnit = String(body.business_unit || '').trim();
   const location = String(body.location || '').trim();
+  const phone = String(body.phone || '').trim();
   const role = body.role || target.role;
   const managerId = body.manager_id ? parseInt(body.manager_id, 10) : null;
   const status = (body.status || 'active') === 'inactive' ? 'inactive' : 'active';
@@ -180,12 +213,15 @@ export async function updateUser(db, actor, id, body) {
   // logged in for the remaining life of their token. Same for a role change:
   // the new role takes effect immediately rather than after the token expires.
   await db.execute(
-    `UPDATE users SET name=?, department=?, business_unit=?, location=?, role=?,
+    `UPDATE users SET name=?, department=?, business_unit=?, location=?, phone=?, role=?,
                       manager_id=?, avatar_initials=?, status=?,
                       deactivated_at = IF(? = 'inactive', COALESCE(deactivated_at, NOW()), NULL)
       WHERE id=?`,
-    [name, department, businessUnit, location, role, managerId, initials, status, status, id]
+    [name, department, businessUnit, location, phone || null, role, managerId, initials, status, status, id]
   );
+
+  // Keep the login directory in step with a changed phone number.
+  if (tenant) indexUser(tenant, { id, email: target.email, phone }).catch(() => {});
   return { success: true };
 }
 
@@ -235,7 +271,7 @@ export async function updateManager(db, actor, id, body) {
 }
 
 /** POST action=delete_user — deactivates instead if the user has real ideas. */
-export async function deleteUser(db, actor, id) {
+export async function deleteUser(db, actor, id, tenant = null) {
   id = parseInt(id, 10) || 0;
   if (!id) throw badRequest('Missing user ID.');
   if (id === Number(actor.id)) throw forbidden('Cannot delete your own account.');
@@ -265,6 +301,7 @@ export async function deleteUser(db, actor, id) {
 
   await db.execute('UPDATE users SET manager_id=NULL WHERE manager_id=?', [id]);
   await db.execute('DELETE FROM users WHERE id=?', [id]);
+  if (tenant) deindexUser(tenant.id, id).catch(() => {});
   return { success: true, deleted: true };
 }
 

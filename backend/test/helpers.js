@@ -133,9 +133,13 @@ export async function api(method, urlPath, { token, body, raw } = {}) {
     payload = JSON.stringify(body);
   }
   const res = await fetch(baseUrl + urlPath, { method, headers, body: payload });
+  // Read the body once as text, then try to parse JSON — so a non-JSON response
+  // (a CSV, an HTML report, a PDF download) is still inspectable via `text` and
+  // `contentType` instead of vanishing.
+  const text = await res.text();
   let data = null;
-  try { data = await res.json(); } catch { /* non-JSON body */ }
-  return { status: res.status, data };
+  try { data = JSON.parse(text); } catch { /* non-JSON body */ }
+  return { status: res.status, data, text, contentType: res.headers.get('content-type') || '' };
 }
 
 export async function login(email, password, orgSlug = '') {

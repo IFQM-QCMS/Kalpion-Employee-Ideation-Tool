@@ -50,16 +50,15 @@ export default function SubmitPage() {
   // Step 4 files
   const [fileSit, setFileSit] = useState(null);
   const [fileSol, setFileSol] = useState(null);
+  // Attached under the Support Required field on the business-case step.
+  const [fileSup, setFileSup] = useState(null);
+  // Attached under the Benefits Expected field on the business-case step.
+  const [fileBen, setFileBen] = useState(null);
 
-  // Step 5 co-suggesters
-  const [co1Id, setCo1Id] = useState('');
-  const [co1Name, setCo1Name] = useState('');
-  const [co2Id, setCo2Id] = useState('');
-  const [co2Name, setCo2Name] = useState('');
-  const [co1Query, setCo1Query] = useState('');
-  const [co2Query, setCo2Query] = useState('');
-  const [co1Results, setCo1Results] = useState([]);
-  const [co2Results, setCo2Results] = useState([]);
+  // Step 5 co-suggesters — a dynamic list; add as many colleagues as needed.
+  const [coSuggesters, setCoSuggesters] = useState([]); // [{ id, label }]
+  const [coQuery, setCoQuery] = useState('');
+  const [coResults, setCoResults] = useState([]);
 
   // Step 6 options
   const [anonymous,    setAnonymous]    = useState(false);
@@ -103,15 +102,25 @@ export default function SubmitPage() {
     }, 600);
   }
 
-  async function searchUsers(query, which) {
-    clearTimeout(searchTimers.current[which]);
-    if (query.length < 2) { which==='1' ? setCo1Results([]) : setCo2Results([]); return; }
-    searchTimers.current[which] = setTimeout(async () => {
+  function searchCoSuggesters(query) {
+    clearTimeout(searchTimers.current.co);
+    if (query.length < 2) { setCoResults([]); return; }
+    searchTimers.current.co = setTimeout(async () => {
       try {
         const res = await usersApi.list({ q: query });
-        which==='1' ? setCo1Results(res.data.users||[]) : setCo2Results(res.data.users||[]);
+        // Hide the submitter and anyone already added.
+        const chosen = new Set(coSuggesters.map(c => c.id));
+        setCoResults((res.data.users || []).filter(u => u.id !== user?.id && !chosen.has(u.id)));
       } catch {}
     }, 300);
+  }
+
+  function addCoSuggester(u) {
+    setCoSuggesters(prev => prev.some(c => c.id === u.id) ? prev : [...prev, { id: u.id, label: `${u.name} (${u.employee_id})` }]);
+    setCoQuery(''); setCoResults([]);
+  }
+  function removeCoSuggester(id) {
+    setCoSuggesters(prev => prev.filter(c => c.id !== id));
   }
 
   function toggleImpact(area) {
@@ -153,8 +162,9 @@ export default function SubmitPage() {
       expected_implementation_date: implDate,
       benefits_expected:            benefits,
       support_required:             support,
-      co_suggester_1_id:  co1Id || null,
-      co_suggester_2_id:  co2Id || null,
+      // Full co-suggester list (backend also mirrors the first two into the
+      // legacy columns for older read paths).
+      co_suggester_ids:   coSuggesters.map(c => c.id),
       is_anonymous:       anonymous ? 1 : 0,
       template_type:      templateType || null,
       challenge_id:       challengeId || null,
@@ -198,6 +208,8 @@ export default function SubmitPage() {
     const uploads = [];
     if (fileSit) uploads.push({ file: fileSit, section: 'situation' });
     if (fileSol) uploads.push({ file: fileSol, section: 'solution' });
+    if (fileSup) uploads.push({ file: fileSup, section: 'support' });
+    if (fileBen) uploads.push({ file: fileBen, section: 'benefits' });
     for (const { file, section } of uploads) {
       const fd = new FormData();
       fd.append('file', file);
@@ -209,11 +221,10 @@ export default function SubmitPage() {
 
   function resetForm() {
     setTitle(''); setSituation(''); setSolution(''); setTangible(''); setIntangible('');
-    setImpactAreas([]); setImpactLevel('Medium'); setFileSit(null); setFileSol(null);
+    setImpactAreas([]); setImpactLevel('Medium'); setFileSit(null); setFileSol(null); setFileSup(null); setFileBen(null);
     setInvestment(''); setFeasibility(''); setImplDuration(''); setImplDate('');
     setBenefits(''); setSupport('');
-    setCo1Id(''); setCo1Name(''); setCo2Id(''); setCo2Name('');
-    setCo1Query(''); setCo2Query('');
+    setCoSuggesters([]); setCoQuery(''); setCoResults([]);
     setAnonymous(false); setTemplateType(''); setChallengeId('');
     setDraftId(null); setStep(1); setError(''); setDupWarning([]);
   }
@@ -324,10 +335,16 @@ export default function SubmitPage() {
 
             <div className="form-row">
               <div className="form-group">
-                <label>{t('form.investment')}</label>
-                <input className="form-control" value={investment} maxLength={255}
-                  onChange={e => setInvestment(e.target.value)}
-                  placeholder={t('form.investment_ph')} />
+                <label>{t('form.investment')} <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}>(₹ INR)</span></label>
+                {/* Amounts are in INR by default — a fixed ₹ adornment sits in
+                    front of the field so the currency is never ambiguous. */}
+                <div style={{ display:'flex',alignItems:'stretch' }}>
+                  <span style={{ display:'inline-flex',alignItems:'center',padding:'0 12px',background:'var(--panel-bg)',border:'1px solid var(--border)',borderRight:'none',borderRadius:'6px 0 0 6px',fontWeight:600,color:'var(--heading)' }}>₹</span>
+                  <input className="form-control" style={{ borderRadius:'0 6px 6px 0' }} value={investment} maxLength={255} inputMode="decimal"
+                    onChange={e => setInvestment(e.target.value)}
+                    placeholder={t('form.investment_ph')} />
+                </div>
+                <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.amount_inr')}</div>
               </div>
               <div className="form-group">
                 <label>{t('form.feasibility')}</label>
@@ -363,12 +380,26 @@ export default function SubmitPage() {
               <textarea className="form-control" rows="3" value={benefits}
                 onChange={e => setBenefits(e.target.value)}
                 placeholder={t('form.benefits_ph')} />
+              {/* Supporting document for the expected benefits (a costing sheet,
+                  projection, before/after data) attaches under this field. */}
+              <label style={{ marginTop:10,display:'block' }}>{t('form.attach_benefits')}</label>
+              <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                onChange={e => setFileBen(e.target.files[0]||null)} />
+              {fileBen && <div style={{ fontSize:12,color:'var(--subtle)',marginTop:4 }}>{fileBen.name}</div>}
             </div>
             <div className="form-group">
               <label>{t('form.support')}</label>
               <textarea className="form-control" rows="3" value={support}
                 onChange={e => setSupport(e.target.value)}
                 placeholder={t('form.support_ph')} />
+              {/* Documents backing up the requested support (a quote, spec,
+                  approval note) attach right here, under the field they relate
+                  to. Uploaded after the idea is created — see uploadFiles(). */}
+              <label style={{ marginTop:10,display:'block' }}>{t('form.attach_support')}</label>
+              <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                onChange={e => setFileSup(e.target.files[0]||null)} />
+              {fileSup && <div style={{ fontSize:12,color:'var(--subtle)',marginTop:4 }}>{fileSup.name}</div>}
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.attach_note')}</div>
             </div>
           </div>
         )}
@@ -392,47 +423,40 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 4: Co-Suggesters */}
+        {/* Step 5: Co-Suggesters — add as many colleagues as you like */}
         {step === 5 && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
-              <label>{t('form.co1')}</label>
+              <label>{t('form.co_suggesters')}</label>
               <div className="pos-rel">
-                <input className="form-control" value={co1Query}
-                  onChange={e => { setCo1Query(e.target.value); setCo1Id(''); setCo1Name(''); searchUsers(e.target.value,'1'); }}
+                <input className="form-control" value={coQuery}
+                  onChange={e => { setCoQuery(e.target.value); searchCoSuggesters(e.target.value); }}
                   placeholder={t('form.co_search_ph')} />
-                {co1Results.length > 0 && (
+                {coResults.length > 0 && (
                   <div className="user-search-results" style={{ display:'block' }}>
-                    {co1Results.map(u => (
-                      <div key={u.id} className="uitem" onClick={() => {
-                        setCo1Id(u.id); setCo1Name(`${u.name} (${u.employee_id})`);
-                        setCo1Query(u.name); setCo1Results([]);
-                      }}>{u.name} · {u.employee_id} · {u.department||'–'}</div>
+                    {coResults.map(u => (
+                      <div key={u.id} className="uitem" onClick={() => addCoSuggester(u)}>
+                        {u.name} · {u.employee_id} · {u.department||'–'}
+                      </div>
                     ))}
                   </div>
                 )}
               </div>
-              {co1Name && <div style={{ fontSize:12,color:'#10b981',marginTop:4 }}>✓ {co1Name}</div>}
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.co_hint')}</div>
             </div>
-            <div className="form-group">
-              <label>{t('form.co2')}</label>
-              <div className="pos-rel">
-                <input className="form-control" value={co2Query}
-                  onChange={e => { setCo2Query(e.target.value); setCo2Id(''); setCo2Name(''); searchUsers(e.target.value,'2'); }}
-                  placeholder={t('form.co_search_ph')} />
-                {co2Results.length > 0 && (
-                  <div className="user-search-results" style={{ display:'block' }}>
-                    {co2Results.map(u => (
-                      <div key={u.id} className="uitem" onClick={() => {
-                        setCo2Id(u.id); setCo2Name(`${u.name} (${u.employee_id})`);
-                        setCo2Query(u.name); setCo2Results([]);
-                      }}>{u.name} · {u.employee_id} · {u.department||'–'}</div>
-                    ))}
-                  </div>
-                )}
+
+            {coSuggesters.length > 0 && (
+              <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:6 }}>
+                {coSuggesters.map(c => (
+                  <span key={c.id} className="chip" style={{ display:'inline-flex',alignItems:'center',gap:6 }}>
+                    {c.label}
+                    <button type="button" onClick={() => removeCoSuggester(c.id)}
+                      aria-label={t('btn.remove')}
+                      style={{ border:'none',background:'none',cursor:'pointer',color:'var(--danger)',fontSize:14,lineHeight:1,padding:0 }}>✕</button>
+                  </span>
+                ))}
               </div>
-              {co2Name && <div style={{ fontSize:12,color:'#10b981',marginTop:4 }}>✓ {co2Name}</div>}
-            </div>
+            )}
           </div>
         )}
 
@@ -467,7 +491,7 @@ export default function SubmitPage() {
             </div>
             {/* Business case — only the answers that were actually given, so a
                 lightly-filled form does not review as a wall of blanks. */}
-            {[[t('form.investment'), investment],
+            {[[t('form.investment'), investment ? `₹ ${investment}` : ''],
               [t('form.feasibility'), feasibility ? translateImpact(feasibility, t) : ''],
               [t('form.impl_time'), [implDuration, implDate].filter(Boolean).join(' · ')],
               [t('form.benefits'), benefits],
@@ -479,10 +503,10 @@ export default function SubmitPage() {
               </div>
             ))}
 
-            {co1Name && (
+            {coSuggesters.length > 0 && (
               <div className="form-group">
                 <label>{t('preview.co_suggesters')}</label>
-                <div className="form-control" style={{ background:'var(--panel-bg)' }}>{co1Name}{co2Name ? ', ' + co2Name : ''}</div>
+                <div className="form-control" style={{ background:'var(--panel-bg)' }}>{coSuggesters.map(c => c.label).join(', ')}</div>
               </div>
             )}
 

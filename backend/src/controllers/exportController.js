@@ -2,6 +2,8 @@
  * Export controller — sends raw CSV / HTML (not JSON). Maps to api/export.php.
  */
 import * as exportService from '../services/exportService.js';
+import * as ideaService from '../services/ideaService.js';
+import { buildIdeaPdf } from '../services/ideaPdfService.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 function csvHeaders(res, filename) {
@@ -32,4 +34,16 @@ export const analytics = asyncHandler(async (req, res) => {
   res.send(html);
 });
 
-export default { ideas, leaderboard, analytics };
+// Single idea → Closure Summary PDF. The route restricts this to the review
+// hierarchy; the idea is loaded through the caller's own tenant pool, so an id
+// from another organisation simply 404s (no cross-tenant read is possible).
+export const ideaPdf = asyncHandler(async (req, res) => {
+  const { idea } = await ideaService.get(req.db, req.user, req.params.id);
+  const filename = `idea_${(idea.idea_code || idea.id)}_closure_summary.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+  buildIdeaPdf(idea, res);
+});
+
+export default { ideas, leaderboard, analytics, ideaPdf };

@@ -939,8 +939,12 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
   padding:14px 22px;flex-shrink:0;
   border-top:1px solid var(--border);background:var(--panel-bg);
 }
-/* The modal's tab strip sits flush inside the header, not floating. */
-.modal .tab-bar{margin-bottom:0;padding:0 22px}
+/* The modal's tab strip sits flush inside the header, not floating.
+   flex-shrink:0 is essential: the modal is a flex column with a fixed max-height,
+   and the body underneath has flex-basis:0, so without this the browser routes
+   ALL the overflow shrink onto the tab strip and collapses it to a sliver — the
+   tab labels (Details / Timeline / Attachments) get clipped to a thin line. */
+.modal .tab-bar{margin-bottom:0;padding:0 22px;flex-shrink:0}
 
 /* ── ALERTS ─────────────────────────────────────────────────────────────── */
 .alert{

@@ -783,4 +783,25 @@ export default {
   'time.min_ago':'{n} min ago',
   'time.hr_ago':'{n}h ago',
   'time.day_ago':'{n}d ago',
+
+  // ── INR amount hint + support-required attachment label ──
+  'form.attach_support':'Supporting Document — Support Required (Optional)',
+  'form.amount_inr':'Amount in Indian Rupees (₹).',
+
+  'detail.export_pdf':'Export PDF',
+
+  'login.identifier':'Email or phone number',
+  'login.identifier_ph':'you@company.com or 98765 43210',
+
+  'admin.uf_phone':'Phone',
+  'admin.uf_phone_ph':'Optional',
+  'admin.uf_dob':'Date of Birth',
+  'admin.uf_dob_hint':'The first-login password is built from this: first 4 letters of the name + birth year.',
+  'admin.uf_temp_pw':'Temp password',
+
+  'form.co_suggesters':'Co-suggesters',
+  'form.co_hint':'Search and add colleagues who contributed. Add as many as you like.',
+  'form.attach_benefits':'Supporting Document — Benefits Expected (Optional)',
+
+  'sa.monthly_activity':'Monthly Submission Activity',
 };
