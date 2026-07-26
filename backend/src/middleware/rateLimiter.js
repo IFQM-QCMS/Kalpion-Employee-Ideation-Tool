@@ -9,9 +9,12 @@
  */
 import rateLimit from 'express-rate-limit';
 
+// Per-IP global cap. Tunable via GLOBAL_RATE_LIMIT so a large deployment (many
+// users behind one office NAT) can raise it without a code change, and load
+// tests can run a dedicated instance uncapped. Default stays 300/min.
 export const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: Number(process.env.GLOBAL_RATE_LIMIT) || 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'Too many requests. Please slow down.' },

@@ -351,3 +351,7 @@ CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_toke
 -- from migration 001
 CREATE INDEX IF NOT EXISTS idx_ideas_status_submitted ON ideas(status, submitted_at);
 CREATE INDEX IF NOT EXISTS idx_ideas_submitter ON ideas(submitter_id);
+-- The ideas list orders by updated_at DESC (LIMIT 100). Without this the query
+-- full-scans + filesorts every request; under load that caused 500s. With it the
+-- optimiser reads the index in order and stops at 100 rows (verified by EXPLAIN).
+CREATE INDEX IF NOT EXISTS idx_ideas_updated_at ON ideas(updated_at);
