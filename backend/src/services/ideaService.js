@@ -478,24 +478,21 @@ export async function dashboard(db, user) {
   const uid = user.id;
   const role = user.role;
 
-  let total;
+  // One grouped query for the whole status breakdown instead of 1 total + 5
+  // per-status COUNTs (6 round-trips → 1). Individuals see their own ideas
+  // (total includes their drafts, matching the previous behaviour); everyone
+  // else sees all non-draft ideas.
+  const counts = { Submitted: 0, 'Under Review': 0, Approved: 0, Implemented: 0, Rejected: 0 };
+  let statusRows;
   if (INDIVIDUAL_ROLES.includes(role)) {
-    const [r] = await db.execute('SELECT COUNT(*) AS c FROM ideas WHERE submitter_id=?', [uid]);
-    total = Number(r[0].c);
+    [statusRows] = await db.execute('SELECT status, COUNT(*) AS c FROM ideas WHERE submitter_id=? GROUP BY status', [uid]);
   } else {
-    const [r] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status != 'Draft'");
-    total = Number(r[0].c);
+    [statusRows] = await db.query("SELECT status, COUNT(*) AS c FROM ideas WHERE status != 'Draft' GROUP BY status");
   }
-
-  const counts = {};
-  for (const s of ['Submitted', 'Under Review', 'Approved', 'Implemented', 'Rejected']) {
-    if (INDIVIDUAL_ROLES.includes(role)) {
-      const [r] = await db.execute('SELECT COUNT(*) AS c FROM ideas WHERE submitter_id=? AND status=?', [uid, s]);
-      counts[s] = Number(r[0].c);
-    } else {
-      const [r] = await db.execute('SELECT COUNT(*) AS c FROM ideas WHERE status=?', [s]);
-      counts[s] = Number(r[0].c);
-    }
+  let total = 0;
+  for (const r of statusRows) {
+    total += Number(r.c);
+    if (r.status in counts) counts[r.status] = Number(r.c);
   }
 
   let pendingReviews = 0;

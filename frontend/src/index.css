@@ -233,6 +233,11 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
   background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);
 }
 #sidebar.collapsed .sidebar-logo span{opacity:0;width:0;overflow:hidden}
+/* Collapsed: the wide org/IFQM logo must scale to fit the 68px rail instead of
+   being clipped at the edge. Center it and let it shrink to the available width
+   keeping its aspect ratio (overrides the inline height so it never distorts). */
+#sidebar.collapsed .sidebar-logo{padding:16px 8px;justify-content:center;gap:0}
+#sidebar.collapsed .sidebar-logo img{height:auto!important;max-height:28px;max-width:100%;padding:3px 5px!important}
 
 .nav-section{
   padding:20px 0 6px 18px;font-size:10.5px;font-weight:600;
@@ -1137,6 +1142,8 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
   #sidebar .nav-item span.label,#sidebar .sidebar-logo span,
   #sidebar .nav-section,#sidebar .sidebar-user-info{opacity:0;width:0;overflow:hidden}
   #sidebar .nav-item{justify-content:center;margin:1px 12px;padding:8px}
+  #sidebar .sidebar-logo{padding:16px 8px;justify-content:center;gap:0}
+  #sidebar .sidebar-logo img{height:auto!important;max-height:28px;max-width:100%;padding:3px 5px!important}
   #content{padding:20px 18px 40px}
   #topbar{padding:0 16px}
   .login-left{display:none}
