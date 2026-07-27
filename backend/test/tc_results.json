@@ -1,0 +1,746 @@
+{
+  "generated": "2026-07-27 04:27:07",
+  "total": 82,
+  "pass": 82,
+  "fail": 0,
+  "results": [
+    {
+      "id": "TC-AUTH-001",
+      "module": "Authentication",
+      "functionality": "Org Admin logs in with correct email/password",
+      "expected": "Login succeeds, JWT issued, role = admin",
+      "actual": "Login ok, role=admin",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-002",
+      "module": "Authentication",
+      "functionality": "Employee logs in with correct credentials",
+      "expected": "Login succeeds, role = employee",
+      "actual": "Login ok, role=employee",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-003",
+      "module": "Authentication",
+      "functionality": "Platform Admin logs in with correct credentials",
+      "expected": "Login succeeds, role = platform_admin",
+      "actual": "role=platform_admin",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-004",
+      "module": "Authentication",
+      "functionality": "User enters correct email but wrong password",
+      "expected": "Login blocked, generic error, no token",
+      "actual": "Blocked 401: Invalid email/phone or password. 4 attempt(s) remaining.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-005",
+      "module": "Authentication",
+      "functionality": "User enters an email that does not exist",
+      "expected": "Same generic error as wrong-password (no account-existence leak)",
+      "actual": "Identical generic message (401)",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-006",
+      "module": "Authentication",
+      "functionality": "User submits login with empty email/password",
+      "expected": "Validation error, login blocked (not a 500)",
+      "actual": "Rejected 400: Email and password are required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:04"
+    },
+    {
+      "id": "TC-AUTH-007",
+      "module": "Authentication",
+      "functionality": "SQL injection string in the email field",
+      "expected": "Safely rejected, no error/crash exposed",
+      "actual": "Safe 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-AUTH-008",
+      "module": "Authentication",
+      "functionality": "Deactivated user tries to log in with correct credentials",
+      "expected": "Login blocked, account-inactive handled",
+      "actual": "Blocked 401: Invalid email/phone or password. 4 attempt(s) remaining.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-AUTH-009",
+      "module": "Authentication",
+      "functionality": "Tampered JWT used on a protected endpoint",
+      "expected": "Rejected 401 — invalid signature grants no access",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-AUTH-010",
+      "module": "Authentication",
+      "functionality": "Access a protected endpoint with no token at all",
+      "expected": "Rejected 401",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-AUTH-011",
+      "module": "Authentication",
+      "functionality": "Repeated wrong-password attempts on one account",
+      "expected": "Attempts are counted and the account is throttled/locked",
+      "actual": "Throttle msg: Too many failed attempts. Please try again in 15 minutes.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-AUTH-012",
+      "module": "Authentication",
+      "functionality": "Forgot-password request for an unknown email",
+      "expected": "Generic success, no account-existence leak",
+      "actual": "Status 200: ok",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:05"
+    },
+    {
+      "id": "TC-PLAT-001",
+      "module": "Platform Admin",
+      "functionality": "Create a new organization with valid details",
+      "expected": "Tenant + org-admin account created",
+      "actual": "Status 200: created",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-002",
+      "module": "Platform Admin",
+      "functionality": "Create an organization with a duplicate slug",
+      "expected": "Rejected — slug already in use",
+      "actual": "Rejected 409: Organization code already in use.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-003",
+      "module": "Platform Admin",
+      "functionality": "Create an organization with missing required fields",
+      "expected": "Validation error listing missing fields",
+      "actual": "Rejected 400: All fields are required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-004",
+      "module": "Platform Admin",
+      "functionality": "List all tenants",
+      "expected": "Returns the tenant registry",
+      "actual": "Status 200, 3 tenants",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-005",
+      "module": "Platform Admin",
+      "functionality": "Suspend a tenant then reactivate it",
+      "expected": "Status transitions suspended → active",
+      "actual": "suspend=200, reactivate=200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-006",
+      "module": "Platform Admin",
+      "functionality": "Delete a tenant with a wrong confirmation slug",
+      "expected": "Blocked — confirmation mismatch",
+      "actual": "Blocked 400: Type the org code \"orgb\" to confirm deletion.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-007",
+      "module": "Platform Admin",
+      "functionality": "Reset a tenant admin password targeting a non-admin email",
+      "expected": "Rejected — target is not that org's admin",
+      "actual": "Rejected 404: No admin account with that email in this organisation.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-008",
+      "module": "Platform Admin",
+      "functionality": "Org Admin tries to reach the platform tenants endpoint",
+      "expected": "Forbidden — platform scope only",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-009",
+      "module": "Platform Admin",
+      "functionality": "Create a platform admin with a weak password",
+      "expected": "Rejected for not meeting policy",
+      "actual": "Rejected 400: Password must be at least 12 characters.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-PLAT-010",
+      "module": "Platform Admin",
+      "functionality": "Platform admin tries to delete their own account",
+      "expected": "Blocked — cannot remove self",
+      "actual": "Blocked 400: You cannot delete your own account.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-001",
+      "module": "Org Admin / Users",
+      "functionality": "Admin creates a user with valid details",
+      "expected": "User created with a derived temporary password",
+      "actual": "Status 200: created",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-002",
+      "module": "Org Admin / Users",
+      "functionality": "Create a user with a missing email",
+      "expected": "Validation error — email required",
+      "actual": "Rejected 400: Name, email, and employee ID are required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-003",
+      "module": "Org Admin / Users",
+      "functionality": "Create a user with an email already in use",
+      "expected": "Rejected — email already registered",
+      "actual": "Rejected 409: Email or employee ID already exists.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-004",
+      "module": "Org Admin / Users",
+      "functionality": "Employee (non-admin) tries to create a user",
+      "expected": "Forbidden — admin only",
+      "actual": "Status 403",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-005",
+      "module": "Org Admin / Users",
+      "functionality": "Admin lists users in the organization",
+      "expected": "Returns the org user list",
+      "actual": "Status 200, 3 users",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-USER-006",
+      "module": "Org Admin / Users",
+      "functionality": "Bulk-import preview with a malformed row",
+      "expected": "Row-level error reported, not a crash",
+      "actual": "Status 200: previewed",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-001",
+      "module": "Ideas",
+      "functionality": "Employee submits a valid idea",
+      "expected": "Idea accepted, id returned",
+      "actual": "Status 200: id=3",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-002",
+      "module": "Ideas",
+      "functionality": "Submit an idea with a missing title",
+      "expected": "Validation error — title required",
+      "actual": "Rejected 400: Title, present situation and proposed solution are required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-003",
+      "module": "Ideas",
+      "functionality": "Submit an idea with a <script> tag in the title",
+      "expected": "Stored safely / escaped, no script execution, no crash",
+      "actual": "Status 200 (stored)",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-004",
+      "module": "Ideas",
+      "functionality": "Submit an idea with an extremely long title (5000+ chars)",
+      "expected": "Rejected with validation, not a server crash",
+      "actual": "Handled 200: accepted",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-005",
+      "module": "Ideas",
+      "functionality": "Fetch own idea by id",
+      "expected": "Returns the idea record",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-006",
+      "module": "Ideas",
+      "functionality": "List ideas",
+      "expected": "Returns a list",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-007",
+      "module": "Ideas",
+      "functionality": "Dashboard aggregates for the org",
+      "expected": "Returns status counts / totals",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-IDEA-008",
+      "module": "Ideas",
+      "functionality": "Submit an idea without authentication",
+      "expected": "Rejected 401",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-001",
+      "module": "Voting & Community",
+      "functionality": "Community upvote on an idea",
+      "expected": "Upvote recorded",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-002",
+      "module": "Voting & Community",
+      "functionality": "Same user upvotes the same idea again",
+      "expected": "Vote toggles off (idempotent), no double count",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-003",
+      "module": "Voting & Community",
+      "functionality": "Rate an idea 1–5",
+      "expected": "Rating stored",
+      "actual": "Status 200: rated",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-004",
+      "module": "Voting & Community",
+      "functionality": "Rate an idea with an out-of-range value (6)",
+      "expected": "Rejected — rating must be 1–5",
+      "actual": "Rejected 400: Invalid request — idea_id and rating (1–5) required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-005",
+      "module": "Voting & Community",
+      "functionality": "Community vote with an invalid vote_type",
+      "expected": "Rejected — vote_type must be up/down",
+      "actual": "Rejected 400: idea_id and vote_type (up/down) required.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-VOTE-006",
+      "module": "Voting & Community",
+      "functionality": "Vote without a token",
+      "expected": "Rejected 401",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CMNT-001",
+      "module": "Comments",
+      "functionality": "Add a comment to an idea",
+      "expected": "Comment created",
+      "actual": "Status 200: added",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CMNT-002",
+      "module": "Comments",
+      "functionality": "Add an empty comment",
+      "expected": "Rejected — content required",
+      "actual": "Rejected 400: Comment content cannot be empty.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CMNT-003",
+      "module": "Comments",
+      "functionality": "Add a comment over 1000 characters",
+      "expected": "Rejected — length cap enforced",
+      "actual": "Rejected 400: Comment cannot exceed 1000 characters.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CMNT-004",
+      "module": "Comments",
+      "functionality": "Comment on a non-existent idea",
+      "expected": "Not found",
+      "actual": "Status 404",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CMNT-005",
+      "module": "Comments",
+      "functionality": "Comment containing a <script> tag",
+      "expected": "Stored safely / escaped on render, no crash",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-RVW-001",
+      "module": "Review & Approval",
+      "functionality": "Reviewer approves an idea",
+      "expected": "Idea moves to Approved with a workflow entry",
+      "actual": "Status 200: approved",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-RVW-002",
+      "module": "Review & Approval",
+      "functionality": "Submitter tries to approve their own idea",
+      "expected": "Forbidden — cannot review own idea",
+      "actual": "Status 403: Insufficient permissions",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-RVW-003",
+      "module": "Review & Approval",
+      "functionality": "Review with an invalid decision value",
+      "expected": "Rejected — invalid decision",
+      "actual": "Rejected 400: Invalid request.",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-RVW-004",
+      "module": "Review & Approval",
+      "functionality": "Approve a non-existent idea",
+      "expected": "Not found",
+      "actual": "Status 404",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-RVW-005",
+      "module": "Review & Approval",
+      "functionality": "Duplicate identical approval within 10 seconds",
+      "expected": "Idempotency guard — no duplicate workflow entry",
+      "actual": "Approved workflow rows: 1",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CAT-001",
+      "module": "Categories & Challenges",
+      "functionality": "Admin creates a category",
+      "expected": "Category created",
+      "actual": "Status 200: created",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CAT-002",
+      "module": "Categories & Challenges",
+      "functionality": "List categories",
+      "expected": "Returns the category list",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CAT-003",
+      "module": "Categories & Challenges",
+      "functionality": "Non-admin tries to create a category",
+      "expected": "Forbidden — admin only",
+      "actual": "Status 403",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-CAT-004",
+      "module": "Categories & Challenges",
+      "functionality": "Admin creates a challenge/campaign",
+      "expected": "Challenge created",
+      "actual": "Status 200: created",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-ANL-001",
+      "module": "Analytics & Reports",
+      "functionality": "Admin loads analytics aggregates",
+      "expected": "Returns aggregate metrics",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-ANL-002",
+      "module": "Analytics & Reports",
+      "functionality": "Admin loads the audit report",
+      "expected": "Returns the audit trail",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-ANL-003",
+      "module": "Analytics & Reports",
+      "functionality": "Analytics CSV export",
+      "expected": "Returns a downloadable analytics export",
+      "actual": "Status 200, type=text/html; charset=utf-8",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-ANL-004",
+      "module": "Analytics & Reports",
+      "functionality": "Leaderboard for the org",
+      "expected": "Returns a ranked list",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-NTF-001",
+      "module": "Notifications",
+      "functionality": "List notifications for the signed-in user",
+      "expected": "Returns the notification list",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-NTF-002",
+      "module": "Notifications",
+      "functionality": "Mark notifications read",
+      "expected": "Marked read, ok",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-NTF-003",
+      "module": "Notifications",
+      "functionality": "List notifications without a token",
+      "expected": "Rejected 401",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-EXP-001",
+      "module": "Reports & Export",
+      "functionality": "Export all ideas as CSV (admin)",
+      "expected": "Returns a CSV download",
+      "actual": "Status 200, type=text/csv; charset=utf-8",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-EXP-002",
+      "module": "Reports & Export",
+      "functionality": "Single-idea Closure PDF as a reviewer",
+      "expected": "Returns a PDF (200)",
+      "actual": "Status 200, type=application/pdf",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:06"
+    },
+    {
+      "id": "TC-EXP-003",
+      "module": "Reports & Export",
+      "functionality": "Single-idea PDF requested from another tenant",
+      "expected": "Blocked — tenant boundary",
+      "actual": "Status 404",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-BRND-001",
+      "module": "Branding & Settings",
+      "functionality": "Admin reads branding",
+      "expected": "Returns branding config",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-BRND-002",
+      "module": "Branding & Settings",
+      "functionality": "Employee tries to update branding",
+      "expected": "Forbidden — admin only",
+      "actual": "Status 403",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-BRND-003",
+      "module": "Branding & Settings",
+      "functionality": "Admin saves settings; SMTP secret is never echoed back",
+      "expected": "Saved; password field masked/omitted on read",
+      "actual": "Secret not echoed",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SUP-001",
+      "module": "Support",
+      "functionality": "User raises a support ticket",
+      "expected": "Ticket created",
+      "actual": "Status 200: id=undefined",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SUP-002",
+      "module": "Support",
+      "functionality": "Another org cannot read this org's ticket",
+      "expected": "Blocked — tenant isolation",
+      "actual": "Status 404",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SUP-003",
+      "module": "Support",
+      "functionality": "Platform internal note stays hidden from the tenant",
+      "expected": "Internal message not visible to org users",
+      "actual": "Internal note hidden",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-QCMS-001",
+      "module": "QCMS Integration",
+      "functionality": "Admin saves the QCMS API key",
+      "expected": "Saved and enabled",
+      "actual": "Status 200: saved",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-QCMS-002",
+      "module": "QCMS Integration",
+      "functionality": "Reading the QCMS config masks the stored key",
+      "expected": "Key returned masked (••••), never in clear",
+      "actual": "Key masked",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-QCMS-003",
+      "module": "QCMS Integration",
+      "functionality": "QCMS base URL is taken from the environment, not the client",
+      "expected": "No client-writable base_url; env value is authoritative",
+      "actual": "Client base_url ignored",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-QCMS-004",
+      "module": "QCMS Integration",
+      "functionality": "List approved ideas eligible to push (admin)",
+      "expected": "Returns approved ideas",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-QCMS-005",
+      "module": "QCMS Integration",
+      "functionality": "Non-admin attempts to push to QCMS",
+      "expected": "Forbidden — admin only",
+      "actual": "Status 403",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SEC-001",
+      "module": "Security & Multi-Tenancy",
+      "functionality": "Org A user cannot see Org B idea content",
+      "expected": "Cross-tenant content never exposed (own-tenant record or 404)",
+      "actual": "No cross-tenant content (status 200)",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SEC-002",
+      "module": "Security & Multi-Tenancy",
+      "functionality": "A tenant JWT cannot reach platform-admin routes",
+      "expected": "Forbidden",
+      "actual": "Status 401",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SEC-003",
+      "module": "Security & Multi-Tenancy",
+      "functionality": "SQL injection in a query parameter",
+      "expected": "Handled safely, no 500/leak",
+      "actual": "Status 200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SEC-004",
+      "module": "Security & Multi-Tenancy",
+      "functionality": "Oversized JSON payload",
+      "expected": "Rejected cleanly (413/400), not a crash",
+      "actual": "Status 413",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    },
+    {
+      "id": "TC-SEC-005",
+      "module": "Security & Multi-Tenancy",
+      "functionality": "Health and readiness probes respond",
+      "expected": "Liveness ok; readiness reports DB reachability",
+      "actual": "health=200, ready=200",
+      "result": "Pass",
+      "ts": "2026-07-27 04:27:07"
+    }
+  ]
+}

@@ -176,13 +176,9 @@ export async function tenantDetail(tenantId) {
 // original built-in list if that table is empty or unreachable.
 
 /** Split schema.sql into executable statements (mirrors the PHP explode(';')). */
-function splitSqlStatements(sql) {
-  return sql.split(';').map((s) => s.trim()).filter((s) => {
-    if (!s) return false;
-    const code = s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').trim();
-    return code.length > 0;
-  });
-}
+/* The tenant schema is now applied in a single multi-statement query (see
+   createTenant), so the app no longer hand-splits SQL on ';' — a splitter that
+   could never be made safe against semicolons inside comments and strings. */
 
 export async function createTenant(body) {
   const orgName = String(body.org_name ?? '').trim();
@@ -217,12 +213,18 @@ export async function createTenant(body) {
       password: config.masterDb.password,
       database: dbName,
       charset: 'utf8mb4',
+      // Provision the whole schema in one round trip, exactly as the test
+      // harness does. The previous approach split the file on ';' and ran the
+      // pieces one by one, which shattered any statement whose body contained a
+      // semicolon inside a comment or string (e.g. the `-- …estimate; …` note in
+      // the ideas table) — so "Create New Organisation" died with a bare SQL
+      // syntax error. Letting the driver parse the batch removes that whole class
+      // of bug and keeps provisioning identical to how the schema is authored.
+      multipleStatements: true,
     });
 
     const schema = await fs.readFile(SCHEMA_PATH, 'utf8');
-    for (const stmt of splitSqlStatements(schema)) {
-      await conn.query(stmt);
-    }
+    await conn.query(schema);
 
     const initials = adminName.split(' ').filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || 'OA';
     const hash = await bcrypt.hash(adminPass, 12);
