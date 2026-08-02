@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -150,7 +150,10 @@ export default function LoginPage() {
   useParticles(canvasRef);
 
   useEffect(() => {
-    const rt = params.get('reset_token');
+    // The reset email links to /reset-password?token=…&org=… (authService), while
+    // older links used ?reset_token=. Accept both so neither generation of email
+    // dead-ends.
+    const rt = params.get('token') || params.get('reset_token');
     if (rt) handleResetPassword(rt);
   }, []);
 
@@ -192,7 +195,7 @@ export default function LoginPage() {
     if (pw1 !== pw2) { showToast(t('login.pw_mismatch'), 'warning'); return; }
     try {
       const res = await authApi.resetPassword({ token, password: pw1, org_slug: params.get('org') || '' });
-      if (res.data.success) { showToast(t('login.pw_updated'), 'success'); navigate('/'); }
+      if (res.data.success) { showToast(t('login.pw_updated'), 'success'); navigate('/login'); }
       else showToast(res.data.error || t('login.reset_failed'), 'danger');
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
@@ -220,7 +223,7 @@ export default function LoginPage() {
           animation:ip-in .6s cubic-bezier(.16,.84,.44,1) both}
         @keyframes ip-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-        .ifqm-particles .brand{display:flex;align-items:center;gap:12px}
+        .ifqm-particles .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
         .ifqm-particles .brand img{height:52px;background:#fff;border-radius:12px;padding:7px 12px;
           object-fit:contain;box-shadow:0 8px 26px rgba(79,70,229,.20)}
         .ifqm-particles .brand .wm{font-size:20px;font-weight:800;letter-spacing:-.02em;color:var(--heading)}
@@ -256,6 +259,7 @@ export default function LoginPage() {
         .ifqm-particles .link:hover{text-decoration:underline}
         .ifqm-particles .err{background:var(--danger-light);color:var(--danger);border:1px solid var(--danger);
           border-radius:10px;padding:9px 13px;font-size:12.5px}
+        .ifqm-particles .alt-cta{margin-top:2px;font-size:12.5px;color:var(--text-muted);text-align:center}
         .ifqm-particles .foot{margin-top:12px;font-size:11px;color:var(--subtle)}
       `}</style>
 
@@ -264,10 +268,10 @@ export default function LoginPage() {
       <div className="glow glow-b" aria-hidden="true" />
 
       <div className="auth-col">
-        <div className="brand">
+        <Link to="/" className="brand" aria-label="IFQM home">
           <img src="/assets/ifqm-logo.png" alt="IFQM" onError={e => { e.target.style.display='none'; }} />
           <span className="wm">IFQM<small>{t('login.app_title')}</small></span>
-        </div>
+        </Link>
 
         <div>
           <h1>{t('login.btn')}</h1>
@@ -300,6 +304,10 @@ export default function LoginPage() {
             {loading ? t('login.signing_in') : t('login.btn')}
           </button>
         </form>
+
+        <p className="alt-cta">
+          {t('login.new_here')} <Link className="link" to="/signup">{t('login.request_access')}</Link>
+        </p>
 
         <p className="foot">{t('login.powered_by')}</p>
       </div>

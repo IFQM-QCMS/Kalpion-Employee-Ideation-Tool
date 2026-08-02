@@ -1,7 +1,13 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: '/api',
+  // Same-origin `/api` locally (the Vite dev proxy forwards it to :4000) and
+  // for any deployment that puts the API behind the same host. When the API
+  // lives on a different origin — e.g. the frontend on a static host and the
+  // backend elsewhere — set VITE_API_URL at build time to its full base URL,
+  // e.g. https://ifqm-api.onrender.com/api, and add that origin to the
+  // backend's CORS_ORIGIN.
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   // Deliberately NO default Content-Type. axios already sets
   // `application/json` for plain-object bodies, and pinning it here forced that
   // value onto multipart uploads too — a FormData body must be sent as

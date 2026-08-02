@@ -49,7 +49,9 @@ export default function Topbar({ onToggleSidebar }) {
 
   async function doLogout() {
     await logout();
-    navigate('/');
+    // Signing out returns you to the sign-in screen, not to the public pitch
+    // page that now lives at "/".
+    navigate('/login');
   }
 
   // Close dropdowns on outside click

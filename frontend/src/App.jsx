@@ -4,7 +4,9 @@ import { BrandingProvider } from './context/BrandingContext';
 import { ToastProvider } from './context/ToastContext';
 import { LangProvider } from './context/LangContext';
 import { NotifProvider } from './context/NotifContext';
+import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
+import SignupPage from './pages/SignupPage';
 import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import AppShell from './components/Layout/AppShell';
 import DashboardPage from './pages/DashboardPage';
@@ -34,7 +36,9 @@ function PrivateRoute({ children }) {
       <div className="spinner" style={{ width:36,height:36,borderWidth:3 }}></div>
     </div>
   );
-  if (!user) return <Navigate to="/" replace />;
+  // "/" is the public marketing page now, so an expired session belongs on the
+  // sign-in screen rather than back at the pitch.
+  if (!user) return <Navigate to="/login" replace />;
 
   // A bulk-imported employee signs in with a temporary password derived from
   // their name and birth year — guessable by any colleague. Until they replace
@@ -76,7 +80,13 @@ function PublicRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
+      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+      <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+      {/* Password-reset emails link here (backend builds /reset-password?token=…&org=…),
+          so it must reach the login screen with its query string intact — a
+          redirect to "/" would drop the token and land on the marketing page. */}
+      <Route path="/reset-password" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/app" element={<PrivateRoute><AppShell /></PrivateRoute>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
       </Route>
