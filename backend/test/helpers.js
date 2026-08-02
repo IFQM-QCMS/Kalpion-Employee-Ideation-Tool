@@ -18,6 +18,10 @@ process.env.NODE_ENV = 'test';
 process.env.MASTER_DB_NAME = 'ifqm_test_master';
 process.env.FALLBACK_DB_NAME = 'ifqm_test_a'; // even the last-resort fallback stays in test land
 process.env.AUTH_RATE_LIMIT = '10000';        // per-IP limiter must not throttle the suite
+// The suite is also a load generator — the 300/min global cap is real (and is
+// itself exercised deliberately), but leaving it in force here would 429 the
+// concurrency and throughput cases and mask what they are actually measuring.
+process.env.GLOBAL_RATE_LIMIT = '1000000';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -139,8 +143,19 @@ export async function api(method, urlPath, { token, body, raw } = {}) {
   const text = await res.text();
   let data = null;
   try { data = JSON.parse(text); } catch { /* non-JSON body */ }
-  return { status: res.status, data, text, contentType: res.headers.get('content-type') || '' };
+  return {
+    status: res.status,
+    data,
+    text,
+    contentType: res.headers.get('content-type') || '',
+    // Response headers matter to several checks (security headers, attachment
+    // disposition, rate-limit budget), so expose them rather than the body alone.
+    headers: Object.fromEntries(res.headers.entries()),
+  };
 }
+
+/** Base URL of the running instance — for checks that need a raw fetch. */
+export const getBaseUrl = () => baseUrl;
 
 export async function login(email, password, orgSlug = '') {
   const { status, data } = await api('POST', '/api/auth/login', {

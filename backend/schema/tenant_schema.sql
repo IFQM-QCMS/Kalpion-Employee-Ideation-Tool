@@ -337,21 +337,125 @@ CREATE TABLE IF NOT EXISTS user_import_errors (
   INDEX idx_import_err_job (job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
-CREATE INDEX IF NOT EXISTS idx_ideas_submitted_at ON ideas(submitted_at);
-CREATE INDEX IF NOT EXISTS idx_ideas_submitter_status ON ideas(submitter_id, status);
-CREATE INDEX IF NOT EXISTS idx_ideas_current_reviewer ON ideas(current_reviewer_id);
-CREATE INDEX IF NOT EXISTS idx_notifications_user_read ON notifications(user_id, is_read);
-CREATE INDEX IF NOT EXISTS idx_idea_votes_idea ON idea_votes(idea_id);
-CREATE INDEX IF NOT EXISTS idx_idea_community_votes_idea ON idea_community_votes(idea_id);
-CREATE INDEX IF NOT EXISTS idx_idea_comments_idea ON idea_comments(idea_id);
-CREATE INDEX IF NOT EXISTS idx_idea_workflow_idea ON idea_workflow(idea_id);
-CREATE INDEX IF NOT EXISTS idx_idea_reviewers_idea_reviewer ON idea_reviewers(idea_id, reviewer_id);
-CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+-- ── Secondary indexes ────────────────────────────────────────────────────────
+-- These were `CREATE INDEX IF NOT EXISTS`, which is MariaDB-only syntax: it runs
+-- on a local XAMPP box and fails with a bare syntax error on real MySQL 8 (any
+-- managed host). The guarded form below is the same idiom migration 001 uses,
+-- is idempotent on both engines, and keeps this file re-runnable as a repair
+-- tool for a half-built schema.
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_status') = 0,
+  'CREATE INDEX idx_ideas_status ON ideas(status)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_submitted_at') = 0,
+  'CREATE INDEX idx_ideas_submitted_at ON ideas(submitted_at)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_submitter_status') = 0,
+  'CREATE INDEX idx_ideas_submitter_status ON ideas(submitter_id, status)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_current_reviewer') = 0,
+  'CREATE INDEX idx_ideas_current_reviewer ON ideas(current_reviewer_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'notifications'
+       AND INDEX_NAME = 'idx_notifications_user_read') = 0,
+  'CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'idea_votes'
+       AND INDEX_NAME = 'idx_idea_votes_idea') = 0,
+  'CREATE INDEX idx_idea_votes_idea ON idea_votes(idea_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'idea_community_votes'
+       AND INDEX_NAME = 'idx_idea_community_votes_idea') = 0,
+  'CREATE INDEX idx_idea_community_votes_idea ON idea_community_votes(idea_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'idea_comments'
+       AND INDEX_NAME = 'idx_idea_comments_idea') = 0,
+  'CREATE INDEX idx_idea_comments_idea ON idea_comments(idea_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'idea_workflow'
+       AND INDEX_NAME = 'idx_idea_workflow_idea') = 0,
+  'CREATE INDEX idx_idea_workflow_idea ON idea_workflow(idea_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'idea_reviewers'
+       AND INDEX_NAME = 'idx_idea_reviewers_idea_reviewer') = 0,
+  'CREATE INDEX idx_idea_reviewers_idea_reviewer ON idea_reviewers(idea_id, reviewer_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens'
+       AND INDEX_NAME = 'idx_password_reset_tokens_user') = 0,
+  'CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens(user_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 -- from migration 001
-CREATE INDEX IF NOT EXISTS idx_ideas_status_submitted ON ideas(status, submitted_at);
-CREATE INDEX IF NOT EXISTS idx_ideas_submitter ON ideas(submitter_id);
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_status_submitted') = 0,
+  'CREATE INDEX idx_ideas_status_submitted ON ideas(status, submitted_at)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_submitter') = 0,
+  'CREATE INDEX idx_ideas_submitter ON ideas(submitter_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 -- The ideas list orders by updated_at DESC (LIMIT 100). Without this the query
 -- full-scans + filesorts every request; under load that caused 500s. With it the
 -- optimiser reads the index in order and stops at 100 rows (verified by EXPLAIN).
-CREATE INDEX IF NOT EXISTS idx_ideas_updated_at ON ideas(updated_at);
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_updated_at') = 0,
+  'CREATE INDEX idx_ideas_updated_at ON ideas(updated_at)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

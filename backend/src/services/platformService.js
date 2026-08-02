@@ -209,6 +209,8 @@ export async function createTenant(body) {
 
     conn = await mysql.createConnection({
       host: config.masterDb.host,
+      port: config.db.port,
+      ssl: config.db.ssl,
       user: config.masterDb.user,
       password: config.masterDb.password,
       database: dbName,

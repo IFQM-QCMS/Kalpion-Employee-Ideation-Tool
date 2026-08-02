@@ -22,6 +22,27 @@ const int = (v, fallback) => {
 const INSECURE_JWT_DEFAULT = 'change-this-to-a-long-random-secret-string';
 const MIN_SECRET_LENGTH = 32;
 
+/**
+ * TLS settings for every MySQL connection, or undefined for a plaintext one.
+ *
+ * A local XAMPP MySQL speaks plaintext on 3306; every managed provider (Aiven,
+ * PlanetScale, …) listens on some other port and rejects unencrypted clients.
+ * Both differences are env-gated so the local setup keeps working untouched.
+ *
+ * DB_SSL_CA (the provider's CA certificate, pasted in full) is what makes the
+ * connection *authenticated* as well as encrypted. Without it we still encrypt,
+ * but cannot prove the server is the right one — acceptable for a throwaway
+ * test deployment, not for real data.
+ */
+function readDbSsl() {
+  if (String(process.env.DB_SSL || '').toLowerCase() !== 'true') return undefined;
+  const ca = (process.env.DB_SSL_CA || '').trim();
+  return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
+}
+
+const dbPort = int(process.env.DB_PORT, 3306);
+const dbSsl = readDbSsl();
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   port: int(process.env.PORT, 4000),
@@ -36,9 +57,13 @@ const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
+  // ── Transport settings shared by every MySQL connection ──
+  db: { port: dbPort, ssl: dbSsl },
+
   // ── Master DB (tenant registry) — MASTER_DB_* in config.php ──
   masterDb: {
     host: process.env.MASTER_DB_HOST || 'localhost',
+    port: dbPort,
     user: process.env.MASTER_DB_USER || 'root',
     password: process.env.MASTER_DB_PASS || '',
     database: process.env.MASTER_DB_NAME || 'ifqm_master',
@@ -47,6 +72,7 @@ const config = {
   // ── Built-in fallback tenant — FALLBACK_DB_* in config.php ──
   fallbackDb: {
     host: process.env.FALLBACK_DB_HOST || 'localhost',
+    port: dbPort,
     user: process.env.FALLBACK_DB_USER || 'root',
     password: process.env.FALLBACK_DB_PASS || '',
     database: process.env.FALLBACK_DB_NAME || 'ifqm_ideation',

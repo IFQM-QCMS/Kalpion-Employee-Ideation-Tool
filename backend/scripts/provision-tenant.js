@@ -31,14 +31,6 @@ function parseArgs(argv) {
   return out;
 }
 
-function splitSqlStatements(sql) {
-  return sql.split(';').map((s) => s.trim()).filter((s) => {
-    if (!s) return false;
-    const code = s.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n').trim();
-    return code.length > 0;
-  });
-}
-
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   const name = opts.name || null;
@@ -71,7 +63,8 @@ async function main() {
   let master;
   try {
     master = await mysql.createConnection({
-      host: config.masterDb.host, user: config.masterDb.user,
+      host: config.masterDb.host, port: config.db.port, ssl: config.db.ssl,
+      user: config.masterDb.user,
       password: config.masterDb.password, database: config.masterDb.database, charset: 'utf8mb4',
     });
     console.log('[1/5] Connected to ifqm_master OK');
@@ -91,7 +84,7 @@ async function main() {
   // 2. Create tenant database
   let rootConn;
   try {
-    rootConn = await mysql.createConnection({ host: dbHost, user: dbUser, password: dbPass, charset: 'utf8mb4' });
+    rootConn = await mysql.createConnection({ host: dbHost, port: config.db.port, ssl: config.db.ssl, user: dbUser, password: dbPass, charset: 'utf8mb4' });
     await rootConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     console.log(`[2/5] Created database \`${dbName}\` OK`);
   } catch (e) {
@@ -106,9 +99,18 @@ async function main() {
   }
   let tenantConn;
   try {
-    tenantConn = await mysql.createConnection({ host: dbHost, user: dbUser, password: dbPass, database: dbName, charset: 'utf8mb4' });
-    const schema = fs.readFileSync(SCHEMA_PATH, 'utf8');
-    for (const stmt of splitSqlStatements(schema)) await tenantConn.query(stmt);
+    // Send the schema as one batch and let the driver parse it, exactly as
+    // platformService.createTenant does. Splitting the file on ';' shattered any
+    // statement whose body contained a semicolon inside a comment (the
+    // `-- …estimate; …` note in the ideas table), so provisioning died with a
+    // bare SQL syntax error. It also breaks the PREPARE/EXECUTE guards the
+    // schema now uses for indexes.
+    tenantConn = await mysql.createConnection({
+      host: dbHost, port: config.db.port, ssl: config.db.ssl,
+      user: dbUser, password: dbPass, database: dbName, charset: 'utf8mb4',
+      multipleStatements: true,
+    });
+    await tenantConn.query(fs.readFileSync(SCHEMA_PATH, 'utf8'));
     console.log('[3/5] Schema applied OK');
   } catch (e) {
     console.error('ERROR: Schema failed: ' + e.message);
@@ -149,9 +151,13 @@ async function main() {
   // 5. Register in master DB
   try {
     await master.execute(
+      // db_user/db_pass are written empty on purpose. Tenant pools take their
+      // credentials from config (APP_DB_*), never from this row — see
+      // src/database/tenant.js — so persisting the live password here would put
+      // a working database login in the registry for no benefit.
       `INSERT INTO tenants (name, slug, domain, db_host, db_name, db_user, db_pass, status, is_default)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0)`,
-      [name, slug, domain, dbHost, dbName, dbUser, dbPass]
+       VALUES (?, ?, ?, ?, ?, '', '', 'active', 0)`,
+      [name, slug, domain, dbHost, dbName]
     );
     console.log('[5/5] Tenant registered in ifqm_master OK');
   } catch (e) {

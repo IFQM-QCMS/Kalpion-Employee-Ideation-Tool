@@ -46,8 +46,17 @@ if (!fs.existsSync(envPath)) {
 const { default: dotenv } = await import('dotenv');
 dotenv.config({ path: envPath });
 
+// Port and TLS mirror src/config/index.js, re-read here because this script
+// runs before (and without) the app config so it can also repair a half-built
+// database. Defaults are the local XAMPP ones: 3306, plaintext.
 const DB = {
   host: process.env.MASTER_DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT, 10) || 3306,
+  ssl: String(process.env.DB_SSL || '').toLowerCase() === 'true'
+    ? ((process.env.DB_SSL_CA || '').trim()
+        ? { ca: process.env.DB_SSL_CA.trim(), rejectUnauthorized: true }
+        : { rejectUnauthorized: false })
+    : undefined,
   user: process.env.MASTER_DB_USER || 'root',
   password: process.env.MASTER_DB_PASS || '',
   multipleStatements: true, // the .sql files are multi-statement by nature

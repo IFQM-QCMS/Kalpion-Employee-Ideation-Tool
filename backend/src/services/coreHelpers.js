@@ -4,14 +4,23 @@
  * Each takes the tenant `db` pool as its first argument.
  */
 
-/** Generate the next idea code: IDA-<year>-<NNN>. Mirrors generateIdeaCode(). */
+/**
+ * Generate the next idea code: IDA-<year>-<NNN>. Mirrors generateIdeaCode().
+ *
+ * Derived from the highest code already issued this year, not from COUNT(*).
+ * A count reuses a number as soon as any idea is deleted, and the column is
+ * UNIQUE — so the next submission collided and the submitter got a 500 for
+ * someone else's deletion. The caller still retries on a duplicate, because two
+ * simultaneous submissions can read the same maximum.
+ */
 export async function generateIdeaCode(db) {
   const year = new Date().getFullYear();
   const [rows] = await db.execute(
-    'SELECT COUNT(*) AS c FROM ideas WHERE YEAR(created_at) = ?',
-    [year]
+    `SELECT MAX(CAST(SUBSTRING_INDEX(idea_code, '-', -1) AS UNSIGNED)) AS n
+       FROM ideas WHERE idea_code LIKE ?`,
+    [`IDA-${year}-%`]
   );
-  const n = Number(rows[0].c) + 1;
+  const n = Number(rows[0].n || 0) + 1;
   return `IDA-${year}-${String(n).padStart(3, '0')}`;
 }
 

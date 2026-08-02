@@ -141,6 +141,8 @@ export function getTenantPool(tenant) {
 
   const pool = mysql.createPool({
     host,
+    port: config.db.port,
+    ssl: config.db.ssl,
     user,
     password,
     database: tenant.db_name,

@@ -26,6 +26,8 @@ export function masterDb() {
   if (pool) return pool;
   pool = mysql.createPool({
     host: config.masterDb.host,
+    port: config.db.port,
+    ssl: config.db.ssl,
     user: config.masterDb.user,
     password: config.masterDb.password,
     database: config.masterDb.database,

@@ -482,8 +482,8 @@ test('QCMS integration: approved-ideas list, key masking, and the push flow', as
   });
   await new Promise((r) => qcms.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${qcms.address().port}/api/v1/integrations`;
-  // The base URL is env-managed (not settable per-tenant), so point the runtime
-  // config at the mock server for the duration of this test.
+  // Exercise the default (no per-tenant override) path: point the runtime config
+  // at the mock server for the duration of this test.
   const savedBase = config.qcms.baseUrl;
   config.qcms.baseUrl = base;
 
@@ -519,6 +519,62 @@ test('QCMS integration: approved-ideas list, key masking, and the push flow', as
   } finally {
     config.qcms.baseUrl = savedBase;
     await new Promise((r) => qcms.close(r));
+  }
+});
+
+test('the QCMS base URL can be overridden per tenant from the admin dashboard', async () => {
+  // A stand-in QCMS that always imports, so a push proves which base URL was used.
+  const hits = [];
+  const server = http.createServer((req, res) => {
+    hits.push(req.url);
+    res.writeHead(201, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Idea imported successfully.' }));
+  });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const override = `http://127.0.0.1:${server.address().port}/custom/v1`;
+  // The .env default must NOT be reachable — only the override may satisfy a push.
+  const savedBase = config.qcms.baseUrl;
+  config.qcms.baseUrl = 'http://127.0.0.1:1/unreachable';
+
+  try {
+    // Out of the box the field is empty and the .env default is reported.
+    const before = await api('GET', '/api/integrations/qcms', { token: AADMIN });
+    assert.equal(before.data.config.base_url_custom, false);
+    assert.equal(before.data.config.base_url, config.qcms.baseUrl);
+    assert.equal(before.data.config.default_base_url, config.qcms.baseUrl);
+
+    // A typo must be rejected rather than silently sending ideas nowhere.
+    const bad = await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { base_url: 'not a url' } });
+    assert.equal(bad.status, 400);
+    const badScheme = await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { base_url: 'ftp://qcms.example.com' } });
+    assert.equal(badScheme.status, 400);
+
+    // Save the override (trailing slashes trimmed) alongside a working key.
+    const saved = await api('PUT', '/api/integrations/qcms', {
+      token: AADMIN, body: { base_url: `${override}/`, api_key: 'qcms_live_override', enabled: true },
+    });
+    assert.equal(saved.data.config.base_url, override);
+    assert.equal(saved.data.config.base_url_custom, true);
+    assert.equal(saved.data.config.default_base_url, config.qcms.baseUrl, 'the .env default stays visible as the fallback');
+
+    // The push must go to the override, not the (unreachable) default.
+    const [idea] = await sql('ifqm_test_a', "SELECT id FROM ifqm_test_a.ideas WHERE status = 'Approved' LIMIT 1");
+    const push = await api('POST', '/api/integrations/push', { token: AADMIN, body: { idea_ids: [idea.id] } });
+    assert.equal(push.data.imported, 1);
+    assert.deepEqual(hits, ['/custom/v1/ideas']);
+
+    // An org admin cannot reach into another tenant: org B still sees the default.
+    const otherOrg = await api('GET', '/api/integrations/qcms', { token: BADMIN });
+    assert.equal(otherOrg.data.config.base_url_custom, false);
+
+    // Clearing the field falls back to the .env default.
+    const cleared = await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { base_url: '' } });
+    assert.equal(cleared.data.config.base_url_custom, false);
+    assert.equal(cleared.data.config.base_url, config.qcms.baseUrl);
+    assert.equal(cleared.data.config.api_key_set, true, 'clearing the URL must not wipe the stored key');
+  } finally {
+    config.qcms.baseUrl = savedBase;
+    await new Promise((r) => server.close(r));
   }
 });
 

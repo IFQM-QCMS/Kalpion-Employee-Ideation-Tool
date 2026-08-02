@@ -212,6 +212,21 @@ export async function get(db, user, id) {
     idea.department = '—';
     idea.business_unit = '—';
     idea.manager_name = null;
+
+    // The header fields are not the only place the author's name appears. The
+    // approval timeline carries an actor name on every entry — starting with
+    // the submitter's own "Submitted" row — and the co-suggester list names the
+    // people who raised it with them. Masking the header alone still told any
+    // colleague exactly who filed the anonymous report.
+    idea.workflow = (idea.workflow || []).map((w) => (
+      Number(w.actor_id) === Number(idea.submitter_id)
+        ? { ...w, actor_name: 'Anonymous', actor_role: null }
+        : w
+    ));
+    idea.co_suggesters = [];
+    idea.co_suggesters_display = '';
+    idea.co1_name = null;
+    idea.co2_name = null;
   }
 
   return { success: true, idea };
@@ -321,23 +336,36 @@ export async function submitOrDraft(db, user, action, b) {
     );
     ideaId = editId;
   } else {
-    const code = await generateIdeaCode(db);
-    const [result] = await db.execute(
-      `INSERT INTO ideas (
-          idea_code,title,present_situation,proposed_solution,
-          impact_areas,impact_level,tangible_benefit,intangible_benefit,
-          investment_required,feasibility,implementation_duration,
-          expected_implementation_date,benefits_expected,support_required,
-          co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
-          status,submitter_id,submitted_at,review_due_date,current_reviewer_id,
-          ai_score,ai_reason)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      [code, title, sit, sol, impacts, impLvl, tangible, intang,
-        investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
-        co1, co2, isAnon, challengeId, templateType,
-        status, user.id, submittedAt, reviewDueDate, currentReviewerId,
-        aiScore, aiReason]
-    );
+    // Two people submitting at the same instant read the same "next" code, so
+    // one INSERT loses the UNIQUE race and used to surface as a 500 on a
+    // perfectly valid submission. Re-read the sequence and retry instead — the
+    // collision is rare, self-correcting, and must never reach the submitter.
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      const code = await generateIdeaCode(db);
+      try {
+        [result] = await db.execute(
+          `INSERT INTO ideas (
+              idea_code,title,present_situation,proposed_solution,
+              impact_areas,impact_level,tangible_benefit,intangible_benefit,
+              investment_required,feasibility,implementation_duration,
+              expected_implementation_date,benefits_expected,support_required,
+              co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
+              status,submitter_id,submitted_at,review_due_date,current_reviewer_id,
+              ai_score,ai_reason)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          [code, title, sit, sol, impacts, impLvl, tangible, intang,
+            investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
+            co1, co2, isAnon, challengeId, templateType,
+            status, user.id, submittedAt, reviewDueDate, currentReviewerId,
+            aiScore, aiReason]
+        );
+        break;
+      } catch (err) {
+        const clash = err?.code === 'ER_DUP_ENTRY' && /idea_code/i.test(err.message || '');
+        if (!clash || attempt >= 8) throw err;
+      }
+    }
     ideaId = result.insertId;
   }
 
@@ -378,6 +406,33 @@ export async function submitOrDraft(db, user, action, b) {
 }
 
 // ── REVIEW ACTION (approve / reject / implement + escalation) ───────
+/**
+ * Serialise everything that decides one idea's fate.
+ *
+ * The duplicate-action guard below reads, then writes. Two clicks that land in
+ * the same millisecond — a double-tapped Approve button, or a retry from a
+ * flaky connection — both read "no recent action" and both wrote one, so an
+ * idea could be approved five times over with five audit entries. A named lock
+ * held for the length of the decision makes the read-then-write atomic across
+ * every request and every application instance (it lives in MySQL, not in this
+ * process). It must be taken and released on the SAME connection, hence the
+ * dedicated one rather than the pool.
+ */
+async function withIdeaDecisionLock(db, ideaId, fn) {
+  const conn = await db.getConnection();
+  const lockName = `ifqm_idea_decision_${ideaId}`;
+  let held = false;
+  try {
+    const [rows] = await conn.query('SELECT GET_LOCK(?, 10) AS got', [lockName]);
+    held = Number(rows[0]?.got) === 1;
+    if (!held) throw new ApiError(409, 'This idea is being updated by someone else. Please try again.');
+    return await fn();
+  } finally {
+    if (held) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]).catch(() => {});
+    conn.release();
+  }
+}
+
 export async function reviewAction(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const decision = b.decision ?? '';
@@ -386,7 +441,10 @@ export async function reviewAction(db, user, b) {
   if (!ideaId || !['Approved', 'Rejected', 'Implemented', 'Under Review'].includes(decision)) {
     throw badRequest('Invalid request.');
   }
+  return withIdeaDecisionLock(db, ideaId, () => reviewActionLocked(db, user, ideaId, decision, comment));
+}
 
+async function reviewActionLocked(db, user, ideaId, decision, comment) {
   const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
   const idea = irows[0];
   if (!idea) throw notFound('Idea not found.');

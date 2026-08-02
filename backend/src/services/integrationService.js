@@ -12,17 +12,37 @@ import logger from '../utils/logger.js';
 
 const KEY_MASK = '••••••••';
 
+/**
+ * Validate/clean an admin-typed QCMS base URL. Returns '' for a blank value
+ * (meaning "fall back to the .env default"), throws for anything that is not a
+ * plain http(s) URL — a typo here would silently send ideas nowhere.
+ */
+function normalizeBaseUrl(raw) {
+  const v = String(raw ?? '').trim().replace(/\/+$/, '');
+  if (!v) return '';
+  let parsed;
+  try { parsed = new URL(v); } catch { throw badRequest('Enter a valid QCMS base URL, e.g. https://api.qcms.com/v1.'); }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw badRequest('The QCMS base URL must start with http:// or https://.');
+  }
+  return v;
+}
+
 // ── Config (get / save) ──────────────────────────────────────────────
 export async function getQcmsConfig(db) {
   const s = await getOrgSettings(db);
+  // The base URL defaults to the operator's .env value (QCMS_BASE_URL); an org
+  // admin may override it for this tenant from the dashboard.
+  const override = (s.qcms_base_url || '').trim();
   return {
     success: true,
     config: {
       enabled: s.qcms_enabled === '1',
-      // The base URL is managed only in the .env file (QCMS_BASE_URL). It is
-      // returned read-only so the admin can see where ideas will be sent, but it
-      // is never editable from the dashboard.
-      base_url: config.qcms.baseUrl,
+      base_url: override || config.qcms.baseUrl,
+      // What the field falls back to when the admin clears it, plus whether an
+      // override is currently in force (the UI shows the default as a placeholder).
+      default_base_url: config.qcms.baseUrl,
+      base_url_custom: !!override,
       api_key_set: !!(s.qcms_api_key || '').trim(),
       // Never return the raw key; a mask if one is stored, empty otherwise.
       api_key: (s.qcms_api_key || '').trim() ? KEY_MASK : '',
@@ -36,8 +56,8 @@ export async function saveQcmsConfig(db, body) {
 
   if (body.enabled !== undefined) writes.push(['qcms_enabled', body.enabled ? '1' : '0']);
 
-  // Base URL is intentionally NOT accepted here — it lives only in .env
-  // (QCMS_BASE_URL) and is managed by the operator, not the org admin.
+  // Base URL: a blank value clears the override so the .env default applies again.
+  if (body.base_url !== undefined) writes.push(['qcms_base_url', normalizeBaseUrl(body.base_url)]);
 
   // The key is written only when a real one is typed. An empty field or the mask
   // means "leave it alone" (same rule as smtp_pass), so saving the toggle can
@@ -83,8 +103,8 @@ export async function listApprovedIdeas(db) {
 async function resolvePushContext(db) {
   const s = await getOrgSettings(db);
   const apiKey = (s.qcms_api_key || '').trim();
-  // Single source of truth for the endpoint: the .env QCMS_BASE_URL.
-  const baseUrl = config.qcms.baseUrl;
+  // This tenant's saved override wins; otherwise the operator's .env default.
+  const baseUrl = (s.qcms_base_url || '').trim() || config.qcms.baseUrl;
   const enabled = s.qcms_enabled === '1';
   return { apiKey, baseUrl, enabled };
 }
