@@ -33,7 +33,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'must_change_password') = 0,
   'ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0',
-  'SELECT "users.must_change_password already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -42,7 +42,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'date_of_birth') = 0,
   'ALTER TABLE users ADD COLUMN date_of_birth DATE NULL DEFAULT NULL',
-  'SELECT "users.date_of_birth already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -51,7 +51,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'activated_at') = 0,
   'ALTER TABLE users ADD COLUMN activated_at DATETIME NULL DEFAULT NULL',
-  'SELECT "users.activated_at already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -66,7 +66,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND INDEX_NAME = 'idx_users_name') = 0,
   'ALTER TABLE users ADD INDEX idx_users_name (name)',
-  'SELECT "idx_users_name already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -75,7 +75,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND INDEX_NAME = 'idx_users_manager') = 0,
   'ALTER TABLE users ADD INDEX idx_users_manager (manager_id)',
-  'SELECT "idx_users_manager already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 

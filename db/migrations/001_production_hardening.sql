@@ -38,7 +38,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'password_changed_at') = 0,
   'ALTER TABLE users ADD COLUMN password_changed_at DATETIME NULL DEFAULT NULL',
-  'SELECT "users.password_changed_at already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -47,7 +47,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'deactivated_at') = 0,
   'ALTER TABLE users ADD COLUMN deactivated_at DATETIME NULL DEFAULT NULL',
-  'SELECT "users.deactivated_at already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -72,7 +72,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens'
        AND COLUMN_NAME = 'selector') = 0,
   'ALTER TABLE password_reset_tokens ADD COLUMN selector CHAR(32) NULL',
-  'SELECT "password_reset_tokens.selector already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -85,7 +85,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens'
        AND INDEX_NAME = 'uniq_prt_selector') = 0,
   'ALTER TABLE password_reset_tokens ADD UNIQUE INDEX uniq_prt_selector (selector)',
-  'SELECT "uniq_prt_selector already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -94,7 +94,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens'
        AND INDEX_NAME = 'idx_prt_expires') = 0,
   'ALTER TABLE password_reset_tokens ADD INDEX idx_prt_expires (expires_at)',
-  'SELECT "idx_prt_expires already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -105,7 +105,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND INDEX_NAME = 'idx_users_email_status') = 0,
   'ALTER TABLE users ADD INDEX idx_users_email_status (email, status)',
-  'SELECT "idx_users_email_status already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -114,7 +114,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND INDEX_NAME = 'idx_ideas_status_submitted') = 0,
   'ALTER TABLE ideas ADD INDEX idx_ideas_status_submitted (status, submitted_at)',
-  'SELECT "idx_ideas_status_submitted already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -123,6 +123,6 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND INDEX_NAME = 'idx_ideas_submitter') = 0,
   'ALTER TABLE ideas ADD INDEX idx_ideas_submitter (submitter_id)',
-  'SELECT "idx_ideas_submitter already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

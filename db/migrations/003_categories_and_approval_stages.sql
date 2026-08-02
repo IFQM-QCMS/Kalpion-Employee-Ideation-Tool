@@ -75,8 +75,8 @@ SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
        AND COLUMN_NAME = 'role' AND COLUMN_TYPE LIKE '%plant_head%') = 0,
-  "ALTER TABLE users MODIFY COLUMN role ENUM('trainee','employee','team_lead','project_lead','manager','senior_manager','executive','admin','super_admin','department_manager','plant_head') NOT NULL DEFAULT 'employee'",
-  'SELECT "users.role already carries department_manager/plant_head" AS note'
+  'ALTER TABLE users MODIFY COLUMN role ENUM(''trainee'',''employee'',''team_lead'',''project_lead'',''manager'',''senior_manager'',''executive'',''admin'',''super_admin'',''department_manager'',''plant_head'') NOT NULL DEFAULT ''employee''',
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -90,7 +90,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'investment_required') = 0,
   'ALTER TABLE ideas ADD COLUMN investment_required VARCHAR(255) NULL DEFAULT NULL',
-  'SELECT "ideas.investment_required already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -98,8 +98,8 @@ SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'feasibility') = 0,
-  "ALTER TABLE ideas ADD COLUMN feasibility ENUM('Low','Medium','High') NULL DEFAULT NULL",
-  'SELECT "ideas.feasibility already present" AS note'
+  'ALTER TABLE ideas ADD COLUMN feasibility ENUM(''Low'',''Medium'',''High'') NULL DEFAULT NULL',
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -108,7 +108,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'implementation_duration') = 0,
   'ALTER TABLE ideas ADD COLUMN implementation_duration VARCHAR(120) NULL DEFAULT NULL',
-  'SELECT "ideas.implementation_duration already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -117,7 +117,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'expected_implementation_date') = 0,
   'ALTER TABLE ideas ADD COLUMN expected_implementation_date DATE NULL DEFAULT NULL',
-  'SELECT "ideas.expected_implementation_date already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -126,7 +126,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'benefits_expected') = 0,
   'ALTER TABLE ideas ADD COLUMN benefits_expected TEXT NULL DEFAULT NULL',
-  'SELECT "ideas.benefits_expected already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -135,6 +135,6 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'support_required') = 0,
   'ALTER TABLE ideas ADD COLUMN support_required TEXT NULL DEFAULT NULL',
-  'SELECT "ideas.support_required already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

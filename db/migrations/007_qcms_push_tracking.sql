@@ -19,7 +19,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'qcms_pushed_at') = 0,
   'ALTER TABLE ideas ADD COLUMN qcms_pushed_at DATETIME NULL DEFAULT NULL',
-  'SELECT "ideas.qcms_pushed_at already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -28,7 +28,7 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'qcms_push_status') = 0,
   'ALTER TABLE ideas ADD COLUMN qcms_push_status VARCHAR(30) NULL DEFAULT NULL',
-  'SELECT "ideas.qcms_push_status already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
@@ -37,6 +37,6 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND COLUMN_NAME = 'qcms_push_message') = 0,
   'ALTER TABLE ideas ADD COLUMN qcms_push_message VARCHAR(255) NULL DEFAULT NULL',
-  'SELECT "ideas.qcms_push_message already present" AS note'
+  'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

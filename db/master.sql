@@ -82,7 +82,17 @@ CREATE TABLE IF NOT EXISTS login_directory (
 -- attachments, which is deliberately NOT web-accessible — they are served
 -- inline (as a data: URI) from the authenticated GET /api/branding.
 -- logo_updated_at is what lets a client tell that an admin replaced the file.
-ALTER TABLE tenants ADD COLUMN IF NOT EXISTS logo_updated_at DATETIME NULL;
+-- `ADD COLUMN IF NOT EXISTS` is MariaDB-only — it parses on a local XAMPP box
+-- and is a syntax error on real MySQL 8. Guard on information_schema instead so
+-- this file stays idempotent on both engines (same idiom as migration 001).
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants'
+       AND COLUMN_NAME = 'logo_updated_at') = 0,
+  'ALTER TABLE tenants ADD COLUMN logo_updated_at DATETIME NULL',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- ── Support tickets ─────────────────────────────────────────────────────────
 -- These live in the MASTER registry, not in tenant databases, and that is the
