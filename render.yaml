@@ -1,0 +1,46 @@
+# Render blueprint for the IFQM backend (free instance type).
+#
+# The database is NOT defined here — Render offers Postgres only, and this app
+# is MySQL. Point MASTER_DB_HOST/DB_PORT at an external managed MySQL and set
+# the secrets below in the Render dashboard (they are marked sync:false so a
+# blueprint deploy prompts for them instead of storing them in git).
+#
+# Free instance caveats: the service sleeps after 15 minutes idle (~1 minute
+# cold start on the next request) and its disk is ephemeral, so anything
+# written to backend/uploads/ is lost on every restart and deploy.
+services:
+  - type: web
+    name: ifqm-backend
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_POOL_SIZE
+        value: "3"
+      - key: DB_SSL
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: FRONTEND_BASE_URL
+        sync: false
+      - key: MASTER_DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: MASTER_DB_NAME
+        sync: false
+      - key: MASTER_DB_USER
+        sync: false
+      - key: MASTER_DB_PASS
+        sync: false
+      - key: APP_DB_USER
+        sync: false
+      - key: APP_DB_PASS
+        sync: false
