@@ -51,6 +51,60 @@ function safeTenant(t) {
   return rest;
 }
 
+/**
+ * How many consecutive days without a sign-in before an organisation reads as
+ * dormant. Reporting only — nothing is switched off, no email is sent, and the
+ * tenant's status column is untouched. An operator seeing "inactive 9 days" can
+ * decide to call them; the platform does not decide for them.
+ */
+const INACTIVE_AFTER_DAYS = 5;
+
+/**
+ * MSME applications waiting on a decision. Queried inline rather than imported
+ * from registrationService, which already imports createTenant from this module
+ * — a cycle ESM would tolerate but nobody should have to reason about.
+ *
+ * Returns 0 if the table is missing (migration 009 not yet applied): a
+ * notification badge must never be able to take the console down.
+ */
+async function pendingRegistrationCount() {
+  try {
+    const [[r]] = await masterDb().query(
+      "SELECT COUNT(*) AS c FROM tenant_registrations WHERE status = 'pending'"
+    );
+    return Number(r?.c || 0);
+  } catch (e) {
+    logger.warn('pending registration count unavailable', e.message);
+    return 0;
+  }
+}
+
+/**
+ * Two orthogonal things the console used to conflate:
+ *
+ *   status         — what an operator DID to the org (active / on hold / pending).
+ *   activity_state — what the org has been DOING (signing in, or gone quiet).
+ *
+ * An org can be perfectly active and on hold, or nominally active and silent
+ * for a month. Collapsing them into one badge hid both.
+ */
+function activityOf(tenant) {
+  if (tenant.status === 'suspended') return { activity_state: 'on_hold', days_since_login: null };
+  if (tenant.status === 'pending') return { activity_state: 'pending', days_since_login: null };
+
+  const last = tenant.last_login_at ? new Date(tenant.last_login_at) : null;
+  if (!last || Number.isNaN(last.getTime())) {
+    // Never signed in. Not the same as having gone quiet, and worth its own
+    // label — a provisioned org nobody ever logged into is a failed handover.
+    return { activity_state: 'never_logged_in', days_since_login: null };
+  }
+  const days = Math.floor((Date.now() - last.getTime()) / 86400000);
+  return {
+    activity_state: days >= INACTIVE_AFTER_DAYS ? 'inactive' : 'active',
+    days_since_login: days,
+  };
+}
+
 /** Order-by-role FIELD() fragment shared across tenant user queries. */
 const ROLE_ORDER = "FIELD(u.role,'admin','executive','plant_head','senior_manager','department_manager','manager','project_lead','team_lead','employee','trainee')";
 
@@ -94,10 +148,16 @@ export async function tenants() {
       logger.warn(`tenant DB unavailable for ${t.slug}`, e.message);
       stats.db_error = true;
     }
-    out.push(safeTenant({ ...t, ...stats }));
+    out.push(safeTenant({ ...t, ...stats, ...activityOf(t) }));
   }
 
-  return { success: true, tenants: out };
+  return {
+    success: true,
+    tenants: out,
+    inactive_after_days: INACTIVE_AFTER_DAYS,
+    // Badge for the console: MSME applications waiting for a decision.
+    pending_registrations: await pendingRegistrationCount(),
+  };
 }
 
 /** Look up a tenant registry row, or 404. */

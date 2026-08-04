@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import * as platform from '../controllers/platformController.js';
 import * as support from '../controllers/supportController.js';
+import * as registrations from '../controllers/registrationController.js';
 import { requirePlatformAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -33,6 +34,12 @@ router.get('/admins', platform.listAdmins);
 router.post('/admins', platform.createAdmin);
 router.delete('/admins/:id', platform.deleteAdmin);
 router.post('/admins/change-password', platform.changeOwnPassword);
+
+// MSME self-registration queue. Approving one provisions a tenant, so these sit
+// behind the same platform-admin guard as create_tenant.
+router.get('/registrations', registrations.list);
+router.post('/registrations/:id/approve', registrations.approve);
+router.post('/registrations/:id/reject', registrations.reject);
 
 router.get('/health', platform.health);
 

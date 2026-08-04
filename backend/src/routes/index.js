@@ -21,6 +21,7 @@ import brandingRoutes from './brandingRoutes.js';
 import supportRoutes from './supportRoutes.js';
 import integrationRoutes from './integrationRoutes.js';
 import platformRoutes from './platformRoutes.js';
+import registrationRoutes from './registrationRoutes.js';
 import { masterDb } from '../database/master.js';
 import logger from '../utils/logger.js';
 
@@ -44,6 +45,9 @@ router.get('/ready', async (_req, res) => {
 });
 
 router.use('/auth', authRoutes);
+// Public: an MSME applying for its own workspace. Everything it creates is a
+// queued application — provisioning only happens on platform-admin approval.
+router.use('/registrations', registrationRoutes);
 router.use('/users', userRoutes);
 router.use('/ideas', ideaRoutes);
 router.use('/votes', votingRoutes);

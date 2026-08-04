@@ -325,8 +325,21 @@ export const supportApi = {
 // (employee names, managers, per-person idea counts) to IFQM staff. tenantDetail
 // now returns aggregates only — counts, role spread, and the org's admin
 // contacts. See the privacy contract at the top of platformService.js.
+/*
+ * MSME self-registration. `submit` and `checkEmail` are the only calls in this
+ * file that work without a token — they are what an unauthenticated visitor on
+ * /signup uses. Everything else about a registration happens platform-side.
+ */
+export const registrationsApi = {
+  submit: (data) => api.post('/registrations', data),
+  checkEmail: (email) => api.get('/registrations/check-email', { params: { email } }),
+};
+
 export const platformApi = {
   tenants: () => api.get('/platform/tenants'),
+  registrations: (status = '') => api.get('/platform/registrations', { params: { status } }),
+  approveRegistration: (id, slug) => api.post(`/platform/registrations/${id}/approve`, { slug }),
+  rejectRegistration: (id, note) => api.post(`/platform/registrations/${id}/reject`, { note }),
   tenantDetail: (id) => api.get(`/platform/tenants/${id}`),
   createTenant: (data) => api.post('/platform/tenants', data),
   updateTenant: (id, data) => api.patch(`/platform/tenants/${id}`, data),

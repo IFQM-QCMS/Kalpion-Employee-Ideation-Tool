@@ -1,0 +1,397 @@
+/**
+ * MSME self-registration.
+ *
+ * An organisation applies for itself; a platform admin approves; only then is a
+ * tenant database provisioned. Nothing an anonymous caller does here touches a
+ * tenant schema — the worst a flood of junk applications can do is fill a
+ * review queue, which is why this file is heavy on validation and light on
+ * side effects.
+ *
+ * The corporate-domain rule is the one deliberate piece of friction: an
+ * ideation platform is sold to a company, not to a person, and a free-mail
+ * address gives no evidence the applicant speaks for the business. It is a
+ * filter for accident and casual abuse, not a security control — anyone
+ * determined can register a domain — so it sits alongside human approval
+ * rather than replacing it.
+ */
+import { masterDb } from '../database/master.js';
+import { ApiError, badRequest, notFound } from '../utils/respond.js';
+import logger from '../utils/logger.js';
+import { createTenant } from './platformService.js';
+
+/* Consumer mailbox providers. A company applying from one of these is either a
+   sole trader using personal email (ask them to use a domain) or noise. */
+const FREE_EMAIL_DOMAINS = new Set([
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk', 'ymail.com',
+  'rocketmail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'outlook.in', 'live.com',
+  'msn.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com', 'protonmail.com', 'proton.me',
+  'pm.me', 'gmx.com', 'gmx.net', 'yandex.com', 'yandex.ru', 'mail.com', 'mail.ru',
+  'zoho.com', 'zohomail.com', 'rediffmail.com', 'rediff.com', 'indiatimes.com',
+  'sify.com', 'in.com', 'inbox.com', 'fastmail.com', 'hushmail.com', 'tutanota.com',
+  'tuta.io', 'qq.com', '163.com', '126.com', 'naver.com', 'daum.net',
+]);
+
+/* Throwaway-mailbox services. Same intent as above: keep the queue reviewable. */
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  'mailinator.com', 'guerrillamail.com', 'sharklasers.com', '10minutemail.com',
+  'temp-mail.org', 'tempmail.com', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
+  'getnada.com', 'dispostable.com', 'maildrop.cc', 'fakeinbox.com', 'mailnesia.com',
+  'spamgourmet.com', 'moakt.com', 'emailondeck.com', 'mohmal.com',
+]);
+
+const ENTITY_TYPES = [
+  'proprietorship', 'partnership', 'llp', 'private_limited',
+  'public_limited', 'cooperative', 'trust', 'society', 'other',
+];
+const ENTERPRISE_CATEGORIES = ['micro', 'small', 'medium'];
+const TURNOVER_BANDS = [
+  'under_50l', '50l_2cr', '2cr_10cr', '10cr_50cr', '50cr_250cr', 'above_250cr',
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/* Statutory identifier formats. Each is checked only when supplied — an MSME
+   below the GST threshold genuinely has no GSTIN, and rejecting the form over a
+   field the applicant cannot fill would be a bug, not diligence. */
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+const UDYAM_RE = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
+const CIN_RE = /^[LUu][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
+const PINCODE_RE = /^[1-9][0-9]{5}$/;
+const PHONE_RE = /^[0-9+\-\s()]{7,20}$/;
+
+const str = (v) => String(v ?? '').trim();
+const upper = (v) => str(v).toUpperCase();
+
+/** The domain part of an email, lowercased. */
+export function emailDomain(email) {
+  const at = str(email).lastIndexOf('@');
+  return at === -1 ? '' : str(email).slice(at + 1).toLowerCase();
+}
+
+/**
+ * Is this a corporate address we will accept an application from?
+ * @returns {{ ok: boolean, reason?: string }}
+ */
+export function checkCorporateEmail(email) {
+  const e = str(email).toLowerCase();
+  if (!EMAIL_RE.test(e)) return { ok: false, reason: 'Enter a valid email address.' };
+
+  const domain = emailDomain(e);
+  if (!domain || !domain.includes('.')) {
+    return { ok: false, reason: 'Enter a valid email address.' };
+  }
+  if (FREE_EMAIL_DOMAINS.has(domain)) {
+    return {
+      ok: false,
+      reason: 'Use your work email address. Applications from personal mailboxes '
+        + `(${domain}) cannot be verified as belonging to your organisation.`,
+    };
+  }
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    return { ok: false, reason: 'Temporary email addresses are not accepted.' };
+  }
+  // A bare TLD or a single-label host is not a company domain.
+  const labels = domain.split('.');
+  if (labels.length < 2 || labels.some((l) => !l)) {
+    return { ok: false, reason: 'Enter a valid work email address.' };
+  }
+  return { ok: true };
+}
+
+/** Normalise a requested org code the same way tenant resolution will. */
+function normaliseSlug(raw) {
+  return str(raw).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+}
+
+/**
+ * Validate an application and return the row to insert.
+ * Throws ApiError(400) with a single, actionable message on the first problem.
+ */
+function validateApplication(body) {
+  const companyName = str(body.company_name);
+  if (companyName.length < 2 || companyName.length > 150) {
+    throw badRequest('Enter your registered company name (2–150 characters).');
+  }
+
+  const contactEmail = str(body.contact_email).toLowerCase();
+  const emailCheck = checkCorporateEmail(contactEmail);
+  if (!emailCheck.ok) throw badRequest(emailCheck.reason);
+
+  const contactName = str(body.contact_name);
+  if (contactName.length < 2 || contactName.length > 120) {
+    throw badRequest('Enter the full name of the person applying.');
+  }
+
+  let slug = normaliseSlug(body.proposed_slug);
+  if (!slug) {
+    // Derive one from the domain's second-level label so the applicant is not
+    // forced to invent an identifier they have no opinion about.
+    slug = normaliseSlug(emailDomain(contactEmail).split('.')[0]);
+  }
+  if (slug.length < 2 || slug.length > 30) {
+    throw badRequest('Organisation code must be 2–30 characters (letters, numbers, - and _).');
+  }
+
+  const phone = str(body.contact_phone);
+  if (phone && !PHONE_RE.test(phone)) throw badRequest('Enter a valid contact phone number.');
+
+  const gstin = upper(body.gstin);
+  if (gstin && !GSTIN_RE.test(gstin)) {
+    throw badRequest('GSTIN does not look valid. It is 15 characters, e.g. 29ABCDE1234F1Z5.');
+  }
+  const pan = upper(body.pan);
+  if (pan && !PAN_RE.test(pan)) {
+    throw badRequest('PAN does not look valid. It is 10 characters, e.g. ABCDE1234F.');
+  }
+  const udyam = upper(body.udyam_number);
+  if (udyam && !UDYAM_RE.test(udyam)) {
+    throw badRequest('Udyam number does not look valid. The format is UDYAM-XX-00-0000000.');
+  }
+  const cin = upper(body.cin);
+  if (cin && !CIN_RE.test(cin)) throw badRequest('CIN does not look valid (21 characters).');
+
+  const entityType = str(body.entity_type).toLowerCase();
+  if (entityType && !ENTITY_TYPES.includes(entityType)) throw badRequest('Select a valid entity type.');
+
+  const category = str(body.enterprise_category).toLowerCase();
+  if (category && !ENTERPRISE_CATEGORIES.includes(category)) {
+    throw badRequest('Select micro, small or medium.');
+  }
+
+  const turnover = str(body.annual_turnover_band).toLowerCase();
+  if (turnover && !TURNOVER_BANDS.includes(turnover)) throw badRequest('Select a valid turnover range.');
+
+  const employeeCount = body.employee_count === '' || body.employee_count == null
+    ? null : Number(body.employee_count);
+  if (employeeCount != null && (!Number.isFinite(employeeCount) || employeeCount < 1 || employeeCount > 100000)) {
+    throw badRequest('Enter a realistic number of employees.');
+  }
+
+  const year = body.year_established === '' || body.year_established == null
+    ? null : Number(body.year_established);
+  const thisYear = new Date().getFullYear();
+  if (year != null && (!Number.isInteger(year) || year < 1850 || year > thisYear)) {
+    throw badRequest(`Year established must be between 1850 and ${thisYear}.`);
+  }
+
+  const pincode = str(body.pincode);
+  if (pincode && !PINCODE_RE.test(pincode)) throw badRequest('Enter a valid 6-digit PIN code.');
+
+  const nic = str(body.nic_code);
+  if (nic && !/^[0-9]{2,5}$/.test(nic)) throw badRequest('NIC code is 2–5 digits.');
+
+  const website = str(body.website);
+  if (website && !/^https?:\/\/\S+\.\S+/.test(website)) {
+    throw badRequest('Website must start with http:// or https://');
+  }
+
+  if (!body.accepted_terms) {
+    throw badRequest('Please confirm you are authorised to register this organisation.');
+  }
+
+  return {
+    company_name: companyName,
+    proposed_slug: slug,
+    email_domain: emailDomain(contactEmail),
+    website: website || null,
+    udyam_number: udyam || null,
+    gstin: gstin || null,
+    pan: pan || null,
+    cin: cin || null,
+    entity_type: entityType || null,
+    enterprise_category: category || null,
+    sector: str(body.sector).slice(0, 100) || null,
+    nic_code: nic || null,
+    employee_count: employeeCount,
+    annual_turnover_band: turnover || null,
+    year_established: year,
+    address_line: str(body.address_line).slice(0, 255) || null,
+    city: str(body.city).slice(0, 100) || null,
+    state: str(body.state).slice(0, 100) || null,
+    pincode: pincode || null,
+    country: str(body.country).slice(0, 80) || 'India',
+    contact_name: contactName,
+    contact_designation: str(body.contact_designation).slice(0, 120) || null,
+    contact_email: contactEmail,
+    contact_phone: phone || null,
+    accepted_terms: 1,
+  };
+}
+
+/**
+ * POST /api/registrations — public.
+ *
+ * Returns only a reference number. It deliberately does NOT say whether the
+ * domain was already known: "this company already has an account" told to an
+ * anonymous caller is a free customer-list lookup.
+ */
+export async function submitRegistration(body, meta = {}) {
+  const row = validateApplication(body);
+  const master = masterDb();
+
+  // Already a live tenant on this domain, or an application in flight? Answer
+  // the applicant identically either way and let the reviewer see the clash.
+  const [pending] = await master.execute(
+    `SELECT id FROM tenant_registrations
+      WHERE status = 'pending' AND (contact_email = ? OR email_domain = ?) LIMIT 1`,
+    [row.contact_email, row.email_domain]
+  );
+  if (pending.length) {
+    return {
+      success: true,
+      status: 'pending',
+      reference: `REG-${pending[0].id}`,
+      message: 'An application for your organisation is already under review.',
+    };
+  }
+
+  const [res] = await master.execute(
+    `INSERT INTO tenant_registrations
+       (company_name, proposed_slug, email_domain, website, udyam_number, gstin, pan, cin,
+        entity_type, enterprise_category, sector, nic_code, employee_count,
+        annual_turnover_band, year_established, address_line, city, state, pincode, country,
+        contact_name, contact_designation, contact_email, contact_phone, accepted_terms, submitted_ip)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      row.company_name, row.proposed_slug, row.email_domain, row.website, row.udyam_number,
+      row.gstin, row.pan, row.cin, row.entity_type, row.enterprise_category, row.sector,
+      row.nic_code, row.employee_count, row.annual_turnover_band, row.year_established,
+      row.address_line, row.city, row.state, row.pincode, row.country,
+      row.contact_name, row.contact_designation, row.contact_email, row.contact_phone,
+      row.accepted_terms, str(meta.ip).slice(0, 45) || null,
+    ]
+  );
+
+  logger.info(`registration: ${row.company_name} (${row.email_domain}) queued as REG-${res.insertId}`);
+  return {
+    success: true,
+    status: 'pending',
+    reference: `REG-${res.insertId}`,
+    message: 'Application received. We will email you once it has been reviewed.',
+  };
+}
+
+/** GET /api/platform/registrations — platform admin. */
+export async function listRegistrations({ status = '' } = {}) {
+  const master = masterDb();
+  const where = ['pending', 'approved', 'rejected'].includes(status) ? 'WHERE r.status = ?' : '';
+  const params = where ? [status] : [];
+
+  const [rows] = await master.query(
+    `SELECT r.*, t.slug AS tenant_slug
+       FROM tenant_registrations r
+       LEFT JOIN tenants t ON t.id = r.tenant_id
+      ${where}
+      ORDER BY r.status = 'pending' DESC, r.created_at DESC
+      LIMIT 200`,
+    params
+  );
+
+  const [[counts]] = await master.query(
+    `SELECT SUM(status='pending')  AS pending,
+            SUM(status='approved') AS approved,
+            SUM(status='rejected') AS rejected
+       FROM tenant_registrations`
+  );
+
+  return {
+    success: true,
+    registrations: rows,
+    counts: {
+      pending: Number(counts?.pending || 0),
+      approved: Number(counts?.approved || 0),
+      rejected: Number(counts?.rejected || 0),
+    },
+  };
+}
+
+async function requireRegistration(id) {
+  const [rows] = await masterDb().execute(
+    'SELECT * FROM tenant_registrations WHERE id = ? LIMIT 1',
+    [Number(id) || 0]
+  );
+  if (!rows[0]) throw notFound('Registration not found.');
+  return rows[0];
+}
+
+/**
+ * POST /api/platform/registrations/:id/approve
+ *
+ * Provisions the tenant and hands back a one-time admin password. The password
+ * is generated here rather than chosen by the applicant: at this point they
+ * have not proved control of the mailbox, so the credential has to travel out
+ * of band, and must_change_password forces it to be replaced on first sign-in.
+ */
+export async function approveRegistration(id, { adminId = null, slug: slugOverride = '' } = {}) {
+  const reg = await requireRegistration(id);
+  if (reg.status !== 'pending') {
+    throw new ApiError(409, `This application has already been ${reg.status}.`);
+  }
+
+  const slug = normaliseSlug(slugOverride || reg.proposed_slug);
+  if (slug.length < 2 || slug.length > 30) {
+    throw badRequest('Organisation code must be 2–30 characters.');
+  }
+
+  const master = masterDb();
+  const [dup] = await master.execute('SELECT id FROM tenants WHERE slug = ? LIMIT 1', [slug]);
+  if (dup.length) {
+    throw new ApiError(409, `Organisation code "${slug}" is taken. Approve with a different code.`);
+  }
+
+  // A temporary password the operator relays; 24 base64url chars comfortably
+  // clears the strength check createTenant applies.
+  const { randomBytes } = await import('node:crypto');
+  const tempPassword = randomBytes(18).toString('base64url');
+
+  const created = await createTenant({
+    org_name: reg.company_name,
+    slug,
+    admin_name: reg.contact_name,
+    admin_email: reg.contact_email,
+    admin_password: tempPassword,
+  });
+
+  await master.execute(
+    `UPDATE tenant_registrations
+        SET status = 'approved', tenant_id = ?, reviewed_by = ?, reviewed_at = NOW()
+      WHERE id = ?`,
+    [created.tenant_id, adminId, reg.id]
+  );
+
+  // The approved organisation's own domain becomes its tenant domain, so a user
+  // arriving from a company link resolves to the right org without a code.
+  await master.execute('UPDATE tenants SET domain = ? WHERE id = ?', [reg.email_domain, created.tenant_id]);
+
+  logger.info(`registration REG-${reg.id} approved → tenant ${slug} (${created.tenant_id})`);
+  return {
+    success: true,
+    tenant_id: created.tenant_id,
+    slug,
+    admin_email: reg.contact_email,
+    temp_password: tempPassword,
+    message: 'Organisation created. Share the temporary password with the applicant — '
+      + 'it is shown once and must be changed at first sign-in.',
+  };
+}
+
+/** POST /api/platform/registrations/:id/reject */
+export async function rejectRegistration(id, { adminId = null, note = '' } = {}) {
+  const reg = await requireRegistration(id);
+  if (reg.status !== 'pending') {
+    throw new ApiError(409, `This application has already been ${reg.status}.`);
+  }
+  await masterDb().execute(
+    `UPDATE tenant_registrations
+        SET status = 'rejected', review_note = ?, reviewed_by = ?, reviewed_at = NOW()
+      WHERE id = ?`,
+    [str(note).slice(0, 2000) || null, adminId, reg.id]
+  );
+  logger.info(`registration REG-${reg.id} rejected`);
+  return { success: true, message: 'Application rejected.' };
+}
+
+export default {
+  submitRegistration, listRegistrations, approveRegistration, rejectRegistration,
+  checkCorporateEmail, emailDomain,
+};

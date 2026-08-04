@@ -34,6 +34,65 @@ const TEAM_ROLES = ['team_lead', 'project_lead', 'manager', 'department_manager'
 const ADMIN_ROLES = ['plant_head', 'executive', 'admin', 'super_admin'];
 const PRIVILEGED_ANON = ['manager', 'department_manager', 'senior_manager', 'plant_head', 'executive', 'admin', 'super_admin'];
 
+/**
+ * Roles that may read an idea's full proposed solution. Everyone else — the
+ * general employee population browsing All Ideas — sees a one-line summary.
+ *
+ * The reasoning: the solution IS the intellectual contribution. Publishing it
+ * verbatim to the whole organisation the moment it is filed lets anyone restate
+ * it as their own before the original is even reviewed, which quietly punishes
+ * the people the leaderboard is meant to reward. The headline, impact, score
+ * and status all stay public, so the pipeline is still transparent — only the
+ * "how" is held back until a reviewer has it.
+ */
+const PRIVILEGED_SOLUTION = PRIVILEGED_ANON;
+
+/**
+ * First sentence of a solution, or a hard-truncated opening — whichever is
+ * shorter. Never returns a fragment that runs to the character limit without
+ * an ellipsis, so a summary is always visibly a summary.
+ */
+export function summariseSolution(text, limit = 140) {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean) return '';
+  const sentenceEnd = clean.search(/[.!?](\s|$)/);
+  if (sentenceEnd > 0 && sentenceEnd + 1 <= limit) return clean.slice(0, sentenceEnd + 1);
+  if (clean.length <= limit) return clean;
+  // Cut on a word boundary so the preview does not end mid-word.
+  const cut = clean.slice(0, limit);
+  const lastSpace = cut.lastIndexOf(' ');
+  return (lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…';
+}
+
+/**
+ * May this viewer read the full solution of this idea?
+ * The author and their co-suggesters always can; so can whoever has to judge it.
+ */
+function canReadSolution(user, idea) {
+  const uid = Number(user.id);
+  if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
+  if (Number(idea.submitter_id) === uid) return true;
+  if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
+  if (Number(idea.current_reviewer_id) === uid) return true;
+  return false;
+}
+
+/**
+ * Replace the full solution with a summary unless the viewer is entitled to it.
+ * Mutates and returns the row. `solution_redacted` lets the UI say why the text
+ * is short instead of looking like the field was left empty.
+ */
+function redactSolution(user, idea) {
+  idea.solution_summary = summariseSolution(idea.proposed_solution);
+  if (!canReadSolution(user, idea)) {
+    idea.proposed_solution = null;
+    idea.solution_redacted = true;
+  } else {
+    idea.solution_redacted = false;
+  }
+  return idea;
+}
+
 // ── LIST ────────────────────────────────────────────────────────────
 export async function list(db, user, { status, search, impact } = {}) {
   const where = [];
@@ -69,14 +128,19 @@ export async function list(db, user, { status, search, impact } = {}) {
   const [ideas] = await db.execute(sql, paramsList);
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
-  if (!canSeeAnon) {
-    for (const idea of ideas) {
-      if (idea.is_anonymous) {
-        idea.submitter_name = 'Anonymous';
-        idea.avatar_initials = '?';
-        idea.department = '—';
-      }
+  for (const idea of ideas) {
+    if (!canSeeAnon && idea.is_anonymous) {
+      idea.submitter_name = 'Anonymous';
+      idea.avatar_initials = '?';
+      idea.department = '—';
     }
+    // The browse list never carries a full solution over the wire, even for
+    // people entitled to read one — they get it from the detail endpoint. A
+    // hundred rows of verbatim proposals sitting in the browser is exactly the
+    // leak this is meant to close, and it is invisible to anyone reading only
+    // the rendered table.
+    redactSolution(user, idea);
+    idea.proposed_solution = null;
   }
   return { success: true, ideas };
 }
@@ -201,6 +265,18 @@ export async function get(db, user, id) {
     idea.reviewers = rv;
   } catch {
     idea.reviewers = [];
+  }
+
+  // Hold back the full proposal from colleagues who are neither its authors nor
+  // its judges. Assigned reviewers count even when they are not the *current*
+  // reviewer — in a multi-reviewer workflow every one of them has to read it.
+  const isAssignedReviewer = (idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid);
+  const isCoSuggester = (idea.co_suggesters || []).some((c) => Number(c.id) === uid);
+  if (isAssignedReviewer || isCoSuggester) {
+    idea.solution_summary = summariseSolution(idea.proposed_solution);
+    idea.solution_redacted = false;
+  } else {
+    redactSolution(user, idea);
   }
 
   // Mask anonymous submitter for non-privileged roles (own idea always visible)

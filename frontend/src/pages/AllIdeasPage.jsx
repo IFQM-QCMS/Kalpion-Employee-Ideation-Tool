@@ -93,6 +93,7 @@ export default function AllIdeasPage() {
             <tr>
               <th>{t('table.code')}</th>
               <th>{t('table.title')}</th>
+              <th>{t('table.solution_gist')}</th>
               <th>{t('table.submitter')}</th>
               <th>{t('table.dept')}</th>
               <th>{t('table.impact')}</th>
@@ -105,10 +106,10 @@ export default function AllIdeasPage() {
           </thead>
           <tbody id="all-ideas-tbody">
             {loading && (
-              <tr><td colSpan="10" className="text-center"><div className="spinner"></div></td></tr>
+              <tr><td colSpan="11" className="text-center"><div className="spinner"></div></td></tr>
             )}
             {!loading && !ideas.length && (
-              <tr><td colSpan="10" className="text-center">{t('msg.no_ideas')}</td></tr>
+              <tr><td colSpan="11" className="text-center">{t('msg.no_ideas')}</td></tr>
             )}
             {ideas.map(i => {
               const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
@@ -117,6 +118,16 @@ export default function AllIdeasPage() {
                 <tr key={i.id}>
                   <td><strong>{i.idea_code}</strong></td>
                   <td title={i.title}>{i.title.length > 60 ? i.title.substring(0,60)+'…' : i.title}</td>
+                  {/* One line only. The full proposal is deliberately not sent to
+                      this screen — see redactSolution() in ideaService. */}
+                  <td style={{ maxWidth:260,color:'var(--text-muted)',fontSize:12.5 }}>
+                    {i.solution_summary
+                      ? <span title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
+                          {i.solution_summary}
+                          {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">🔒</span>}
+                        </span>
+                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                  </td>
                   <td>{i.submitter_name}</td>
                   <td>{i.department||'–'}</td>
                   <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'–'}</span></td>

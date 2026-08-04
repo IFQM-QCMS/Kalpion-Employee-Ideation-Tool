@@ -242,6 +242,15 @@ export async function login({ email, password, orgSlug, host }) {
   // Keep the login directory current (and self-heal it for a pre-existing user
   // who was resolved by the tenant scan rather than a directory row).
   indexUser(tenant, user).catch(() => {});
+  // Stamp the organisation's last sign-in so the platform console can report
+  // which orgs have gone quiet. Best-effort and fire-and-forget: an activity
+  // metric must never be able to fail a login. Tenant id 0 is the built-in
+  // fallback tenant, which has no registry row to update.
+  if (tenant.id) {
+    masterDb()
+      .execute('UPDATE tenants SET last_login_at = NOW() WHERE id = ?', [tenant.id])
+      .catch((e) => logger.warn('tenant last_login_at update failed', e.message));
+  }
   const token = signToken({
     user: session,
     org_slug: tenant.slug,

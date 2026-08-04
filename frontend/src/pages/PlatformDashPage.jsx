@@ -28,6 +28,186 @@ const KPI_ICONS = {
   ideas:     <path d="M9 21h6M12 3a6 6 0 016 6c0 2.2-1.1 3.8-2.5 5L15 16H9l-.5-2C7 12.8 6 11.2 6 9a6 6 0 016-6z"/>,
 };
 
+/**
+ * How an organisation is behaving, as distinct from what an operator did to it.
+ * `inactive` here means "no sign-in for N days" and carries no consequence —
+ * the badge exists so a quiet account is noticed before renewal, not so the
+ * platform can act on it.
+ */
+function ActivityBadge({ ten, t }) {
+  const TONE = {
+    active:          { bg:'var(--success-light)', fg:'var(--success)' },
+    inactive:        { bg:'var(--warning-light)', fg:'var(--warning)' },
+    on_hold:         { bg:'var(--danger-light)',  fg:'var(--danger)'  },
+    pending:         { bg:'var(--info-light)',    fg:'var(--info)'    },
+    never_logged_in: { bg:'var(--chip-bg)',       fg:'var(--text-muted)' },
+  };
+  const state = ten.activity_state || 'active';
+  const tone = TONE[state] || TONE.never_logged_in;
+  const label = {
+    active: t('pa.act_active'), inactive: t('pa.act_inactive'), on_hold: t('pa.act_on_hold'),
+    pending: t('pa.act_pending'), never_logged_in: t('pa.act_never'),
+  }[state] || state;
+
+  const days = ten.days_since_login;
+  const sub = days == null ? null : days === 0 ? t('pa.act_today') : t('pa.act_days_ago').replace('{days}', days);
+
+  return (
+    <div>
+      <span
+        title={state === 'inactive' ? t('pa.act_inactive_hint').replace('{days}', days ?? '?') : undefined}
+        style={{ background:tone.bg,color:tone.fg,fontSize:10,padding:'3px 10px',borderRadius:20,
+                 fontWeight:700,textTransform:'uppercase',whiteSpace:'nowrap' }}>
+        {label}
+      </span>
+      {sub && <div style={{ fontSize:10.5,color:'var(--subtle)',marginTop:3 }}>{sub}</div>}
+    </div>
+  );
+}
+
+/**
+ * The MSME self-registration queue.
+ *
+ * Approving provisions a real tenant and mints a one-time admin password, so it
+ * asks for the org code first (the applicant's preference is only a suggestion,
+ * and codes collide) and surfaces the password in a form the operator can copy
+ * before it is gone.
+ */
+function RegistrationQueue({ t, showToast, onApproved }) {
+  const [regs, setRegs] = useState([]);
+  const [open, setOpen] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [issued, setIssued] = useState(null);
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    try {
+      const res = await platformApi.registrations('pending');
+      if (res.data.success) setRegs(res.data.registrations || []);
+    } catch { /* the panel is additive; never block the dashboard */ }
+  }
+
+  async function approve(reg) {
+    const slug = window.prompt(t('pa.reg_slug_prompt'), reg.proposed_slug || '');
+    if (!slug) return;
+    setBusy(true);
+    try {
+      const res = await platformApi.approveRegistration(reg.id, slug.trim().toLowerCase());
+      if (res.data.success) {
+        setIssued({ email: res.data.admin_email, password: res.data.temp_password, slug: res.data.slug });
+        showToast(t('pa.reg_approved_ok'), 'success');
+        await load();
+        onApproved?.();
+      } else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (e) {
+      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setBusy(false);
+  }
+
+  async function reject(reg) {
+    const note = window.prompt(t('pa.reg_reject_prompt'), '');
+    if (note === null) return;
+    setBusy(true);
+    try {
+      const res = await platformApi.rejectRegistration(reg.id, note);
+      if (res.data.success) { showToast(t('pa.reg_rejected_ok'), 'success'); await load(); }
+      else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (e) {
+      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setBusy(false);
+  }
+
+  if (!regs.length && !issued) return null;
+
+  const line = (label, value) => value
+    ? <div><span style={{ color:'var(--subtle)' }}>{label}:</span> {value}</div>
+    : null;
+
+  return (
+    <div className="card" style={{ marginTop:18,borderColor:'var(--primary-dim)' }}>
+      <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:4,flexWrap:'wrap' }}>
+        <div className="card-title" style={{ margin:0 }}>{t('pa.reg_title')}</div>
+        {regs.length > 0 && (
+          <span style={{ background:'var(--primary-light)',color:'var(--primary)',fontSize:11,fontWeight:750,
+                         padding:'2px 9px',borderRadius:999 }}>
+            {t('pa.reg_pending').replace('{n}', regs.length)}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize:12.5,color:'var(--text-muted)',margin:'0 0 14px' }}>{t('pa.reg_sub')}</p>
+
+      {issued && (
+        <div className="alert alert-warning" style={{ marginBottom:14,fontSize:12.5 }}>
+          <div style={{ fontWeight:700,marginBottom:6 }}>
+            {t('pa.reg_temp_pw').replace('{email}', issued.email)}
+          </div>
+          <code style={{ display:'inline-block',background:'var(--chip-bg)',border:'1px solid var(--border)',
+                         borderRadius:8,padding:'6px 10px',fontSize:13,fontWeight:700,userSelect:'all' }}>
+            {issued.password}
+          </code>
+          <div style={{ marginTop:8 }}>
+            <button className="btn btn-outline btn-sm" onClick={() => setIssued(null)}>{t('btn.close') || 'Close'}</button>
+          </div>
+        </div>
+      )}
+
+      {regs.map((r) => (
+        <div key={r.id} style={{ border:'1px solid var(--border)',borderRadius:12,padding:'12px 14px',marginBottom:10 }}>
+          <div style={{ display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',alignItems:'flex-start' }}>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontWeight:700,color:'var(--heading)' }}>{r.company_name}</div>
+              <div style={{ fontSize:11.5,color:'var(--subtle)' }}>
+                REG-{r.id} · {r.contact_name} · {r.contact_email}
+              </div>
+            </div>
+            <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+              <button className="btn btn-outline btn-sm" disabled={busy}
+                onClick={() => setOpen(open === r.id ? null : r.id)}>{t('pa.reg_details')}</button>
+              <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => reject(r)}>
+                {t('pa.reg_reject')}
+              </button>
+              <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => approve(r)}>
+                {t('pa.reg_approve')}
+              </button>
+            </div>
+          </div>
+
+          {open === r.id && (
+            <div style={{ marginTop:12,paddingTop:12,borderTop:'1px dashed var(--border)',
+                          display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
+                          gap:'6px 18px',fontSize:12.5,color:'var(--subtext)' }}>
+              {line('Domain', r.email_domain)}
+              {line('Requested code', r.proposed_slug)}
+              {line('Udyam', r.udyam_number)}
+              {line('GSTIN', r.gstin)}
+              {line('PAN', r.pan)}
+              {line('CIN', r.cin)}
+              {line('Entity', r.entity_type)}
+              {line('Category', r.enterprise_category)}
+              {line('Sector', r.sector)}
+              {line('NIC', r.nic_code)}
+              {line('Employees', r.employee_count)}
+              {line('Turnover', r.annual_turnover_band)}
+              {line('Established', r.year_established)}
+              {line('Phone', r.contact_phone)}
+              {line('Designation', r.contact_designation)}
+              {line('Website', r.website)}
+              {line('Location', [r.city, r.state, r.pincode, r.country].filter(Boolean).join(', '))}
+              {line('Address', r.address_line)}
+              {line(t('pa.reg_applied'), r.created_at ? new Date(r.created_at).toLocaleString() : null)}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {!regs.length && <div className="empty-state" style={{ fontSize:13 }}>{t('pa.reg_none')}</div>}
+    </div>
+  );
+}
+
 export default function PlatformDashPage() {
   const { user }      = useAuth();
   const { t }         = useLang();
@@ -156,6 +336,10 @@ export default function PlatformDashPage() {
         ))}
       </div>
 
+      {/* MSME applications waiting on a decision. Renders nothing when the queue
+          is empty, so it never occupies space on a quiet day. */}
+      <RegistrationQueue t={t} showToast={showToast} onApproved={load} />
+
       {/* Analytics charts */}
       {!loading && !error && tenants.length > 0 && (
         <div style={{ display:'grid',gridTemplateColumns:'minmax(280px,360px) 1fr',gap:18,marginTop:18 }}>
@@ -228,6 +412,7 @@ export default function PlatformDashPage() {
                   <th>{t('pa.col_users')}</th>
                   <th>{t('pa.col_ideas')}</th>
                   <th>{t('table.status')}</th>
+                  <th>{t('pa.activity')}</th>
                   <th>{t('platform.last_activity')}</th>
                   <th style={{ textAlign:'right' }}>{t('pa.col_actions')}</th>
                 </tr>
@@ -252,13 +437,19 @@ export default function PlatformDashPage() {
                     <td style={{ fontWeight:700 }}>{ten.user_count ?? 0}</td>
                     <td style={{ fontWeight:700 }}>{ten.idea_count ?? 0}</td>
                     <td>
+                      {/* Operator-set state. "suspended" in the database reads as
+                          "On Hold" everywhere a human sees it. */}
                       <span style={{ ...(STATUS_STYLE[ten.status] || {}),fontSize:10,padding:'3px 10px',borderRadius:20,fontWeight:700,textTransform:'uppercase' }}>
-                        {ten.status}
+                        {t(`pa.status_${ten.status}`) || ten.status}
                       </span>
                       {ten.db_error && (
                         <div style={{ fontSize:10,color:'var(--danger)',marginTop:3 }}>{t('platform.db_error')}</div>
                       )}
                     </td>
+                    {/* Derived from sign-ins, separate from the status above.
+                        Purely informational: nothing is switched off when an
+                        organisation goes quiet. */}
+                    <td><ActivityBadge ten={ten} t={t} /></td>
                     <td style={{ fontSize:12,color:'var(--subtext)' }}>
                       {ten.last_activity ? new Date(ten.last_activity).toLocaleDateString() : t('pa.no_activity')}
                     </td>

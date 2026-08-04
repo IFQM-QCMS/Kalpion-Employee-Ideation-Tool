@@ -153,7 +153,20 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   </div>
                   <div className="form-group">
                     <label>{t('detail.solution')}</label>
-                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
+                    {/* Colleagues who are neither the author nor a reviewer get the
+                        one-line gist. The server decides — the full text is never
+                        sent to them, so this is not a display-only restriction. */}
+                    {idea.solution_redacted ? (
+                      <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
+                        <div>{idea.solution_summary || '—'}</div>
+                        <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
+                          <span aria-hidden="true">🔒</span>
+                          <span>{t('idea.solution_hidden_hint')}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
+                    )}
                   </div>
                   <div className="form-row" style={{ marginBottom:10 }}>
                     <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>

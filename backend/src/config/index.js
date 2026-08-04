@@ -36,7 +36,12 @@ const MIN_SECRET_LENGTH = 32;
  */
 function readDbSsl() {
   if (String(process.env.DB_SSL || '').toLowerCase() !== 'true') return undefined;
-  const ca = (process.env.DB_SSL_CA || '').trim();
+  // Accept the PEM either with real newlines (pasting the file into a dashboard
+  // field) or with the two-character sequence \n (single-line pastes, .env
+  // files, and any tooling that flattens multi-line values). Node's TLS parser
+  // rejects the flattened form, and the resulting "unable to get local issuer
+  // certificate" is a long way from the actual mistake.
+  const ca = (process.env.DB_SSL_CA || '').replace(/\\n/g, '\n').trim();
   return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
 }
 
