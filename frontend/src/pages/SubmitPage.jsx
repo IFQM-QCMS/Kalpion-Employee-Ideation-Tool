@@ -17,6 +17,20 @@ const FEASIBILITY_LEVELS = ['Low','Medium','High'];
  */
 const FALLBACK_CATEGORIES = ['Safety','Quality','Productivity','Delivery','Sustenance'];
 
+/**
+ * Required-field marker. The asterisk used to be a plain character in the label
+ * text, the same weight and colour as the label itself, so it read as
+ * punctuation rather than an instruction — people reached the validation error
+ * before they noticed which fields were mandatory.
+ *
+ * aria-hidden because it carries no meaning for a screen reader: the `required`
+ * attribute on the input already announces the field as mandatory, and reading
+ * out "star" on top of that is noise.
+ */
+const Req = () => (
+  <span aria-hidden="true" style={{ color:'var(--danger)',fontWeight:800,marginLeft:2 }}>*</span>
+);
+
 export default function SubmitPage() {
   const { user }      = useAuth();
   const { t }         = useLang();
@@ -264,7 +278,7 @@ export default function SubmitPage() {
         {step === 1 && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
-              <label>{t('form.title')} *</label>
+              <label>{t('form.title')}<Req /></label>
               <input className="form-control" value={title}
                 onChange={e => { setTitle(e.target.value); checkDuplicate(e.target.value); }}
                 placeholder={t('form.title_ph')} />
@@ -280,7 +294,7 @@ export default function SubmitPage() {
               )}
             </div>
             <div className="form-group">
-              <label>{t('form.situation')} * <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}>{t('form.min_chars')}</span></label>
+              <label>{t('form.situation')}<Req /> <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}>{t('form.min_chars')}</span></label>
               <textarea className="form-control" rows="5" value={situation}
                 onChange={e => setSituation(e.target.value)}
                 placeholder={t('form.situation_ph')} />
@@ -292,7 +306,7 @@ export default function SubmitPage() {
         {step === 2 && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
-              <label>{t('form.solution')} *</label>
+              <label>{t('form.solution')}<Req /></label>
               <textarea className="form-control" rows="5" value={solution}
                 onChange={e => setSolution(e.target.value)}
                 placeholder={t('form.solution_ph')} />

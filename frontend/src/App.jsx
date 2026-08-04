@@ -25,6 +25,7 @@ import ProfilePage from './pages/ProfilePage';
 import PlatformDashPage from './pages/PlatformDashPage';
 import PlatformTenantsPage from './pages/PlatformTenantsPage';
 import PlatformTicketsPage from './pages/PlatformTicketsPage';
+import PlatformRegistrationsPage from './pages/PlatformRegistrationsPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
 import SupportPage from './pages/SupportPage';
 
@@ -105,6 +106,7 @@ function AppRoutes() {
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
       <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
+      <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tickets" element={<PrivateRoute><AppShell><PlatformTicketsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />

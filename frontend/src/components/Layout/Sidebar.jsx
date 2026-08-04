@@ -112,6 +112,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         <>
           <div className="nav-section">{t('section.platform')}</div>
           <NavItem path="/platform" icon={NAV_ICONS.platformDash} label={t('nav.organisations')} />
+          <NavItem path="/platform/registrations" icon={NAV_ICONS.platformTenants} label={t('nav.registrations')} />
           <NavItem path="/platform/tickets" icon={NAV_ICONS.support} label={t('nav.support_tickets')} />
           <NavItem path="/platform/settings" icon={NAV_ICONS.admin} label={t('nav.platform_settings')} />
         </>

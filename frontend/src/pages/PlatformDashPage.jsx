@@ -65,149 +65,6 @@ function ActivityBadge({ ten, t }) {
   );
 }
 
-/**
- * The MSME self-registration queue.
- *
- * Approving provisions a real tenant and mints a one-time admin password, so it
- * asks for the org code first (the applicant's preference is only a suggestion,
- * and codes collide) and surfaces the password in a form the operator can copy
- * before it is gone.
- */
-function RegistrationQueue({ t, showToast, onApproved }) {
-  const [regs, setRegs] = useState([]);
-  const [open, setOpen] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [issued, setIssued] = useState(null);
-
-  useEffect(() => { load(); }, []);
-
-  async function load() {
-    try {
-      const res = await platformApi.registrations('pending');
-      if (res.data.success) setRegs(res.data.registrations || []);
-    } catch { /* the panel is additive; never block the dashboard */ }
-  }
-
-  async function approve(reg) {
-    const slug = window.prompt(t('pa.reg_slug_prompt'), reg.proposed_slug || '');
-    if (!slug) return;
-    setBusy(true);
-    try {
-      const res = await platformApi.approveRegistration(reg.id, slug.trim().toLowerCase());
-      if (res.data.success) {
-        setIssued({ email: res.data.admin_email, password: res.data.temp_password, slug: res.data.slug });
-        showToast(t('pa.reg_approved_ok'), 'success');
-        await load();
-        onApproved?.();
-      } else showToast(res.data.error || t('msg.error'), 'danger');
-    } catch (e) {
-      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
-    }
-    setBusy(false);
-  }
-
-  async function reject(reg) {
-    const note = window.prompt(t('pa.reg_reject_prompt'), '');
-    if (note === null) return;
-    setBusy(true);
-    try {
-      const res = await platformApi.rejectRegistration(reg.id, note);
-      if (res.data.success) { showToast(t('pa.reg_rejected_ok'), 'success'); await load(); }
-      else showToast(res.data.error || t('msg.error'), 'danger');
-    } catch (e) {
-      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
-    }
-    setBusy(false);
-  }
-
-  if (!regs.length && !issued) return null;
-
-  const line = (label, value) => value
-    ? <div><span style={{ color:'var(--subtle)' }}>{label}:</span> {value}</div>
-    : null;
-
-  return (
-    <div className="card" style={{ marginTop:18,borderColor:'var(--primary-dim)' }}>
-      <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:4,flexWrap:'wrap' }}>
-        <div className="card-title" style={{ margin:0 }}>{t('pa.reg_title')}</div>
-        {regs.length > 0 && (
-          <span style={{ background:'var(--primary-light)',color:'var(--primary)',fontSize:11,fontWeight:750,
-                         padding:'2px 9px',borderRadius:999 }}>
-            {t('pa.reg_pending').replace('{n}', regs.length)}
-          </span>
-        )}
-      </div>
-      <p style={{ fontSize:12.5,color:'var(--text-muted)',margin:'0 0 14px' }}>{t('pa.reg_sub')}</p>
-
-      {issued && (
-        <div className="alert alert-warning" style={{ marginBottom:14,fontSize:12.5 }}>
-          <div style={{ fontWeight:700,marginBottom:6 }}>
-            {t('pa.reg_temp_pw').replace('{email}', issued.email)}
-          </div>
-          <code style={{ display:'inline-block',background:'var(--chip-bg)',border:'1px solid var(--border)',
-                         borderRadius:8,padding:'6px 10px',fontSize:13,fontWeight:700,userSelect:'all' }}>
-            {issued.password}
-          </code>
-          <div style={{ marginTop:8 }}>
-            <button className="btn btn-outline btn-sm" onClick={() => setIssued(null)}>{t('btn.close') || 'Close'}</button>
-          </div>
-        </div>
-      )}
-
-      {regs.map((r) => (
-        <div key={r.id} style={{ border:'1px solid var(--border)',borderRadius:12,padding:'12px 14px',marginBottom:10 }}>
-          <div style={{ display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',alignItems:'flex-start' }}>
-            <div style={{ minWidth:0 }}>
-              <div style={{ fontWeight:700,color:'var(--heading)' }}>{r.company_name}</div>
-              <div style={{ fontSize:11.5,color:'var(--subtle)' }}>
-                REG-{r.id} · {r.contact_name} · {r.contact_email}
-              </div>
-            </div>
-            <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
-              <button className="btn btn-outline btn-sm" disabled={busy}
-                onClick={() => setOpen(open === r.id ? null : r.id)}>{t('pa.reg_details')}</button>
-              <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => reject(r)}>
-                {t('pa.reg_reject')}
-              </button>
-              <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => approve(r)}>
-                {t('pa.reg_approve')}
-              </button>
-            </div>
-          </div>
-
-          {open === r.id && (
-            <div style={{ marginTop:12,paddingTop:12,borderTop:'1px dashed var(--border)',
-                          display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
-                          gap:'6px 18px',fontSize:12.5,color:'var(--subtext)' }}>
-              {line('Domain', r.email_domain)}
-              {line('Requested code', r.proposed_slug)}
-              {line('Udyam', r.udyam_number)}
-              {line('GSTIN', r.gstin)}
-              {line('PAN', r.pan)}
-              {line('CIN', r.cin)}
-              {line('Entity', r.entity_type)}
-              {line('Category', r.enterprise_category)}
-              {line('Sector', r.sector)}
-              {line('NIC', r.nic_code)}
-              {line('Employees', r.employee_count)}
-              {line('Turnover', r.annual_turnover_band)}
-              {line('Established', r.year_established)}
-              {line('Phone', r.contact_phone)}
-              {line('Designation', r.contact_designation)}
-              {line('Website', r.website)}
-              {line('Location', [r.city, r.state, r.pincode, r.country].filter(Boolean).join(', '))}
-              {line('Address', r.address_line)}
-              {line(t('pa.reg_applied'), r.created_at ? new Date(r.created_at).toLocaleString() : null)}
-            </div>
-          )}
-        </div>
-      ))}
-
-      {!regs.length && <div className="empty-state" style={{ fontSize:13 }}>{t('pa.reg_none')}</div>}
-    </div>
-  );
-}
-
 export default function PlatformDashPage() {
   const { user }      = useAuth();
   const { t }         = useLang();
@@ -336,9 +193,10 @@ export default function PlatformDashPage() {
         ))}
       </div>
 
-      {/* MSME applications waiting on a decision. Renders nothing when the queue
-          is empty, so it never occupies space on a quiet day. */}
-      <RegistrationQueue t={t} showToast={showToast} onApproved={load} />
+      {/* The MSME registration queue lives on its own screen (Platform →
+          Registrations). Approving one provisions a live tenant, and that
+          decision needs every submitted field in front of the operator — not a
+          summary strip wedged between a donut chart and a tenant table. */}
 
       {/* Analytics charts */}
       {!loading && !error && tenants.length > 0 && (
@@ -418,7 +276,7 @@ export default function PlatformDashPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((ten) => (
+                {filtered.map((ten, rowIdx) => (
                   <tr key={ten.id}>
                     <td>
                       <div style={{ fontWeight:700,color:'var(--heading)' }}>{ten.name}</div>
@@ -462,8 +320,20 @@ export default function PlatformDashPage() {
                       >⋮</button>
                       {menuFor === ten.id && (
                         <div style={{
-                          position:'absolute',right:0,top:'100%',zIndex:20,minWidth:190,textAlign:'left',
-                          background:'var(--card)',border:'1px solid var(--border)',borderRadius:'var(--r)',
+                          position:'absolute',right:0,zIndex:20,minWidth:190,textAlign:'left',
+                          // The list card scrolls horizontally, and a box with
+                          // overflow-x:auto cannot keep overflow-y:visible — the
+                          // browser promotes it to auto, so a menu hanging below
+                          // the last row was clipped away entirely. Flip it above
+                          // the button for rows near the bottom.
+                          ...(rowIdx >= filtered.length - 2 && filtered.length > 2
+                            ? { bottom:'100%', marginBottom:4 }
+                            : { top:'100%', marginTop:4 }),
+                          // Was var(--card), which this design system does not
+                          // define — the menu rendered with a transparent
+                          // background over the table, so it looked like the
+                          // button did nothing at all.
+                          background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--r)',
                           boxShadow:'var(--shadow-lg)',padding:6,
                         }}>
                           <MenuItem onClick={() => navigate(`/platform/tenants/${ten.id}?name=${encodeURIComponent(ten.name)}`)}>
