@@ -94,9 +94,20 @@ export default function BoardPage() {
                   <div style={{ fontSize:12,color:'var(--text-muted)',marginTop:2 }}>
                     {i.submitter_name} · {i.department||'–'} · {fmtDate(i.created_at)}
                   </div>
+                  {/* Summaries, not the full text. The board is a browse view
+                      like All Ideas, so the same rule applies: the server sends
+                      a gist and nothing more. The line clamp used to be the only
+                      thing hiding the rest — which hid it from the reader, not
+                      from the page. */}
                   <div style={{ fontSize:13,color:'var(--text)',marginTop:6,WebkitLineClamp:2,display:'-webkit-box',WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                    {i.present_situation}
+                    {i.situation_summary || i.present_situation}
                   </div>
+                  {i.solution_summary && (
+                    <div style={{ fontSize:12.5,color:'var(--text-muted)',marginTop:4 }}>
+                      {i.solution_summary}
+                      {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">🔒</span>}
+                    </div>
+                  )}
                   <div style={{ display:'flex',gap:8,marginTop:8,alignItems:'center',flexWrap:'wrap' }}>
                     <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
                     <span className={`badge ${impactBadge(i.impact_level)}`}>

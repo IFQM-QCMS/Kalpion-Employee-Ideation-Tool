@@ -11,6 +11,12 @@ const router = Router();
 
 router.get('/me', optionalAuth, auth.me);
 router.post('/login', authLimiter, auth.login);
+// §4.1 / §4.2 — sign in with a one-time code. Rate limited on the same footing
+// as password login: both are unauthenticated ways to reach an account.
+router.get('/otp/status', auth.otpStatus);
+router.post('/otp/request', authLimiter, auth.otpRequest);
+router.post('/otp/verify', authLimiter, auth.otpVerify);
+
 router.post('/logout', auth.logout);
 router.post('/forgot-password', authLimiter, auth.forgotPassword);
 router.post('/reset-password', authLimiter, auth.resetPassword);

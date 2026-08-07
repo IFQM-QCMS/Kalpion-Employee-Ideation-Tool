@@ -32,6 +32,12 @@ const LockIcon = () => (
     <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
   </svg>
 );
+const PhoneIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>
+  </svg>
+);
 const EyeIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -134,7 +140,7 @@ function useParticles(canvasRef) {
 }
 
 export default function LoginPage() {
-  const { login }   = useAuth();
+  const { login, adoptSession } = useAuth();
   const { t }       = useLang();
   const { showToast } = useToast();
   const navigate     = useNavigate();
@@ -148,6 +154,70 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false);
   const canvasRef = useRef(null);
   useParticles(canvasRef);
+
+  /*
+   * MOM §4.1 / §4.2 — sign in with a one-time code.
+   *
+   * The option is only shown when the platform has it switched on AND a
+   * provider is configured. Offering it otherwise would send people down a
+   * route where no code ever arrives, which is worse than not offering it.
+   */
+  const [otpAvailable, setOtpAvailable] = useState(false);
+  const [mode, setMode]         = useState('password');   // 'password' | 'otp'
+  const [otpStage, setOtpStage] = useState('request');     // 'request' | 'verify'
+  const [otpPhone, setOtpPhone] = useState('');
+  const [otpCode,  setOtpCode]  = useState('');
+  const [otpNote,  setOtpNote]  = useState('');
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    authApi.otpStatus()
+      .then((r) => setOtpAvailable(!!r.data?.enabled && r.data?.provider !== 'unconfigured'))
+      .catch(() => setOtpAvailable(false));
+  }, []);
+
+  // Resend countdown.
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const id = setInterval(() => setResendIn((v) => Math.max(0, v - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendIn]);
+
+  async function sendCode(e) {
+    e?.preventDefault();
+    setError(''); setOtpNote('');
+    setLoading(true);
+    try {
+      const res = await authApi.otpRequest(otpPhone.trim());
+      // Deliberately generic — the server will not say whether the number is
+      // registered, and neither should this screen.
+      setOtpNote(res.data?.message || t('login.otp_sent'));
+      setOtpStage('verify');
+      setResendIn(res.data?.resend_in ?? 60);
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setLoading(false);
+  }
+
+  async function verifyCode(e) {
+    e?.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const res = await authApi.otpVerify(otpPhone.trim(), otpCode.trim());
+      if (res.data?.success) {
+        adoptSession(res.data.user, res.data.token, res.data.user?.org_slug);
+        const role = res.data.user?.role;
+        if (role === 'platform_admin') navigate('/platform');
+        else if (role === 'super_admin') navigate('/super-admin');
+        else navigate('/dashboard');
+      } else setError(res.data?.error || t('msg.server_error'));
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
     // The reset email links to /reset-password?token=…&org=… (authService), while
@@ -257,6 +327,13 @@ export default function LoginPage() {
         .ifqm-particles .row{display:flex;justify-content:flex-end;margin-top:-2px}
         .ifqm-particles .link{font-size:12.5px;color:var(--primary);text-decoration:none;cursor:pointer}
         .ifqm-particles .link:hover{text-decoration:underline}
+        .ifqm-particles .note{background:var(--info-light);color:var(--info);border:1px solid var(--info);
+          border-radius:10px;padding:9px 13px;font-size:12.5px;line-height:1.5}
+        .ifqm-particles .switcher{display:flex;align-items:center;gap:10px;margin-top:2px}
+        .ifqm-particles .switcher span{flex:1;height:1px;background:var(--border)}
+        .ifqm-particles .switcher button{background:none;border:none;padding:0;cursor:pointer;
+          font-size:12.5px;color:var(--primary);font-family:inherit}
+        .ifqm-particles .switcher button:hover{text-decoration:underline}
         .ifqm-particles .err{background:var(--danger-light);color:var(--danger);border:1px solid var(--danger);
           border-radius:10px;padding:9px 13px;font-size:12.5px}
         .ifqm-particles .alt-cta{margin-top:2px;font-size:12.5px;color:var(--text-muted);text-align:center}
@@ -279,7 +356,47 @@ export default function LoginPage() {
         </div>
 
         {error && <div className="err">{error}</div>}
+        {mode === 'otp' && otpNote && <div className="note">{otpNote}</div>}
 
+        {mode === 'otp' ? (
+          otpStage === 'request' ? (
+            <form onSubmit={sendCode}>
+              <div className="fld">
+                <span className="ic"><PhoneIcon /></span>
+                <input type="tel" value={otpPhone} onChange={e => setOtpPhone(e.target.value)}
+                  placeholder={t('login.otp_phone_ph')} autoComplete="tel" required autoFocus />
+              </div>
+              <button type="submit" className="go" disabled={loading || !otpPhone.trim()}>
+                {loading ? t('msg.loading') : t('login.otp_send')}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={verifyCode}>
+              <div className="fld">
+                <span className="ic"><LockIcon /></span>
+                {/* inputMode numeric so a phone shows the number pad; one-time-code
+                    lets both iOS and Android offer the SMS straight from the keyboard */}
+                <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={8}
+                  value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder={t('login.otp_code_ph')} autoComplete="one-time-code" required autoFocus
+                  style={{ letterSpacing:'.35em', fontWeight:700 }} />
+              </div>
+              <button type="submit" className="go" disabled={loading || otpCode.length < 4}>
+                {loading ? t('login.signing_in') : t('login.otp_verify')}
+              </button>
+              <div className="row" style={{ justifyContent:'space-between' }}>
+                <a className="link" onClick={() => { setOtpStage('request'); setOtpCode(''); setOtpNote(''); }}>
+                  {t('login.otp_change_number')}
+                </a>
+                {resendIn > 0
+                  ? <span style={{ fontSize:12.5,color:'var(--subtle)' }}>
+                      {t('login.otp_resend_in').replace('{s}', resendIn)}
+                    </span>
+                  : <a className="link" onClick={sendCode}>{t('login.otp_resend')}</a>}
+              </div>
+            </form>
+          )
+        ) : (
         <form onSubmit={handleLogin}>
           <div className="fld">
             <span className="ic"><MailIcon /></span>
@@ -304,6 +421,22 @@ export default function LoginPage() {
             {loading ? t('login.signing_in') : t('login.btn')}
           </button>
         </form>
+        )}
+
+        {/* Only offered when the platform actually has a working SMS provider —
+            a route where no code ever arrives is worse than no route. */}
+        {otpAvailable && (
+          <div className="switcher">
+            <span />
+            <button type="button" className="link" onClick={() => {
+              setMode(m => (m === 'otp' ? 'password' : 'otp'));
+              setError(''); setOtpNote(''); setOtpStage('request'); setOtpCode('');
+            }}>
+              {mode === 'otp' ? t('login.use_password') : t('login.use_otp')}
+            </button>
+            <span />
+          </div>
+        )}
 
         <p className="alt-cta">
           {t('login.new_here')} <Link className="link" to="/signup">{t('login.request_access')}</Link>

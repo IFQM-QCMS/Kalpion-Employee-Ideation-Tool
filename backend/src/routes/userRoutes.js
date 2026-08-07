@@ -43,6 +43,13 @@ const ADMIN = requireRole('admin', 'super_admin');
 router.get('/import/template', ADMIN, userImport.template);
 router.post('/import/preview', ADMIN, handleImportFile, userImport.preview);
 router.post('/import', ADMIN, heavyLimiter, handleImportFile, userImport.start);
+
+// §13.14 — reporting structure as an editable sheet. Download comes pre-filled
+// with the organisation as it stands, so the admin edits reality rather than
+// retyping it. Preview shows what would change; nothing is written until apply.
+router.get('/hierarchy/template', ADMIN, users.hierarchyTemplate_download);
+router.post('/hierarchy/preview', ADMIN, handleImportFile, users.hierarchyTemplate_preview);
+router.post('/hierarchy/apply', ADMIN, heavyLimiter, handleImportFile, users.hierarchyTemplate_apply);
 router.get('/import/:id', ADMIN, userImport.job);
 router.get('/import/:id/errors.csv', ADMIN, userImport.errorsCsv);
 

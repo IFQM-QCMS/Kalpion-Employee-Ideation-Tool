@@ -318,7 +318,11 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   -- ideaService: authors_reviewers | managers_only | everyone.
   ('solution_visibility',       'authors_reviewers'),
   ('idea_tags_enabled',         '1'),
-  ('patentability_enabled',     '1');
+  ('patentability_enabled',     '1'),
+  -- §14.10: voting is open to all; this governs the AI's written reasoning only.
+  ('prediction_visibility',     'seniors'),
+  -- §7.2: deterrents against casually copying idea text. Off by default.
+  ('content_protection',        '0');
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,

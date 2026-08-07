@@ -20,6 +20,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import config from '../config/index.js';
 import { badRequest, forbidden, ApiError } from '../utils/respond.js';
+import { masterDb } from '../database/master.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_BASE = path.join(__dirname, '..', '..', 'uploads');
@@ -37,6 +38,45 @@ export async function tenantUploadDir(slug) {
  * @param file { originalname, buffer, size } (from multer memoryStorage)
  * @returns { safeName, filename }
  */
+
+/**
+ * Bytes currently used by one tenant's uploads.
+ *
+ * A flat directory per tenant, so a single readdir is enough — no recursion,
+ * and no reason for this to get slower as other tenants grow.
+ */
+async function dirSize(dir) {
+  try {
+    const names = await fs.readdir(dir);
+    const sizes = await Promise.all(names.map(async (n) => {
+      try { return (await fs.stat(path.join(dir, n))).size; } catch { return 0; }
+    }));
+    return sizes.reduce((a, b) => a + b, 0);
+  } catch {
+    return 0;                     // directory not created yet
+  }
+}
+
+/**
+ * This tenant's storage cap in MB: its own override, else the platform default,
+ * else 0 meaning unlimited. Failures return 0 rather than blocking uploads — a
+ * registry hiccup must not stop people attaching files.
+ */
+async function tenantStorageQuotaMb(slug) {
+  try {
+    const [[t] = []] = await masterDb().execute(
+      'SELECT storage_quota_mb FROM tenants WHERE slug = ? LIMIT 1', [slug]
+    );
+    if (t?.storage_quota_mb != null) return Number(t.storage_quota_mb) || 0;
+    const [[d] = []] = await masterDb().execute(
+      "SELECT value FROM platform_settings WHERE key_name = 'storage_quota_mb' LIMIT 1"
+    );
+    return parseInt(d?.value, 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function upload(db, slug, user, { ideaId, section, file }) {
   ideaId = Number(ideaId) || 0;
   // 'support' and 'benefits' let an employee attach the document(s) that back up
@@ -58,6 +98,29 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
   if (!ALLOWED_EXT.includes(ext)) throw badRequest('File type not allowed.');
 
   const dir = await tenantUploadDir(slug);
+
+  /*
+   * MOM §8.5 — an upper limit per organisation, not just per file.
+   *
+   * The per-file cap alone stops one enormous upload; it does nothing about ten
+   * thousand ordinary ones, which is how shared storage actually fills up. The
+   * quota is measured from the directory on disk rather than a running total in
+   * the database: a counter drifts the moment a file is removed by hand or a
+   * write fails halfway, and a storage limit that quietly disagrees with the
+   * storage is worse than none.
+   *
+   * Checked before the write, and the incoming file counts toward the total, so
+   * the limit cannot be stepped over by exactly one file.
+   */
+  const quotaMb = await tenantStorageQuotaMb(slug);
+  if (quotaMb > 0) {
+    const usedBytes = await dirSize(dir);
+    if (usedBytes + file.size > quotaMb * 1024 * 1024) {
+      throw new ApiError(413,
+        `Your organisation has used its ${quotaMb} MB of attachment storage. `
+        + 'Delete some attachments, or ask IFQM to raise the limit.');
+    }
+  }
   const safeName = `attach_${Date.now().toString(16)}${crypto.randomBytes(7).toString('hex')}.${ext}`;
 
   try {

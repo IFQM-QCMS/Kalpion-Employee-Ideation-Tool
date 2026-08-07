@@ -75,6 +75,20 @@ export function AuthProvider({ children }) {
     return { success: false, error: res.data.error || null };
   }, []);
 
+  /*
+   * Adopt a session minted by some route other than the password form — today
+   * that is the one-time code (MOM §4.1). The server returns exactly the same
+   * { user, token } either way, so this is the same three lines the password
+   * branch runs and nothing downstream can tell them apart.
+   */
+  const adoptSession = useCallback((user, token, orgSlug) => {
+    localStorage.setItem('ifqm_token', token);
+    if (orgSlug) localStorage.setItem('ifqm_org', orgSlug);
+    else localStorage.removeItem('ifqm_org');
+    setUser(user);
+    return { success: true, user };
+  }, []);
+
   const logout = useCallback(async () => {
     try { await authApi.logout(); } catch { /* ignore */ }
     localStorage.removeItem('ifqm_token');
@@ -107,7 +121,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, changePassword, refreshUser, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, adoptSession, logout, changePassword, refreshUser, setUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -247,8 +247,7 @@ export function buildIdeaPdf(idea, res) {
   y = field(doc, MARGIN, y, CONTENT_W, 'Redeployment Effort (Ease / Cost / Impact)',
     [s(idea.feasibility) && `Feasibility: ${s(idea.feasibility)}`, fmtMoney(idea.investment_required)].filter(Boolean).join('  ·  '),
     { labelW: 210 });
-  y = field(doc, MARGIN, y, CONTENT_W, 'Linked SOP / Standard Doc No.',
-    (idea.attachments || []).map((a) => a.filename).join(', '), { labelW: 170 });
+  y = field(doc, MARGIN, y, CONTENT_W, 'Linked SOP / Standard Doc No.', '', { labelW: 170 });
 
   // Section D — Proof of Result
   y = sectionHeader(doc, y, 'SECTION D — PROOF OF RESULT', 'RESULTS VALIDATION');
@@ -281,6 +280,31 @@ export function buildIdeaPdf(idea, res) {
   y = yesNo(doc, MARGIN, y + 1, 'Sponsor / Champion Sign-Off on File?', s(idea.manager_name) ? 'yes' : null) + 2;
 
   // Section F — Reuse Potential
+  /*
+   * MOM §14.2 — attachments are listed by NAME ONLY, never embedded.
+   *
+   * Embedding them would balloon a one-page summary into whatever the
+   * photographs happen to weigh, and would hand every file to anyone entitled
+   * to the PDF — a wider audience than the people entitled to the files
+   * themselves, which are served individually behind an auth check. The name,
+   * size and section are enough for a reader to ask for the right one.
+   */
+  const atts = idea.attachments || [];
+  y = sectionHeader(doc, y, 'ATTACHMENTS', `${atts.length} FILE(S) — NAMES ONLY`);
+  if (!atts.length) {
+    y = field(doc, MARGIN, y, CONTENT_W, 'Files attached', 'None', { labelW: 170 });
+  } else {
+    for (const a of atts) {
+      const kb = a.filesize ? ` · ${Math.max(1, Math.round(Number(a.filesize) / 1024))} KB` : '';
+      const where = a.section ? ` · ${a.section}` : '';
+      y = field(doc, MARGIN, y, CONTENT_W, '•', `${s(a.filename)}${kb}${where}`, { labelW: 14 });
+    }
+    y = field(doc, MARGIN, y, CONTENT_W, '',
+      'Files are not embedded in this document. Request them from the submitter or open the idea in IFQM.',
+      { labelW: 14 });
+  }
+  y += 2;
+
   y = sectionHeader(doc, y, 'SECTION F — REUSE POTENTIAL', 'APPLICABILITY');
   y = field(doc, MARGIN, y, CONTENT_W, 'Horizontal Deployment (Applied Elsewhere?)', '', { labelW: 230 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Known Limitations / Side Effects', '', { labelW: 230 });

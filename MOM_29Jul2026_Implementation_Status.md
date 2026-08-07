@@ -3,7 +3,7 @@
 Tracks every action item in `IFQM_EIT_MOM_29Jul2026.docx` against what is now in
 the codebase.
 
-**Status as of 7 August 2026.**
+**Status as of 7 August 2026 (second round).**
 
 Each item carries one of three states, and the distinction matters when reading
 the totals:
@@ -15,16 +15,20 @@ the totals:
 | ❌ **Not started** | No code exists for it yet |
 | 🟡 **Partial** | Some of the item is covered; the gap is stated |
 
-**Summary of 75 action items: 41 done · 10 pre-existing · 5 partial ·
-19 not started.**
+**Summary of 75 action items: 52 done · 9 pre-existing · 2 partial ·
+12 not started.**
 
-Of the 19 not started, most are not code: commercial decisions (§1.4 support
-scope, §5.1 trial period, §6.1 branding, §10.1 billing), process (§4.3 UAT, §7.1
-penetration testing), a vendor question (§8.2), and one deliberate gap where the
-minutes contradict themselves (§9.6 — see Open questions). The genuinely
-outstanding engineering is OTP/SMS login (§4.1, §4.2), Azure OAuth and SSO
-(§12.6, §12.7), and a handful of console renames and views (§12.9, §13.10 UI
-polish, §13.14).
+The 12 remaining are, with two exceptions, not code. They are commercial
+decisions (§1.4 support scope, §5.1 trial period, §6.1 branding, §10.1 billing —
+which the minutes themselves mark as future scope), process items (§4.3 UAT,
+§7.1 penetration testing, §3.3 IFQM taking ownership), a question for a vendor
+(§8.2), and a figure only its owner can confirm (§1.1).
+
+The two genuine engineering items left are **§12.6 SSO across QCMS, DWM and
+Skills** and **§12.7 Azure OAuth**, which need an Azure tenant and app
+registration that do not exist yet, plus agreement from the other two tools.
+
+**§9.6 is a decision, not a task.** It contradicts §9.3 — see Open questions.
 
 ---
 
@@ -55,8 +59,8 @@ polish, §13.14).
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 4.1 | Mock OTP test on login with SMS-tag integration | ❌ | No SMS provider is integrated. Login is password-based; phone numbers are stored and usable as a login identifier, but never as an OTP factor. |
-| 4.2 | Developer/test access via OTP | ❌ | |
+| 4.1 | Mock OTP test on login with SMS-tag integration | ✅ | One-time-code sign-in built end to end, with a pluggable SMS provider so the mock test the minutes asked for works today without an SMS contract. Codes are hashed at rest, single use, expire in five minutes, and five wrong guesses burn the code. Requesting one reveals nothing about whether the number is registered. |
+| 4.2 | Developer/test access via OTP | ✅ | Same flow, with a `dev_access` purpose recorded against the code so a developer or tester sign-in is distinguishable from a normal one in the activity log. |
 | 4.3 | UAT before final deployment | ❌ | Process item. |
 
 ## 5. Trial Period
@@ -77,17 +81,17 @@ polish, §13.14).
 | # | Expected | State | Notes |
 |---|---|---|---|
 | 7.1 | Stress / penetration-style testing | ❌ | Load testing informed the `ideas.updated_at` index, but no penetration test has been run. |
-| 7.2 | Disable screenshots and right-click | ❌ | Worth a conversation before building: right-click blocking is trivially bypassed (devtools, view-source, print, phone camera) and mainly annoys legitimate users. The server-side solution redaction in §11.4 is the control that actually holds. |
+| 7.2 | Disable screenshots and right-click | ✅ | Content protection as an org setting, off by default: right-click, selection, copy and drag suppressed on idea text, plus a watermark carrying the reader's own name. The label and help text state plainly that it cannot stop a screenshot or a phone camera — nothing in a browser can. Its real value is that a leaked screenshot is attributable. |
 
 ## 8. API & Data Privacy
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 8.1 | Clarify API key privacy and what the API stores | 🟡 | The QCMS API key is stored per tenant in `org_settings` and never returned to the client. Not written up as a document. |
+| 8.1 | Clarify API key privacy and what the API stores | ✅ | `docs/DATA_AND_API_PRIVACY.md` — what is stored and where, what IFQM can and cannot see, what leaves the system and to whom, retention, and the list of things deliberately not collected. The QCMS key is write-only through the API and appears in no screen, export or log. |
 | 8.2 | Confirm enterprise edition does not leak private info | ❌ | Vendor question. |
 | 8.3 | API rate limits: 10,000 total, 2,000/month | ✅ | Per-tenant quota: 10,000 lifetime / 2,000 monthly, counted in `tenant_api_usage`, enforced in `middleware/tenantQuota.js`. Buffered writes; fails open on a metering error so a counting outage cannot become a customer outage. |
 | 8.4 | File upload limit 10 MB, listed under expected benefits | ⏸️ | Enforced via `MAX_FILE_MB=10`, both in multer and in the upload service. Not yet surfaced as a "benefit". |
-| 8.5 | Upper limit per organisation + per-file size limit | ✅ | Per-file limit already enforced; per-tenant request quota now too, with per-org overrides on the tenant row. `storage_quota_mb` column added — enforcement of the storage cap is not yet wired. |
+| 8.5 | Upper limit per organisation + per-file size limit | ✅ | Per-organisation storage cap now enforced on upload, measured from the directory on disk rather than a running total — a counter drifts the moment a file is removed by hand. |
 | 8.6 | Evaluate DDoS prevention at tenant level | ✅ | Abuse protection is now per tenant as well as per IP. A NAT-ed office looks like one client to an IP limiter and a botnet looks like thousands, which is why the commercial limit had to be counted per organisation. |
 
 ## 9. Self-Service & Tenant Registration
@@ -114,7 +118,7 @@ polish, §13.14).
 |---|---|---|---|
 | 11.1 | Attractive leaderboard: Top Contributors, Top 5, podium | ✅ | Top three on a 2-1-3 podium (winner centre and tallest) with 🏆/🥈/🥉, gold/silver/bronze tinting, ranks 4+ continuing as rows. Collapses to one column on narrow screens. |
 | 11.2 | Shareable via social media | ✅ | Share button on the leaderboard: Web Share API where the device offers it, clipboard fallback. Shares a text summary of the top 5, not a link — the leaderboard is behind a tenant login, so a URL would dead-end for anyone outside the org. |
-| 11.3 | Compare "All Ideas" view against an "Idea Board" view | ❌ | Both views exist (`/all-ideas`, `/board`); no comparison has been done. |
+| 11.3 | Compare "All Ideas" view against an "Idea Board" view | ✅ | `docs/VIEW_COMPARISON.md`. The comparison earned its place: it found the Idea Board still sending every idea's full text to every employee. That module was never brought along when the redaction went in, and the screen's two-line clamp was hiding it from the reader but not from the page. Fixed, along with the board showing archived ideas. |
 | 11.4 | Biocon-style: problem, business case, solution as one-line summary; full details hidden until expanded | ✅ | The list endpoint no longer sends any full solution text, and the detail endpoint redacts it unless the viewer is the author, a co-suggester, an assigned or current reviewer, or a manager and above. All Ideas shows a one-line gist with a 🔒 and an explanation. Title, impact, score and status stay public. |
 
 ## 12. IFQM Super Admin Login
@@ -129,7 +133,7 @@ polish, §13.14).
 | 12.6 | SSO across QCMS, DWM and Skills on a shared database | ❌ | |
 | 12.7 | Azure for OAuth | ❌ | |
 | 12.8 | "Ideas Implemented" on home page (Orgs → Ideas → Implemented) | ✅ | Ideas Implemented and Sent to QCMS as headline tiles, summed from the same per-tenant figures the table shows, so the headline cannot disagree with the rows. |
-| 12.9 | Nomenclature: "Organisation Admin" | ❌ | |
+| 12.9 | Nomenclature: "Organisation Admin" | ✅ | Role label is now "Organisation Admin", including the platform console column and the contacts panel. |
 | 12.10 | Top-right: "Superadmin signed in as [username]" | ✅ | Platform admins now see "Superadmin signed in as <name>" instead of a name plus a role pill. |
 | 12.11 | Create another superadmin (soft limit 5) | ✅ | Soft cap of 5, stored in `platform_settings` so an operator who genuinely needs a sixth can raise it — soft because the MOM said soft. |
 | 12.12 | Notifications should display login activity | ✅ | `platform_login_activity`, append-only, recording successes, failures and lockouts with IP and user agent. `login_attempts` could never answer this: it is lockout state and is cleared on every successful sign-in. Endpoint: `GET /api/platform/activity`. |
@@ -141,7 +145,7 @@ polish, §13.14).
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 13.1 | Restrict which sections employees can view (one-line solution) | 🟡 | Now an org setting (`solution_visibility`): authors_reviewers / managers_only / everyone. Server-enforced. Verified across all three modes. |
+| 13.1 | Restrict which sections employees can view (one-line solution) | ✅ | Fully configurable by the organisation admin: author and reviewers (default), managers only, or everyone. Server-enforced and verified in all three modes. |
 | 13.2 | Org Admin control over ideas, including archiving old ideas | ✅ | Archive/restore on an idea, org-admin only, logged to the workflow timeline. Not a delete: points, audit trail and ROI survive. |
 | 13.3 | All Ideas: add filter and export to CSV/PDF | ✅ | CSV and PDF export from All Ideas, honouring the active filters. The full solution is deliberately absent from both — the server does not send it to that screen. |
 | 13.4 | Bulk import fields: Salutation, First Name, Last Name, Year of Birth only | ✅ | Import sheet is now Salutation / First name / Last name / year_of_birth. The old `name` and `date_of_birth` headers still map, so an existing sheet imports unchanged. The temporary password only ever used the year, so the day and month were personal data collected for no purpose. |
@@ -150,18 +154,18 @@ polish, §13.14).
 | 13.7 | QCMS API key: user guide only, no key exposure | ⏸️ | The key is write-only in the API — it is never returned to a client. A user guide is still to be written. |
 | 13.8 | Hierarchy: typing a user shows their full reporting chain via dropdown | ✅ | `GET /api/users/:id/chain` returns the full line upward plus direct reports. Cycle-guarded and depth-bounded — a manager loop is two clicks to create and would otherwise spin inside a request. |
 | 13.9 | User list: filter by Manager, Executive etc. without pulling the whole DB | ✅ | Filter by role, department, status or manager, all applied in SQL. The available roles and departments come back with the page, so the UI does not hard-code them. |
-| 13.10 | Idea Management: "Patentability" decision option | ❌ | |
+| 13.10 | Idea Management: "Patentability" decision option | ✅ | Not assessed / not patentable / possibly / filing recommended / filed, recorded against the idea and logged to its timeline. Kept as its own axis rather than a status value, because an idea can be approved and unpatentable, or turned down on cost and still worth filing. |
 | 13.11 | Remove Super Admin from the approval chain | ✅ | `super_admin` removed from the approval chain and from the selectable role list. A stored chain that still names it is filtered out on read. |
 | 13.12 | Final approval authority: Plant Head (replacing Executive) | ✅ | Built-in chain now ends at Plant Head. `admin` is appended to the final set so an idea can never dead-end with nobody able to close it. |
 | 13.13 | Show current review stage ("Under review by ___") | ✅ | `review_stage` on the idea detail: "Under review by <names>", or unassigned/draft/closed. Multi-reviewer ideas name everyone still outstanding. |
-| 13.14 | Customisable hierarchy per org via Excel template (Year of Birth, not DOB) | ❌ | Bulk import exists; the hierarchy template and the YOB change do not. |
+| 13.14 | Customisable hierarchy per org via Excel template (Year of Birth, not DOB) | ✅ | Reporting-structure template, separate from the employee import: it can rewire who reports to whom and cannot create, rename or remove anybody. Downloads pre-filled with the organisation as it stands. Preview shows what would change; unknown managers, self-references and reporting loops are each refused by row before anything is written. |
 
 ## 14. Employee Login
 
 | # | Expected | State | Notes |
 |---|---|---|---|
 | 14.1 | Dashboard: Rejected Ideas view | ✅ | Same dedicated page as 13.5. |
-| 14.2 | Export idea to PDF including attachment file names | 🟡 | Per-idea PDF export exists. Attachment file names in the PDF still unconfirmed. |
+| 14.2 | Export idea to PDF including attachment file names | ✅ | PDF now has a dedicated attachments section listing file names, sizes and which part of the idea they belong to. Files are deliberately not embedded: it would balloon a one-page summary, and hand every file to anyone entitled to the PDF — a wider audience than the people entitled to the files, which are served individually behind an auth check. |
 | 14.3 | Employees can only view idea title and part of the solution | ✅ | See 11.4. Enforced server-side, so it holds even against a crafted API call. |
 | 14.4 | Mark mandatory fields with a red asterisk | ✅ | Title, Present Situation and Proposed Solution in the submit wizard. Previously the asterisk was the same colour and weight as the label, so it read as punctuation. Marked `aria-hidden` since the `required` attribute already announces this to screen readers. |
 | 14.5 | Form fields: Situation Title, Description, Solution, Business Case (colour-coded feasibility), Time Required dropdown (<3 / 3–6 / 6–12 months) | 🟡 | Time Required is a three-band dropdown and feasibility is colour-coded (red/amber/green buttons rather than a dropdown, so it reads at a glance). The exact field renaming — "Situation Title", "Description" — is NOT done; those map onto existing columns with real data and renaming them is a data migration, not a label change. |
@@ -169,7 +173,7 @@ polish, §13.14).
 | 14.7 | Remove the Idea Template section | ⏸️ | No idea-template section exists in the current UI. |
 | 14.8 | Remove "Submit Idea Anonymously" | ✅ | Removed from the submit form. The column and masking logic stay in the backend on purpose — ideas already filed anonymously must keep that promise. |
 | 14.9 | Capture a timestamp for every idea submitted | ⏸️ | `submitted_at`, `created_at` and `updated_at` are all recorded. |
-| 14.10 | Upvote/downvote for all employees; predictions possibly restricted to seniors | ⏸️/❌ | Community voting is open to all employees. The prediction-access restriction is unresolved — the MOM itself says "confirm scope". |
+| 14.10 | Upvote/downvote for all employees; predictions possibly restricted to seniors | ✅ | Voting is open to everyone and always was. The AI's written assessment is now gated, defaulting to managers and above, with the author always able to read the assessment of their own idea. The minutes said "confirm scope", so it is an organisation setting rather than a guess baked into the code. |
 | 14.11 | Team Lead sits within the Employee hierarchy | ⏸️ | `team_lead` is already a role in the hierarchy chain. |
 
 ## 15. Infrastructure & Hosting

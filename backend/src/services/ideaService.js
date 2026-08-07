@@ -69,7 +69,44 @@ export const PATENTABILITY_VALUES = [
  * Reading the org setting costs one cached settings lookup per request, which
  * the callers already perform for other reasons.
  */
-function visibilityMode(settings) {
+/**
+ * MOM §14.10 — who may read the AI's assessment of an idea.
+ *
+ * Voting itself stays open to everyone; that was never in question. What the
+ * minutes flag is the *prediction*: the machine's score reasoning, which reads
+ * as a verdict on somebody's idea before a human has looked at it. Shown to the
+ * whole floor it discourages people whose first attempt scored badly, which is
+ * the opposite of what a suggestion scheme is for.
+ *
+ * The minutes say "confirm scope", so this is a setting rather than a guess.
+ * The default is the cautious reading — managers and above — and an
+ * organisation that disagrees can open it up without a code change.
+ */
+function predictionMode(settings) {
+  const v = String(settings?.prediction_visibility ?? 'seniors');
+  return ['seniors', 'everyone'].includes(v) ? v : 'seniors';
+}
+
+/**
+ * Hide the AI reasoning from people not entitled to it. The score itself stays
+ * visible — it is a sorting aid and removing it would make the list unreadable.
+ * Only the written justification is held back.
+ */
+function redactPrediction(user, idea, mode) {
+  if (mode === 'everyone') { idea.prediction_hidden = false; return idea; }
+  const uid = Number(user.id);
+  // The author sees the assessment of their own idea in every mode: it is
+  // feedback on their work, and withholding it would be perverse.
+  if (Number(idea.submitter_id) === uid || PRIVILEGED_SOLUTION.includes(user.role)) {
+    idea.prediction_hidden = false;
+    return idea;
+  }
+  idea.ai_reason = null;
+  idea.prediction_hidden = true;
+  return idea;
+}
+
+export function visibilityMode(settings) {
   const v = String(settings?.solution_visibility ?? 'authors_reviewers');
   return ['authors_reviewers', 'managers_only', 'everyone'].includes(v) ? v : 'authors_reviewers';
 }
@@ -95,7 +132,7 @@ export function summariseSolution(text, limit = 140) {
  * May this viewer read the full solution of this idea?
  * The author and their co-suggesters always can; so can whoever has to judge it.
  */
-function canReadSolution(user, idea, mode = 'authors_reviewers') {
+export function canReadSolution(user, idea, mode = 'authors_reviewers') {
   const uid = Number(user.id);
   // The author always sees their own proposal, in every mode. A setting that
   // could hide someone's own writing from them would be a bug, not a policy.
@@ -183,7 +220,9 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
   const [ideas] = await db.execute(sql, paramsList);
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
-  const mode = visibilityMode(await getOrgSettings(db));
+  const settings = await getOrgSettings(db);
+  const mode = visibilityMode(settings);
+  const predMode = predictionMode(settings);
   for (const idea of ideas) {
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
@@ -196,6 +235,7 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     // leak this is meant to close, and it is invisible to anyone reading only
     // the rendered table.
     redactSolution(user, idea, mode);
+    redactPrediction(user, idea, predMode);
     idea.proposed_solution = null;
   }
   return { success: true, ideas };
@@ -337,6 +377,7 @@ export async function get(db, user, id) {
   } else {
     redactSolution(user, idea, mode);
   }
+  redactPrediction(user, idea, predictionMode(await getOrgSettings(db)));
 
   /*
    * MOM §13.13 — "Under review by ___" as one readable line, rather than making

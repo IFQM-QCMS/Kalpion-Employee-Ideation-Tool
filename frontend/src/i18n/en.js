@@ -61,6 +61,17 @@ export default {
   'login.signing_in':'Signing in…',
   'login.failed':'Login failed.',
   'login.forgot':'Forgot your password?',
+  // MOM §4.1 / §4.2 — one-time code sign-in
+  'login.use_otp':'Sign in with a code instead',
+  'login.use_password':'Sign in with a password instead',
+  'login.otp_phone_ph':'Registered phone number',
+  'login.otp_code_ph':'6-digit code',
+  'login.otp_send':'Send me a code',
+  'login.otp_verify':'Verify and sign in',
+  'login.otp_sent':'If that number belongs to an account, a code has been sent to it.',
+  'login.otp_resend':'Resend code',
+  'login.otp_resend_in':'Resend in {s}s',
+  'login.otp_change_number':'Use a different number',
   'login.powered_by':'Powered by IFQM · Multi-Tenant · Role-Based Access Control',
   'login.feat1_title':'Submit & Track Ideas',
   'login.feat1_sub':'5-step wizard with AI quality scoring',
@@ -126,7 +137,9 @@ export default {
   'role.manager':'Manager',
   'role.senior_manager':'Senior Manager',
   'role.executive':'Executive',
-  'role.admin':'Org Admin',
+  // MOM §12.9 — spelled out rather than abbreviated. "Org Admin" next to
+  // "Super Admin" read as two grades of the same thing; they are different jobs.
+  'role.admin':'Organisation Admin',
   'role.super_admin':'Super Admin',
   'role.department_manager':'Department Manager',
   'role.plant_head':'Plant Head',
@@ -174,6 +187,8 @@ export default {
 
   // -- Visibility & privacy --
   'info.solution_visibility':'Who can read the full text of an idea. Everyone always sees the title, category, score and status - this only controls the detailed write-up, so colleagues cannot copy an idea before it has been reviewed. The person who wrote it always sees their own.',
+  'info.prediction_visibility':'The app scores each idea automatically and writes a short reason for the score. This controls who can read that reason. Voting is unaffected — everyone can always vote. The concern is that a machine-written verdict shown to the whole company discourages people whose first attempt scored badly, so the default is managers only. Whoever wrote the idea always sees the assessment of their own.',
+  'info.content_protection':'Turns off right-click, text selection and copy on the text of an idea, and lays the reader’s own name faintly across it. Be clear about what it does not do: it cannot stop a screenshot, a phone camera pointed at the screen, or anyone who opens the browser’s developer tools. It discourages casual copying and makes a leak traceable. What actually protects an idea is the setting above, because the text is never sent to people who should not have it.',
   'info.feature_flags':'On/off switches for optional parts of the app. Turning one off hides that feature from everyone in your organisation; existing data is kept, not deleted, so you can turn it back on.',
   'info.flag_anonymous':'Lets employees submit without their name attached. Ideas already submitted anonymously stay anonymous even if you switch this off.',
   'info.flag_board':'A shared wall where everyone can see and vote on ideas. Switch it off if you want ideas visible only to reviewers.',
@@ -302,6 +317,12 @@ export default {
   'admin.sv_managers_only':'Managers and above only',
   'admin.sv_everyone':'Everyone in the organisation',
   'admin.sv_hint':'Everyone always sees the title, impact, score and status. This controls the proposal text itself.',
+  // §14.10 / §7.2
+  'admin.prediction_visibility':'Who can read the AI assessment',
+  'admin.pv_seniors':'Managers and above (plus the author)',
+  'admin.pv_everyone':'Everyone in the organisation',
+  'admin.content_protection':'Discourage copying of idea text',
+  'admin.cp_hint':'Blocks right-click, selection and copy on idea text, and stamps the reader’s name faintly across it. It cannot stop a screenshot or a phone camera — nothing in a browser can. Its real value is that a leaked screenshot carries a name.',
   // §13.9 user filters
   'admin.filter_role':'All roles',
   'admin.filter_dept':'All departments',
@@ -714,7 +735,7 @@ export default {
   'pa.org_count':'{n} organisation(s)',
   'pa.no_match':'No organisations match your search.',
   'pa.col_company':'Company',
-  'pa.col_admin':'Admin',
+  'pa.col_admin':'Organisation Admin',
   'pa.col_users':'Users',
   'pa.col_ideas':'Ideas',
   'pa.col_actions':'Actions',
@@ -730,7 +751,7 @@ export default {
   'pa.kpi_roles':'Roles in use',
   'pa.role_spread':'Role Distribution',
   'pa.active_suffix':'active',
-  'pa.admin_contacts':'Administrator Contacts',
+  'pa.admin_contacts':'Organisation Admin Contacts',
   'pa.admin_contacts_sub':'The organisation’s own admin accounts — your support contacts. No other user is listed.',
   'pa.no_admins':'This organisation has no admin account.',
   'pa.reset_admin_pw':'Reset Password',

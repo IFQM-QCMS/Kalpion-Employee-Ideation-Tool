@@ -22,10 +22,13 @@ const SETTINGS_WHITELIST = [
   // MOM §13.1 — who may read a full proposed solution. This was a constant in
   // ideaService; the org admin now owns it.
   'solution_visibility', 'idea_tags_enabled', 'patentability_enabled',
+  // §14.10 — who may read the AI's reasoning. Voting stays open to everyone.
+  'prediction_visibility',
 ];
 
 /** Accepted values for solution_visibility, loosest last. */
 export const SOLUTION_VISIBILITY_MODES = ['authors_reviewers', 'managers_only', 'everyone'];
+export const PREDICTION_VISIBILITY_MODES = ['seniors', 'everyone'];
 
 const APPROVAL_MODES = ['default', 'custom', 'stages'];
 
@@ -154,6 +157,7 @@ export async function updateSettings(db, body) {
     // An unrecognised visibility mode must not silently become "everyone" —
     // that would publish every solution in the org on a typo.
     if (key === 'solution_visibility' && !SOLUTION_VISIBILITY_MODES.includes(String(value))) continue;
+    if (key === 'prediction_visibility' && !PREDICTION_VISIBILITY_MODES.includes(String(value))) continue;
     if (key === 'approval_threshold') {
       value = String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));
     }

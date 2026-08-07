@@ -235,7 +235,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                   <div className="form-group">
                     <label>{t('detail.situation')}</label>
-                    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.present_situation}</div>
+                    <div data-protect style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.present_situation}</div>
                   </div>
                   <div className="form-group">
                     <label>{t('detail.solution')}</label>
@@ -251,7 +251,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
+                      <div data-protect style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
                     )}
                   </div>
                   <div className="form-row" style={{ marginBottom:10 }}>

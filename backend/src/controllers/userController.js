@@ -3,7 +3,8 @@
  * actions of PHP api/users.php.
  */
 import * as userService from '../services/userService.js';
-import { respond } from '../utils/respond.js';
+import * as hierarchyTemplate from '../services/hierarchyTemplateService.js';
+import { respond, badRequest } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 export const list = asyncHandler(async (req, res) =>
@@ -23,6 +24,30 @@ export const adminUsers = asyncHandler(async (req, res) =>
     manager_id: req.query.manager_id,
   }))
 );
+
+/*
+ * MOM §13.14 — the reporting-structure template.
+ *
+ * Separate from the employee import on purpose: this can only rewire who
+ * reports to whom, never create or remove people.
+ */
+export const hierarchyTemplate_download = asyncHandler(async (req, res) => {
+  const wb = await hierarchyTemplate.buildTemplate(req.db, req.tenant?.name);
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="ifqm-reporting-structure.xlsx"');
+  await wb.xlsx.write(res);
+  res.end();
+});
+
+export const hierarchyTemplate_preview = asyncHandler(async (req, res) => {
+  if (!req.file) throw badRequest('No file uploaded.');
+  respond(res, await hierarchyTemplate.previewUpload(req.db, req.file.buffer));
+});
+
+export const hierarchyTemplate_apply = asyncHandler(async (req, res) => {
+  if (!req.file) throw badRequest('No file uploaded.');
+  respond(res, await hierarchyTemplate.applyUpload(req.db, req.file.buffer));
+});
 
 /** GET /api/users/:id/chain — MOM §13.8, one person's full reporting line. */
 export const reportingChain = asyncHandler(async (req, res) =>
@@ -57,4 +82,5 @@ export const updateProfile = asyncHandler(async (req, res) =>
   respond(res, await userService.updateProfile(req.db, req.user, req.body || {}))
 );
 
-export default { list, adminUsers, reportingChain, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile };
+export default { list, adminUsers, reportingChain,
+  hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile };

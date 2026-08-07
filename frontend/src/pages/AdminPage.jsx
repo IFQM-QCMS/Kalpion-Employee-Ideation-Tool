@@ -136,8 +136,8 @@ export default function AdminPage() {
     // This is an explicit allowlist, not Object.fromEntries — a new field on the
     // form is invisible to the save until it is named here. solution_visibility
     // (MOM §13.1) is one of them.
-    ['review_sla_days','escalation_days','solution_visibility','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
-    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
+    ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
+    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
     try {
       const res = await settingsApi.update(data);
@@ -373,6 +373,30 @@ export default function AdminPage() {
                 <option value="everyone">{t('admin.sv_everyone')}</option>
               </select>
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sv_hint')}</div>
+            </div>
+
+            {/* MOM §14.10 — voting stays open to everyone; this is only the AI's
+                written assessment. The minutes said "confirm scope", so it is a
+                choice rather than a rule baked into the code. */}
+            <div className="form-group" style={{ maxWidth:420 }}>
+              <label>{t('admin.prediction_visibility')}<InfoDot term="prediction_visibility" /></label>
+              <select className="form-control" name="prediction_visibility"
+                defaultValue={settings.prediction_visibility || 'seniors'}>
+                <option value="seniors">{t('admin.pv_seniors')}</option>
+                <option value="everyone">{t('admin.pv_everyone')}</option>
+              </select>
+            </div>
+
+            {/* MOM §7.2 — a deterrent, not a control. The hint says so plainly
+                rather than letting an admin believe it stops screenshots. */}
+            <div className="form-group" style={{ maxWidth:520 }}>
+              <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
+                <input type="checkbox" name="content_protection" value="1"
+                  defaultChecked={settings.content_protection==='1'}
+                  style={{ accentColor:'var(--primary)' }} />
+                {t('admin.content_protection')}<InfoDot term="content_protection" />
+              </label>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.cp_hint')}</div>
             </div>
 
             <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.flags_heading')}<InfoDot term="feature_flags" /></div>

@@ -112,6 +112,10 @@ export const authApi = {
   // employee faces on first login. Returns a NEW token — the old one is revoked
   // by the password change itself.
   changePassword: (data) => api.post('/auth/change-password', data),
+  // MOM §4.1 / §4.2 — sign in with a one-time code sent by SMS.
+  otpStatus: () => api.get('/auth/otp/status'),
+  otpRequest: (identifier, purpose = 'login') => api.post('/auth/otp/request', { identifier, purpose }),
+  otpVerify: (identifier, code) => api.post('/auth/otp/verify', { identifier, code }),
 };
 
 // ── Ideas ─────────────────────────────────────────────────────────

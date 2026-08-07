@@ -14,6 +14,8 @@
  *     idea_community_votes; does not touch the counter columns.
  */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
+import { summariseSolution, canReadSolution, visibilityMode } from './ideaService.js';
+import { getOrgSettings } from './mailerService.js';
 
 const num = (v) => Number(v ?? 0);
 const PRIVILEGED_ANON = ['manager', 'department_manager', 'senior_manager', 'plant_head', 'executive', 'admin', 'super_admin'];
@@ -201,6 +203,7 @@ export async function board(db, user, sort) {
   const [ideas] = await db.execute(
     `SELECT i.id, i.idea_code, i.title, i.present_situation, i.proposed_solution,
             i.impact_level, i.status, i.created_at, i.is_anonymous, i.ai_score,
+            i.submitter_id, i.co_suggester_1_id, i.co_suggester_2_id, i.current_reviewer_id,
             u.name AS submitter_name, u.avatar_initials, u.department,
             (SELECT COUNT(*) FROM idea_community_votes WHERE idea_id=i.id AND vote_type='up')   AS upvotes,
             (SELECT COUNT(*) FROM idea_community_votes WHERE idea_id=i.id AND vote_type='down') AS downvotes,
@@ -208,18 +211,38 @@ export async function board(db, user, sort) {
      FROM ideas i
      JOIN users u ON u.id = i.submitter_id
      WHERE i.status IN ('Submitted','Under Review','Approved','Implemented')
+       AND i.archived_at IS NULL
      ORDER BY ${orderBy}, i.created_at DESC
      LIMIT 100`,
     [uid]
   );
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
+  const mode = visibilityMode(await getOrgSettings(db));
   for (const idea of ideas) {
     if (idea.is_anonymous && !canSeeAnon) {
       idea.submitter_name = 'Anonymous';
       idea.avatar_initials = '?';
       idea.department = '—';
     }
+
+    /*
+     * The board is a LIST, and the same rule applies to it as to All Ideas
+     * (MOM §11.4, §13.1): a browse view never carries the full proposal over
+     * the wire, for anybody.
+     *
+     * This was missed when the redaction went in — the board is served by
+     * votingService rather than ideaService, so it kept selecting
+     * proposed_solution and shipping it to every employee. The screen only
+     * rendered a snippet, which is exactly why it went unnoticed: the text was
+     * sitting in the response the whole time. Found by comparing the two views
+     * side by side (§11.3).
+     */
+    idea.solution_summary = summariseSolution(idea.proposed_solution);
+    idea.situation_summary = summariseSolution(idea.present_situation);
+    idea.solution_redacted = !canReadSolution(user, idea, mode);
+    idea.proposed_solution = null;
+    idea.present_situation = null;
   }
   return { success: true, ideas };
 }

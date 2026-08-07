@@ -4,6 +4,7 @@
  * reset_password, check_reset_token).
  */
 import * as authService from '../services/authService.js';
+import * as otpService from '../services/otpService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
@@ -29,6 +30,32 @@ export const login = asyncHandler(async (req, res) => {
     host: hostOf(req),
     // MOM §12.12 — where the sign-in came from, for the activity feed. Read
     // here rather than in the service so the service stays free of req.
+    meta: { ip: req.ip, userAgent: req.get('user-agent') },
+  });
+  return respond(res, { success: true, user: result.user, token: result.token });
+});
+
+/*
+ * One-time-code sign-in (MOM §4.1, §4.2). `verify` returns the same
+ * { user, token } shape as a password login, so nothing downstream has to know
+ * which route the session came from.
+ */
+export const otpStatus = asyncHandler(async (_req, res) =>
+  respond(res, await otpService.otpStatus())
+);
+
+export const otpRequest = asyncHandler(async (req, res) =>
+  respond(res, await otpService.requestOtp({
+    identifier: req.body?.identifier,
+    purpose: req.body?.purpose || 'login',
+    meta: { ip: req.ip, userAgent: req.get('user-agent') },
+  }))
+);
+
+export const otpVerify = asyncHandler(async (req, res) => {
+  const result = await otpService.verifyOtp({
+    identifier: req.body?.identifier,
+    code: req.body?.code,
     meta: { ip: req.ip, userAgent: req.get('user-agent') },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
