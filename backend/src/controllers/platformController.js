@@ -4,8 +4,16 @@
  */
 import * as platformService from '../services/platformService.js';
 import * as settings from '../services/platformSettingsService.js';
+import * as activity from '../services/activityService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
+
+// MOM §12.12 — recent sign-in activity for the console's notifications.
+export const loginActivity = asyncHandler(async (req, res) =>
+  respond(res, await activity.recentActivity({
+    limit: req.query.limit, outcome: req.query.outcome || '', tenantId: req.query.tenant_id || null,
+  }))
+);
 
 export const tenants = asyncHandler(async (req, res) =>
   respond(res, await platformService.tenants())

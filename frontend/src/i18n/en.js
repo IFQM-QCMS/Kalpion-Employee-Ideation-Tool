@@ -147,6 +147,87 @@ export default {
   'table.status':'Status',
   'table.date':'Date',
   'table.solution_gist':'Solution (gist)',
+
+  // ── MOM 29 Jul 2026 ──
+  // §14.5 Time Required
+  'form.time_required':'Time required',
+  'form.time_none':'Not estimated',
+  'form.time_lt3':'Less than 3 months',
+  'form.time_3_6':'3 – 6 months',
+  'form.time_6_12':'6 – 12 months',
+  // §14.6 solution category tags
+  'form.solution_tags':'Solution category',
+  'form.solution_tags_hint':'Pick every dimension this idea improves. QCD is Quality, Cost and Delivery.',
+  'form.tag_process':'Process improvement',
+  'form.tag_quality':'Quality',
+  'form.tag_cost':'Cost',
+  'form.tag_delivery':'Delivery',
+  // §13.13 review stage
+  'idea.under_review_by':'Under review by {names}',
+  'idea.review_unassigned':'Awaiting reviewer assignment',
+  'idea.review_closed':'Closed — {status}',
+  'idea.review_draft':'Draft — not yet submitted',
+  // §13.10 patentability
+  'idea.patentability':'Patentability',
+  'idea.pat_not_assessed':'Not assessed',
+  'idea.pat_not_patentable':'Not patentable',
+  'idea.pat_possible':'Possibly patentable',
+  'idea.pat_recommended':'Filing recommended',
+  'idea.pat_filed':'Filed',
+  'idea.pat_saved':'Patentability recorded.',
+  'idea.pat_note_prompt':'Note (optional, visible to admins):',
+  // §13.2 archive
+  'idea.archive':'Archive',
+  'idea.restore':'Restore',
+  'idea.archived':'Archived',
+  'idea.archived_ok':'Idea archived.',
+  'idea.restored_ok':'Idea restored.',
+  'idea.show_archived':'Archived only',
+  'idea.confirm_archive':'Archive this idea? It stays in reports and keeps its points — it just leaves the working lists.',
+  // §13.3 export
+  'btn.export_csv':'Export CSV',
+  'btn.export_pdf':'Export PDF',
+  // §13.5 / §14.1 rejected view
+  'nav.rejected':'Rejected ideas',
+  'dash.rejected_title':'Rejected ideas',
+  'dash.rejected_sub':'Ideas that did not proceed, with the reviewer’s reason. Worth revisiting before a similar idea is filed again.',
+  'dash.rejected_none':'No rejected ideas.',
+  // §12.13 info buttons
+  'pa.sla_info':'Working days a reviewer has before an idea is flagged as overdue. Nothing is reassigned automatically — the flag is a prompt, not an action.',
+  'pa.escalation_info':'Working days before an unactioned idea moves up to the next approver in the chain.',
+  // §12.4 / §12.9 nomenclature
+  'pa.active_orgs':'Active Orgs',
+  'pa.org_admin':'Organisation Admin',
+  'pa.signed_in_as':'Superadmin signed in as {name}',
+  // §12.5 / §12.8 business value
+  'pa.qcms_pushed':'Sent to QCMS',
+  'pa.value_path':'Organisations → Ideas → Implemented',
+  'pa.kpi_implemented':'Ideas implemented',
+  // §12.12 login activity
+  'pa.activity_feed':'Sign-in activity',
+  'pa.activity_none':'No sign-in activity recorded yet.',
+  'pa.activity_success':'Signed in',
+  'pa.activity_failure':'Failed sign-in',
+  'pa.activity_lockout':'Locked out',
+  'pa.activity_24h':'Last 24 hours: {ok} signed in, {fail} failed, {lock} locked out',
+  // §11.2 leaderboard sharing
+  'lb.share':'Share',
+  'lb.share_copied':'Leaderboard summary copied to the clipboard.',
+  'lb.share_title':'Top contributors',
+  // §13.1 solution visibility setting
+  'admin.solution_visibility':'Who can read the full solution',
+  'admin.sv_authors_reviewers':'Author, co-suggesters and reviewers',
+  'admin.sv_managers_only':'Managers and above only',
+  'admin.sv_everyone':'Everyone in the organisation',
+  'admin.sv_hint':'Everyone always sees the title, impact, score and status. This controls the proposal text itself.',
+  // §13.9 user filters
+  'admin.filter_role':'All roles',
+  'admin.filter_dept':'All departments',
+  'admin.filter_status':'All statuses',
+  // §13.8 reporting chain
+  'admin.chain':'Reporting line',
+  'admin.chain_none':'No manager set.',
+  'admin.chain_reports':'Direct reports',
   'idea.solution_hidden_hint':'Only a summary is shown. The full proposal is visible to the author, their co-suggesters and the reviewers handling it.',
   'table.action':'Action',
   'table.idea':'Idea',

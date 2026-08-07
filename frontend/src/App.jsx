@@ -14,6 +14,7 @@ import MyIdeasPage from './pages/MyIdeasPage';
 import SubmitPage from './pages/SubmitPage';
 import ReviewQueuePage from './pages/ReviewQueuePage';
 import AllIdeasPage from './pages/AllIdeasPage';
+import RejectedIdeasPage from './pages/RejectedIdeasPage';
 import BoardPage from './pages/BoardPage';
 import ChallengesPage from './pages/ChallengesPage';
 import AuditPage from './pages/AuditPage';
@@ -96,6 +97,7 @@ function AppRoutes() {
       <Route path="/submit"          element={<PrivateRoute><AppShell><SubmitPage /></AppShell></PrivateRoute>} />
       <Route path="/review"          element={<PrivateRoute><AppShell><ReviewQueuePage /></AppShell></PrivateRoute>} />
       <Route path="/all-ideas"       element={<PrivateRoute><AppShell><AllIdeasPage /></AppShell></PrivateRoute>} />
+      <Route path="/rejected"        element={<PrivateRoute><AppShell><RejectedIdeasPage /></AppShell></PrivateRoute>} />
       <Route path="/board"           element={<PrivateRoute><AppShell><BoardPage /></AppShell></PrivateRoute>} />
       <Route path="/challenges"      element={<PrivateRoute><AppShell><ChallengesPage /></AppShell></PrivateRoute>} />
       <Route path="/audit"           element={<PrivateRoute><AppShell><AuditPage /></AppShell></PrivateRoute>} />

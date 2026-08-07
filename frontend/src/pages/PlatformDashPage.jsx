@@ -72,6 +72,7 @@ export default function PlatformDashPage() {
   const navigate      = useNavigate();
 
   const [tenants, setTenants] = useState([]);
+  const [totals,  setTotals]  = useState({ orgs:0, ideas:0, implemented:0, qcms_pushed:0 });
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -94,7 +95,10 @@ export default function PlatformDashPage() {
     setLoading(true); setError('');
     try {
       const res = await platformApi.tenants();
-      if (res.data.success) setTenants(res.data.tenants || []);
+      if (res.data.success) {
+        setTenants(res.data.tenants || []);
+        setTotals(res.data.totals || { orgs:0, ideas:0, implemented:0, qcms_pushed:0 });
+      }
       else setError(res.data.error || t('msg.fail_load'));
     } catch (err) { setError(err?.response?.data?.error || t('msg.fail_load')); }
     setLoading(false);
@@ -155,10 +159,14 @@ export default function PlatformDashPage() {
 
   const kpis = [
     ['orgs',      t('pa.kpi_total_orgs'), counts.total,     'var(--primary)', 'var(--primary-light)'],
-    ['active',    t('pa.kpi_active'),     counts.active,    'var(--success)', 'var(--success-light)'],
+    ['active',    t('pa.active_orgs'),    counts.active,    'var(--success)', 'var(--success-light)'],
     ['suspended', t('pa.kpi_suspended'),  counts.suspended, 'var(--danger)',  'var(--danger-light)'],
     ['users',     t('pa.total_users'),    counts.users,     'var(--info)',    'var(--info-light)'],
     ['ideas',     t('pa.ideas_submitted'), counts.ideas,    'var(--warning)', 'var(--warning-light)'],
+    // §12.8 — the drill-down the MOM named: Organisations → Ideas → Implemented,
+    // then §12.5's QCMS figure as the business-value endpoint of that path.
+    ['ideas',     t('pa.kpi_implemented'), totals.implemented, 'var(--primary)', 'var(--primary-light)'],
+    ['ideas',     t('pa.qcms_pushed'),     totals.qcms_pushed, 'var(--info)',    'var(--info-light)'],
   ];
 
   return (
@@ -269,6 +277,7 @@ export default function PlatformDashPage() {
                   <th>{t('pa.col_admin')}</th>
                   <th>{t('pa.col_users')}</th>
                   <th>{t('pa.col_ideas')}</th>
+                  <th>{t('pa.qcms_pushed')}</th>
                   <th>{t('table.status')}</th>
                   <th>{t('pa.activity')}</th>
                   <th>{t('platform.last_activity')}</th>
@@ -294,6 +303,7 @@ export default function PlatformDashPage() {
                     </td>
                     <td style={{ fontWeight:700 }}>{ten.user_count ?? 0}</td>
                     <td style={{ fontWeight:700 }}>{ten.idea_count ?? 0}</td>
+                    <td style={{ fontWeight:700,color:'var(--info)' }}>{ten.qcms_pushed_count ?? 0}</td>
                     <td>
                       {/* Operator-set state. "suspended" in the database reads as
                           "On Hold" everywhere a human sees it. */}

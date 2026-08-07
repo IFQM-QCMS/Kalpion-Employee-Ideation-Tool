@@ -49,6 +49,9 @@ router.get('/import/:id/errors.csv', ADMIN, userImport.errorsCsv);
 // Literal paths first, before the /:id param routes.
 router.get('/', requireAuth, users.list);                       // action=list
 router.get('/admin', requireRole('admin', 'super_admin'), users.adminUsers);      // action=admin_users
+// §13.8 — a user's reporting line. Admin-only: it names managers up the tree,
+// which is org-chart data an ordinary employee has no need to enumerate.
+router.get('/:id/chain', requireRole('admin', 'super_admin'), users.reportingChain);
 router.get('/managers', requireRole('admin', 'super_admin'), users.managers);     // action=managers
 // PHP scoped hierarchy to super_admin (Command Center). The tenant admin's
 // Hierarchy screen (approval-chain + reporting-line management) needs the same

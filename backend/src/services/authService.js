@@ -17,6 +17,7 @@ import crypto from 'node:crypto';
 import config from '../config/index.js';
 import { signToken } from '../utils/jwt.js';
 import { masterDb } from '../database/master.js';
+import { recordLogin } from './activityService.js';
 import { resolveTenant, getTenantPool, sanitizeSlug } from '../database/tenant.js';
 import { resolveTenantByLogin, indexUser, isEmail, normalizePhone } from './directoryService.js';
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
@@ -99,7 +100,7 @@ function initialsFrom(name) {
  * Authenticate a user (platform admin or tenant user).
  * @returns {Promise<{ user: object, token: string }>}
  */
-export async function login({ email, password, orgSlug, host }) {
+export async function login({ email, password, orgSlug, host, meta = {} }) {
   email = String(email || '').trim();
   // Deliberately NOT trimmed: the password must be compared exactly as the user
   // set it. Trimming here while storing it untrimmed would silently lock out
@@ -114,6 +115,12 @@ export async function login({ email, password, orgSlug, host }) {
   // Lockout check
   const attempts = await getFailedAttempts(loginId);
   if (attempts.locked_for > 0) {
+    // A locked account being hammered is precisely what an operator wants to
+    // see in the activity feed, so it is recorded rather than only thrown.
+    recordLogin({
+      actorType: 'tenant_user', actorEmail: email, tenantSlug: cleanSlug || null,
+      outcome: 'lockout', ip: meta.ip, userAgent: meta.userAgent,
+    });
     throw tooMany(
       `Too many failed attempts. Please try again in ${Math.ceil(attempts.locked_for / 60)} minute(s).`,
       { retry_after: attempts.locked_for }
@@ -144,6 +151,11 @@ export async function login({ email, password, orgSlug, host }) {
       await clearFailedAttempts(loginId);
       const token = signToken({ user: session, platform_admin: true });
       logger.info(`auth: platform admin login ok (${email})`);
+      // §12.12 — append-only sign-in record for the console's activity feed.
+      recordLogin({
+        actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
+        actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent,
+      });
       return { user: session, token };
     }
   } catch (e) {
@@ -167,6 +179,10 @@ export async function login({ email, password, orgSlug, host }) {
   if (!tenant) {
     await bcrypt.compare(password, DUMMY_HASH);
     await recordFailedAttempt(loginId);
+    recordLogin({
+      actorType: 'tenant_user', actorEmail: email, tenantSlug: cleanSlug || null,
+      outcome: 'failure', ip: meta.ip, userAgent: meta.userAgent,
+    });
     const after = await getFailedAttempts(loginId);
     const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
     throw unauthorized(
@@ -208,6 +224,11 @@ export async function login({ email, password, orgSlug, host }) {
     const after = await getFailedAttempts(loginId);
     const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
     logger.warn(`auth: failed login for ${loginId} (${after.count}/${MAX_ATTEMPTS})`);
+    recordLogin({
+      actorType: 'tenant_user', actorId: user?.id ?? null, actorName: user?.name ?? null,
+      actorEmail: email, tenantId: tenant.id || null, tenantSlug: tenant.slug,
+      outcome: remaining > 0 ? 'failure' : 'lockout', ip: meta.ip, userAgent: meta.userAgent,
+    });
     const err =
       remaining > 0
         ? `Invalid email/phone or password. ${remaining} attempt(s) remaining.`
@@ -257,6 +278,11 @@ export async function login({ email, password, orgSlug, host }) {
     pwd_ts: Number(user.password_changed_ts) || 0,
   });
   logger.info(`auth: login ok (${email} @ ${tenant.slug})`);
+  recordLogin({
+    actorType: 'tenant_user', actorId: user.id, actorName: user.name, actorEmail: user.email,
+    tenantId: tenant.id || null, tenantSlug: tenant.slug, outcome: 'success',
+    ip: meta.ip, userAgent: meta.userAgent,
+  });
   return { user: session, token };
 }
 

@@ -55,10 +55,28 @@ export const DEFAULT_STAGES = [
 
 /**
  * An idea must never be able to dead-end. Whatever chain an organisation
- * builds, an org admin can always close what is sitting in front of them, so
- * these two are appended to the final-approver set rather than replacing it.
+ * builds, the org admin can always close what is sitting in front of them, so
+ * this is appended to the final-approver set rather than replacing it.
+ *
+ * MOM 29 Jul 2026 §13.11 removes `super_admin` from the approval chain. It was
+ * here as a second safety net, but a super admin approving ideas is exactly the
+ * conflation of platform ownership with business judgement the MOM objects to:
+ * whoever holds the org's super-admin credentials is usually IT, not the person
+ * qualified to accept a shop-floor improvement. `admin` alone keeps the
+ * dead-end guarantee.
  */
-const ALWAYS_FINAL = ['admin', 'super_admin'];
+const ALWAYS_FINAL = ['admin'];
+
+/**
+ * §13.12 — the built-in chain's final authority is the Plant Head, replacing
+ * Executive. Organisations running the older role-based `approval_mode` inherit
+ * this too, which is the point: the MOM is describing who signs off, not which
+ * storage format an org happens to use.
+ */
+export const DEFAULT_FINAL_ROLES = ['plant_head', 'admin'];
+export const DEFAULT_REVIEWER_ROLES = [
+  'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
+];
 
 /** Parse the stored CSV into a clean, de-duplicated, originator-first list. */
 export function parseStages(raw) {

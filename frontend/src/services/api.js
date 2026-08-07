@@ -157,6 +157,8 @@ export const notifApi = {
 
 // ── Users ─────────────────────────────────────────────────────────
 export const usersApi = {
+  // §13.8 — a user's full reporting line, in one call.
+  chain: (id) => api.get(`/users/${id}/chain`),
   list: (params) => api.get('/users', { params }),
   analytics: () => api.get('/reports/analytics'),
   audit: () => api.get('/reports/audit'),
@@ -335,9 +337,18 @@ export const registrationsApi = {
   checkEmail: (email) => api.get('/registrations/check-email', { params: { email } }),
 };
 
+/* MOM §13.2 / §13.10 — org-admin decisions on an idea. */
+export const ideaAdminApi = {
+  setArchived: (idea_id, archived, note = '') => api.post('/ideas/archive', { idea_id, archived, note }),
+  setPatentability: (idea_id, patentability, patentability_note = '') =>
+    api.post('/ideas/patentability', { idea_id, patentability, patentability_note }),
+};
+
 export const platformApi = {
   tenants: () => api.get('/platform/tenants'),
   registrations: (status = '') => api.get('/platform/registrations', { params: { status } }),
+  // §12.12 — sign-in activity feed.
+  activity: (params = {}) => api.get('/platform/activity', { params }),
   approveRegistration: (id, slug) => api.post(`/platform/registrations/${id}/approve`, { slug }),
   rejectRegistration: (id, note) => api.post(`/platform/registrations/${id}/reject`, { note }),
   tenantDetail: (id) => api.get(`/platform/tenants/${id}`),

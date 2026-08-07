@@ -63,7 +63,18 @@ export const updateImplementation = asyncHandler(async (req, res) =>
   respond(res, await ideaService.updateImplementation(req.db, req.user, req.body || {}))
 );
 
+// MOM §13.2 / §13.10 — org-admin only; the service enforces the role itself so
+// the rule holds no matter which route reaches it.
+export const setArchived = asyncHandler(async (req, res) =>
+  respond(res, await ideaService.setArchived(req.db, req.user, req.body || {}))
+);
+
+export const setPatentability = asyncHandler(async (req, res) =>
+  respond(res, await ideaService.setPatentability(req.db, req.user, req.body || {}))
+);
+
 export default {
   list, my, review, get, submit, draft, reviewAction, dashboard,
   assignReviewers, reviewerDecision, checkDuplicate, bulkReview, updateRoi, updateImplementation,
+  setArchived, setPatentability,
 };

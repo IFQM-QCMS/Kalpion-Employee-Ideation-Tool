@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { useLang } from '../context/LangContext';
 import { leaderboardApi } from '../services/api';
 import { scoreBadgeClass, engagementIndex } from '../utils/helpers';
@@ -110,6 +111,7 @@ function Podium({ rows, meId, t }) {
 export default function LeaderboardPage() {
   const { user }  = useAuth();
   const { t }     = useLang();
+  const { showToast } = useToast();
   const [period,  setPeriod]  = useState('all');
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
@@ -140,6 +142,25 @@ export default function LeaderboardPage() {
     }, 200);
   }, [data]);
 
+  async function shareLeaderboard() {
+    const rows = (data?.individuals || []).slice(0, 5);
+    if (!rows.length) return;
+    const medals = ['🏆', '🥈', '🥉', '4.', '5.'];
+    const text = [
+      `${t('lb.share_title')} — ${user?.org_name || 'IFQM'}`,
+      ...rows.map((u, i) => `${medals[i]} ${u.name} — ${u.points} ${t('unit.pts')}`),
+    ].join('\n');
+
+    try {
+      if (navigator.share) { await navigator.share({ title: t('lb.share_title'), text }); return; }
+      await navigator.clipboard.writeText(text);
+      showToast(t('lb.share_copied'), 'success');
+    } catch (e) {
+      // AbortError is the user dismissing the share sheet — not a failure.
+      if (e?.name !== 'AbortError') showToast(t('msg.error'), 'danger');
+    }
+  }
+
   const indivs = data?.individuals || [];
   const depts  = data?.departments || [];
   const top    = data?.top_ideas   || [];
@@ -148,8 +169,14 @@ export default function LeaderboardPage() {
 
   return (
     <>
-      {/* Period chips */}
-      <div className="chip-filter" style={{ marginBottom:20 }}>
+      {/* Period chips + share.
+          §11.2 — sharing is a plain-text summary via the Web Share API where the
+          device offers it (that is the sheet a phone user expects), falling back
+          to the clipboard. Deliberately NOT a link: the leaderboard sits behind
+          a tenant login, so a URL would be a dead end for anyone outside the
+          organisation, and names + points are the org's own data to post. */}
+      <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:20 }}>
+      <div className="chip-filter" style={{ marginBottom:0 }}>
         {PERIODS.map(p => (
           <div
             key={p.val}
@@ -160,6 +187,11 @@ export default function LeaderboardPage() {
             {t(p.label)}
           </div>
         ))}
+      </div>
+        <button className="btn btn-outline btn-sm" style={{ marginLeft:'auto' }}
+          onClick={shareLeaderboard} disabled={!indivs.length}>
+          {t('lb.share')}
+        </button>
       </div>
 
       {loading && <div className="empty-state"><div className="spinner"></div></div>}

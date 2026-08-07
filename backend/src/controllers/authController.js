@@ -27,6 +27,9 @@ export const login = asyncHandler(async (req, res) => {
     password,
     orgSlug: org_slug,
     host: hostOf(req),
+    // MOM §12.12 — where the sign-in came from, for the activity feed. Read
+    // here rather than in the service so the service stays free of req.
+    meta: { ip: req.ip, userAgent: req.get('user-agent') },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
 });

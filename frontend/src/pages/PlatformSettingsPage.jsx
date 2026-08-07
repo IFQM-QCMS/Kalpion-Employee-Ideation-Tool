@@ -28,6 +28,37 @@ const fmtBytes = (b) => {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 };
 
+
+/**
+ * MOM §12.13 — the "i" next to SLA and Escalation Days.
+ *
+ * Both numbers look interchangeable and are not, and getting them the wrong way
+ * round quietly changes when ideas move. A <details>-free inline tooltip keeps
+ * it available to keyboard and touch users, which a title attribute alone does
+ * not (title never appears on a touch device).
+ */
+function InfoDot({ text }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position:'relative', display:'inline-flex', marginLeft:6 }}>
+      <button type="button" aria-label={text} aria-expanded={open}
+        onClick={() => setOpen(v => !v)} onBlur={() => setOpen(false)}
+        style={{ width:16,height:16,borderRadius:'50%',border:'1px solid var(--border-strong)',
+                 background:'var(--surface-2)',color:'var(--text-muted)',fontSize:10.5,
+                 fontWeight:800,cursor:'pointer',lineHeight:1,padding:0,
+                 display:'inline-flex',alignItems:'center',justifyContent:'center' }}>i</button>
+      {open && (
+        <span role="tooltip" style={{ position:'absolute',top:'120%',left:0,zIndex:30,width:250,
+          background:'var(--surface)',border:'1px solid var(--border)',borderRadius:9,
+          boxShadow:'var(--shadow-lg)',padding:'9px 11px',fontSize:11.5,lineHeight:1.5,
+          color:'var(--text)',fontWeight:400,textTransform:'none',letterSpacing:0 }}>
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function PlatformSettingsPage() {
   const { t } = useLang();
   const [tab, setTab] = useState(0);
@@ -84,12 +115,12 @@ function DefaultsTab() {
 
       <div className="form-row">
         <div className="form-group">
-          <label>{t('admin.sla_days')}</label>
+          <label>{t('admin.sla_days')}<InfoDot text={t('pa.sla_info')} /></label>
           <input className="form-control" type="number" min="1" max="365" value={d.review_sla_days || ''}
             onChange={(e) => set('review_sla_days', e.target.value)} />
         </div>
         <div className="form-group">
-          <label>{t('admin.escalation_days')}</label>
+          <label>{t('admin.escalation_days')}<InfoDot text={t('pa.escalation_info')} /></label>
           <input className="form-control" type="number" min="1" max="365" value={d.escalation_days || ''}
             onChange={(e) => set('escalation_days', e.target.value)} />
         </div>
@@ -183,12 +214,12 @@ function OrgSettingsTab() {
         <>
           <div className="form-row">
             <div className="form-group">
-              <label>{t('admin.sla_days')}</label>
+              <label>{t('admin.sla_days')}<InfoDot text={t('pa.sla_info')} /></label>
               <input className="form-control" type="number" min="1" max="365" value={s.review_sla_days || ''}
                 onChange={(e) => set('review_sla_days', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t('admin.escalation_days')}</label>
+              <label>{t('admin.escalation_days')}<InfoDot text={t('pa.escalation_info')} /></label>
               <input className="form-control" type="number" min="1" max="365" value={s.escalation_days || ''}
                 onChange={(e) => set('escalation_days', e.target.value)} />
             </div>

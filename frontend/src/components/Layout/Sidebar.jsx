@@ -86,6 +86,9 @@ export default function Sidebar({ collapsed, onToggle }) {
           <div className="nav-section">{t('section.workflow')}</div>
           <NavItem path="/review"     icon={NAV_ICONS.review}     label={t('nav.review')}    hidden={!isPriv} />
           <NavItem path="/all-ideas"  icon={NAV_ICONS.allIdeas}   label={t('nav.all_ideas')} />
+          {/* §13.5 / §14.1 — rejections as a readable set, not a filter
+              nobody thinks to apply. */}
+          <NavItem path="/rejected"   icon={NAV_ICONS.allIdeas}   label={t('nav.rejected')} />
           <NavItem path="/board"      icon={NAV_ICONS.board}      label={t('nav.board')}     />
           <NavItem path="/audit"      icon={NAV_ICONS.audit}      label={t('nav.audit')}     hidden={!isPriv} />
 

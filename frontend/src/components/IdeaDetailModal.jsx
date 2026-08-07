@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { ideasApi, votesApi, uploadApi, exportApi } from '../services/api';
+import { ideasApi, votesApi, uploadApi, exportApi, ideaAdminApi } from '../services/api';
 import {
   statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas,
   fmtDate, actionLabel, isPrivileged, communityScore,
@@ -29,7 +29,46 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const [showRvDecision,  setShowRvDecision]  = useState(false);
   const [exporting,       setExporting]       = useState(false);
 
+  // §13.10 / §13.2 — org-admin controls. `pat` mirrors the idea so the select is
+  // controlled; it re-syncs whenever the idea reloads.
+  const [pat, setPat] = useState('not_assessed');
+  const [busyAdmin, setBusyAdmin] = useState(false);
+  const isOrgAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
   useEffect(() => { load(); }, [ideaId]);
+  useEffect(() => { if (idea) setPat(idea.patentability || 'not_assessed'); }, [idea?.id, idea?.patentability]);
+
+  async function savePatentability(value) {
+    const prev = pat;
+    setPat(value);                       // optimistic: the select must not lag the click
+    setBusyAdmin(true);
+    try {
+      const note = value === 'not_assessed' ? '' : (window.prompt(t('idea.pat_note_prompt'), idea.patentability_note || '') ?? '');
+      const res = await ideaAdminApi.setPatentability(ideaId, value, note);
+      if (res.data.success) { showToast(t('idea.pat_saved'), 'success'); await load(); }
+      else { setPat(prev); showToast(res.data.error || t('msg.error'), 'danger'); }
+    } catch (e) {
+      setPat(prev);
+      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setBusyAdmin(false);
+  }
+
+  async function toggleArchive() {
+    const archiving = !idea.archived_at;
+    if (archiving && !window.confirm(t('idea.confirm_archive'))) return;
+    setBusyAdmin(true);
+    try {
+      const res = await ideaAdminApi.setArchived(ideaId, archiving);
+      if (res.data.success) {
+        showToast(archiving ? t('idea.archived_ok') : t('idea.restored_ok'), 'success');
+        await load();
+      } else showToast(res.data.error || t('msg.error'), 'danger');
+    } catch (e) {
+      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setBusyAdmin(false);
+  }
 
   async function load() {
     setLoading(true);
@@ -146,6 +185,52 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       <span className={`badge ${statusBadge(idea.status)}`}>{translateStatus(idea.status,t)}</span>
                     </div>
                   </div>
+
+                  {/* §13.13 — one line answering "where is this now?", rather
+                      than leaving the reader to reconstruct it from the timeline. */}
+                  {idea.review_stage && (
+                    <div style={{ display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',
+                                  background:'var(--panel-bg)',border:'1px solid var(--border)',
+                                  borderRadius:10,padding:'9px 12px',marginBottom:12,fontSize:12.5 }}>
+                      <span style={{ fontWeight:700,color:'var(--heading)' }}>
+                        {idea.review_stage.state === 'pending' && idea.review_stage.names.length
+                          ? t('idea.under_review_by').replace('{names}', idea.review_stage.names.join(', '))
+                          : idea.review_stage.state === 'pending' || idea.review_stage.state === 'unassigned'
+                            ? t('idea.review_unassigned')
+                            : idea.review_stage.state === 'draft'
+                              ? t('idea.review_draft')
+                              : t('idea.review_closed').replace('{status}', translateStatus(idea.review_stage.status, t))}
+                      </span>
+                      {idea.archived_at && (
+                        <span style={{ background:'var(--chip-bg)',color:'var(--text-muted)',fontSize:10.5,
+                                       fontWeight:700,padding:'2px 9px',borderRadius:999,textTransform:'uppercase' }}>
+                          {t('idea.archived')}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* §13.10 / §13.2 — org-admin decisions. The server enforces the
+                      role as well; this only decides whether to draw the controls. */}
+                  {isOrgAdmin && (
+                    <div style={{ display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14 }}>
+                      <div style={{ flex:'1 1 220px' }}>
+                        <label style={{ fontSize:12,fontWeight:650,color:'var(--subtext)',display:'block',marginBottom:4 }}>
+                          {t('idea.patentability')}
+                        </label>
+                        <select className="form-control" value={pat} disabled={busyAdmin}
+                          onChange={e => savePatentability(e.target.value)}>
+                          {['not_assessed','not_patentable','possible','recommended','filed'].map(v => (
+                            <option key={v} value={v}>{t(`idea.pat_${v}`)}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <button className="btn btn-outline btn-sm" disabled={busyAdmin}
+                        onClick={toggleArchive}>
+                        {idea.archived_at ? t('idea.restore') : t('idea.archive')}
+                      </button>
+                    </div>
+                  )}
 
                   <div className="form-group">
                     <label>{t('detail.situation')}</label>

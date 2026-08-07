@@ -9,6 +9,32 @@ import { translateStatus, translateImpact, translateArea } from '../utils/helper
 const IMPACT_LEVELS = ['Low','Medium','High','Critical'];
 const FEASIBILITY_LEVELS = ['Low','Medium','High'];
 
+/* MOM §14.5 — feasibility is colour-coded, because "Low" in plain text next to
+   nine other plain-text fields is not something a reviewer scanning a list
+   notices. Red/amber/green is the vocabulary the shop floor already uses. */
+const FEASIBILITY_TONE = {
+  Low:    { bg:'var(--danger-light)',  fg:'var(--danger)'  },
+  Medium: { bg:'var(--warning-light)', fg:'var(--warning)' },
+  High:   { bg:'var(--success-light)', fg:'var(--success)' },
+};
+
+/* MOM §14.5 — Time Required, three fixed bands. Keys match the backend enum. */
+const TIME_REQUIRED = [
+  ['lt_3m', 'form.time_lt3'],
+  ['3_6m',  'form.time_3_6'],
+  ['6_12m', 'form.time_6_12'],
+];
+
+/* MOM §14.6 — solution category tags. QCD is Quality, Cost, Delivery, kept as
+   three separate tags rather than one lump so an idea can be tagged for exactly
+   the dimension it improves. */
+const SOLUTION_TAGS = [
+  ['process_improvement', 'form.tag_process'],
+  ['quality',            'form.tag_quality'],
+  ['cost',               'form.tag_cost'],
+  ['delivery',           'form.tag_delivery'],
+];
+
 /*
  * Categories are per-organisation rows now, not a constant compiled into this
  * bundle. This list is only the last resort: if the request fails the employee
@@ -56,6 +82,8 @@ export default function SubmitPage() {
   // Step 3 business case
   const [investment,   setInvestment]   = useState('');
   const [feasibility,  setFeasibility]  = useState('');
+  const [timeRequired, setTimeRequired] = useState('');
+  const [solutionTags, setSolutionTags] = useState([]);
   const [implDuration, setImplDuration] = useState('');
   const [implDate,     setImplDate]     = useState('');
   const [benefits,     setBenefits]     = useState('');
@@ -75,7 +103,6 @@ export default function SubmitPage() {
   const [coResults, setCoResults] = useState([]);
 
   // Step 6 options
-  const [anonymous,    setAnonymous]    = useState(false);
   const [templateType, setTemplateType] = useState('');
   const [challengeId,  setChallengeId]  = useState('');
   const [challenges,   setChallenges]   = useState([]);
@@ -173,13 +200,16 @@ export default function SubmitPage() {
       investment_required:          investment,
       feasibility:                  feasibility,
       implementation_duration:      implDuration,
+      time_required:                timeRequired,
+      solution_tags:                solutionTags,
       expected_implementation_date: implDate,
       benefits_expected:            benefits,
       support_required:             support,
       // Full co-suggester list (backend also mirrors the first two into the
       // legacy columns for older read paths).
       co_suggester_ids:   coSuggesters.map(c => c.id),
-      is_anonymous:       anonymous ? 1 : 0,
+      // §14.8: always identified. Existing anonymous ideas are untouched.
+      is_anonymous:       0,
       template_type:      templateType || null,
       challenge_id:       challengeId || null,
     };
@@ -364,11 +394,62 @@ export default function SubmitPage() {
               </div>
               <div className="form-group">
                 <label>{t('form.feasibility')}</label>
-                <select className="form-control" value={feasibility} onChange={e => setFeasibility(e.target.value)}>
-                  <option value="">{t('form.feas_none')}</option>
-                  {FEASIBILITY_LEVELS.map(l => <option key={l} value={l}>{translateImpact(l, t)}</option>)}
-                </select>
+                {/* §14.5 — colour-coded. Buttons rather than a <select> so the
+                    red/amber/green reads at a glance instead of hiding inside a
+                    closed dropdown. */}
+                <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+                  {FEASIBILITY_LEVELS.map(l => {
+                    const on = feasibility === l;
+                    const tone = FEASIBILITY_TONE[l];
+                    return (
+                      <button key={l} type="button"
+                        onClick={() => setFeasibility(on ? '' : l)}
+                        aria-pressed={on}
+                        style={{ flex:'1 1 0',minWidth:78,padding:'9px 10px',borderRadius:10,cursor:'pointer',
+                          fontSize:13,fontWeight:on?750:600,
+                          background:on?tone.bg:'var(--surface)',
+                          color:on?tone.fg:'var(--text-muted)',
+                          border:`1.5px solid ${on?tone.fg:'var(--border)'}` }}>
+                        {translateImpact(l, t)}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+            </div>
+
+            {/* §14.5 — Time Required. Three fixed bands, not free text: the
+                point of the item is that these are comparable across ideas. */}
+            <div className="form-group">
+              <label>{t('form.time_required')}</label>
+              <select className="form-control" value={timeRequired}
+                onChange={e => setTimeRequired(e.target.value)}>
+                <option value="">{t('form.time_none')}</option>
+                {TIME_REQUIRED.map(([v, k]) => <option key={v} value={v}>{t(k)}</option>)}
+              </select>
+            </div>
+
+            {/* §14.6 — solution category tags. */}
+            <div className="form-group">
+              <label>{t('form.solution_tags')}</label>
+              <div style={{ display:'flex',gap:8,flexWrap:'wrap',marginTop:4 }}>
+                {SOLUTION_TAGS.map(([v, k]) => {
+                  const on = solutionTags.includes(v);
+                  return (
+                    <button key={v} type="button"
+                      onClick={() => setSolutionTags(prev => on ? prev.filter(x=>x!==v) : [...prev, v])}
+                      aria-pressed={on}
+                      style={{ padding:'7px 13px',borderRadius:999,cursor:'pointer',fontSize:12.5,
+                        fontWeight:on?700:600,
+                        background:on?'var(--primary-light)':'var(--surface)',
+                        color:on?'var(--primary)':'var(--text-muted)',
+                        border:`1.5px solid ${on?'var(--primary)':'var(--border)'}` }}>
+                      {t(k)}
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:6 }}>{t('form.solution_tags_hint')}</div>
             </div>
 
             {/* "date or duration" — either answer is valid, so both are offered
@@ -509,6 +590,8 @@ export default function SubmitPage() {
                 lightly-filled form does not review as a wall of blanks. */}
             {[[t('form.investment'), investment ? `₹ ${investment}` : ''],
               [t('form.feasibility'), feasibility ? translateImpact(feasibility, t) : ''],
+              [t('form.time_required'), timeRequired ? t(TIME_REQUIRED.find(([v]) => v === timeRequired)?.[1] || '') : ''],
+              [t('form.solution_tags'), solutionTags.map(v => t(SOLUTION_TAGS.find(([k]) => k === v)?.[1] || v)).join(', ')],
               [t('form.impl_time'), [implDuration, implDate].filter(Boolean).join(' · ')],
               [t('form.benefits'), benefits],
               [t('form.support'), support],
@@ -548,10 +631,10 @@ export default function SubmitPage() {
               )}
             </div>
 
-            <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,marginTop:8 }}>
-              <input type="checkbox" id="idea-anonymous" checked={anonymous} onChange={e => setAnonymous(e.target.checked)} style={{ accentColor:'var(--primary)' }} />
-              {t('form.anonymous')}
-            </label>
+            {/* MOM §14.8 — "Submit Idea Anonymously" is gone. The column and the
+                masking logic remain in the backend on purpose: ideas already
+                filed anonymously must keep that promise, and stripping the
+                feature retroactively would expose their authors. */}
 
             <div id="wizard-submit-row" style={{ display:'flex',gap:10,marginTop:24 }}>
               <button className="btn btn-success" disabled={submitting} onClick={handleSubmit}>

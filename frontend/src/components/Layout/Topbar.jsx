@@ -155,11 +155,21 @@ export default function Topbar({ onToggleSidebar }) {
           </div>
         )}
 
-        {/* User chip */}
+        {/* User chip.
+            MOM §12.10 — a platform admin sees "Superadmin signed in as <name>"
+            rather than a bare name plus a role pill. These accounts can reach
+            every tenant on the platform, so which one you are currently acting
+            as should be a sentence, not something inferred from a chip. */}
         <div className="user-chip" onClick={() => navigate('/profile')}>
           <div className="avatar">{user?.avatar_initials || user?.name?.[0] || '?'}</div>
-          <span>{user?.name}</span>
-          <span className="role-badge">{formatRole(user?.role, t)}</span>
+          {user?.role === 'platform_admin' ? (
+            <span>{t('pa.signed_in_as').replace('{name}', user?.name || '')}</span>
+          ) : (
+            <>
+              <span>{user?.name}</span>
+              <span className="role-badge">{formatRole(user?.role, t)}</span>
+            </>
+          )}
         </div>
 
         <button className="btn btn-outline btn-sm" onClick={doLogout}>{t('topbar.logout')}</button>

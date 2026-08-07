@@ -132,7 +132,10 @@ export default function AdminPage() {
     // are managed on the Hierarchy tab. Collecting them from a form that has
     // no such fields sent '' / 'default' and silently wiped a tenant's custom
     // approval chain every time SMTP or a flag was saved.
-    ['review_sla_days','escalation_days','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
+    // This is an explicit allowlist, not Object.fromEntries — a new field on the
+    // form is invisible to the save until it is named here. solution_visibility
+    // (MOM §13.1) is one of them.
+    ['review_sla_days','escalation_days','solution_visibility','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
     ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
     try {
@@ -354,6 +357,21 @@ export default function AdminPage() {
                 <label>{t('admin.escalation_days')}</label>
                 <input className="form-control" name="escalation_days" type="number" min="1" max="180" defaultValue={settings.escalation_days||14} />
               </div>
+            </div>
+
+            {/* MOM §13.1 — who may read the full proposal. This used to be a
+                constant in the backend; the organisation now owns it. Everyone
+                still sees title, impact, score and status in every mode — only
+                the proposal text is governed here. */}
+            <div className="form-group" style={{ marginTop:8,maxWidth:420 }}>
+              <label>{t('admin.solution_visibility')}</label>
+              <select className="form-control" name="solution_visibility"
+                defaultValue={settings.solution_visibility || 'authors_reviewers'}>
+                <option value="authors_reviewers">{t('admin.sv_authors_reviewers')}</option>
+                <option value="managers_only">{t('admin.sv_managers_only')}</option>
+                <option value="everyone">{t('admin.sv_everyone')}</option>
+              </select>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sv_hint')}</div>
             </div>
 
             <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.flags_heading')}</div>

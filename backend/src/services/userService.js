@@ -24,6 +24,15 @@ const ROLES_ADMIN_CAN_ASSIGN = [
 const ROLES_SUPER_ADMIN_CAN_ASSIGN = [...ROLES_ADMIN_CAN_ASSIGN, 'admin'];
 
 /**
+ * Every role that can appear on a user row — the vocabulary the admin console's
+ * role filter offers (MOM §13.9). Wider than the assignable lists above:
+ * super_admin cannot be assigned through the UI but certainly exists, and
+ * filtering it out of the filter would hide those accounts from the one screen
+ * meant to show them.
+ */
+const ALL_ROLES = [...ROLES_SUPER_ADMIN_CAN_ASSIGN, 'super_admin'];
+
+/**
  * The single source of truth for "which roles may this actor hand out".
  *
  * Exported so the bulk importer enforces the SAME rule as single-user creation.
@@ -74,7 +83,7 @@ export async function list(db, actor, q) {
  * The response still includes `users`, so an older client keeps working; it just
  * gets the first page.
  */
-export async function adminUsers(db, { q = '', page = 1, limit = 50 } = {}) {
+export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', department = '', status = '', manager_id: managerId = '' } = {}) {
   const search = String(q || '').trim();
   const perPage = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
@@ -86,6 +95,31 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50 } = {}) {
     where.push('(u.name LIKE ? OR u.email LIKE ? OR u.employee_id LIKE ?)');
     const like = `%${search}%`;
     params.push(like, like, like);
+  }
+
+  /*
+   * MOM §13.9 — filter by role, department, status or manager.
+   *
+   * Every one of these narrows the SQL rather than the rendered page, which is
+   * the whole point of the item: the admin console must never pull the entire
+   * user table into the browser to filter it there. Pagination already worked
+   * that way; these filters had to join it rather than undo it.
+   */
+  if (ALL_ROLES.includes(String(role))) {
+    where.push('u.role = ?');
+    params.push(String(role));
+  }
+  if (String(department).trim()) {
+    where.push('u.department = ?');
+    params.push(String(department).trim());
+  }
+  if (['active', 'inactive'].includes(String(status))) {
+    where.push('u.status = ?');
+    params.push(String(status));
+  }
+  if (Number(managerId)) {
+    where.push('u.manager_id = ?');
+    params.push(Number(managerId));
   }
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
@@ -107,6 +141,12 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50 } = {}) {
     [...params, perPage, offset]
   );
 
+  // The department list comes from the data, not a constant: an org's
+  // departments are whatever its import sheet contained.
+  const [departments] = await db.query(
+    "SELECT DISTINCT department FROM users WHERE department IS NOT NULL AND department != '' ORDER BY department"
+  );
+
   return {
     success: true,
     users: rows,
@@ -114,6 +154,64 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50 } = {}) {
     page: pageNum,
     limit: perPage,
     pages: Math.max(1, Math.ceil(total / perPage)),
+    filters: {
+      roles: ALL_ROLES,
+      departments: departments.map((d) => d.department),
+    },
+  };
+}
+
+/**
+ * GET /api/users/:id/chain — MOM §13.8.
+ *
+ * One person's full reporting line, upward to the top and one level down. The
+ * admin screen used to make you click manager-by-manager to answer "who does
+ * this idea escalate to?"; this answers it in one call.
+ *
+ * The upward walk is bounded and cycle-guarded. A manager loop (A reports to B
+ * reports to A) is a data error an admin can create in two clicks, and without
+ * the guard it is an infinite loop inside a request.
+ */
+export async function reportingChain(db, userId) {
+  const id = Number(userId) || 0;
+  if (!id) throw badRequest('User id required.');
+
+  const [[start]] = await db.execute(
+    `SELECT u.id, u.name, u.employee_id, u.role, u.department, u.email, u.avatar_initials, u.manager_id
+       FROM users u WHERE u.id = ? LIMIT 1`,
+    [id]
+  );
+  if (!start) throw notFound('User not found');
+
+  const chain = [];
+  const seen = new Set([start.id]);
+  let cursor = start.manager_id;
+  // 12 levels is far deeper than any real org chart; hitting it means a cycle
+  // the seen-set somehow missed, and stopping beats spinning.
+  for (let depth = 0; cursor && depth < 12; depth++) {
+    if (seen.has(cursor)) break;
+    seen.add(cursor);
+    const [[mgr]] = await db.execute(
+      `SELECT id, name, employee_id, role, department, email, avatar_initials, manager_id
+         FROM users WHERE id = ? LIMIT 1`,
+      [cursor]
+    );
+    if (!mgr) break;
+    chain.push(mgr);
+    cursor = mgr.manager_id;
+  }
+
+  const [reports] = await db.execute(
+    `SELECT id, name, employee_id, role, department, avatar_initials
+       FROM users WHERE manager_id = ? ORDER BY name LIMIT 100`,
+    [id]
+  );
+
+  return {
+    success: true,
+    user: start,
+    chain,               // immediate manager first, up to the top
+    direct_reports: reports,
   };
 }
 

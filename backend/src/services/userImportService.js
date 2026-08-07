@@ -50,12 +50,19 @@ const STALE_JOB_MINUTES = 30;
 export const COLUMNS = [
   { key: 'employee_id', header: 'employee_id', required: true,  max: 20,  width: 16,
     note: 'Unique ID for the employee. Required. This is the key the import de-duplicates on.' },
-  { key: 'name',        header: 'name',        required: true,  max: 100, width: 24,
-    note: 'Full name. Required.' },
+  // MOM §13.4 — salutation / first name / last name, and a birth YEAR rather
+  // than a full date. The temporary password only ever used the year, so the
+  // day and month were personal data collected for no purpose.
+  { key: 'salutation',  header: 'salutation',  required: false, max: 10,  width: 11,
+    note: 'Optional. Mr / Ms / Mrs / Dr / Prof.' },
+  { key: 'first_name',  header: 'first_name',  required: true,  max: 60,  width: 18,
+    note: 'Required.' },
+  { key: 'last_name',   header: 'last_name',   required: false, max: 60,  width: 18,
+    note: 'Optional, but recommended — it is part of the displayed name.' },
   { key: 'email',       header: 'email',       required: true,  max: 150, width: 28,
     note: 'Work email. Required, must be unique.' },
-  { key: 'date_of_birth', header: 'date_of_birth', required: true, max: 10, width: 14,
-    note: 'YYYY-MM-DD (or just the 4-digit year). Required — the first-login password is built from it.' },
+  { key: 'year_of_birth', header: 'year_of_birth', required: true, max: 4, width: 14,
+    note: 'Four-digit year, e.g. 1994. Required — the first-login password is built from it.' },
   { key: 'role',        header: 'role',        required: false, max: 20,  width: 16,
     note: 'Leave blank for "employee". Pick from the dropdown.' },
   { key: 'department',  header: 'department',  required: false, max: 100, width: 18, note: 'Optional.' },
@@ -74,9 +81,15 @@ for (const c of COLUMNS) {
 }
 // A few forgiving spellings, so a hand-edited header doesn't fail the upload.
 [['emp id', 'employee_id'], ['empid', 'employee_id'], ['employee code', 'employee_id'],
- ['full name', 'name'], ['employee name', 'name'],
+ // 'name' and 'date_of_birth' are the pre-MOM headers. Kept as aliases so a
+ // sheet an organisation already has on disk still imports: first_name absorbs
+ // a full name and is split below, and a full date is reduced to its year.
+ ['full name', 'first_name'], ['employee name', 'first_name'], ['name', 'first_name'],
+ ['first name', 'first_name'], ['last name', 'last_name'], ['surname', 'last_name'],
+ ['title', 'salutation'],
  ['email address', 'email'], ['e mail', 'email'],
- ['dob', 'date_of_birth'], ['birth date', 'date_of_birth'], ['date of birth', 'date_of_birth'],
+ ['dob', 'year_of_birth'], ['birth date', 'year_of_birth'], ['date of birth', 'year_of_birth'],
+ ['date_of_birth', 'year_of_birth'], ['birth year', 'year_of_birth'], ['yob', 'year_of_birth'],
  ['designation', 'role'], ['manager', 'manager_employee_id'], ['manager id', 'manager_employee_id'],
  ['reports to', 'manager_employee_id'], ['mobile', 'phone'], ['contact', 'phone'],
  ['dept', 'department'], ['bu', 'business_unit'],
@@ -141,9 +154,11 @@ export async function buildTemplate(actorRole) {
   // One filled example row so the expected shape is obvious.
   ws.addRow({
     employee_id: 'EMP001',
-    name: 'Asha Rao',
+    salutation: 'Ms',
+    first_name: 'Asha',
+    last_name: 'Rao',
     email: 'asha.rao@yourcompany.com',
-    date_of_birth: '1994-08-21',
+    year_of_birth: '1994',
     role: 'employee',
     department: 'Production',
     business_unit: 'Plant 1',
@@ -309,32 +324,28 @@ const CURRENT_YEAR = new Date().getFullYear();
 /** Accept a real date cell, an ISO date, or a bare 4-digit year. Nothing ambiguous. */
 function parseBirth(raw) {
   const s = cellToString(raw);
-  if (!s) return { error: 'date_of_birth is required (the first-login password is built from it).' };
+  if (!s) return { error: 'year_of_birth is required (the first-login password is built from it).' };
 
   let year = null;
-  let iso = null;
 
   if (/^\d{4}$/.test(s)) {
     year = Number(s);
-    iso = `${s}-01-01`;
   } else {
+    // A full ISO date is still accepted so a sheet written against the old
+    // template imports unchanged — only the year is kept. Anything else is
+    // refused rather than guessed: 03/04/1994 is ambiguous, and guessing wrong
+    // hands the employee a temporary password that does not work.
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (!m) {
-      // Deliberately do NOT try to guess 03/04/1994 — dd/mm vs mm/dd is
-      // ambiguous and guessing wrong would hand the employee a password that
-      // does not work. Make the admin be explicit.
-      return { error: 'date_of_birth must be YYYY-MM-DD or a 4-digit year (e.g. 1994-08-21 or 1994).' };
+      return { error: 'year_of_birth must be a 4-digit year (e.g. 1994).' };
     }
-    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
-    if (Number.isNaN(d.getTime())) return { error: 'date_of_birth is not a real date.' };
     year = Number(m[1]);
-    iso = `${m[1]}-${m[2]}-${m[3]}`;
   }
 
   if (year < 1900 || year > CURRENT_YEAR - 14) {
-    return { error: `date_of_birth year ${year} is out of range (1900–${CURRENT_YEAR - 14}).` };
+    return { error: `year_of_birth ${year} is out of range (1900–${CURRENT_YEAR - 14}).` };
   }
-  return { year, iso };
+  return { year };
 }
 
 /**
@@ -368,8 +379,24 @@ export async function validateRows(db, actor, records) {
 
   for (const rec of records) {
     const employeeId = (rec.employee_id || '').trim();
-    const name       = (rec.name || '').trim();
-    const email      = (rec.email || '').trim().toLowerCase();
+    const salutation = (rec.salutation || '').trim();
+    /*
+     * MOM §13.4 — the sheet now carries first and last name separately. An old
+     * sheet with a single `name` column maps onto first_name via the header
+     * alias, so split it back out here rather than storing someone's full name
+     * as their first name.
+     */
+    let firstName = (rec.first_name || '').trim();
+    let lastName  = (rec.last_name  || '').trim();
+    if (!lastName && firstName.includes(' ')) {
+      const parts = firstName.split(/\s+/);
+      firstName = parts.shift();
+      lastName = parts.join(' ');
+    }
+    // `name` stays the displayed identity everywhere else in the product, so it
+    // is composed rather than replaced — nothing downstream has to change.
+    const name = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const email = (rec.email || '').trim().toLowerCase();
 
     // ── required ──
     if (!employeeId) { reject(rec, 'employee_id is required.'); continue; }
@@ -387,7 +414,7 @@ export async function validateRows(db, actor, records) {
     if (!EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
 
     // ── date of birth / temp password ──
-    const birth = parseBirth(rec.date_of_birth);
+    const birth = parseBirth(rec.year_of_birth);
     if (birth.error) { reject(rec, birth.error); continue; }
 
     // ── role: the RBAC gate ──
@@ -426,7 +453,10 @@ export async function validateRows(db, actor, records) {
       employee_id: employeeId,
       name,
       email,
-      date_of_birth: birth.iso,
+      salutation: salutation || null,
+      first_name: firstName,
+      last_name: lastName || null,
+      year_of_birth: birth.year,
       birth_year: birth.year,
       role,
       department:    (rec.department || '').trim() || null,
@@ -550,12 +580,12 @@ async function insertUsers(db, rows, onProgress, onPhase) {
       const values = chunk.map((r) => [
         r.employee_id, r.name, r.email, hashes.get(r.employee_id),
         r.phone, r.department, r.business_unit, r.location, r.role,
-        avatarInitials(r.name), r.date_of_birth,
+        avatarInitials(r.name), r.salutation, r.first_name, r.last_name, r.year_of_birth,
       ]);
       await conn.query(
         `INSERT INTO users
            (employee_id, name, email, password_hash, phone, department, business_unit,
-            location, role, avatar_initials, date_of_birth,
+            location, role, avatar_initials, salutation, first_name, last_name, year_of_birth,
             status, points, must_change_password, password_changed_at)
          VALUES ?`,
         // The trailing constants are appended per-row below via map, so keep the

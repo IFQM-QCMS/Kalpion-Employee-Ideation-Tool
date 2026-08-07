@@ -18,6 +18,7 @@ import { resolveTenantBySlug, getTenantPool } from '../database/tenant.js';
 import { masterDb } from '../database/master.js';
 import { ApiError, unauthorized, forbidden } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
+import { meterTenantRequest } from './tenantQuota.js';
 
 function getBearer(req) {
   const h = req.headers.authorization || '';
@@ -30,6 +31,16 @@ async function attachTenantDb(req, orgSlug) {
   const tenant = await resolveTenantBySlug(orgSlug, host);
   req.tenant = tenant;
   req.db = getTenantPool(tenant);
+  /*
+   * MOM §8.3/§8.5 — meter the request against this organisation's quota.
+   *
+   * It has to happen HERE rather than as a router-level middleware: the tenant
+   * is only known once the token has been decoded, so anything mounted before
+   * the auth middleware would see req.tenant undefined and silently count
+   * nothing. Returns a rejection when the quota is exhausted; fails open on any
+   * metering error.
+   */
+  await meterTenantRequest(req);
 }
 
 /**

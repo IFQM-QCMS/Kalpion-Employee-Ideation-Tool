@@ -30,4 +30,10 @@ router.post('/bulk-review', requireRole(...REVIEWER_ROLES), ideas.bulkReview);  
 router.post('/roi', requireRole(...IMPL_ROLES), ideas.updateRoi);                        // action=update_roi
 router.post('/implementation', requireRole(...IMPL_ROLES), ideas.updateImplementation);  // action=update_implementation
 
+// Archiving and patentability are organisation-admin decisions (MOM §13.2,
+// §13.10). requireRole gates the route; ideaService re-checks, because a service
+// that trusts its caller's role has no defence if a new route forgets to.
+router.post('/archive', requireRole('admin', 'super_admin'), ideas.setArchived);
+router.post('/patentability', requireRole('admin', 'super_admin'), ideas.setPatentability);
+
 export default router;

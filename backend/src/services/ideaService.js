@@ -48,6 +48,33 @@ const PRIVILEGED_ANON = ['manager', 'department_manager', 'senior_manager', 'pla
 const PRIVILEGED_SOLUTION = PRIVILEGED_ANON;
 
 /**
+ * MOM §14.5 — Time Required is a fixed three-band dropdown.
+ * MOM §14.6 — solution category tags.
+ * Both are validated against these lists rather than stored as free text, so a
+ * typo cannot create a fourth band or a one-off tag that breaks every filter.
+ */
+export const TIME_REQUIRED_BANDS = ['lt_3m', '3_6m', '6_12m'];
+export const SOLUTION_TAGS = ['process_improvement', 'quality', 'cost', 'delivery'];
+
+/** MOM §13.10 — patentability, a separate axis from approval status. */
+export const PATENTABILITY_VALUES = [
+  'not_assessed', 'not_patentable', 'possible', 'recommended', 'filed',
+];
+
+/**
+ * MOM §13.1 — solution visibility is now the organisation's choice, not a
+ * constant. `everyone` restores the pre-MOM behaviour; `managers_only` is the
+ * strictest, hiding the text from peers entirely.
+ *
+ * Reading the org setting costs one cached settings lookup per request, which
+ * the callers already perform for other reasons.
+ */
+function visibilityMode(settings) {
+  const v = String(settings?.solution_visibility ?? 'authors_reviewers');
+  return ['authors_reviewers', 'managers_only', 'everyone'].includes(v) ? v : 'authors_reviewers';
+}
+
+/**
  * First sentence of a solution, or a hard-truncated opening — whichever is
  * shorter. Never returns a fragment that runs to the character limit without
  * an ellipsis, so a summary is always visibly a summary.
@@ -68,10 +95,14 @@ export function summariseSolution(text, limit = 140) {
  * May this viewer read the full solution of this idea?
  * The author and their co-suggesters always can; so can whoever has to judge it.
  */
-function canReadSolution(user, idea) {
+function canReadSolution(user, idea, mode = 'authors_reviewers') {
   const uid = Number(user.id);
-  if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
+  // The author always sees their own proposal, in every mode. A setting that
+  // could hide someone's own writing from them would be a bug, not a policy.
   if (Number(idea.submitter_id) === uid) return true;
+  if (mode === 'everyone') return true;
+  if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
+  if (mode === 'managers_only') return false;
   if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
   if (Number(idea.current_reviewer_id) === uid) return true;
   return false;
@@ -82,9 +113,9 @@ function canReadSolution(user, idea) {
  * Mutates and returns the row. `solution_redacted` lets the UI say why the text
  * is short instead of looking like the field was left empty.
  */
-function redactSolution(user, idea) {
+function redactSolution(user, idea, mode = 'authors_reviewers') {
   idea.solution_summary = summariseSolution(idea.proposed_solution);
-  if (!canReadSolution(user, idea)) {
+  if (!canReadSolution(user, idea, mode)) {
     idea.proposed_solution = null;
     idea.solution_redacted = true;
   } else {
@@ -94,9 +125,33 @@ function redactSolution(user, idea) {
 }
 
 // ── LIST ────────────────────────────────────────────────────────────
-export async function list(db, user, { status, search, impact } = {}) {
+export async function list(db, user, { status, search, impact, archived, tag, time_required: timeReq } = {}) {
   const where = [];
   const params = [];
+
+  /*
+   * Archived ideas are hidden unless explicitly asked for (MOM §13.2). This is
+   * a filter, not a delete: the points already awarded, the workflow history and
+   * the ROI figures all survive, which is exactly why archiving exists instead
+   * of a delete button.
+   */
+  if (String(archived) === '1' || archived === true) {
+    where.push('i.archived_at IS NOT NULL');
+  } else if (String(archived) !== 'all') {
+    where.push('i.archived_at IS NULL');
+  }
+
+  // §14.6 — filter by solution tag. Matched on the CSV with delimiters on both
+  // sides so `cost` cannot match `cost_saving`.
+  if (tag && SOLUTION_TAGS.includes(tag)) {
+    where.push("CONCAT(',', IFNULL(i.solution_tags,''), ',') LIKE ?");
+    params.push(`%,${tag},%`);
+  }
+
+  if (timeReq && TIME_REQUIRED_BANDS.includes(timeReq)) {
+    where.push('i.time_required = ?');
+    params.push(timeReq);
+  }
 
   if (INDIVIDUAL_ROLES.includes(user.role)) {
     where.push('(i.submitter_id = ? OR i.co_suggester_1_id = ? OR i.co_suggester_2_id = ?)');
@@ -128,6 +183,7 @@ export async function list(db, user, { status, search, impact } = {}) {
   const [ideas] = await db.execute(sql, paramsList);
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
+  const mode = visibilityMode(await getOrgSettings(db));
   for (const idea of ideas) {
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
@@ -139,7 +195,7 @@ export async function list(db, user, { status, search, impact } = {}) {
     // hundred rows of verbatim proposals sitting in the browser is exactly the
     // leak this is meant to close, and it is invisible to anyone reading only
     // the rendered table.
-    redactSolution(user, idea);
+    redactSolution(user, idea, mode);
     idea.proposed_solution = null;
   }
   return { success: true, ideas };
@@ -270,14 +326,37 @@ export async function get(db, user, id) {
   // Hold back the full proposal from colleagues who are neither its authors nor
   // its judges. Assigned reviewers count even when they are not the *current*
   // reviewer — in a multi-reviewer workflow every one of them has to read it.
+  const mode = visibilityMode(await getOrgSettings(db));
   const isAssignedReviewer = (idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid);
   const isCoSuggester = (idea.co_suggesters || []).some((c) => Number(c.id) === uid);
-  if (isAssignedReviewer || isCoSuggester) {
+  // An assigned reviewer or co-suggester reads the full text in every mode
+  // except managers_only, which is the whole point of that mode.
+  if ((isAssignedReviewer || isCoSuggester) && mode !== 'managers_only') {
     idea.solution_summary = summariseSolution(idea.proposed_solution);
     idea.solution_redacted = false;
   } else {
-    redactSolution(user, idea);
+    redactSolution(user, idea, mode);
   }
+
+  /*
+   * MOM §13.13 — "Under review by ___" as one readable line, rather than making
+   * the viewer reconstruct it from the workflow timeline. Multi-reviewer ideas
+   * name everyone still outstanding; hierarchical ones name the single current
+   * reviewer. A closed idea reports its outcome instead.
+   */
+  idea.review_stage = (() => {
+    if (['Approved', 'Rejected', 'Implemented'].includes(idea.status)) {
+      return { state: 'closed', status: idea.status, names: [] };
+    }
+    if (idea.status === 'Draft') return { state: 'draft', names: [] };
+    const pending = (idea.reviewers || []).filter((r) => !r.decision || r.decision === 'pending');
+    if (pending.length) {
+      return { state: 'pending', names: pending.map((r) => r.reviewer_name).filter(Boolean) };
+    }
+    const current = (idea.reviewers || []).find((r) => Number(r.reviewer_id) === Number(idea.current_reviewer_id));
+    const name = current?.reviewer_name || idea.current_reviewer_name || null;
+    return { state: name ? 'pending' : 'unassigned', names: name ? [name] : [] };
+  })();
 
   // Mask anonymous submitter for non-privileged roles (own idea always visible)
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
@@ -332,6 +411,19 @@ export async function submitOrDraft(db, user, action, b) {
   const isAnon = b.is_anonymous ? 1 : 0;
   const challengeId = b.challenge_id ? Number(b.challenge_id) : null;
   const templateType = String(b.template_type ?? '').trim() || null;
+
+  /*
+   * MOM §14.5 / §14.6. Both validated against a fixed list rather than stored as
+   * typed: an unrecognised value becomes NULL instead of creating a fourth time
+   * band or a one-off tag that every filter would then miss.
+   */
+  const timeRequired = TIME_REQUIRED_BANDS.includes(String(b.time_required ?? ''))
+    ? String(b.time_required) : null;
+  const solutionTags = [...new Set(
+    (Array.isArray(b.solution_tags) ? b.solution_tags : String(b.solution_tags ?? '').split(','))
+      .map((x) => String(x).trim())
+      .filter((x) => SOLUTION_TAGS.includes(x))
+  )].join(',') || null;
 
   /*
    * Business case. Every field is optional — a half-formed idea is still worth
@@ -397,6 +489,7 @@ export async function submitOrDraft(db, user, action, b) {
         expected_implementation_date=?,benefits_expected=?,support_required=?,
         co_suggester_1_id=?,co_suggester_2_id=?,
         is_anonymous=?,challenge_id=?,template_type=?,
+        time_required=?,solution_tags=?,
         status=?,submitted_at=COALESCE(submitted_at,?),
         review_due_date=COALESCE(review_due_date,?),
         current_reviewer_id=COALESCE(current_reviewer_id,?),
@@ -406,6 +499,7 @@ export async function submitOrDraft(db, user, action, b) {
       [title, sit, sol, impacts, impLvl, tangible, intang,
         investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
         co1, co2, isAnon, challengeId, templateType,
+        timeRequired, solutionTags,
         status, submittedAt, reviewDueDate, currentReviewerId,
         aiScore, aiReason,
         editId, user.id]
@@ -427,12 +521,14 @@ export async function submitOrDraft(db, user, action, b) {
               investment_required,feasibility,implementation_duration,
               expected_implementation_date,benefits_expected,support_required,
               co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
+              time_required,solution_tags,
               status,submitter_id,submitted_at,review_due_date,current_reviewer_id,
               ai_score,ai_reason)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [code, title, sit, sol, impacts, impLvl, tangible, intang,
             investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
             co1, co2, isAnon, challengeId, templateType,
+            timeRequired, solutionTags,
             status, user.id, submittedAt, reviewDueDate, currentReviewerId,
             aiScore, aiReason]
         );
@@ -914,3 +1010,77 @@ export default {
   list, my, review, get, submitOrDraft, reviewAction, dashboard,
   assignReviewers, reviewerDecision, checkDuplicate, bulkReview, updateRoi, updateImplementation,
 };
+
+// ── ARCHIVE / PATENTABILITY (MOM §13.2, §13.10) ─────────────────────
+/**
+ * Only the org's own admins may archive. It is not destructive — the row, its
+ * points, its workflow history and its ROI figures all stay — but it removes an
+ * idea from everyone else's working lists, which is a decision that belongs to
+ * whoever runs the programme rather than to any reviewer.
+ */
+const ORG_ADMIN_ROLES = ['admin', 'super_admin'];
+
+function assertOrgAdmin(user, what) {
+  if (!ORG_ADMIN_ROLES.includes(user.role)) {
+    throw forbidden(`Only an organisation admin can ${what}.`);
+  }
+}
+
+/**
+ * Archive or restore an idea.
+ *
+ * Deliberately reversible and deliberately logged: an idea vanishing from the
+ * list with no trace of who removed it is indistinguishable from a bug, and the
+ * submitter is entitled to an answer.
+ */
+export async function setArchived(db, user, b) {
+  assertOrgAdmin(user, 'archive ideas');
+  const ideaId = Number(b.idea_id) || 0;
+  if (!ideaId) throw badRequest('idea_id required.');
+  const archive = !(b.archived === false || b.archived === 0 || b.archived === '0');
+
+  const [[idea]] = await db.execute('SELECT id, idea_code, archived_at FROM ideas WHERE id=?', [ideaId]);
+  if (!idea) throw notFound('Idea not found');
+
+  if (archive) {
+    if (idea.archived_at) return { success: true, archived: true, message: 'Already archived.' };
+    await db.execute('UPDATE ideas SET archived_at=NOW(), archived_by=?, updated_at=NOW() WHERE id=?', [user.id, ideaId]);
+  } else {
+    if (!idea.archived_at) return { success: true, archived: false, message: 'Not archived.' };
+    await db.execute('UPDATE ideas SET archived_at=NULL, archived_by=NULL, updated_at=NOW() WHERE id=?', [ideaId]);
+  }
+
+  await addWorkflow(db, ideaId, user.id, archive ? 'Archived' : 'Restored',
+    String(b.note ?? '').trim() || null);
+
+  return {
+    success: true,
+    archived: archive,
+    message: archive ? 'Idea archived.' : 'Idea restored.',
+  };
+}
+
+/**
+ * Record a patentability decision.
+ *
+ * Separate from `status` on purpose (MOM §13.10): an idea can be approved and
+ * unpatentable, or rejected on cost grounds and still worth a provisional
+ * filing. Folding it into the status enum would lose exactly those cases.
+ */
+export async function setPatentability(db, user, b) {
+  assertOrgAdmin(user, 'record a patentability decision');
+  const ideaId = Number(b.idea_id) || 0;
+  const value = String(b.patentability ?? '');
+  if (!ideaId) throw badRequest('idea_id required.');
+  if (!PATENTABILITY_VALUES.includes(value)) throw badRequest('Invalid patentability value.');
+
+  const note = String(b.patentability_note ?? '').trim().slice(0, 2000) || null;
+  const [res] = await db.execute(
+    'UPDATE ideas SET patentability=?, patentability_note=?, updated_at=NOW() WHERE id=?',
+    [value, note, ideaId]
+  );
+  if (!res.affectedRows) throw notFound('Idea not found');
+
+  await addWorkflow(db, ideaId, user.id, 'Patentability', `${value}${note ? ` — ${note}` : ''}`);
+  return { success: true, patentability: value, message: 'Patentability recorded.' };
+}

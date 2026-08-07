@@ -2,9 +2,15 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { ideasApi, votesApi } from '../services/api';
+import { ideasApi, votesApi, saveBlob } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate, communityScore } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
+
+/* Escape for the print window — that HTML is built by string concatenation, so
+   React's automatic escaping does not apply to it. */
+const esc = (v) => String(v ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
 
 function VoteWidget({ ideaId, isSelf, upvotes, downvotes, userVote, onVote }) {
   return (
@@ -42,17 +48,18 @@ export default function AllIdeasPage() {
   const [status,  setStatus]  = useState('');
   const [impact,  setImpact]  = useState('');
   const [openId,  setOpenId]  = useState(null);
+  const [archived, setArchived] = useState('');   // '' = live only, '1' = archived only
   const pollRef = useRef(null);
 
   useEffect(() => {
     loadIdeas();
     pollRef.current = setInterval(loadIdeas, 10000);
     return () => clearInterval(pollRef.current);
-  }, [search, status, impact]);
+  }, [search, status, impact, archived]);
 
   async function loadIdeas() {
     try {
-      const res = await ideasApi.list({ search, status, impact });
+      const res = await ideasApi.list({ search, status, impact, archived });
       setIdeas(res.data.ideas || []);
     } catch { /* non-blocking poll */ }
     setLoading(false);
@@ -64,6 +71,54 @@ export default function AllIdeasPage() {
       if (res.data.success) loadIdeas();
       else showToast(res.data.error || t('msg.error'), 'danger');
     } catch { showToast(t('msg.network_error'), 'danger'); }
+  }
+
+  /*
+   * CSV of the current view. Values are quoted and internal quotes doubled — an
+   * idea titled `Reduce "idle" time, phase 2` would otherwise split into extra
+   * columns and silently corrupt the file.
+   *
+   * The full solution is deliberately NOT exported: the server does not send it
+   * to this screen (see redactSolution), so an export that appeared to contain
+   * it would either be empty or a privacy hole depending on who clicked it.
+   */
+  function exportCsv() {
+    const cols = ['idea_code','title','solution_summary','submitter_name','department',
+      'impact_level','ai_score','status','submitted_at'];
+    const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [cols.join(','), ...ideas.map(r => cols.map(c => q(r[c])).join(','))].join('\r\n');
+    saveBlob(new Blob([csv], { type:'text/csv;charset=utf-8' }), 'ifqm-ideas.csv');
+  }
+
+  /* PDF via the browser's own print-to-PDF. A dependency-free route that gives
+     the user their platform's real save dialogue, rather than shipping a PDF
+     library to every visitor for a button most never press. */
+  function exportPdf() {
+    const rows = ideas.map(i => `<tr>
+        <td>${esc(i.idea_code)}</td><td>${esc(i.title)}</td>
+        <td>${esc(i.solution_summary)}</td><td>${esc(i.submitter_name)}</td>
+        <td>${esc(i.department)}</td><td>${esc(i.impact_level)}</td>
+        <td>${esc(i.ai_score)}</td><td>${esc(i.status)}</td>
+        <td>${i.submitted_at ? esc(fmtDate(i.submitted_at)) : ''}</td></tr>`).join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+      <title>IFQM — Ideas</title><style>
+        body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;padding:24px;color:#111}
+        h1{font-size:17px;margin:0 0 4px} p{font-size:11px;color:#666;margin:0 0 16px}
+        table{border-collapse:collapse;width:100%;font-size:10.5px}
+        th,td{border:1px solid #ddd;padding:5px 7px;text-align:left;vertical-align:top}
+        th{background:#f3f4f6}
+      </style></head><body>
+      <h1>IFQM — Ideas</h1>
+      <p>${ideas.length} idea(s) · exported ${new Date().toLocaleString()}</p>
+      <table><thead><tr>
+        <th>Code</th><th>Title</th><th>Solution (gist)</th><th>Submitter</th><th>Dept</th>
+        <th>Impact</th><th>Score</th><th>Status</th><th>Date</th>
+      </tr></thead><tbody>${rows}</tbody></table></body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
   }
 
   return (
@@ -83,6 +138,26 @@ export default function AllIdeasPage() {
             <option key={l} value={l}>{translateImpact(l, t)}</option>
           ))}
         </select>
+
+        {/* §13.2 — archived ideas are out of the way but never gone. */}
+        <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'var(--text-muted)',cursor:'pointer' }}>
+          <input type="checkbox" checked={archived === '1'}
+            onChange={e => setArchived(e.target.checked ? '1' : '')}
+            style={{ accentColor:'var(--primary)' }} />
+          {t('idea.show_archived')}
+        </label>
+
+        {/* §13.3 — export what is on screen. Client-side: the rows are already
+            in the browser, so this needs no endpoint and honours the filters
+            exactly as the user set them. */}
+        <div style={{ display:'flex',gap:8,marginLeft:'auto' }}>
+          <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={!ideas.length}>
+            {t('btn.export_csv')}
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={exportPdf} disabled={!ideas.length}>
+            {t('btn.export_pdf')}
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

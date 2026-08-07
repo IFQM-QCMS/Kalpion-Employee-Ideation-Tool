@@ -41,6 +41,8 @@ router.get('/registrations', registrations.list);
 router.post('/registrations/:id/approve', registrations.approve);
 router.post('/registrations/:id/reject', registrations.reject);
 
+router.get('/activity', platform.loginActivity);   // §12.12 sign-in feed
+
 router.get('/health', platform.health);
 
 // Support queue — every tenant's tickets, plus IFQM-only internal notes.

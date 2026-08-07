@@ -6,7 +6,11 @@
  * fresh each call (no cross-request/tenant caching), the safe equivalent.
  */
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
-import { parseStages, stagesToChain, STAGE_CATALOG } from './approvalStages.js';
+import {
+  parseStages, stagesToChain, STAGE_CATALOG,
+  DEFAULT_REVIEWER_ROLES as CHAIN_DEFAULT_REVIEWERS,
+  DEFAULT_FINAL_ROLES as CHAIN_DEFAULT_FINALS,
+} from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
 
 const SETTINGS_WHITELIST = [
@@ -15,22 +19,36 @@ const SETTINGS_WHITELIST = [
   'smtp_pass', 'smtp_from', 'smtp_from_name', 'approval_mode',
   'approval_reviewer_roles', 'approval_final_approver_roles', 'approval_threshold',
   'approval_stages',
+  // MOM §13.1 — who may read a full proposed solution. This was a constant in
+  // ideaService; the org admin now owns it.
+  'solution_visibility', 'idea_tags_enabled', 'patentability_enabled',
 ];
+
+/** Accepted values for solution_visibility, loosest last. */
+export const SOLUTION_VISIBILITY_MODES = ['authors_reviewers', 'managers_only', 'everyone'];
 
 const APPROVAL_MODES = ['default', 'custom', 'stages'];
 
 const SMTP_PASS_MASK = '••••••••';
 const isAdmin = (role) => role === 'admin' || role === 'super_admin';
 
-const DEFAULT_REVIEWER_ROLES = ['team_lead', 'project_lead', 'manager', 'senior_manager'];
-const DEFAULT_FINAL_ROLES = ['executive', 'admin', 'super_admin'];
+/*
+ * MOM 29 Jul 2026 §13.11/§13.12 — the built-in chain now ends at Plant Head,
+ * not Executive, and super_admin is no longer an approver anywhere. Both lists
+ * are imported from approvalStages so that the stage-based and role-based modes
+ * cannot drift apart: they described the same chain and used to define it twice.
+ */
+const DEFAULT_REVIEWER_ROLES = CHAIN_DEFAULT_REVIEWERS;
+const DEFAULT_FINAL_ROLES = CHAIN_DEFAULT_FINALS;
 
 // Roles a tenant admin may place in their approval chain. Anything else typed
 // into the role lists is dropped on save — a bad role name would silently
-// exclude reviewers from the escalation walk.
+// exclude reviewers from the escalation walk. super_admin is absent by design
+// (§13.11): it cannot be selected, and any stored chain that still names it is
+// filtered out on read.
 const VALID_CHAIN_ROLES = [
   'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
-  'plant_head', 'executive', 'admin', 'super_admin',
+  'plant_head', 'executive', 'admin',
 ];
 
 export async function getApprovalConfig(db) {
@@ -133,6 +151,9 @@ export async function updateSettings(db, body) {
 
     let value = rawValue;
     if (key === 'approval_mode' && !APPROVAL_MODES.includes(value)) continue; // reject invalid mode
+    // An unrecognised visibility mode must not silently become "everyone" —
+    // that would publish every solution in the org on a typo.
+    if (key === 'solution_visibility' && !SOLUTION_VISIBILITY_MODES.includes(String(value))) continue;
     if (key === 'approval_threshold') {
       value = String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));
     }

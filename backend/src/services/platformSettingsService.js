@@ -250,6 +250,24 @@ export async function createAdmin(body) {
   const [dup] = await masterDb().execute('SELECT id FROM platform_admins WHERE email = ? LIMIT 1', [email]);
   if (dup.length) throw new ApiError(409, 'A platform admin with that email already exists.');
 
+  /*
+   * MOM §12.11 — a soft cap of 5. Soft because the MOM said soft: it is a
+   * governance signal, not a licence check, so it is stored in platform_settings
+   * and an operator who genuinely needs a sixth can raise it rather than being
+   * blocked by a constant nobody can reach. Every one of these accounts can
+   * reach every tenant, so the number should stay small and deliberate.
+   */
+  const [[cap] = []] = await masterDb().execute(
+    "SELECT value FROM platform_settings WHERE key_name = 'max_platform_admins' LIMIT 1"
+  );
+  const maxAdmins = parseInt(cap?.value, 10) || 5;
+  const [[{ n: adminCount }]] = await masterDb().query('SELECT COUNT(*) AS n FROM platform_admins');
+  if (Number(adminCount) >= maxAdmins) {
+    throw new ApiError(409,
+      `The platform admin limit of ${maxAdmins} has been reached. Remove an existing admin, `
+      + 'or raise the limit in Platform Settings, before adding another.');
+  }
+
   const [res] = await masterDb().execute(
     'INSERT INTO platform_admins (name, email, password_hash) VALUES (?, ?, ?)',
     [name, email, await bcrypt.hash(password, 12)]

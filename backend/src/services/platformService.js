@@ -116,7 +116,8 @@ export async function tenants() {
   const out = [];
   for (const t of rows) {
     const stats = {
-      user_count: 0, idea_count: 0, implemented_count: 0, last_activity: null,
+      user_count: 0, idea_count: 0, implemented_count: 0, qcms_pushed_count: 0,
+      last_activity: null,
       trend: [], admin_name: null, admin_email: null,
     };
     try {
@@ -124,6 +125,16 @@ export async function tenants() {
       const [[uc]] = await db.query("SELECT COUNT(*) AS c FROM users WHERE role != 'super_admin'");
       const [[ic]] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status != 'Draft'");
       const [[imp]] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Implemented'");
+      // §12.5 — how many of this org's ideas actually reached QCMS. The column
+      // may predate a tenant's last migration, so a failure here degrades to 0
+      // rather than blanking the whole row.
+      let qcmsPushed = 0;
+      try {
+        const [[qp]] = await db.query(
+          "SELECT COUNT(*) AS c FROM ideas WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status = 'success'"
+        );
+        qcmsPushed = Number(qp.c) || 0;
+      } catch { /* column absent on an un-migrated tenant */ }
       const [[la]] = await db.query("SELECT MAX(submitted_at) AS last FROM ideas WHERE status != 'Draft'");
       const [trend] = await db.query(
         `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS cnt
@@ -140,6 +151,7 @@ export async function tenants() {
       stats.user_count = Number(uc.c);
       stats.idea_count = Number(ic.c);
       stats.implemented_count = Number(imp.c);
+      stats.qcms_pushed_count = qcmsPushed;
       stats.last_activity = la.last ?? null;
       stats.trend = trend;
       stats.admin_name = admin?.name ?? null;
@@ -151,9 +163,23 @@ export async function tenants() {
     out.push(safeTenant({ ...t, ...stats, ...activityOf(t) }));
   }
 
+  /*
+   * §12.5 / §12.8 — the business-value roll-up the MOM asked for, as one path:
+   * organisations → ideas → implemented → pushed to QCMS. Summed from the
+   * per-tenant figures already gathered above rather than re-queried, so the
+   * headline can never disagree with the table under it.
+   */
+  const totals = out.reduce((acc, t) => ({
+    orgs: acc.orgs + 1,
+    ideas: acc.ideas + (t.idea_count || 0),
+    implemented: acc.implemented + (t.implemented_count || 0),
+    qcms_pushed: acc.qcms_pushed + (t.qcms_pushed_count || 0),
+  }), { orgs: 0, ideas: 0, implemented: 0, qcms_pushed: 0 });
+
   return {
     success: true,
     tenants: out,
+    totals,
     inactive_after_days: INACTIVE_AFTER_DAYS,
     // Badge for the console: MSME applications waiting for a decision.
     pending_registrations: await pendingRegistrationCount(),

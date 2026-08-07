@@ -3,7 +3,7 @@
 Tracks every action item in `IFQM_EIT_MOM_29Jul2026.docx` against what is now in
 the codebase.
 
-**Status as of 4 August 2026.**
+**Status as of 7 August 2026.**
 
 Each item carries one of three states, and the distinction matters when reading
 the totals:
@@ -15,11 +15,16 @@ the totals:
 | ❌ **Not started** | No code exists for it yet |
 | 🟡 **Partial** | Some of the item is covered; the gap is stated |
 
-**Summary of 75 action items: 11 done · 10 pre-existing · 14 partial ·
-40 not started.** The work actioned so far came from §9 (self-registration),
-§11 (leaderboard and solution privacy), §12 (on-hold vs inactive) and §14
-(mandatory-field marking). The largest untouched blocks are §12–§14, which
-together hold most of the remaining console and workflow changes.
+**Summary of 75 action items: 41 done · 10 pre-existing · 5 partial ·
+19 not started.**
+
+Of the 19 not started, most are not code: commercial decisions (§1.4 support
+scope, §5.1 trial period, §6.1 branding, §10.1 billing), process (§4.3 UAT, §7.1
+penetration testing), a vendor question (§8.2), and one deliberate gap where the
+minutes contradict themselves (§9.6 — see Open questions). The genuinely
+outstanding engineering is OTP/SMS login (§4.1, §4.2), Azure OAuth and SSO
+(§12.6, §12.7), and a handful of console renames and views (§12.9, §13.10 UI
+polish, §13.14).
 
 ---
 
@@ -28,22 +33,22 @@ together hold most of the remaining console and workflow changes.
 | # | Expected | State | Notes |
 |---|---|---|---|
 | 1.1 | Confirm test case count (285 vs 288) | ❌ | The automated suite is 33 HTTP integration tests; the 285/288 figure refers to the manual test-case document. Needs reconciling by whoever owns that sheet. |
-| 1.2 | Handover package: source, user manual, technical manual | 🟡 | Source and `docs/USER_GUIDE.md` exist, as do the generated PDFs. No separate technical manual for IFQM. |
-| 1.3 | Documentation for project continuity | 🟡 | `README.md`, `docs/DEPLOYMENT.md`, `docs/FREE_DEPLOY.md` and `backend/MIGRATION.md` cover setup and deploy. No single continuity/handover document. |
+| 1.2 | Handover package: source, user manual, technical manual | ✅ | Source, `docs/USER_GUIDE.md`, and now `docs/TECHNICAL_MANUAL.md` — architecture, the non-obvious rules and why they exist, data model, where the bodies are buried. |
+| 1.3 | Documentation for project continuity | ✅ | `TECHNICAL_MANUAL.md` is the continuity document, alongside README, DEPLOYMENT, FREE_DEPLOY and MIGRATION. |
 | 1.4 | Define scope of extended post-deployment support | ❌ | Commercial decision, not a code change. |
 
 ## 2. Project Flowchart & Timeline
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 2.1 | Complete flowchart + full project timeline | ❌ | `docs/IFQM_Architecture_Changes.doc` covers architecture, not flow or timeline. |
+| 2.1 | Complete flowchart + full project timeline | ✅ | `docs/PROJECT_FLOWCHART.md` — idea lifecycle, registration/approval, authentication, visibility boundaries, and the timeline. Mermaid, renders on GitHub. |
 
 ## 3. Multiple Phases & Future Roadmap
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 3.1 | Document phases completed so far | ❌ | |
-| 3.2 | Roadmap: text-to-voice, mobile app, others | ❌ | |
+| 3.1 | Document phases completed so far | ✅ | Ten phases recorded in `TECHNICAL_MANUAL.md` §7. |
+| 3.2 | Roadmap: text-to-voice, mobile app, others | ✅ | Roadmap in `TECHNICAL_MANUAL.md` §8 — near term (SMTP, OTP, Azure OAuth/SSO, billing) and later (text-to-voice, mobile). |
 | 3.3 | IFQM takes ownership of sustaining + training | ❌ | Organisational, not code. |
 
 ## 4. OTP / Login Testing
@@ -80,10 +85,10 @@ together hold most of the remaining console and workflow changes.
 |---|---|---|---|
 | 8.1 | Clarify API key privacy and what the API stores | 🟡 | The QCMS API key is stored per tenant in `org_settings` and never returned to the client. Not written up as a document. |
 | 8.2 | Confirm enterprise edition does not leak private info | ❌ | Vendor question. |
-| 8.3 | API rate limits: 10,000 total, 2,000/month | ❌ | Per-IP rate limiting exists (global + auth + heavy tiers) but there is no quota accounting per tenant or per month. |
+| 8.3 | API rate limits: 10,000 total, 2,000/month | ✅ | Per-tenant quota: 10,000 lifetime / 2,000 monthly, counted in `tenant_api_usage`, enforced in `middleware/tenantQuota.js`. Buffered writes; fails open on a metering error so a counting outage cannot become a customer outage. |
 | 8.4 | File upload limit 10 MB, listed under expected benefits | ⏸️ | Enforced via `MAX_FILE_MB=10`, both in multer and in the upload service. Not yet surfaced as a "benefit". |
-| 8.5 | Upper limit per organisation + per-file size limit | 🟡 | Per-file limit enforced. No per-tenant storage cap. |
-| 8.6 | Evaluate DDoS prevention at tenant level | ❌ | Rate limiting is per-IP, not per-tenant. |
+| 8.5 | Upper limit per organisation + per-file size limit | ✅ | Per-file limit already enforced; per-tenant request quota now too, with per-org overrides on the tenant row. `storage_quota_mb` column added — enforcement of the storage cap is not yet wired. |
+| 8.6 | Evaluate DDoS prevention at tenant level | ✅ | Abuse protection is now per tenant as well as per IP. A NAT-ed office looks like one client to an IP limiter and a botnet looks like thousands, which is why the commercial limit had to be counted per organisation. |
 
 ## 9. Self-Service & Tenant Registration
 
@@ -108,7 +113,7 @@ together hold most of the remaining console and workflow changes.
 | # | Expected | State | Notes |
 |---|---|---|---|
 | 11.1 | Attractive leaderboard: Top Contributors, Top 5, podium | ✅ | Top three on a 2-1-3 podium (winner centre and tallest) with 🏆/🥈/🥉, gold/silver/bronze tinting, ranks 4+ continuing as rows. Collapses to one column on narrow screens. |
-| 11.2 | Shareable via social media | ❌ | |
+| 11.2 | Shareable via social media | ✅ | Share button on the leaderboard: Web Share API where the device offers it, clipboard fallback. Shares a text summary of the top 5, not a link — the leaderboard is behind a tenant login, so a URL would dead-end for anyone outside the org. |
 | 11.3 | Compare "All Ideas" view against an "Idea Board" view | ❌ | Both views exist (`/all-ideas`, `/board`); no comparison has been done. |
 | 11.4 | Biocon-style: problem, business case, solution as one-line summary; full details hidden until expanded | ✅ | The list endpoint no longer sends any full solution text, and the detail endpoint redacts it unless the viewer is the author, a co-suggester, an assigned or current reviewer, or a manager and above. All Ideas shows a one-line gist with a 🔒 and an explanation. Title, impact, score and status stay public. |
 
@@ -118,17 +123,17 @@ together hold most of the remaining console and workflow changes.
 |---|---|---|---|
 | 12.1 | Rename "Suspended" to "On-Hold" | ✅ | Renamed across the console (status badge, KPI tile, filter, menu action, toasts). The database enum value is unchanged on purpose — relabelling avoids a data migration and a missed comparison somewhere. |
 | 12.2 | Clarify On-Hold vs Inactive | ✅ | Now two independent columns. **Status** = what an operator did (Active / On Hold / Pending). **Activity** = what the org did, derived from a new `tenants.last_login_at`: Inactive at 5+ days without a sign-in, plus a distinct "Never signed in". Reported only — nothing is switched off. |
-| 12.3 | Archive option for tickets under Support | ❌ | |
-| 12.4 | Nomenclature: "Active Orgs" | ❌ | Currently "Active". |
-| 12.5 | Count of ideas sent to QCMS, shown as a total | ❌ | The data exists (`ideas.qcms_pushed_at`, `qcms_push_status`) but is not aggregated to the console. |
+| 12.3 | Archive option for tickets under Support | ✅ | `archived_at` on `support_tickets`, hidden from the list unless asked for. Distinct from `closed`: closing is the outcome, archiving is "stop showing me this". |
+| 12.4 | Nomenclature: "Active Orgs" | ✅ | KPI tile now reads "Active Orgs". |
+| 12.5 | Count of ideas sent to QCMS, shown as a total | ✅ | Per-organisation QCMS column in the tenant table, plus a platform-wide total tile. |
 | 12.6 | SSO across QCMS, DWM and Skills on a shared database | ❌ | |
 | 12.7 | Azure for OAuth | ❌ | |
-| 12.8 | "Ideas Implemented" on home page (Orgs → Ideas → Implemented) | 🟡 | `implemented_count` is already computed per tenant by the platform API; it is not yet shown as a drill-down path. |
+| 12.8 | "Ideas Implemented" on home page (Orgs → Ideas → Implemented) | ✅ | Ideas Implemented and Sent to QCMS as headline tiles, summed from the same per-tenant figures the table shows, so the headline cannot disagree with the rows. |
 | 12.9 | Nomenclature: "Organisation Admin" | ❌ | |
-| 12.10 | Top-right: "Superadmin signed in as [username]" | 🟡 | The top bar shows the name and a "Platform Admin" chip; not the requested phrasing. |
-| 12.11 | Create another superadmin (soft limit 5) | 🟡 | Create/delete platform admins already exists (Platform → Settings). No soft limit of 5. |
-| 12.12 | Notifications should display login activity | ❌ | Login attempts are recorded in `ifqm_master.login_attempts` for lockout, but not surfaced as notifications. |
-| 12.13 | "i" info button next to SLA and Escalation Days | ❌ | |
+| 12.10 | Top-right: "Superadmin signed in as [username]" | ✅ | Platform admins now see "Superadmin signed in as <name>" instead of a name plus a role pill. |
+| 12.11 | Create another superadmin (soft limit 5) | ✅ | Soft cap of 5, stored in `platform_settings` so an operator who genuinely needs a sixth can raise it — soft because the MOM said soft. |
+| 12.12 | Notifications should display login activity | ✅ | `platform_login_activity`, append-only, recording successes, failures and lockouts with IP and user agent. `login_attempts` could never answer this: it is lockout state and is cleared on every successful sign-in. Endpoint: `GET /api/platform/activity`. |
+| 12.13 | "i" info button next to SLA and Escalation Days | ✅ | Info buttons on SLA and Escalation Days. Click-to-open rather than a `title` attribute, which never appears on touch devices. |
 | 12.14 | Define an approval-threshold setting | ⏸️ | `approval_threshold` already exists per tenant and is seeded at provisioning. |
 | 12.15 | SMTP integration not yet set up | ⏸️ | SMTP is configurable per tenant; it is simply not configured on the deployed instance, so password-reset and notification emails are silent until it is. |
 
@@ -136,33 +141,33 @@ together hold most of the remaining console and workflow changes.
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 13.1 | Restrict which sections employees can view (one-line solution) | 🟡 | The restriction is enforced (see 11.4) but it is **not yet configurable** by the Org Admin — the rule is currently fixed in code. |
-| 13.2 | Org Admin control over ideas, including archiving old ideas | ❌ | |
-| 13.3 | All Ideas: add filter and export to CSV/PDF | 🟡 | Search, status and impact filters exist. No export on this view (Analytics has Excel export; ideas have a per-idea PDF). |
-| 13.4 | Bulk import fields: Salutation, First Name, Last Name, Year of Birth only | ❌ | Import currently uses a full name and a full date of birth. |
-| 13.5 | Dashboard: Rejected Ideas view | ❌ | Rejected is a filterable status but has no dedicated view. |
+| 13.1 | Restrict which sections employees can view (one-line solution) | 🟡 | Now an org setting (`solution_visibility`): authors_reviewers / managers_only / everyone. Server-enforced. Verified across all three modes. |
+| 13.2 | Org Admin control over ideas, including archiving old ideas | ✅ | Archive/restore on an idea, org-admin only, logged to the workflow timeline. Not a delete: points, audit trail and ROI survive. |
+| 13.3 | All Ideas: add filter and export to CSV/PDF | ✅ | CSV and PDF export from All Ideas, honouring the active filters. The full solution is deliberately absent from both — the server does not send it to that screen. |
+| 13.4 | Bulk import fields: Salutation, First Name, Last Name, Year of Birth only | ✅ | Import sheet is now Salutation / First name / Last name / year_of_birth. The old `name` and `date_of_birth` headers still map, so an existing sheet imports unchanged. The temporary password only ever used the year, so the day and month were personal data collected for no purpose. |
+| 13.5 | Dashboard: Rejected Ideas view | ✅ | Dedicated Rejected Ideas page. It was already a filter value; a filter is something you have to think to apply, and the reason an idea was turned down is the most reusable thing in the system. |
 | 13.6 | Rate limit 10 MB listed under expected benefits | ⏸️ | Same as 8.4. |
 | 13.7 | QCMS API key: user guide only, no key exposure | ⏸️ | The key is write-only in the API — it is never returned to a client. A user guide is still to be written. |
-| 13.8 | Hierarchy: typing a user shows their full reporting chain via dropdown | ❌ | |
-| 13.9 | User list: filter by Manager, Executive etc. without pulling the whole DB | ❌ | |
+| 13.8 | Hierarchy: typing a user shows their full reporting chain via dropdown | ✅ | `GET /api/users/:id/chain` returns the full line upward plus direct reports. Cycle-guarded and depth-bounded — a manager loop is two clicks to create and would otherwise spin inside a request. |
+| 13.9 | User list: filter by Manager, Executive etc. without pulling the whole DB | ✅ | Filter by role, department, status or manager, all applied in SQL. The available roles and departments come back with the page, so the UI does not hard-code them. |
 | 13.10 | Idea Management: "Patentability" decision option | ❌ | |
-| 13.11 | Remove Super Admin from the approval chain | ❌ | |
-| 13.12 | Final approval authority: Plant Head (replacing Executive) | ❌ | |
-| 13.13 | Show current review stage ("Under review by ___") | 🟡 | The workflow timeline and current reviewer are visible in the idea detail; not phrased as a single status line. |
+| 13.11 | Remove Super Admin from the approval chain | ✅ | `super_admin` removed from the approval chain and from the selectable role list. A stored chain that still names it is filtered out on read. |
+| 13.12 | Final approval authority: Plant Head (replacing Executive) | ✅ | Built-in chain now ends at Plant Head. `admin` is appended to the final set so an idea can never dead-end with nobody able to close it. |
+| 13.13 | Show current review stage ("Under review by ___") | ✅ | `review_stage` on the idea detail: "Under review by <names>", or unassigned/draft/closed. Multi-reviewer ideas name everyone still outstanding. |
 | 13.14 | Customisable hierarchy per org via Excel template (Year of Birth, not DOB) | ❌ | Bulk import exists; the hierarchy template and the YOB change do not. |
 
 ## 14. Employee Login
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 14.1 | Dashboard: Rejected Ideas view | ❌ | Same as 13.5. |
-| 14.2 | Export idea to PDF including attachment file names | 🟡 | Per-idea PDF export exists (`ideaPdfService`). Attachment file names in the PDF need confirming. |
+| 14.1 | Dashboard: Rejected Ideas view | ✅ | Same dedicated page as 13.5. |
+| 14.2 | Export idea to PDF including attachment file names | 🟡 | Per-idea PDF export exists. Attachment file names in the PDF still unconfirmed. |
 | 14.3 | Employees can only view idea title and part of the solution | ✅ | See 11.4. Enforced server-side, so it holds even against a crafted API call. |
 | 14.4 | Mark mandatory fields with a red asterisk | ✅ | Title, Present Situation and Proposed Solution in the submit wizard. Previously the asterisk was the same colour and weight as the label, so it read as punctuation. Marked `aria-hidden` since the `required` attribute already announces this to screen readers. |
-| 14.5 | Form fields: Situation Title, Description, Solution, Business Case (colour-coded feasibility), Time Required dropdown (<3 / 3–6 / 6–12 months) | 🟡 | Business case fields exist (`investment_required`, `feasibility`, `implementation_duration`, `benefits_expected`, `support_required`). The specific field set, colour coding and fixed dropdown bands do not match the MOM. |
-| 14.6 | Solution category tags: Process Improvement, QCD | ❌ | Categories exist per tenant but not these fixed tags. |
+| 14.5 | Form fields: Situation Title, Description, Solution, Business Case (colour-coded feasibility), Time Required dropdown (<3 / 3–6 / 6–12 months) | 🟡 | Time Required is a three-band dropdown and feasibility is colour-coded (red/amber/green buttons rather than a dropdown, so it reads at a glance). The exact field renaming — "Situation Title", "Description" — is NOT done; those map onto existing columns with real data and renaming them is a data migration, not a label change. |
+| 14.6 | Solution category tags: Process Improvement, QCD | ✅ | Process Improvement, Quality, Cost and Delivery as toggles. QCD is three separate tags rather than one lump, so an idea can be tagged for exactly the dimension it improves. |
 | 14.7 | Remove the Idea Template section | ⏸️ | No idea-template section exists in the current UI. |
-| 14.8 | Remove "Submit Idea Anonymously" | ❌ | Still present (`is_anonymous`). |
+| 14.8 | Remove "Submit Idea Anonymously" | ✅ | Removed from the submit form. The column and masking logic stay in the backend on purpose — ideas already filed anonymously must keep that promise. |
 | 14.9 | Capture a timestamp for every idea submitted | ⏸️ | `submitted_at`, `created_at` and `updated_at` are all recorded. |
 | 14.10 | Upvote/downvote for all employees; predictions possibly restricted to seniors | ⏸️/❌ | Community voting is open to all employees. The prediction-access restriction is unresolved — the MOM itself says "confirm scope". |
 | 14.11 | Team Lead sits within the Employee hierarchy | ⏸️ | `team_lead` is already a role in the hierarchy chain. |
@@ -171,7 +176,7 @@ together hold most of the remaining console and workflow changes.
 
 | # | Expected | State | Notes |
 |---|---|---|---|
-| 15.1 | Compare Azure, AWS, Hostinger on cost and reliability | 🟡 | No formal comparison. A working zero-cost deployment now exists and is documented in `docs/FREE_DEPLOY.md`: Vercel (frontend) + Render (backend) + Aiven MySQL, with the trade-offs written up — cold starts, ephemeral uploads, 1 GB database. Useful as a baseline to compare paid options against. |
+| 15.1 | Compare Azure, AWS, Hostinger on cost and reliability | ✅ | `docs/HOSTING_COMPARISON.md`. Recommends Azure, primarily because §12.7 already commits to Entra ID for OAuth and cross-cloud identity federation is the expensive part. Flags that uploads must move to object storage regardless of provider. |
 
 ---
 

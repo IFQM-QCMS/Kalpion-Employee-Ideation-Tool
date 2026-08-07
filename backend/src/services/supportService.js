@@ -232,6 +232,15 @@ export async function listPlatformTickets(query = {}) {
   const where = [];
   const params = [];
 
+  /*
+   * MOM §12.3 — archived tickets are hidden unless asked for. Archiving is not
+   * the same as closing: closing is the outcome of the conversation, archiving
+   * is the operator saying "stop showing me this". A closed ticket still belongs
+   * in the recent list; an archived one does not.
+   */
+  if (String(query.archived) === '1') where.push('t.archived_at IS NOT NULL');
+  else if (String(query.archived) !== 'all') where.push('t.archived_at IS NULL');
+
   if (STATUSES.includes(query.status)) { where.push('t.status = ?'); params.push(query.status); }
   if (PRIORITIES.includes(query.priority)) { where.push('t.priority = ?'); params.push(query.priority); }
   if (query.tenant_id) { where.push('t.tenant_id = ?'); params.push(Number(query.tenant_id)); }
@@ -256,7 +265,8 @@ export async function listPlatformTickets(query = {}) {
     `SELECT COUNT(*) AS total,
             SUM(status = 'open') AS open_count,
             SUM(status = 'in_progress') AS in_progress_count,
-            SUM(priority = 'urgent' AND status NOT IN ('resolved','closed')) AS urgent_count
+            SUM(priority = 'urgent' AND status NOT IN ('resolved','closed')) AS urgent_count,
+            SUM(archived_at IS NOT NULL) AS archived_count
        FROM support_tickets`
   );
 
@@ -268,6 +278,7 @@ export async function listPlatformTickets(query = {}) {
       open: Number(counts.open_count) || 0,
       in_progress: Number(counts.in_progress_count) || 0,
       urgent: Number(counts.urgent_count) || 0,
+      archived: Number(counts.archived_count) || 0,
     },
   };
 }
@@ -351,6 +362,13 @@ export async function updatePlatformTicket(id, body) {
     }
     updates.push('assignee_id = ?');
     params.push(assignee);
+  }
+
+  // MOM §12.3. Reversible on purpose — an archive that cannot be undone is a
+  // delete with a friendlier name.
+  if (body?.archived !== undefined) {
+    updates.push('archived_at = ?');
+    params.push(body.archived ? new Date() : null);
   }
 
   if (!updates.length) throw badRequest('Nothing to update.');

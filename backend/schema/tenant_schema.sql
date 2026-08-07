@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS users (
   -- ── from migration 002 (bulk user import) ──
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   date_of_birth        DATE NULL DEFAULT NULL,
+  -- MOM 29 Jul 2026 §13.4: bulk import captures a birth YEAR, not a full date —
+  -- the derived temporary password only ever used the year, so the rest was
+  -- personal data held for no purpose. date_of_birth is retained for existing
+  -- rows and is no longer written.
+  salutation           VARCHAR(10) NULL DEFAULT NULL,
+  first_name           VARCHAR(60) NULL DEFAULT NULL,
+  last_name            VARCHAR(60) NULL DEFAULT NULL,
+  year_of_birth        SMALLINT NULL DEFAULT NULL,
+
   activated_at         DATETIME NULL DEFAULT NULL,
   FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL,
   INDEX idx_users_email_status (email, status),
@@ -73,6 +82,21 @@ CREATE TABLE IF NOT EXISTS ideas (
   expected_implementation_date DATE NULL DEFAULT NULL,
   benefits_expected        TEXT NULL DEFAULT NULL,
   support_required         TEXT NULL DEFAULT NULL,
+  -- ── MOM 29 Jul 2026 (migration 010) ──
+  -- Time Required: three fixed bands. implementation_duration above stays as
+  -- free text — it holds real data on older ideas and cannot be coerced safely.
+  time_required            ENUM('lt_3m','3_6m','6_12m') NULL DEFAULT NULL,
+  -- Process Improvement / QCD. CSV of tag keys: the set is fixed and small, and
+  -- is never queried relationally, so a join table would be ceremony.
+  solution_tags            VARCHAR(255) NULL DEFAULT NULL,
+  -- Patentability is a separate axis from approval: an idea can be approved and
+  -- unpatentable, or rejected and still worth a provisional filing.
+  patentability            ENUM('not_assessed','not_patentable','possible','recommended','filed') NOT NULL DEFAULT 'not_assessed',
+  patentability_note       TEXT NULL DEFAULT NULL,
+  -- Archiving hides an idea from working lists without destroying its points,
+  -- audit trail or ROI figures. NULL = live.
+  archived_at              DATETIME NULL DEFAULT NULL,
+  archived_by              INT NULL DEFAULT NULL,
   ai_score                 INT DEFAULT 0,
   ai_reason                TEXT,
   workflow_type            ENUM('hierarchical','multi_reviewer') NOT NULL DEFAULT 'hierarchical',
@@ -271,7 +295,9 @@ CREATE TABLE IF NOT EXISTS org_settings (
 INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('review_sla_days',           '7'),
   ('escalation_days',           '14'),
-  ('anonymous_allowed',         '1'),
+  -- §14.8 removed anonymous submission. Kept as a setting, not ripped out:
+  -- ideas already filed anonymously must keep that promise.
+  ('anonymous_allowed',         '0'),
   ('public_board_enabled',      '1'),
   ('challenges_enabled',        '1'),
   ('email_enabled',             '0'),
@@ -287,7 +313,12 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('approval_threshold',        '100'),
   -- Named approval chain (migration 003). Seeded for every organisation but only
   -- in force when approval_mode = 'stages'.
-  ('approval_stages',           'originator,immediate_manager,department_manager,plant_head');
+  ('approval_stages',           'originator,immediate_manager,department_manager,plant_head'),
+  -- MOM 29 Jul 2026. solution_visibility replaces what used to be a constant in
+  -- ideaService: authors_reviewers | managers_only | everyone.
+  ('solution_visibility',       'authors_reviewers'),
+  ('idea_tags_enabled',         '1'),
+  ('patentability_enabled',     '1');
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -456,6 +487,15 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND INDEX_NAME = 'idx_ideas_updated_at') = 0,
   'CREATE INDEX idx_ideas_updated_at ON ideas(updated_at)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_archived') = 0,
+  'CREATE INDEX idx_ideas_archived ON ideas(archived_at)',
   'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
