@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { ideasApi, challengesApi, uploadApi, usersApi, categoriesApi } from '../services/api';
 import { translateStatus, translateImpact, translateArea } from '../utils/helpers';
+import InfoDot from '../components/InfoDot';
 
 const IMPACT_LEVELS = ['Low','Medium','High','Critical'];
 const FEASIBILITY_LEVELS = ['Low','Medium','High'];
@@ -343,13 +344,13 @@ export default function SubmitPage() {
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>{t('form.tangible')}</label>
+                <label>{t('form.tangible')}<InfoDot term="tangible_benefit" /></label>
                 <textarea className="form-control" rows="3" value={tangible}
                   onChange={e => setTangible(e.target.value)}
                   placeholder={t('form.tangible_ph')} />
               </div>
               <div className="form-group">
-                <label>{t('form.intangible')}</label>
+                <label>{t('form.intangible')}<InfoDot term="intangible_benefit" /></label>
                 <textarea className="form-control" rows="3" value={intangible}
                   onChange={e => setIntangible(e.target.value)}
                   placeholder={t('form.intangible_ph')} />
@@ -365,7 +366,7 @@ export default function SubmitPage() {
               </div>
             </div>
             <div className="form-group">
-              <label>{t('form.impact_level')}</label>
+              <label>{t('form.impact_level')}<InfoDot term="impact_level" /></label>
               <select className="form-control" value={impactLevel} onChange={e => setImpactLevel(e.target.value)}>
                 {IMPACT_LEVELS.map(l => <option key={l} value={l}>{translateImpact(l, t)}</option>)}
               </select>
@@ -393,7 +394,7 @@ export default function SubmitPage() {
                 <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.amount_inr')}</div>
               </div>
               <div className="form-group">
-                <label>{t('form.feasibility')}</label>
+                <label>{t('form.feasibility')}<InfoDot term="feasibility" /></label>
                 {/* §14.5 — colour-coded. Buttons rather than a <select> so the
                     red/amber/green reads at a glance instead of hiding inside a
                     closed dropdown. */}
@@ -421,7 +422,7 @@ export default function SubmitPage() {
             {/* §14.5 — Time Required. Three fixed bands, not free text: the
                 point of the item is that these are comparable across ideas. */}
             <div className="form-group">
-              <label>{t('form.time_required')}</label>
+              <label>{t('form.time_required')}<InfoDot term="time_required" /></label>
               <select className="form-control" value={timeRequired}
                 onChange={e => setTimeRequired(e.target.value)}>
                 <option value="">{t('form.time_none')}</option>
@@ -431,7 +432,7 @@ export default function SubmitPage() {
 
             {/* §14.6 — solution category tags. */}
             <div className="form-group">
-              <label>{t('form.solution_tags')}</label>
+              <label>{t('form.solution_tags')}<InfoDot term="solution_tags" /></label>
               <div style={{ display:'flex',gap:8,flexWrap:'wrap',marginTop:4 }}>
                 {SOLUTION_TAGS.map(([v, k]) => {
                   const on = solutionTags.includes(v);
@@ -524,7 +525,7 @@ export default function SubmitPage() {
         {step === 5 && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
-              <label>{t('form.co_suggesters')}</label>
+              <label>{t('form.co_suggesters')}<InfoDot term="co_suggesters" /></label>
               <div className="pos-rel">
                 <input className="form-control" value={coQuery}
                   onChange={e => { setCoQuery(e.target.value); searchCoSuggesters(e.target.value); }}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { registrationsApi } from '../services/api';
+import InfoDot from '../components/InfoDot';
 
 /*
   MSME self-registration.
@@ -251,7 +252,7 @@ export default function SignupPage() {
                           placeholder="Acme Precision Components Pvt Ltd" required />
                       </div>
                       <div>
-                        <label htmlFor="proposed_slug">Preferred org code <span className="opt">optional</span></label>
+                        <label htmlFor="proposed_slug">Preferred org code <span className="opt">optional</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="acme" />
                         <p className="hint">Short identifier for your workspace. We derive one from your email if you leave this blank.</p>
@@ -306,12 +307,12 @@ export default function SignupPage() {
                     </p>
                     <div className="grid">
                       <div>
-                        <label htmlFor="udyam_number">Udyam registration number <span className="opt">optional</span></label>
+                        <label htmlFor="udyam_number">Udyam registration number <span className="opt">optional</span><InfoDot term="udyam" /></label>
                         <input id="udyam_number" value={form.udyam_number} onChange={set('udyam_number')}
                           placeholder="UDYAM-KR-03-0012345" />
                       </div>
                       <div>
-                        <label htmlFor="gstin">GSTIN <span className="opt">optional</span></label>
+                        <label htmlFor="gstin">GSTIN <span className="opt">optional</span><InfoDot term="gstin" /></label>
                         <input id="gstin" value={form.gstin} onChange={set('gstin')} placeholder="29ABCDE1234F1Z5" />
                         <p className="hint">Leave blank if you are below the GST threshold.</p>
                       </div>
@@ -352,7 +353,7 @@ export default function SignupPage() {
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="nic_code">NIC activity code <span className="opt">optional</span></label>
+                        <label htmlFor="nic_code">NIC activity code <span className="opt">optional</span><InfoDot term="nic_code" /></label>
                         <input id="nic_code" value={form.nic_code} onChange={set('nic_code')} placeholder="25" />
                         <p className="hint">The 2-digit code from your Udyam certificate.</p>
                       </div>

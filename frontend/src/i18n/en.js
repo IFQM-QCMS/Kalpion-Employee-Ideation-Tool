@@ -148,6 +148,88 @@ export default {
   'table.date':'Date',
   'table.solution_gist':'Solution (gist)',
 
+  // == GLOSSARY ==============================================================
+  // Every jargon term in the product, explained for the person who has to set
+  // it -- an org admin at a 40-person workshop, not the people who built this.
+  // Rules for anything added here: say what the setting DOES and what happens
+  // if it is wrong; give a concrete number or example; never define a term
+  // using another term from this same list.
+  'info.explain':'What does this mean?',
+
+  // -- Review & SLA --
+  'info.sla_days':'How many days a reviewer has before the idea is marked overdue. It is a reminder, not an action - nothing is reassigned or rejected automatically, the idea just starts showing as late so someone chases it. 7 days is typical.',
+  'info.escalation_days':'How many days an idea can sit untouched before it moves up to the next person in the approval chain. This one DOES move the idea. Set it longer than the SLA above, or ideas will jump to the next approver before the first one has run out of time.',
+  'info.review_sla':'"SLA" means service level agreement - the promise about how quickly a review happens. Here it is simply the number of days a reviewer is expected to respond in.',
+
+  // -- Approval workflow --
+  'info.workflow_mode':'How ideas travel up your organisation for approval. Platform Default uses a sensible ready-made chain. Approval Chain lets you list the steps in order. Custom Roles lets you pick the job titles instead. Most organisations never need to change this.',
+  'info.approval_stages':'The steps an idea passes through, in order, from the person who submitted it to whoever gives final sign-off. Add or remove steps to match how your organisation actually approves things. The last step is the one that closes the idea.',
+  'info.reviewer_roles':'The job titles that can look at an idea and pass it upward. They cannot close it - they move it to the next person. Someone must hold at least one of these roles, or submitted ideas will have nobody to go to.',
+  'info.final_roles':'The job titles that can give the final Approved or Rejected decision. Once someone in one of these roles decides, the idea stops moving. Your organisation admin is always included, so an idea can never get stuck with nobody able to close it.',
+  'info.approval_threshold':'When several people review the same idea, this is the share of them that must approve before it counts as approved. 100% means everyone has to agree; 50% means half of them is enough.',
+  'info.chain_preview':'A plain reading of the chain you have built above - who sees an idea, in what order, and who gives the final decision. Check it matches how approvals really work in your organisation before saving.',
+  'info.reporting_structure':'Who each person reports to. Ideas escalate up this chain, so if someone reports to the wrong manager, their ideas go to the wrong reviewer.',
+  'info.multi_reviewer':'A committee reviews the idea together instead of it passing up one person at a time. The approval threshold decides how many of them must agree.',
+  'info.hierarchical':'The idea passes up one manager at a time, following the reporting structure, until it reaches someone who can give final approval.',
+
+  // -- Visibility & privacy --
+  'info.solution_visibility':'Who can read the full text of an idea. Everyone always sees the title, category, score and status - this only controls the detailed write-up, so colleagues cannot copy an idea before it has been reviewed. The person who wrote it always sees their own.',
+  'info.feature_flags':'On/off switches for optional parts of the app. Turning one off hides that feature from everyone in your organisation; existing data is kept, not deleted, so you can turn it back on.',
+  'info.flag_anonymous':'Lets employees submit without their name attached. Ideas already submitted anonymously stay anonymous even if you switch this off.',
+  'info.flag_board':'A shared wall where everyone can see and vote on ideas. Switch it off if you want ideas visible only to reviewers.',
+  'info.flag_challenges':'Time-limited campaigns asking for ideas on one specific problem, e.g. "reduce packaging waste by March".',
+  'info.flag_email':'Whether the app sends email at all - review reminders, approval notices, password resets. The mail server details below have to be filled in first.',
+
+  // -- Email --
+  'info.smtp':'The mail server the app sends email through. Your IT provider or email host supplies these values. Without them the app still works, but nobody receives notifications and password reset emails never arrive.',
+  'info.smtp_host':'The address of your mail server, e.g. smtp.gmail.com or smtp.office365.com. Your email provider publishes this.',
+  'info.smtp_port':'The numbered channel the mail server listens on. 587 is the usual answer and the one to try first.',
+  'info.smtp_user':'The mailbox the app signs in as to send mail. Usually a full email address.',
+  'info.smtp_pass':'The password for that mailbox. Many providers require an app-specific password rather than the normal one. Leave blank to keep the password already saved.',
+  'info.smtp_from':'The address employees will see messages arriving from. It normally has to belong to the same domain as the mailbox above, or the mail gets rejected as spam.',
+
+  // -- Scoring --
+  'info.ai_score':'An automatic quality score out of 100, worked out from how complete and well-argued the submission is across six areas. It is a sorting aid so good ideas surface first - not a decision. A reviewer can approve a low-scoring idea or reject a high-scoring one.',
+  'info.community_score':'The automatic score adjusted by how colleagues voted. Upvotes push it up, downvotes pull it down. It shows whether the people who do the work agree with the machine.',
+  'info.engagement_index':'A single number combining an idea\u2019s score, its star ratings and how many people voted. High means the idea is both well-formed and getting attention; low often just means nobody has looked at it yet.',
+  'info.impact_level':'How big a difference this idea would make if implemented. Your own judgement - there is no formula. It helps reviewers sort what to look at first.',
+  'info.feasibility':'How realistically this can be done with what the organisation has today. Green is straightforward, amber needs some effort or spend, red needs significant investment or a decision nobody has taken yet.',
+  'info.time_required':'Roughly how long implementation would take once approved. A rough band is fine - it is there so reviewers can tell a quick win from a long project.',
+  'info.solution_tags':'What kind of improvement this is. QCD stands for Quality, Cost and Delivery - the three things most improvement programmes measure. Pick every one that applies.',
+  'info.tangible_benefit':'A benefit you can put a number on: money saved, hours saved, scrap reduced. E.g. "about \u20b950,000 a year in rework".',
+  'info.intangible_benefit':'A real benefit you cannot easily put a number on: safer working, less frustration, a better audit result. These count too - say so plainly.',
+  'info.roi':'Return on investment - what the organisation actually got back after the idea was implemented, recorded once it is done. This is the real figure, not the estimate made at submission.',
+  'info.patentability':'Whether this idea might be worth protecting as intellectual property. Kept separate from approval on purpose: an idea can be approved and not patentable, or turned down on cost and still worth filing.',
+  'info.duplicate_check':'As you type a title, the app looks for ideas that already exist. It is a heads-up, not a block - if yours is genuinely different, carry on.',
+
+  // -- Idea states --
+  'info.draft':'Saved but not submitted. Only you can see it, and it has not entered the review process. Nothing happens until you submit it.',
+  'info.archived':'Removed from the day-to-day lists but not deleted. Points already awarded, the approval history and any recorded savings all stay. An admin can restore it at any time.',
+  'info.review_stage':'Who currently has this idea on their desk. If it names nobody, it has not been assigned to a reviewer yet.',
+  'info.co_suggesters':'Colleagues who worked on this idea with you. They are credited alongside you and can read the full write-up.',
+
+  // -- Platform console --
+  'info.org_code':'A short nickname for the organisation, used in web addresses and at sign-in, e.g. "acme". Lower-case letters, numbers, - and _ only. It cannot clash with another organisation\u2019s code.',
+  'info.default_org':'The organisation people reach when they sign in without giving an organisation code. There can only be one, and it cannot be put on hold - that would lock out everyone who signs in that way.',
+  'info.on_hold':'Something YOU did to this organisation: their access is paused. Nobody there can sign in until you take them off hold. Their data is untouched.',
+  'info.activity_state':'Something the ORGANISATION did, or stopped doing. "Inactive" simply means nobody has signed in for 5 days or more. Information only - nothing is switched off, and they can still sign in normally.',
+  'info.tenant':'One customer organisation. Each has its own separate database, so no organisation can see another\u2019s people, ideas or files.',
+  'info.api_quota':'A cap on how many requests one organisation can make. It stops a single customer, or a faulty integration, from consuming the whole platform. Raise it for that organisation if they legitimately need more.',
+  'info.qcms_pushed':'Approved ideas handed over to the QCMS tool to be carried out. It is the point where an idea stops being a suggestion and becomes tracked work.',
+  'info.platform_admin_limit':'How many IFQM staff accounts may exist. Every one of them can reach every customer organisation, so the number should stay small and deliberate.',
+  'info.registration_queue':'Businesses that have applied for a workspace. Approving one creates their database and their first admin account, so read the details before deciding.',
+  'info.udyam':'The registration number an Indian MSME receives from the government Udyam portal. It is how a business shows it qualifies as a micro, small or medium enterprise.',
+  'info.gstin':'The 15-character GST identification number. Businesses below the GST turnover threshold genuinely do not have one, so it is optional.',
+  'info.nic_code':'A government code for what kind of business this is. It appears on the Udyam certificate.',
+
+  // -- User management --
+  'info.employee_id':'Your organisation\u2019s own staff number. It must be unique, and it is what bulk import matches on when updating people who already exist.',
+  'info.bulk_import':'Add many employees at once from a spreadsheet. Download the template, fill it in, upload it. Each person gets a temporary password they must change when they first sign in.',
+  'info.year_of_birth':'Used only to build the temporary first-login password. The year alone is enough, which is why the full date is no longer asked for.',
+  'info.must_change_password':'This person signed in with a temporary password and has not replaced it yet. They cannot use the rest of the app until they do.',
+  'info.reporting_line':'This person\u2019s managers, all the way up. Ideas they submit travel along this line for approval.',
+  'info.qcms_api_key':'The key that lets this app hand approved ideas to your QCMS tool. Once saved it is never shown again - not on screen, in exports, or in logs. To change it, paste a new one; leaving it blank keeps the current key.',
+
   // ── MOM 29 Jul 2026 ──
   // §14.5 Time Required
   'form.time_required':'Time required',
@@ -753,7 +835,7 @@ export default {
   'hier.mode_label':'Workflow Mode',
   'hier.mode_default':'Use Platform Default',
   'hier.mode_custom':'Customize My Approval Hierarchy',
-  'hier.default_hint':'Platform Default: Team Lead → Project Lead → Manager → Senior Manager → (Executive/Admin/Super Admin final)',
+  'hier.default_hint':'Platform Default: Team Lead → Project Lead → Manager → Department Manager → Senior Manager → (Plant Head / Admin give final approval)',
   'hier.reviewer_roles':'Reviewer Roles (escalation chain — who can review before final approval)',
   'hier.reviewer_hint':'Ideas move up the chain through selected roles. At least one role must be selected.',
   'hier.final_roles':'Final Approver Roles (can give final approval — no further escalation)',

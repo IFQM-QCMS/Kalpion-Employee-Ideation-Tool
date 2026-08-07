@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
+import InfoDot from '../components/InfoDot';
 
 /*
   Platform → Registrations.
@@ -40,12 +41,12 @@ const STATUS_TONE = {
 
 /** A labelled value. Renders an em dash rather than vanishing, so a reviewer can
     see what the applicant chose to leave blank — that is itself information. */
-function Field({ label, value, mono = false }) {
+function Field({ label, value, mono = false, info = null }) {
   const empty = value === null || value === undefined || value === '';
   return (
     <div>
       <div style={{ fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.06em',
-                    color: 'var(--subtle)', fontWeight: 700, marginBottom: 2 }}>{label}</div>
+                    color: 'var(--subtle)', fontWeight: 700, marginBottom: 2 }}>{label}{info && <InfoDot term={info} />}</div>
       <div style={{ fontSize: 13, color: empty ? 'var(--subtle)' : 'var(--text)',
                     fontFamily: mono && !empty ? 'ui-monospace,SFMono-Regular,Menlo,monospace' : 'inherit',
                     wordBreak: 'break-word' }}>
@@ -159,7 +160,7 @@ export default function PlatformRegistrationsPage() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-title" style={{ margin: '0 0 4px' }}>{t('pa.reg_title')}</div>
+        <div className="card-title" style={{ margin: '0 0 4px' }}>{t('pa.reg_title')}<InfoDot term="registration_queue" /></div>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 14px' }}>{t('pa.reg_sub')}</p>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -247,8 +248,8 @@ export default function PlatformRegistrationsPage() {
                 </Group>
 
                 <Group title={t('pa.reg_g_statutory')}>
-                  <Field label={t('pa.reg_f_udyam')} value={r.udyam_number} mono />
-                  <Field label={t('pa.reg_f_gstin')} value={r.gstin} mono />
+                  <Field label={t('pa.reg_f_udyam')} value={r.udyam_number} mono info="udyam" />
+                  <Field label={t('pa.reg_f_gstin')} value={r.gstin} mono info="gstin" />
                   <Field label={t('pa.reg_f_pan')} value={r.pan} mono />
                   <Field label={t('pa.reg_f_cin')} value={r.cin} mono />
                   <Field label={t('pa.reg_f_entity')} value={ENTITY_LABEL[r.entity_type] || r.entity_type} />
@@ -258,7 +259,7 @@ export default function PlatformRegistrationsPage() {
 
                 <Group title={t('pa.reg_g_profile')}>
                   <Field label={t('pa.reg_f_sector')} value={r.sector} />
-                  <Field label={t('pa.reg_f_nic')} value={r.nic_code} mono />
+                  <Field label={t('pa.reg_f_nic')} value={r.nic_code} mono info="nic_code" />
                   <Field label={t('pa.reg_f_employees')} value={r.employee_count} />
                   <Field label={t('pa.reg_f_turnover')}
                     value={TURNOVER_LABEL[r.annual_turnover_band] || r.annual_turnover_band} />

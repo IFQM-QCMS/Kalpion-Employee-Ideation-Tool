@@ -10,6 +10,7 @@ import {
 import ReviewActionModal from './ReviewActionModal';
 import AssignReviewersModal from './AssignReviewersModal';
 import ReviewerDecisionModal from './ReviewerDecisionModal';
+import InfoDot from './InfoDot';
 
 const TAB_KEYS = ['modal.details', 'modal.timeline', 'modal.attachments'];
 
@@ -216,7 +217,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     <div style={{ display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14 }}>
                       <div style={{ flex:'1 1 220px' }}>
                         <label style={{ fontSize:12,fontWeight:650,color:'var(--subtext)',display:'block',marginBottom:4 }}>
-                          {t('idea.patentability')}
+                          {t('idea.patentability')}<InfoDot term="patentability" />
                         </label>
                         <select className="form-control" value={pat} disabled={busyAdmin}
                           onChange={e => savePatentability(e.target.value)}>
@@ -255,7 +256,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   </div>
                   <div className="form-row" style={{ marginBottom:10 }}>
                     <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>
-                    <div><strong>{t('detail.impact_level')}:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'–'}</span></div>
+                    <div><strong>{t('detail.impact_level')}<InfoDot term="impact_level" />:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'–'}</span></div>
                   </div>
                   {idea.tangible_benefit   && <div style={{ marginTop:8 }}><strong>{t('detail.tangible')}:</strong> {idea.tangible_benefit}</div>}
                   {idea.intangible_benefit && <div style={{ marginTop:8 }}><strong>{t('detail.intangible')}:</strong> {idea.intangible_benefit}</div>}
@@ -323,7 +324,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                           <div style={{ fontSize:11,color:'var(--subtle)' }}>{t('community.downvotes')}</div>
                         </div>
                         <div style={{ marginLeft:'auto',textAlign:'right' }}>
-                          <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:4 }}>{t('community.score')}</div>
+                          <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:4 }}>{t('community.score')}<InfoDot term="community_score" /></div>
                           <span className={scoreBadgeClass(cScoreVal)} style={{ fontSize:15,padding:'4px 12px' }}>{cScoreVal}/100</span>
                           {idea.ai_score > 0 && <div style={{ fontSize:10,color:'var(--subtle)',marginTop:3 }}>AI: {idea.ai_score} · Votes: {adjStr}</div>}
                         </div>

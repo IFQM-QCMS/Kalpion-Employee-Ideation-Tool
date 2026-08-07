@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { useLang } from '../context/LangContext';
 import { leaderboardApi } from '../services/api';
 import { scoreBadgeClass, engagementIndex } from '../utils/helpers';
+import InfoDot from '../components/InfoDot';
 
 const PERIODS = [
   { val:'all',       label:'lb.all' },
@@ -201,7 +202,7 @@ export default function LeaderboardPage() {
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20 }}>
           {/* Individuals */}
           <div className="card" style={{ gridColumn:'1/3' }}>
-            <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('lb.top_employees')}</div>
+            <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('lb.top_employees')}<InfoDot term="engagement_index" /></div>
 
             {/* Top 3 on a podium, then the rest of the top 5 (and beyond) as rows.
                 The podium repeats ranks 1–3, so the list below starts at 4. */}

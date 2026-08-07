@@ -7,6 +7,7 @@ import { usersApi, ideasApi, settingsApi, scoreApi, brandingApi, categoriesApi, 
 import { formatRole, statusBadge, translateStatus, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import BulkImportModal from '../components/BulkImportModal';
+import InfoDot from '../components/InfoDot';
 
 /*
  * React's `style` prop takes an object, not a CSS string. These were strings
@@ -350,11 +351,11 @@ export default function AdminPage() {
             <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',marginBottom:16 }}>{t('admin.sla_heading')}</div>
             <div className="form-row">
               <div className="form-group">
-                <label>{t('admin.sla_days')}</label>
+                <label>{t('admin.sla_days')}<InfoDot term="sla_days" /></label>
                 <input className="form-control" name="review_sla_days" type="number" min="1" max="90" defaultValue={settings.review_sla_days||7} />
               </div>
               <div className="form-group">
-                <label>{t('admin.escalation_days')}</label>
+                <label>{t('admin.escalation_days')}<InfoDot term="escalation_days" /></label>
                 <input className="form-control" name="escalation_days" type="number" min="1" max="180" defaultValue={settings.escalation_days||14} />
               </div>
             </div>
@@ -364,7 +365,7 @@ export default function AdminPage() {
                 still sees title, impact, score and status in every mode — only
                 the proposal text is governed here. */}
             <div className="form-group" style={{ marginTop:8,maxWidth:420 }}>
-              <label>{t('admin.solution_visibility')}</label>
+              <label>{t('admin.solution_visibility')}<InfoDot term="solution_visibility" /></label>
               <select className="form-control" name="solution_visibility"
                 defaultValue={settings.solution_visibility || 'authors_reviewers'}>
                 <option value="authors_reviewers">{t('admin.sv_authors_reviewers')}</option>
@@ -374,30 +375,30 @@ export default function AdminPage() {
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sv_hint')}</div>
             </div>
 
-            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.flags_heading')}</div>
+            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.flags_heading')}<InfoDot term="feature_flags" /></div>
             <div className="form-row">
-              {[['anonymous_allowed','admin.flag_anonymous'],['public_board_enabled','admin.flag_board'],
-                ['challenges_enabled','admin.flag_challenges'],['email_enabled','admin.flag_email']].map(([k,labelKey]) => (
+              {[['anonymous_allowed','admin.flag_anonymous','flag_anonymous'],['public_board_enabled','admin.flag_board','flag_board'],
+                ['challenges_enabled','admin.flag_challenges','flag_challenges'],['email_enabled','admin.flag_email','flag_email']].map(([k,labelKey,infoTerm]) => (
                 <div key={k} className="form-group">
                   <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
                     <input type="checkbox" name={k} value="1" defaultChecked={settings[k]==='1'} style={{ accentColor:'var(--primary)' }} />
-                    {t(labelKey)}
+                    {t(labelKey)}<InfoDot term={infoTerm} />
                   </label>
                 </div>
               ))}
             </div>
 
-            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.smtp_heading')}</div>
+            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.smtp_heading')}<InfoDot term="smtp" /></div>
             <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_host')}</label><input className="form-control" name="smtp_host" defaultValue={settings.smtp_host||''} /></div>
-              <div className="form-group"><label>{t('admin.smtp_port')}</label><input className="form-control" name="smtp_port" type="number" defaultValue={settings.smtp_port||587} /></div>
+              <div className="form-group"><label>{t('admin.smtp_host')}<InfoDot term="smtp_host" /></label><input className="form-control" name="smtp_host" defaultValue={settings.smtp_host||''} /></div>
+              <div className="form-group"><label>{t('admin.smtp_port')}<InfoDot term="smtp_port" /></label><input className="form-control" name="smtp_port" type="number" defaultValue={settings.smtp_port||587} /></div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_user')}</label><input className="form-control" name="smtp_user" defaultValue={settings.smtp_user||''} /></div>
-              <div className="form-group"><label>{t('admin.smtp_pass')}</label><input className="form-control" name="smtp_pass" type="password" placeholder={t('admin.smtp_pass_ph')} /></div>
+              <div className="form-group"><label>{t('admin.smtp_user')}<InfoDot term="smtp_user" /></label><input className="form-control" name="smtp_user" defaultValue={settings.smtp_user||''} /></div>
+              <div className="form-group"><label>{t('admin.smtp_pass')}<InfoDot term="smtp_pass" /></label><input className="form-control" name="smtp_pass" type="password" placeholder={t('admin.smtp_pass_ph')} /></div>
             </div>
             <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_from')}</label><input className="form-control" name="smtp_from" type="email" defaultValue={settings.smtp_from||''} /></div>
+              <div className="form-group"><label>{t('admin.smtp_from')}<InfoDot term="smtp_from" /></label><input className="form-control" name="smtp_from" type="email" defaultValue={settings.smtp_from||''} /></div>
               <div className="form-group"><label>{t('admin.smtp_from_name')}</label><input className="form-control" name="smtp_from_name" defaultValue={settings.smtp_from_name||'IFQM Ideation'} /></div>
             </div>
 
@@ -748,8 +749,13 @@ const CHAIN_LADDER = ['team_lead','project_lead','manager','senior_manager','exe
 // also make executives part of the chain or let senior managers close ideas.
 const REVIEWER_ROLE_OPTIONS = ['team_lead','project_lead','manager','department_manager','senior_manager','plant_head','executive'];
 const FINAL_ROLE_OPTIONS    = ['manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
-const DEFAULT_REVIEWERS = ['team_lead','project_lead','manager','senior_manager'];
-const DEFAULT_FINALS    = ['executive','admin','super_admin'];
+/*
+ * Must mirror backend/src/services/approvalStages.js. MOM §13.11/§13.12 dropped
+ * super_admin as an approver and moved final authority to Plant Head; leaving
+ * these stale meant the preview advertised a chain the server no longer runs.
+ */
+const DEFAULT_REVIEWERS = ['team_lead','project_lead','manager','department_manager','senior_manager'];
+const DEFAULT_FINALS    = ['plant_head','admin'];
 
 /*
  * ── Approval stages ────────────────────────────────────────────────
@@ -952,7 +958,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14 }}>{t('hier.approval_sub')}</div>
 
         <div className="form-group" style={{ marginBottom:14 }}>
-          <label style={{ fontWeight:500,marginBottom:8,display:'block' }}>{t('hier.mode_label')}</label>
+          <label style={{ fontWeight:500,marginBottom:8,display:'block' }}>{t('hier.mode_label')}<InfoDot term="workflow_mode" /></label>
           <div style={{ display:'flex',gap:20,flexWrap:'wrap' }}>
             <label style={{ display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13 }}>
               <input type="radio" name="approval_mode" value="default" checked={mode==='default'} onChange={() => setMode('default')} />
@@ -975,7 +981,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
             it is the submission itself, not an approval. */}
         {mode === 'stages' && (
           <div style={{ borderLeft:'2px solid var(--primary)',paddingLeft:14,marginBottom:14 }}>
-            <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}</label>
+            <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}<InfoDot term="approval_stages" /></label>
             <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:10 }}>{t('hier.stages_hint')}</div>
 
             <div style={{ display:'flex',flexDirection:'column',gap:6,marginBottom:12 }}>
@@ -1035,21 +1041,21 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         {mode === 'custom' && (
           <div style={{ borderLeft:'2px solid var(--primary)',paddingLeft:14,marginBottom:14 }}>
             <div className="form-group" style={{ marginBottom:12 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.reviewer_roles')}</label>
+              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.reviewer_roles')}<InfoDot term="reviewer_roles" /></label>
               <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
                 {REVIEWER_ROLE_OPTIONS.map(r => roleChip(r, revRoles.includes(r), () => toggleRole(revRoles, setRevRoles, r)))}
               </div>
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.reviewer_hint')}</div>
             </div>
             <div className="form-group" style={{ marginBottom:12 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.final_roles')}</label>
+              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.final_roles')}<InfoDot term="final_roles" /></label>
               <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
                 {FINAL_ROLE_OPTIONS.map(r => roleChip(r, finRoles.includes(r), () => toggleRole(finRoles, setFinRoles, r)))}
               </div>
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.final_hint')}</div>
             </div>
             <div className="form-group" style={{ marginBottom:8,maxWidth:220 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.threshold')}</label>
+              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.threshold')}<InfoDot term="approval_threshold" /></label>
               <input className="form-control" type="number" min="1" max="100" value={threshold}
                 onChange={e => setThreshold(e.target.value)}
                 onBlur={() => setThreshold(v => Math.max(1, Math.min(100, parseInt(v, 10) || 100)))} />
@@ -1059,7 +1065,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         )}
 
         <div style={{ fontSize:12,background:'var(--bg)',border:'1px dashed var(--border)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14 }}>
-          <strong style={{ fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'var(--subtle)' }}>{t('hier.chain_preview')}</strong>
+          <strong style={{ fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'var(--subtle)' }}>{t('hier.chain_preview')}<InfoDot term="chain_preview" /></strong>
           <div style={{ marginTop:4,color:'var(--text)' }}>{chainPreview}</div>
         </div>
 
@@ -1074,7 +1080,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
 
       {/* ── Reporting Structure ── */}
       <div className="card">
-        <div className="card-title">{t('hier.org_structure')}</div>
+        <div className="card-title">{t('hier.org_structure')}<InfoDot term="reporting_structure" /></div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14 }}>{t('hier.org_hint')}</div>
         {truncated && (
           <div className="alert alert-warning" style={{ marginBottom:12,fontSize:12 }}>
@@ -1187,7 +1193,7 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           {error && <div className="alert alert-danger" id="user-form-error">{error}</div>}
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_name')} *</label><input className="form-control" value={name} onChange={e=>setName(e.target.value)} id="uf-name" /></div>
-            <div className="form-group"><label>{t('admin.uf_emp_id')} *</label><input className="form-control" value={empId} onChange={e=>setEmpId(e.target.value)} id="uf-emp-id" /></div>
+            <div className="form-group"><label>{t('admin.uf_emp_id')} *<InfoDot term="employee_id" /></label><input className="form-control" value={empId} onChange={e=>setEmpId(e.target.value)} id="uf-emp-id" /></div>
           </div>
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_email')} *</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
@@ -1195,7 +1201,7 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           </div>
           {!isEdit && (
             <div className="form-group" id="uf-dob-group">
-              <label>{t('admin.uf_dob')} *</label>
+              <label>{t('admin.uf_dob')} *<InfoDot term="year_of_birth" /></label>
               <input className="form-control" type="date" value={dob} onChange={e=>setDob(e.target.value)} id="uf-dob" />
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_dob_hint')}</div>
             </div>
@@ -1340,6 +1346,7 @@ function ApprovedIdeasTab({ t, showToast }) {
 function IntegrationTab({ t, showToast }) {
   const [config,  setConfig]  = useState(null);
   const [apiKey,  setApiKey]  = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -1352,17 +1359,21 @@ function IntegrationTab({ t, showToast }) {
       const res = await integrationApi.getConfig();
       const c = res.data.config || {};
       setConfig(c); setEnabled(!!c.enabled); setApiKey('');
+      // Show the override only; a blank field means "use the server default".
+      setBaseUrl(c.base_url_custom ? c.base_url : '');
     } catch { showToast(t('msg.network_error'), 'danger'); }
     setLoading(false);
   }
   async function save() {
     setSaving(true);
     try {
-      const body = { enabled };
+      const body = { enabled, base_url: baseUrl.trim() };
       if (apiKey.trim()) body.api_key = apiKey.trim(); // sent only when actually typed
       const res = await integrationApi.saveConfig(body);
-      if (res.data.success) { showToast(t('admin.qcms_saved'), 'success'); setConfig(res.data.config); setApiKey(''); }
-      else showToast(res.data.error || t('msg.error'), 'danger');
+      if (res.data.success) {
+        showToast(t('admin.qcms_saved'), 'success'); setApiKey('');
+        const c = res.data.config; setConfig(c); setBaseUrl(c.base_url_custom ? c.base_url : '');
+      } else showToast(res.data.error || t('msg.error'), 'danger');
     } catch (err) { showToast(err.response?.data?.error || t('msg.server_error'), 'danger'); }
     setSaving(false);
   }
@@ -1378,9 +1389,10 @@ function IntegrationTab({ t, showToast }) {
   }
 
   if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
-  // Endpoint is derived from the .env base URL (read-only here). Tolerate a base
-  // that already ends in /ideas so we never show /ideas/ideas.
-  const rawBase = (config?.base_url || '').replace(/\/+$/, '');
+  // Preview the endpoint from what is typed (falling back to the server default),
+  // so the admin sees where ideas will go before saving. Tolerate a base that
+  // already ends in /ideas so we never show /ideas/ideas.
+  const rawBase = (baseUrl.trim() || config?.default_base_url || '').replace(/\/+$/, '');
   const ideasUrl = /\/ideas$/i.test(rawBase) ? rawBase : `${rawBase}/ideas`;
   const endpoint = `POST ${ideasUrl}\nAuthorization: Bearer qcms_live_...\nContent-Type: application/json`;
 
@@ -1397,7 +1409,7 @@ function IntegrationTab({ t, showToast }) {
       </div>
 
       <div className="form-group">
-        <label>{t('admin.qcms_api_key')}</label>
+        <label>{t('admin.qcms_api_key')}<InfoDot term="qcms_api_key" /></label>
         <input className="form-control" type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)}
           autoComplete="off"
           placeholder={config?.api_key_set ? `•••••••• (${t('admin.qcms_key_set')})` : t('admin.qcms_key_ph')} />
@@ -1406,8 +1418,11 @@ function IntegrationTab({ t, showToast }) {
 
       <div className="form-group">
         <label>{t('admin.qcms_base_url')}</label>
-        <div className="form-control" style={{ background:'var(--panel-bg)',color:'var(--text-muted)',cursor:'default',userSelect:'all' }}>{ideasUrl}</div>
-        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.qcms_base_managed')}</div>
+        <input className="form-control" type="url" value={baseUrl} onChange={e=>setBaseUrl(e.target.value)}
+          autoComplete="off" spellCheck={false} placeholder={config?.default_base_url} />
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
+          {t('admin.qcms_base_hint', { url: config?.default_base_url || '' })}
+        </div>
       </div>
 
       <div style={{ display:'flex',gap:10,marginTop:8 }}>

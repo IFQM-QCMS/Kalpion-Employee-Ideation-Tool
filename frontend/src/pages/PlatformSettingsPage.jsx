@@ -4,6 +4,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
+import InfoDot from '../components/InfoDot';
 
 /*
  * Platform → Settings. Four tabs:
@@ -29,35 +30,6 @@ const fmtBytes = (b) => {
 };
 
 
-/**
- * MOM §12.13 — the "i" next to SLA and Escalation Days.
- *
- * Both numbers look interchangeable and are not, and getting them the wrong way
- * round quietly changes when ideas move. A <details>-free inline tooltip keeps
- * it available to keyboard and touch users, which a title attribute alone does
- * not (title never appears on a touch device).
- */
-function InfoDot({ text }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <span style={{ position:'relative', display:'inline-flex', marginLeft:6 }}>
-      <button type="button" aria-label={text} aria-expanded={open}
-        onClick={() => setOpen(v => !v)} onBlur={() => setOpen(false)}
-        style={{ width:16,height:16,borderRadius:'50%',border:'1px solid var(--border-strong)',
-                 background:'var(--surface-2)',color:'var(--text-muted)',fontSize:10.5,
-                 fontWeight:800,cursor:'pointer',lineHeight:1,padding:0,
-                 display:'inline-flex',alignItems:'center',justifyContent:'center' }}>i</button>
-      {open && (
-        <span role="tooltip" style={{ position:'absolute',top:'120%',left:0,zIndex:30,width:250,
-          background:'var(--surface)',border:'1px solid var(--border)',borderRadius:9,
-          boxShadow:'var(--shadow-lg)',padding:'9px 11px',fontSize:11.5,lineHeight:1.5,
-          color:'var(--text)',fontWeight:400,textTransform:'none',letterSpacing:0 }}>
-          {text}
-        </span>
-      )}
-    </span>
-  );
-}
 
 export default function PlatformSettingsPage() {
   const { t } = useLang();
@@ -115,12 +87,12 @@ function DefaultsTab() {
 
       <div className="form-row">
         <div className="form-group">
-          <label>{t('admin.sla_days')}<InfoDot text={t('pa.sla_info')} /></label>
+          <label>{t('admin.sla_days')}<InfoDot term="sla_days" /></label>
           <input className="form-control" type="number" min="1" max="365" value={d.review_sla_days || ''}
             onChange={(e) => set('review_sla_days', e.target.value)} />
         </div>
         <div className="form-group">
-          <label>{t('admin.escalation_days')}<InfoDot text={t('pa.escalation_info')} /></label>
+          <label>{t('admin.escalation_days')}<InfoDot term="escalation_days" /></label>
           <input className="form-control" type="number" min="1" max="365" value={d.escalation_days || ''}
             onChange={(e) => set('escalation_days', e.target.value)} />
         </div>
@@ -214,12 +186,12 @@ function OrgSettingsTab() {
         <>
           <div className="form-row">
             <div className="form-group">
-              <label>{t('admin.sla_days')}<InfoDot text={t('pa.sla_info')} /></label>
+              <label>{t('admin.sla_days')}<InfoDot term="sla_days" /></label>
               <input className="form-control" type="number" min="1" max="365" value={s.review_sla_days || ''}
                 onChange={(e) => set('review_sla_days', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t('admin.escalation_days')}<InfoDot text={t('pa.escalation_info')} /></label>
+              <label>{t('admin.escalation_days')}<InfoDot term="escalation_days" /></label>
               <input className="form-control" type="number" min="1" max="365" value={s.escalation_days || ''}
                 onChange={(e) => set('escalation_days', e.target.value)} />
             </div>
@@ -240,21 +212,21 @@ function OrgSettingsTab() {
           <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.smtp_heading')}</div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t('admin.smtp_host')}</label>
+              <label>{t('admin.smtp_host')}<InfoDot term="smtp_host" /></label>
               <input className="form-control" value={s.smtp_host || ''} onChange={(e) => set('smtp_host', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t('admin.smtp_port')}</label>
+              <label>{t('admin.smtp_port')}<InfoDot term="smtp_port" /></label>
               <input className="form-control" type="number" value={s.smtp_port || ''} onChange={(e) => set('smtp_port', e.target.value)} />
             </div>
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t('admin.smtp_user')}</label>
+              <label>{t('admin.smtp_user')}<InfoDot term="smtp_user" /></label>
               <input className="form-control" value={s.smtp_user || ''} onChange={(e) => set('smtp_user', e.target.value)} />
             </div>
             <div className="form-group">
-              <label>{t('admin.smtp_pass')}</label>
+              <label>{t('admin.smtp_pass')}<InfoDot term="smtp_pass" /></label>
               <input className="form-control" type="password" value={smtpPass} onChange={(e) => setSmtpPass(e.target.value)}
                 placeholder={s.smtp_pass_set ? t('ps.smtp_pass_set') : t('ps.smtp_pass_unset')} />
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('ps.smtp_pass_hint')}</div>

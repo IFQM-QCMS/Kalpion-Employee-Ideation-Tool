@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { ideasApi, votesApi, saveBlob } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate, communityScore } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
+import InfoDot from '../components/InfoDot';
 
 /* Escape for the print window — that HTML is built by string concatenation, so
    React's automatic escaping does not apply to it. */
@@ -144,7 +145,7 @@ export default function AllIdeasPage() {
           <input type="checkbox" checked={archived === '1'}
             onChange={e => setArchived(e.target.checked ? '1' : '')}
             style={{ accentColor:'var(--primary)' }} />
-          {t('idea.show_archived')}
+          {t('idea.show_archived')}<InfoDot term="archived" />
         </label>
 
         {/* §13.3 — export what is on screen. Client-side: the rows are already
@@ -172,7 +173,7 @@ export default function AllIdeasPage() {
               <th>{t('table.submitter')}</th>
               <th>{t('table.dept')}</th>
               <th>{t('table.impact')}</th>
-              <th>{t('table.score')}</th>
+              <th>{t('table.score')}<InfoDot term="community_score" /></th>
               <th>{t('table.votes')}</th>
               <th>{t('table.status')}</th>
               <th>{t('table.date')}</th>

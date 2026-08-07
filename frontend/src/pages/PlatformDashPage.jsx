@@ -5,6 +5,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi, saveBlob } from '../services/api';
 import { Donut, Legend, colorAt, STATUS_COLORS } from '../components/Charts';
+import InfoDot from '../components/InfoDot';
 
 /*
  * Platform → Organizations (tenant management).
@@ -277,9 +278,9 @@ export default function PlatformDashPage() {
                   <th>{t('pa.col_admin')}</th>
                   <th>{t('pa.col_users')}</th>
                   <th>{t('pa.col_ideas')}</th>
-                  <th>{t('pa.qcms_pushed')}</th>
-                  <th>{t('table.status')}</th>
-                  <th>{t('pa.activity')}</th>
+                  <th>{t('pa.qcms_pushed')}<InfoDot term="qcms_pushed" /></th>
+                  <th>{t('table.status')}<InfoDot term="on_hold" /></th>
+                  <th>{t('pa.activity')}<InfoDot term="activity_state" /></th>
                   <th>{t('platform.last_activity')}</th>
                   <th style={{ textAlign:'right' }}>{t('pa.col_actions')}</th>
                 </tr>
@@ -443,7 +444,7 @@ function CreateOrgModal({ onClose, onCreated, t }) {
           {error && <div className="alert alert-danger" id="create-org-error">{error}</div>}
           <div className="form-group"><label>{t('pa.org_name')} *</label>
             <input className="form-control" id="co-org-name" value={orgName} onChange={e => handleOrgNameChange(e.target.value)} /></div>
-          <div className="form-group"><label>{t('pa.org_slug')} *</label>
+          <div className="form-group"><label>{t('pa.org_slug')} *<InfoDot term="org_code" /></label>
             <input className="form-control" id="co-slug" value={slug}
               onChange={e => { setSlug(e.target.value); setSlugEdited(true); }} style={{ textTransform:'lowercase' }} />
             <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('pa.slug_hint')}{slug||'your-code'}</div>
