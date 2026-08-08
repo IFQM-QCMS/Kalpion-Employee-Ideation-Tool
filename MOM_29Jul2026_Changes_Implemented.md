@@ -356,7 +356,7 @@ index, slug, feature flag. Somebody running a forty-person workshop has no reaso
 to know any of those words, and a setting whose meaning has to be guessed either
 gets set wrong or gets left alone.
 
-There are now 58 small "i" buttons next to the technical terms across the app,
+There are now 60 small "i" buttons next to the technical terms across the app,
 covering 43 different concepts. Each one explains, in ordinary English, what the
 setting does, what happens if you get it wrong, and gives a real example or
 number where that helps. None of them explains a term by using another technical

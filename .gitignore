@@ -20,6 +20,10 @@ build/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# Python bytecode from the document generators in docs/
+__pycache__/
+*.pyc
+
 # ── Logs / OS / editor noise ───────────────────────────────────────
 *.log
 npm-debug.log*
