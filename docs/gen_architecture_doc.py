@@ -43,7 +43,8 @@ PRODUCT = "IFQM Employee Ideation Tool (EIT)"
 VERSION = "1.0"
 STATUS = "First complete version - for review"
 ISSUE_DATE = date.today().strftime("%d %B %Y")
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "Software Architecture.docx")
+# Writes alongside the other documents in docs/, not into the project root.
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Software Architecture.docx")
 
 BLACK = RGBColor(0, 0, 0)
 GREY = RGBColor(0x59, 0x59, 0x59)

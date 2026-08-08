@@ -234,6 +234,38 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     req.isPlatformAdmin = true;
     req.master = masterDb();
     req.user = await loadLivePlatformAdmin(req, payload);
+    /*
+     * A platform admin belongs to no organisation, so req.db is deliberately
+     * never set for them. Any tenant-scoped route therefore reached the service
+     * with an undefined connection and died with a TypeError, which surfaced as
+     * an opaque 500 and a stack trace in the log.
+     *
+     * No data ever leaked - there was no database to read from - but "internal
+     * server error" is the wrong answer to a request that is simply not for
+     * this kind of account. Refuse it plainly instead.
+     */
+    const path = String(req.originalUrl || req.url || '').split('?')[0];
+
+    /*
+     * Two endpoints deliberately answer a platform admin with an empty or
+     * default result instead of an error, because the shared app shell calls
+     * them for whoever is signed in. That decision predates this guard and is
+     * locked in by a test ("notification polling as a platform admin returns
+     * empty, not 500"), so they are excluded here rather than overridden.
+     * See notificationController for the reasoning.
+     */
+    const handlesMissingTenant = ['/api/notifications', '/api/branding'];
+    const tenantFree = path.startsWith('/api/platform')
+      || path.startsWith('/api/auth')
+      || path === '/api/health' || path === '/api/ready'
+      || handlesMissingTenant.some((p) => path.startsWith(p));
+
+    if (!tenantFree) {
+      return next(forbidden(
+        'This is a platform administrator account. It has no organisation, so '
+        + 'organisation screens are not available to it.'
+      ));
+    }
   } else {
     await attachTenantDb(req, payload.org_slug);
     // Authoritative role/status come from the DB, not the 8-hour-old token.

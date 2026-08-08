@@ -10,7 +10,10 @@ export function NotifProvider({ children }) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   const loadNotifications = useCallback(async () => {
-    if (!user) return;
+    // A platform administrator belongs to no organisation, so this endpoint
+    // has no database to answer from and correctly refuses. Skipping the call
+    // avoids a pointless request and a 403 in the log every 60 seconds.
+    if (!user || user.role === 'platform_admin') return;
     try {
       const res = await notifApi.list();
       if (res.data.success) {
@@ -22,7 +25,7 @@ export function NotifProvider({ children }) {
 
   // Poll every 60 seconds
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.role === 'platform_admin') return;
     loadNotifications();
     const interval = setInterval(loadNotifications, 60000);
     return () => clearInterval(interval);

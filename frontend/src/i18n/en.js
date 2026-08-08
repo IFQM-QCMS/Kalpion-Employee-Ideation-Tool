@@ -1122,5 +1122,4 @@ export default {
 
   'pa.chart_status':'Organisation Status',
   'pa.chart_ideas_by_org':'Ideas by Organisation',
-  'admin.qcms_base_managed':'Managed in the .env file (QCMS_BASE_URL) — contact your operator to change it.',
 };

@@ -25,7 +25,10 @@ export function BrandingProvider({ children }) {
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    if (!user) return;
+    // A platform administrator belongs to no organisation, so this endpoint
+    // has no database to answer from and correctly refuses. Skipping the call
+    // avoids a pointless request and a 403 in the log on every page load.
+    if (!user || user.role === 'platform_admin') return;
     setLoading(true);
     try {
       const res = await brandingApi.get();
@@ -43,7 +46,7 @@ export function BrandingProvider({ children }) {
   }, [user?.org_slug, user?.id]);
 
   useEffect(() => {
-    if (!user) { setLogo(null); setOrgName(''); return; }
+    if (!user || user.role === 'platform_admin') { setLogo(null); setOrgName(''); return; }
     setOrgName(user.org_name || '');
     refresh();
   }, [user?.org_slug, user?.id]);

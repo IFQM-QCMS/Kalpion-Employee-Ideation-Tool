@@ -51,7 +51,7 @@ ifqm/
 │   └── test/           # HTTP invariant/integration suite
 ├── frontend/           # React + Vite SPA (runs on :5173)
 │   └── src/            # pages · components · context · i18n · services
-└── docs/               # USER_GUIDE, DEPLOYMENT, project overview
+└── docs/               # all documentation, generated PDFs and sample data
 ```
 
 ## Quick start (development)
@@ -90,9 +90,47 @@ The server refuses to start in `production` with missing or unsafe secrets.
 
 ## Documentation
 
+Everything lives in [`docs/`](docs/). The project root holds only what has to be
+there: this file, `render.yaml` (the deployment host reads it from the root),
+and configuration.
+
+**Start here**
+
+- [`docs/Software Architecture.docx`](docs/) — the full architecture and design
+  document: requirements, diagrams, data model, API, security, operations
+- [`docs/TECHNICAL_MANUAL.md`](docs/TECHNICAL_MANUAL.md) — for whoever inherits
+  the code: how it fits together and why the non-obvious parts are that way
 - [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) — end-user guide (roles, submitting,
   reviewing, admin settings)
+
+**Deploying and running**
+
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production deployment
+- [`docs/FREE_DEPLOY.md`](docs/FREE_DEPLOY.md) — zero-cost deployment
+  (Vercel + Render + Aiven), including the day-two workflow
+- [`docs/HOSTING_COMPARISON.md`](docs/HOSTING_COMPARISON.md) — Azure vs AWS vs
+  Hostinger, with a recommendation
+
+**Design and data**
+
+- [`docs/PROJECT_FLOWCHART.md`](docs/PROJECT_FLOWCHART.md) — flows and timeline
+- [`docs/DATA_AND_API_PRIVACY.md`](docs/DATA_AND_API_PRIVACY.md) — what is
+  stored, who can read it, and what is deliberately not collected
+- [`docs/VIEW_COMPARISON.md`](docs/VIEW_COMPARISON.md) — All Ideas vs the Idea Board
+
+**Meeting follow-up**
+
+- [`docs/MOM_29Jul2026_Changes_Implemented.md`](docs/MOM_29Jul2026_Changes_Implemented.md)
+  — what was built after the 29 July review, in plain English
+- [`docs/MOM_29Jul2026_Implementation_Status.md`](docs/MOM_29Jul2026_Implementation_Status.md)
+  — every action item and its state
+
+**Generated files** (rebuild with the scripts in `docs/`)
+
+- `docs/EIT_User_Guide.pdf`, `docs/EIT_TestCases_Simple.pdf`,
+  `docs/QCMS_TestCases_Simple.pdf`
+- `docs/IFQM_Demo_Employees_500.xlsx` — 500 fictional employees for demos and
+  testing (`node backend/scripts/generate-demo-employees.js`)
 - [`docs/IFQM_Project_Overview.pptx`](docs/IFQM_Project_Overview.pptx) — project
   overview presentation
 

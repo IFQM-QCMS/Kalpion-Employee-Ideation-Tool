@@ -2,7 +2,7 @@
  * Generate a dummy employee sheet for the bulk importer.
  *
  *   node scripts/generate-demo-employees.js [count] [outfile]
- *   node scripts/generate-demo-employees.js 500 ../IFQM_Demo_Employees_500.xlsx
+ *   node scripts/generate-demo-employees.js 500 ../docs/IFQM_Demo_Employees_500.xlsx
  *
  * Why this exists: demonstrating the tool, load-testing the user list, and
  * exercising the approval chain all need a realistic organisation, and typing
@@ -205,7 +205,9 @@ function build(count) {
 
 async function main() {
   const count = Math.max(1, parseInt(process.argv[2], 10) || 500);
-  const out = path.resolve(__dirname, '..', process.argv[3] || `../IFQM_Demo_Employees_${count}.xlsx`);
+  // Defaults into docs/, where the sample sheets and the rest of the project
+  // documentation live. Pass a second argument to write somewhere else.
+  const out = path.resolve(__dirname, '..', process.argv[3] || `../docs/IFQM_Demo_Employees_${count}.xlsx`);
   const rows = build(count);
 
   const wb = new ExcelJS.Workbook();
