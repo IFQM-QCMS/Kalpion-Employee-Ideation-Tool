@@ -35,5 +35,10 @@ router.post('/implementation', requireRole(...IMPL_ROLES), ideas.updateImplement
 // that trusts its caller's role has no defence if a new route forgets to.
 router.post('/archive', requireRole('admin', 'super_admin'), ideas.setArchived);
 router.post('/patentability', requireRole('admin', 'super_admin'), ideas.setPatentability);
+router.post('/bulk-archive', requireRole('admin', 'super_admin'), ideas.bulkArchive);
+
+// The patentable tick is not an admin decision - a submitter may raise it on
+// their own idea and a reviewer on any idea. The service does the real check.
+router.post('/patentable-flag', requireAuth, ideas.setPatentableFlag);
 
 export default router;

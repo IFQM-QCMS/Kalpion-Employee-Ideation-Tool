@@ -1,8 +1,8 @@
 {
-  "generated": "2026-07-28 17:35:05",
+  "generated": "2026-08-09 16:14:58",
   "total": 228,
-  "pass": 228,
-  "fail": 0,
+  "pass": 227,
+  "fail": 1,
   "results": [
     {
       "id": "TC-AUTH-001",
@@ -11,7 +11,7 @@
       "expected": "Login succeeds, JWT issued, role = admin",
       "actual": "Login ok, role=admin",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:45"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-002",
@@ -20,7 +20,7 @@
       "expected": "Login succeeds, role = employee",
       "actual": "Login ok, role=employee",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:45"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-003",
@@ -29,7 +29,7 @@
       "expected": "Login succeeds, role = platform_admin",
       "actual": "role=platform_admin",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:45"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-004",
@@ -38,7 +38,7 @@
       "expected": "Login blocked, generic error, no token",
       "actual": "Blocked 401: Invalid email/phone or password. 4 attempt(s) remaining.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:45"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-005",
@@ -47,7 +47,7 @@
       "expected": "Same generic error as wrong-password (no account-existence leak)",
       "actual": "Identical generic message (401)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:46"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-006",
@@ -56,7 +56,7 @@
       "expected": "Validation error, login blocked (not a 500)",
       "actual": "Rejected 400: Email and password are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:46"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-007",
@@ -65,7 +65,7 @@
       "expected": "Safely rejected, no error/crash exposed",
       "actual": "Safe 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:46"
+      "ts": "2026-08-09 16:14:46"
     },
     {
       "id": "TC-AUTH-008",
@@ -74,7 +74,7 @@
       "expected": "Login blocked, account-inactive handled",
       "actual": "Blocked 401: Invalid email/phone or password. 4 attempt(s) remaining.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:47"
+      "ts": "2026-08-09 16:14:47"
     },
     {
       "id": "TC-AUTH-009",
@@ -83,7 +83,7 @@
       "expected": "Rejected 401 — invalid signature grants no access",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:47"
+      "ts": "2026-08-09 16:14:47"
     },
     {
       "id": "TC-AUTH-010",
@@ -92,7 +92,7 @@
       "expected": "Rejected 401",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:47"
+      "ts": "2026-08-09 16:14:47"
     },
     {
       "id": "TC-AUTH-011",
@@ -101,7 +101,7 @@
       "expected": "Attempts are counted and the account is throttled/locked",
       "actual": "Throttle msg: Too many failed attempts. Please try again in 15 minutes.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:47"
+      "ts": "2026-08-09 16:14:47"
     },
     {
       "id": "TC-AUTH-012",
@@ -110,7 +110,7 @@
       "expected": "Generic success, no account-existence leak",
       "actual": "Status 200: ok",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:47"
+      "ts": "2026-08-09 16:14:47"
     },
     {
       "id": "TC-PLAT-001",
@@ -119,7 +119,7 @@
       "expected": "Tenant + org-admin account created",
       "actual": "Status 200: created",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-002",
@@ -128,7 +128,7 @@
       "expected": "Rejected — slug already in use",
       "actual": "Rejected 409: Organization code already in use.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-003",
@@ -137,7 +137,7 @@
       "expected": "Validation error listing missing fields",
       "actual": "Rejected 400: All fields are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-004",
@@ -146,7 +146,7 @@
       "expected": "Returns the tenant registry",
       "actual": "Status 200, 3 tenants",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-005",
@@ -155,7 +155,7 @@
       "expected": "Status transitions suspended → active",
       "actual": "suspend=200, reactivate=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-006",
@@ -164,7 +164,7 @@
       "expected": "Blocked — confirmation mismatch",
       "actual": "Blocked 400: Type the org code \"orgb\" to confirm deletion.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-007",
@@ -173,7 +173,7 @@
       "expected": "Rejected — target is not that org's admin",
       "actual": "Rejected 404: No admin account with that email in this organisation.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-008",
@@ -182,7 +182,7 @@
       "expected": "Forbidden — platform scope only",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-009",
@@ -191,7 +191,7 @@
       "expected": "Rejected for not meeting policy",
       "actual": "Rejected 400: Password must be at least 12 characters.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-PLAT-010",
@@ -200,7 +200,7 @@
       "expected": "Blocked — cannot remove self",
       "actual": "Blocked 400: You cannot delete your own account.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-001",
@@ -209,7 +209,7 @@
       "expected": "User created with a derived temporary password",
       "actual": "Status 200: created",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-002",
@@ -218,7 +218,7 @@
       "expected": "Validation error — email required",
       "actual": "Rejected 400: Name, email, and employee ID are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-003",
@@ -227,7 +227,7 @@
       "expected": "Rejected — email already registered",
       "actual": "Rejected 409: Email or employee ID already exists.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-004",
@@ -236,7 +236,7 @@
       "expected": "Forbidden — admin only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-005",
@@ -245,7 +245,7 @@
       "expected": "Returns the org user list",
       "actual": "Status 200, 3 users",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-USER-006",
@@ -254,7 +254,7 @@
       "expected": "Row-level error reported, not a crash",
       "actual": "Status 200: previewed",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-001",
@@ -263,7 +263,7 @@
       "expected": "Idea accepted, id returned",
       "actual": "Status 200: id=3",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-002",
@@ -272,7 +272,7 @@
       "expected": "Validation error — title required",
       "actual": "Rejected 400: Title, present situation and proposed solution are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-003",
@@ -281,7 +281,7 @@
       "expected": "Stored safely / escaped, no script execution, no crash",
       "actual": "Status 200 (stored)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-004",
@@ -290,7 +290,7 @@
       "expected": "Rejected with validation, not a server crash",
       "actual": "Handled 200: accepted",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-005",
@@ -299,7 +299,7 @@
       "expected": "Returns the idea record",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-006",
@@ -308,7 +308,7 @@
       "expected": "Returns a list",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-007",
@@ -317,7 +317,7 @@
       "expected": "Returns status counts / totals",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-IDEA-008",
@@ -326,7 +326,7 @@
       "expected": "Rejected 401",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-001",
@@ -335,7 +335,7 @@
       "expected": "Upvote recorded",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-002",
@@ -344,7 +344,7 @@
       "expected": "Vote toggles off (idempotent), no double count",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-003",
@@ -353,7 +353,7 @@
       "expected": "Rating stored",
       "actual": "Status 200: rated",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-004",
@@ -362,7 +362,7 @@
       "expected": "Rejected — rating must be 1–5",
       "actual": "Rejected 400: Invalid request — idea_id and rating (1–5) required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-005",
@@ -371,7 +371,7 @@
       "expected": "Rejected — vote_type must be up/down",
       "actual": "Rejected 400: idea_id and vote_type (up/down) required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-VOTE-006",
@@ -380,7 +380,7 @@
       "expected": "Rejected 401",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CMNT-001",
@@ -389,7 +389,7 @@
       "expected": "Comment created",
       "actual": "Status 200: added",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CMNT-002",
@@ -398,7 +398,7 @@
       "expected": "Rejected — content required",
       "actual": "Rejected 400: Comment content cannot be empty.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CMNT-003",
@@ -407,7 +407,7 @@
       "expected": "Rejected — length cap enforced",
       "actual": "Rejected 400: Comment cannot exceed 1000 characters.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CMNT-004",
@@ -416,7 +416,7 @@
       "expected": "Not found",
       "actual": "Status 404",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CMNT-005",
@@ -425,7 +425,7 @@
       "expected": "Stored safely / escaped on render, no crash",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-RVW-001",
@@ -434,7 +434,7 @@
       "expected": "Idea moves to Approved with a workflow entry",
       "actual": "Status 200: approved",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-RVW-002",
@@ -443,7 +443,7 @@
       "expected": "Forbidden — cannot review own idea",
       "actual": "Status 403: Insufficient permissions",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-RVW-003",
@@ -452,7 +452,7 @@
       "expected": "Rejected — invalid decision",
       "actual": "Rejected 400: Invalid request.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-RVW-004",
@@ -461,7 +461,7 @@
       "expected": "Not found",
       "actual": "Status 404",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-RVW-005",
@@ -470,7 +470,7 @@
       "expected": "Idempotency guard — no duplicate workflow entry",
       "actual": "Approved workflow rows: 1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CAT-001",
@@ -479,7 +479,7 @@
       "expected": "Category created",
       "actual": "Status 200: created",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CAT-002",
@@ -488,7 +488,7 @@
       "expected": "Returns the category list",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CAT-003",
@@ -497,7 +497,7 @@
       "expected": "Forbidden — admin only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-CAT-004",
@@ -506,7 +506,7 @@
       "expected": "Challenge created",
       "actual": "Status 200: created",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-ANL-001",
@@ -515,7 +515,7 @@
       "expected": "Returns aggregate metrics",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-ANL-002",
@@ -524,7 +524,7 @@
       "expected": "Returns the audit trail",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-ANL-003",
@@ -533,7 +533,7 @@
       "expected": "Returns a downloadable analytics export",
       "actual": "Status 200, type=text/html; charset=utf-8",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-ANL-004",
@@ -542,7 +542,7 @@
       "expected": "Returns a ranked list",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-NTF-001",
@@ -551,7 +551,7 @@
       "expected": "Returns the notification list",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-NTF-002",
@@ -560,7 +560,7 @@
       "expected": "Marked read, ok",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-NTF-003",
@@ -569,7 +569,7 @@
       "expected": "Rejected 401",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-EXP-001",
@@ -578,7 +578,7 @@
       "expected": "Returns a CSV download",
       "actual": "Status 200, type=text/csv; charset=utf-8",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:49"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-EXP-002",
@@ -587,7 +587,7 @@
       "expected": "Returns a PDF (200)",
       "actual": "Status 200, type=application/pdf",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-EXP-003",
@@ -596,7 +596,7 @@
       "expected": "Blocked — tenant boundary",
       "actual": "Status 404",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-BRND-001",
@@ -605,7 +605,7 @@
       "expected": "Returns branding config",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-BRND-002",
@@ -614,7 +614,7 @@
       "expected": "Forbidden — admin only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-BRND-003",
@@ -623,7 +623,7 @@
       "expected": "Saved; password field masked/omitted on read",
       "actual": "Secret not echoed",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SUP-001",
@@ -632,7 +632,7 @@
       "expected": "Ticket created",
       "actual": "Status 200: id=undefined",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SUP-002",
@@ -641,7 +641,7 @@
       "expected": "Blocked — tenant isolation",
       "actual": "Status 404",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SUP-003",
@@ -650,7 +650,7 @@
       "expected": "Internal message not visible to org users",
       "actual": "Internal note hidden",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-001",
@@ -659,7 +659,7 @@
       "expected": "Saved and enabled",
       "actual": "Status 200: saved",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-002",
@@ -668,7 +668,7 @@
       "expected": "Key returned masked (••••), never in clear",
       "actual": "Key masked",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-003",
@@ -677,7 +677,7 @@
       "expected": "Saved for this tenant; blank restores the environment default",
       "actual": "Override saved and cleared",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-004",
@@ -686,7 +686,7 @@
       "expected": "Rejected (400) — ideas are never sent to a bad endpoint",
       "actual": "Status 400",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-005",
@@ -695,7 +695,7 @@
       "expected": "Forbidden — admin only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-006",
@@ -704,7 +704,7 @@
       "expected": "Returns approved ideas",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-QCMS-007",
@@ -713,7 +713,7 @@
       "expected": "Forbidden — admin only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SEC-001",
@@ -722,7 +722,7 @@
       "expected": "Cross-tenant content never exposed (own-tenant record or 404)",
       "actual": "No cross-tenant content (status 200)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SEC-002",
@@ -731,7 +731,7 @@
       "expected": "Forbidden",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SEC-003",
@@ -740,7 +740,7 @@
       "expected": "Handled safely, no 500/leak",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SEC-004",
@@ -749,7 +749,7 @@
       "expected": "Rejected cleanly (413/400), not a crash",
       "actual": "Status 413",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SEC-005",
@@ -758,7 +758,7 @@
       "expected": "Liveness ok; readiness reports DB reachability",
       "actual": "health=200, ready=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-001",
@@ -767,7 +767,7 @@
       "expected": "Rejected 401 — the verifier pins HS256, the token cannot choose",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-002",
@@ -776,7 +776,7 @@
       "expected": "Rejected 401 — signature must verify against the server secret",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-003",
@@ -785,7 +785,7 @@
       "expected": "Rejected 401 with expired flag, no access",
       "actual": "Status 401: Session expired (expired flag)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-004",
@@ -794,7 +794,7 @@
       "expected": "Role is read from the database row, not the token — forbidden",
       "actual": "Status 403: Insufficient permissions",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-005",
@@ -803,7 +803,7 @@
       "expected": "Forbidden — role change is admin-only and the stored role is unchanged",
       "actual": "Status 403, stored role=employee",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-006",
@@ -812,7 +812,7 @@
       "expected": "Mass-assignment ignored — role and points unchanged",
       "actual": "role=employee, points=75 (unchanged)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-007",
@@ -821,7 +821,7 @@
       "expected": "Rejected 401 — a password change kills tokens issued earlier",
       "actual": "before=200, after password change=401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-008",
@@ -830,7 +830,7 @@
       "expected": "Rejected 401 on the very next request — status is re-read per request",
       "actual": "before=200, after deactivation=401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-009",
@@ -839,7 +839,7 @@
       "expected": "Rejected 401 — no ghost sessions",
       "actual": "Status 401: Your account no longer exists.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-010",
@@ -848,7 +848,7 @@
       "expected": "Blocked 403 everywhere except the change-password / support allow-list",
       "actual": "ideas=403 (You must set a new password before continuing.), me=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-011",
@@ -857,7 +857,7 @@
       "expected": "Never present — no hash or bcrypt prefix is ever serialised",
       "actual": "No hash material in any sampled response",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-012",
@@ -866,7 +866,7 @@
       "expected": "nosniff, frame/CSP lockdown, no-referrer, no server fingerprint",
       "actual": "nosniff=nosniff, csp=default-src 'none';frame-ancestors 'none, referrer=no-referrer, x-powered-by=absent",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-013",
@@ -875,7 +875,7 @@
       "expected": "No allow-origin granted to the unlisted site",
       "actual": "access-control-allow-origin: absent",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-014",
@@ -884,7 +884,7 @@
       "expected": "Clean 400 \"Malformed request body\", never a 500",
       "actual": "Status 400: {\"success\":false,\"error\":\"Malformed request body.\"}",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-015",
@@ -893,7 +893,7 @@
       "expected": "Stored as literal text — the ideas table is untouched",
       "actual": "ideas rows before=5, after=6 (table intact)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-016",
@@ -902,7 +902,7 @@
       "expected": "Returned as JSON data, never as executable HTML",
       "actual": "content-type=application/json; charset=utf-8",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-017",
@@ -911,7 +911,7 @@
       "expected": "Rejected 400 — extension allow-list enforced server-side",
       "actual": "Status 400: File type not allowed.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:48"
     },
     {
       "id": "TC-SAFE-018",
@@ -920,16 +920,16 @@
       "expected": "Rejected — the real (last) extension is what is checked",
       "actual": "Status 400: File type not allowed.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:50"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-019",
       "module": "Safety & Data Protection",
       "functionality": "Attachment over the configured size limit",
       "expected": "Clean 400 stating the limit, not a dropped connection",
-      "actual": "Status 400: File exceeds 10MB limit.",
+      "actual": "Status 400: File exceeds this organisation's 10 MB limit.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-020",
@@ -938,7 +938,7 @@
       "expected": "Accepted and recorded against that idea only",
       "actual": "Status 200, attachment id=1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-021",
@@ -947,7 +947,7 @@
       "expected": "Forbidden — ownership checked before the file is written",
       "actual": "Status 403: Unauthorized or idea not found.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-022",
@@ -956,7 +956,7 @@
       "expected": "Rejected 401 — attachments are not public URLs",
       "actual": "Status 401",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-023",
@@ -965,7 +965,7 @@
       "expected": "Not found — the lookup is scoped to the caller's tenant database",
       "actual": "Status 404: Attachment not found.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-024",
@@ -974,7 +974,7 @@
       "expected": "Streamed as an attachment with nosniff — never renderable in-origin",
       "actual": "Status 200, disposition=attachment; filename=\"evidence.png\"; fil, nosniff=nosniff",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-025",
@@ -983,7 +983,7 @@
       "expected": "Rejected — id is numeric, no filesystem path is ever taken from input",
       "actual": "Status 400",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-026",
@@ -992,7 +992,7 @@
       "expected": "Forbidden — only the owner may remove their file",
       "actual": "Status 403: Not found or unauthorized.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-027",
@@ -1001,7 +1001,7 @@
       "expected": "Submitter name, e-mail and department masked from the peer",
       "actual": "Identity masked for the colleague",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-028",
@@ -1010,7 +1010,7 @@
       "expected": "Author still sees their own submission unmasked",
       "actual": "Author sees their own name",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-029",
@@ -1019,16 +1019,16 @@
       "expected": "submitter_id retained in the database for accountability",
       "actual": "submitter_id=2, is_anonymous=1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-030",
       "module": "Safety & Data Protection",
       "functionality": "Platform (vendor) admin reads a customer's ideas",
       "expected": "Refused — vendor staff see counts, never tenant content",
-      "actual": "ideas=500, users=500, no tenant content",
+      "actual": "ideas=403, users=403, no tenant content",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-031",
@@ -1037,7 +1037,7 @@
       "expected": "Blocked while suspended, restored on reactivation",
       "actual": "suspended: 404 (Unknown organization code.); reactivated: login ok",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-032",
@@ -1046,7 +1046,7 @@
       "expected": "Account locked out — the right password does not clear a live lockout",
       "actual": "Blocked: Too many failed attempts. Please try again in 15 minute(s).",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-033",
@@ -1055,7 +1055,7 @@
       "expected": "Recorded in the master registry so every instance sees it",
       "actual": "1 row(s) persisted, attempts=1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-034",
@@ -1064,7 +1064,7 @@
       "expected": "Generic message only — no stack trace, SQL or file path",
       "actual": "Clean 404: {\"success\":false,\"error\":\"Idea not found\"}",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-035",
@@ -1073,7 +1073,7 @@
       "expected": "Uniform 404 envelope, no framework fingerprint",
       "actual": "Status 404: {\"success\":false,\"error\":\"Unknown action\"}",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-036",
@@ -1082,7 +1082,7 @@
       "expected": "Standard RateLimit headers present on API responses",
       "actual": "RateLimit headers present (budget shown: 1000000; the suite raises GLOBAL_RATE_LIMIT — the shipped default is 300/min per IP, 30/15min on auth)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-037",
@@ -1091,7 +1091,7 @@
       "expected": "Forbidden — secrets are admin-only",
       "actual": "Status 403",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-038",
@@ -1100,7 +1100,7 @@
       "expected": "Placeholder JWT secret / rootless DB flagged before boot",
       "actual": "6 problem(s) reported, first: JWT_SECRET is unset or still the example placeholder. Anyone with the repo can forge authe",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-039",
@@ -1109,7 +1109,7 @@
       "expected": "Rejected — minimum length enforced server-side",
       "actual": "Status 400: Password must be at least 12 characters.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-SAFE-040",
@@ -1118,7 +1118,7 @@
       "expected": "Stored as text — no header split, no 500",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-001",
@@ -1127,7 +1127,7 @@
       "expected": "Handled as a client error, never a 500",
       "actual": "Status 400",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-002",
@@ -1136,7 +1136,7 @@
       "expected": "Validation error, service stays up",
       "actual": "Status 400: Title, present situation and proposed solution are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-003",
@@ -1145,7 +1145,7 @@
       "expected": "Validation error, not a null-dereference crash",
       "actual": "Status 400: Title, present situation and proposed solution are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-004",
@@ -1154,7 +1154,7 @@
       "expected": "Rejected cleanly",
       "actual": "Status 400",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-005",
@@ -1163,7 +1163,7 @@
       "expected": "Parsed or rejected without exhausting the stack",
       "actual": "Status 400",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-006",
@@ -1172,7 +1172,7 @@
       "expected": "Handled without overflow or crash",
       "actual": "Status 200: accepted",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-007",
@@ -1181,7 +1181,7 @@
       "expected": "Client error, not a 500",
       "actual": "Status 404",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-008",
@@ -1190,7 +1190,7 @@
       "expected": "At most one stored vote — no double counting under concurrency",
       "actual": "Stored vote rows: 0",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-009",
@@ -1199,7 +1199,7 @@
       "expected": "All accepted, none lost, no deadlock",
       "actual": "10/10 stored, 0 server errors",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-010",
@@ -1208,7 +1208,7 @@
       "expected": "Exactly one approval recorded — the guard holds under a race",
       "actual": "Approved workflow rows: 1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-011",
@@ -1217,7 +1217,7 @@
       "expected": "Only one account exists afterwards",
       "actual": "Accounts with that email: 1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:51"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-012",
@@ -1226,16 +1226,16 @@
       "expected": "Push reports failed per idea; the platform keeps serving",
       "actual": "push status=200, failed=1, health=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:52"
+      "ts": "2026-08-09 16:14:49"
     },
     {
       "id": "TC-REL-013",
       "module": "Reliability & Fault Tolerance",
       "functionality": "QCMS accepts the connection then never responds",
       "expected": "Timed out and classified as failed, no hung request",
-      "actual": "status=failed in 807 ms: QCMS did not respond in time.",
+      "actual": "status=failed in 818 ms: QCMS did not respond in time.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:52"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-014",
@@ -1244,7 +1244,7 @@
       "expected": "Idea is still saved — notification failure never blocks the user",
       "actual": "Status 200, stored=1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:52"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-015",
@@ -1253,7 +1253,7 @@
       "expected": "Decision persists even though the e-mail cannot be sent",
       "actual": "Status 200, stored status=Approved",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:52"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-016",
@@ -1262,7 +1262,7 @@
       "expected": "No 5xx across the burst; the service stays healthy",
       "actual": "60/60 clean, health afterwards=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-017",
@@ -1271,7 +1271,7 @@
       "expected": "Stored and returned byte-identical (utf8mb4 end to end)",
       "actual": "Exact round-trip",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-018",
@@ -1280,7 +1280,7 @@
       "expected": "Accepted and stored without mangling",
       "actual": "Status 200, stored: Good catch 👍🏽🎯",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-019",
@@ -1289,7 +1289,7 @@
       "expected": "Idempotent — the second call is still a success",
       "actual": "first=200, second=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-020",
@@ -1298,7 +1298,7 @@
       "expected": "Rejected — trimmed validation, no blank ideas",
       "actual": "Status 400: Title, present situation and proposed solution are required.",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-021",
@@ -1307,7 +1307,7 @@
       "expected": "Similar existing ideas are surfaced before submission",
       "actual": "Status 200, 0 similar idea(s) reported",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-022",
@@ -1316,7 +1316,7 @@
       "expected": "Accepted and returned intact, or rejected cleanly — never a 500",
       "actual": "Status 200, 60000 chars stored",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-023",
@@ -1325,7 +1325,7 @@
       "expected": "Every cycle succeeds — no session leak or degradation",
       "actual": "10/10 cycles clean",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-REL-024",
@@ -1334,16 +1334,16 @@
       "expected": "Export completes; concurrent writes are unaffected",
       "actual": "export=200, 5/5 writes stored",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:53"
+      "ts": "2026-08-09 16:14:50"
     },
     {
       "id": "TC-SCLH-001",
       "module": "Scalability — Horizontal",
       "functionality": "A second application instance starts against the same databases",
       "expected": "Instance 2 boots and answers its liveness probe",
-      "actual": "Instance 2 on http://127.0.0.1:55460, health=200",
+      "actual": "Instance 2 on http://127.0.0.1:53288, health=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:51"
     },
     {
       "id": "TC-SCLH-002",
@@ -1352,7 +1352,7 @@
       "expected": "Reports ready — the load balancer may route to it",
       "actual": "Status 200: ready",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:51"
     },
     {
       "id": "TC-SCLH-003",
@@ -1361,7 +1361,7 @@
       "expected": "Accepted — authentication is stateless, no sticky sessions needed",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:51"
     },
     {
       "id": "TC-SCLH-004",
@@ -1370,7 +1370,7 @@
       "expected": "Accepted in both directions",
       "actual": "login on 2 = ok, request on 1 = 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:51"
     },
     {
       "id": "TC-SCLH-005",
@@ -1379,7 +1379,7 @@
       "expected": "Immediately visible — no per-process cache to go stale",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-006",
@@ -1388,7 +1388,7 @@
       "expected": "Immediately visible in the other direction",
       "actual": "Status 200",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-007",
@@ -1397,7 +1397,7 @@
       "expected": "One vote — shared state lives in the database, not in a process",
       "actual": "Stored votes: 1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:55"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-008",
@@ -1406,7 +1406,7 @@
       "expected": "No configuration cached per process",
       "actual": "Instance 2 reports review_sla_days=11",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:56"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-009",
@@ -1415,7 +1415,7 @@
       "expected": "Per-tenant integration config is shared, not per instance",
       "actual": "Instance 2 reports base_url=https://qcms.shared.example/v1",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:56"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-010",
@@ -1424,7 +1424,7 @@
       "expected": "Tenant branding is read from the database on both",
       "actual": "Instance 2 branding: {\"success\":true,\"branding\":{\"org_name\":\"Org A Renamed\",\"logo\":null,\"logo_updated",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:56"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-011",
@@ -1433,7 +1433,7 @@
       "expected": "Brute-force state is central — an attacker cannot rotate instances",
       "actual": "Instance 2 also blocked: Too many failed attempts. Please try again in 15 minute(s).",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:56"
+      "ts": "2026-08-09 16:14:52"
     },
     {
       "id": "TC-SCLH-012",
@@ -1442,7 +1442,7 @@
       "expected": "New tenants are picked up from the registry at request time",
       "actual": "create=200, login on instance 2=ok",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:58"
+      "ts": "2026-08-09 16:14:53"
     },
     {
       "id": "TC-SCLH-013",
@@ -1451,7 +1451,7 @@
       "expected": "All succeed — any request may land on any instance",
       "actual": "20/20 succeeded across both instances",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:58"
+      "ts": "2026-08-09 16:14:53"
     },
     {
       "id": "TC-SCLH-014",
@@ -1460,7 +1460,7 @@
       "expected": "Served by either instance when the upload directory is shared storage",
       "actual": "Status 200 — note: requires shared/NFS storage or object storage across hosts",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:58"
+      "ts": "2026-08-09 16:14:53"
     },
     {
       "id": "TC-SCLH-015",
@@ -1469,7 +1469,7 @@
       "expected": "Counters are per process — a strict global cap needs a shared store",
       "actual": "Instance 2 unaffected by instance 1 traffic (health=200); documented limitation — use a Redis store for one global budget",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:58"
+      "ts": "2026-08-09 16:14:53"
     },
     {
       "id": "TC-SCLH-016",
@@ -1478,25 +1478,25 @@
       "expected": "The surviving instance keeps serving — no shared in-process state",
       "actual": "instance 1 = 200 after instance 2 was killed (instance 2 = down)",
       "result": "Pass",
-      "ts": "2026-07-28 17:34:59"
+      "ts": "2026-08-09 16:14:53"
     },
     {
       "id": "TC-SCLV-001",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Load one organisation with 5,000 ideas and 300 users",
       "expected": "Dataset lands in the tenant database and is queryable",
-      "actual": "5023 ideas in 1183 ms (4227 rows/s)",
+      "actual": "5023 ideas in 558 ms (8961 rows/s)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-002",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Idea list response size at 5,000 ideas",
       "expected": "Bounded at 100 rows — response size does not grow with the dataset",
-      "actual": "100 rows returned, payload 200 KB",
+      "actual": "100 rows returned, payload 172 KB",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-003",
@@ -1505,97 +1505,97 @@
       "expected": "Cap is server-side — a client cannot ask for the whole table",
       "actual": "100 rows returned",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-004",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Idea list latency under load",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 79 ms (budget 3000 ms)",
+      "actual": "Status 200 in 49 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-005",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Dashboard aggregate latency under load",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 21 ms (budget 3000 ms)",
+      "actual": "Status 200 in 10 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-006",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Analytics latency under load",
       "expected": "Responds in under 4000 ms at 5,000 ideas",
-      "actual": "Status 200 in 33 ms (budget 4000 ms)",
+      "actual": "Status 200 in 15 ms (budget 4000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-007",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Leaderboard latency with 300+ users",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 60 ms (budget 3000 ms)",
+      "actual": "Status 200 in 23 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-008",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Audit report latency under load",
       "expected": "Responds in under 4000 ms at 5,000 ideas",
-      "actual": "Status 200 in 7 ms (budget 4000 ms)",
+      "actual": "Status 200 in 5 ms (budget 4000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-009",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Title search latency under load",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 86 ms (budget 3000 ms)",
+      "actual": "Status 200 in 49 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-010",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Status-filtered list latency under load",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 26 ms (budget 3000 ms)",
+      "actual": "Status 200 in 12 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-011",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Approved-ideas (integration) listing under load",
       "expected": "Responds in under 4000 ms at 5,000 ideas",
-      "actual": "Status 200 in 36 ms (budget 4000 ms)",
+      "actual": "Status 200 in 54 ms (budget 4000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-012",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Single idea detail stays constant-time",
       "expected": "Responds in under 1000 ms at 5,000 ideas",
-      "actual": "Status 200 in 26 ms (budget 1000 ms)",
+      "actual": "Status 200 in 24 ms (budget 1000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:00"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-013",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Employee's own idea list under load",
       "expected": "Responds in under 3000 ms at 5,000 ideas",
-      "actual": "Status 200 in 254 ms (budget 3000 ms)",
+      "actual": "Status 200 in 137 ms (budget 3000 ms)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:01"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-014",
@@ -1604,7 +1604,7 @@
       "expected": "idx_ideas_updated_at present so the top-100 read is an ordered index scan",
       "actual": "Index present on column updated_at",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:01"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-015",
@@ -1613,52 +1613,52 @@
       "expected": "No full scan of ideas with a filesort of the entire table",
       "actual": "type=index, key=idx_ideas_updated_at, rows=100, extra=-",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:01"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-016",
       "module": "Scalability — Vertical & Performance",
       "functionality": "CSV export of the full 5,000-idea dataset",
       "expected": "Completes inside 15 s and contains every row",
-      "actual": "5024 lines, 0.6 MB in 55 ms",
+      "actual": "5024 lines, 0.6 MB in 32 ms",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:01"
+      "ts": "2026-08-09 16:14:54"
     },
     {
       "id": "TC-SCLV-017",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Thirty concurrent requests against a pool of 10",
       "expected": "All served — requests queue for a connection instead of failing",
-      "actual": "30/30 succeeded in 201 ms with DB_POOL_SIZE=10",
+      "actual": "30/30 succeeded in 90 ms with DB_POOL_SIZE=10",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:01"
+      "ts": "2026-08-09 16:14:55"
     },
     {
       "id": "TC-SCLV-018",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Sustained throughput on the loaded dataset",
       "expected": "One hundred reads with no errors, throughput recorded",
-      "actual": "100 requests in 1805 ms → 55.4 req/s, 0 errors",
+      "actual": "100 requests in 923 ms → 108.3 req/s, 0 errors",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:55"
     },
     {
       "id": "TC-SCLV-019",
       "module": "Scalability — Vertical & Performance",
       "functionality": "The other organisation while this one holds 5,000 ideas",
       "expected": "Unaffected — each tenant is a separate schema with its own indexes",
-      "actual": "Org B dashboard 200 in 13 ms",
+      "actual": "Org B dashboard 200 in 9 ms",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:55"
     },
     {
       "id": "TC-SCLV-020",
       "module": "Scalability — Vertical & Performance",
       "functionality": "Process memory after the load run",
       "expected": "Resident memory stays bounded — no dataset is held in the application",
-      "actual": "RSS 180 MB, heap 87 MB after 5,000 ideas",
+      "actual": "RSS 204 MB, heap 118 MB after 5,000 ideas",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:55"
     },
     {
       "id": "TC-SCLV-021",
@@ -1667,16 +1667,16 @@
       "expected": "Returns a capped page rather than every notification ever raised",
       "actual": "3 notifications returned",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:55"
     },
     {
       "id": "TC-DATA-001",
       "module": "Data Integrity & Recovery",
       "functionality": "Migration runner applied against the live schemas",
       "expected": "Pending migrations applied and recorded in the ledger",
-      "actual": "30 application(s) this pass, 30 ledger row(s) total",
+      "actual": "45 application(s) this pass, 45 ledger row(s) total",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-002",
@@ -1685,7 +1685,7 @@
       "expected": "Applies nothing — migrations are idempotent and ledgered",
       "actual": "0 application(s) on the repeat run",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-003",
@@ -1694,16 +1694,16 @@
       "expected": "Picked up automatically on the next run, then recorded",
       "actual": "4 application(s); probe table present in tenant A = true",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-004",
       "module": "Data Integrity & Recovery",
       "functionality": "Ledger records which schema received which migration",
       "expected": "One row per (database, migration) — reproducible on a new environment",
-      "actual": "ifqm_acme:7, ifqm_growth:7, ifqm_test_a:7, ifqm_test_b:7, ifqm_test_master:2",
+      "actual": "ifqm_acme:10, ifqm_growth:10, ifqm_test_a:10, ifqm_test_b:10, ifqm_test_master:5",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-005",
@@ -1712,7 +1712,7 @@
       "expected": "Same table set — a new organisation is not a second-class database",
       "actual": "reference 18 tables, provisioned 19, missing: none",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-006",
@@ -1721,7 +1721,7 @@
       "expected": "Rejected by the UNIQUE constraint — codes cannot collide",
       "actual": "Rejected: ER_DUP_ENTRY",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:03"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-007",
@@ -1730,7 +1730,7 @@
       "expected": "Comments, votes, attachments and workflow rows go with it",
       "actual": "orphans left — comments:0, votes:0, workflow:0",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-008",
@@ -1739,7 +1739,7 @@
       "expected": "Next code continues past the highest issued — no reuse, no collision",
       "actual": "previous max 23 → issued IDA-2026-024",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-009",
@@ -1748,7 +1748,7 @@
       "expected": "Both present — a decision is never half-recorded",
       "actual": "status=Approved, workflow rows=2",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-010",
@@ -1757,7 +1757,7 @@
       "expected": "Ledger and configuration agree",
       "actual": "+10 points (POINTS_SUBMIT=10)",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-011",
@@ -1766,7 +1766,7 @@
       "expected": "Written in the database's own time — no timezone drift",
       "actual": "created_at is 0 s from NOW()",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-012",
@@ -1775,7 +1775,7 @@
       "expected": "utf8mb4 throughout — every language and emoji storable",
       "actual": "0 table(s) not on utf8mb4",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-013",
@@ -1784,7 +1784,7 @@
       "expected": "InnoDB throughout — transactional and crash-recoverable",
       "actual": "0 table(s) not InnoDB",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:56"
     },
     {
       "id": "TC-DATA-014",
@@ -1793,7 +1793,7 @@
       "expected": "Required for replication and for safe row-level recovery",
       "actual": "Every table has a primary key",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-DATA-015",
@@ -1802,7 +1802,7 @@
       "expected": "Reads credentials and schema names from configuration",
       "actual": "env-driven credentials=true, schemas discovered from the registry=false, hard-coded secrets=false",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-DATA-016",
@@ -1811,7 +1811,7 @@
       "expected": "Deployment guide covers backup and restore",
       "actual": "backup mentioned=true, restore mentioned=true",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-DATA-017",
@@ -1820,16 +1820,16 @@
       "expected": "All of its data is intact after the outage",
       "actual": "ideas before=1, after=1",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-001",
       "module": "Extensibility & Future Scope",
       "functionality": "Translation coverage across all shipped languages",
       "expected": "Every locale carries the same key set as English",
-      "actual": "en:799 · hi:799 · kn:799 · ml:799 · mr:799 · ta:799 · te:799",
-      "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "actual": "en:1081 · hi:819 (-262) · kn:819 (-262) · ml:819 (-262) · mr:819 (-262) · ta:819 (-262) · te:819 (-262)",
+      "result": "Fail",
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-002",
@@ -1838,16 +1838,16 @@
       "expected": "Purely additive — one dictionary file plus one registry line",
       "actual": "All seven locales registered in one map — an eighth is one import + one entry",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-003",
       "module": "Extensibility & Future Scope",
       "functionality": "Adding a new API area",
       "expected": "Feature modules are mounted in one aggregator, no core surgery",
-      "actual": "18 feature modules mounted under /api",
+      "actual": "19 feature modules mounted under /api",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-004",
@@ -1856,7 +1856,7 @@
       "expected": "Roles are data in one list per route file, not scattered conditionals",
       "actual": "Reviewer and implementer role sets are single declarations",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-005",
@@ -1865,7 +1865,7 @@
       "expected": "Usable the moment it is created — no deploy, no restart",
       "actual": "login=ok, dashboard=200",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:04"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-006",
@@ -1874,7 +1874,7 @@
       "expected": "Per-tenant configuration — customers can point at their own systems",
       "actual": "org A → https://qcms-a.example/v1, org B → https://qcms-b.example/v2",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-007",
@@ -1883,7 +1883,7 @@
       "expected": "Limits, pool size, token life and points all come from the environment",
       "actual": "GLOBAL_RATE_LIMIT=1000000, AUTH_RATE_LIMIT=10000, DB_POOL_SIZE=10, MAX_FILE_MB=10, JWT_EXPIRES_IN=28800, POINTS_SUBMIT=10, POINTS_APPROVED=25, POINTS_IMPLEMENTED=65, MIN_PASSWORD_LENGTH=12",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-008",
@@ -1892,7 +1892,7 @@
       "expected": "The registry stores a host per tenant, so growth means another DB box",
       "actual": "orga@localhost/ifqm_test_a · orgb@localhost/ifqm_test_b · acme@localhost/ifqm_acme · growth@localhost/ifqm_growth",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-009",
@@ -1901,7 +1901,7 @@
       "expected": "Falls back to the built-in heuristic — the feature never hard-fails",
       "actual": "Status 200, provider=\"none — heuristic\"",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-010",
@@ -1910,7 +1910,7 @@
       "expected": "Provider and keys are configuration, not embedded calls",
       "actual": "config.ai exposes: provider, openaiApiKey, geminiApiKey",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-011",
@@ -1919,7 +1919,7 @@
       "expected": "The QCMS field mapping is a pure function — a new target is a new mapper",
       "actual": "mapped 11 fields with no I/O: category=Cost, status=Approved",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-012",
@@ -1928,7 +1928,7 @@
       "expected": "New clients can rely on one success/error shape",
       "actual": "5/5 endpoints return the standard envelope",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-013",
@@ -1937,7 +1937,7 @@
       "expected": "Every push is gated by the automated tests",
       "actual": "ci.yml runs npm test on push",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-014",
@@ -1946,7 +1946,7 @@
       "expected": "package.json pins the supported Node version for future upgrades",
       "actual": "engines.node = >=18",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-015",
@@ -1955,7 +1955,7 @@
       "expected": "Lockfile committed so a future build resolves the same tree",
       "actual": "backend/package-lock.json present",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-016",
@@ -1964,7 +1964,7 @@
       "expected": "Schema names come from configuration, so environments stay separable",
       "actual": "referenced in: src\\config\\index.js",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-017",
@@ -1973,7 +1973,7 @@
       "expected": "Deployment, user guide and changelog are in the repository",
       "actual": "4 documents present",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-FUT-018",
@@ -1982,7 +1982,7 @@
       "expected": "Can be served from a CDN or any number of web nodes",
       "actual": "build script: vite build",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-001",
@@ -1991,7 +1991,7 @@
       "expected": "Answers in single-digit milliseconds — safe to poll often",
       "actual": "Status 200 in 2 ms",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-002",
@@ -2000,7 +2000,7 @@
       "expected": "Distinct from liveness so a database-less instance leaves rotation",
       "actual": "Status 200: {\"success\":true,\"status\":\"ready\"}",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-003",
@@ -2009,7 +2009,7 @@
       "expected": "SIGTERM/SIGINT drain in-flight requests and close pools",
       "actual": "Drain-then-close handler registered for SIGINT and SIGTERM",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-004",
@@ -2018,7 +2018,7 @@
       "expected": "Unhandled rejections and exceptions are logged, not silent",
       "actual": "unhandledRejection and uncaughtException handlers present",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-005",
@@ -2027,7 +2027,7 @@
       "expected": "Daily files, location configurable, enabled in production",
       "actual": "LOG_TO_FILE / LOG_DIR honoured; separate daily error log",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-006",
@@ -2036,7 +2036,7 @@
       "expected": "Who did what, retrievable from the product itself",
       "actual": "Status 200, 31 entries returned",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-007",
@@ -2045,7 +2045,7 @@
       "expected": "Insecure production settings stop the process rather than run wide open",
       "actual": "server.js calls assertConfigOrExit before listening",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     },
     {
       "id": "TC-OPS-008",
@@ -2054,7 +2054,7 @@
       "expected": "CHANGELOG present for operators tracking what shipped",
       "actual": "141 lines of change history",
       "result": "Pass",
-      "ts": "2026-07-28 17:35:05"
+      "ts": "2026-08-09 16:14:57"
     }
   ]
 }

@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useLang } from '../context/LangContext';
 import { leaderboardApi } from '../services/api';
 import { scoreBadgeClass, engagementIndex } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
+import { drawPersonalCard, drawPodiumCard, canvasToBlob, shareImage } from '../utils/shareCard';
 
 const PERIODS = [
   { val:'all',       label:'lb.all' },
@@ -143,23 +144,72 @@ export default function LeaderboardPage() {
     }, 200);
   }, [data]);
 
-  async function shareLeaderboard() {
+  /*
+   * Sharing produces a picture, not a line of text. Nobody posts a paste of
+   * "1. Priya - 240 pts"; people do post a card with their name and rank on it.
+   *
+   * The card is drawn on a canvas in the browser: no library, no upload, and
+   * nothing about any idea on it - names, points and idea counts only. On a
+   * phone it goes straight into the native share sheet; on a desktop, where
+   * browsers cannot share files, it downloads so it can be attached anywhere.
+   */
+  const shareRef = useRef(null);
+
+  const periodLabel = () =>
+    t(PERIODS.find((p) => p.val === period)?.label || 'lb.all');
+
+  async function shareCard(kind) {
+    const rows = data?.individuals || [];
+    if (!rows.length) return;
+    const canvas = shareRef.current;
+    if (!canvas) return;
+
+    const orgName = user?.org_name || 'IFQM';
+    let filename;
+    let text;
+
+    if (kind === 'personal') {
+      const idx = rows.findIndex((r) => Number(r.id) === Number(user?.id));
+      const me = idx >= 0 ? rows[idx] : null;
+      if (!me) { showToast(t('lb.share_no_rank'), 'info'); return; }
+      drawPersonalCard(canvas, {
+        orgName, name: me.name, rank: idx + 1,
+        points: me.points, ideas: me.ideas_count ?? me.idea_count ?? 0,
+        periodLabel: periodLabel(),
+      });
+      filename = 'my-idea-score.png';
+      text = `${me.name} — #${idx + 1} on the ${orgName} idea leaderboard, ${me.points} ${t('unit.pts')}.`;
+    } else {
+      drawPodiumCard(canvas, { orgName, rows, periodLabel: periodLabel() });
+      filename = 'idea-leaderboard.png';
+      text = `${t('lb.share_title')} — ${orgName}`;
+    }
+
+    try {
+      const blob = await canvasToBlob(canvas);
+      if (!blob) { showToast(t('msg.error'), 'danger'); return; }
+      const how = await shareImage(blob, filename, text);
+      showToast(how === 'shared' ? t('lb.share_ok') : t('lb.share_saved'), 'success');
+    } catch (e) {
+      // AbortError is the user closing the share sheet — not a failure.
+      if (e?.name !== 'AbortError') showToast(t('msg.error'), 'danger');
+    }
+  }
+
+  /* Text remains available for anyone who wants to paste it into a chat. */
+  async function shareLeaderboardText() {
     const rows = (data?.individuals || []).slice(0, 5);
     if (!rows.length) return;
-    const medals = ['🏆', '🥈', '🥉', '4.', '5.'];
+    const medals = ['1.', '2.', '3.', '4.', '5.'];
     const text = [
       `${t('lb.share_title')} — ${user?.org_name || 'IFQM'}`,
       ...rows.map((u, i) => `${medals[i]} ${u.name} — ${u.points} ${t('unit.pts')}`),
     ].join('\n');
 
     try {
-      if (navigator.share) { await navigator.share({ title: t('lb.share_title'), text }); return; }
       await navigator.clipboard.writeText(text);
       showToast(t('lb.share_copied'), 'success');
-    } catch (e) {
-      // AbortError is the user dismissing the share sheet — not a failure.
-      if (e?.name !== 'AbortError') showToast(t('msg.error'), 'danger');
-    }
+    } catch { showToast(t('msg.error'), 'danger'); }
   }
 
   const indivs = data?.individuals || [];
@@ -171,11 +221,10 @@ export default function LeaderboardPage() {
   return (
     <>
       {/* Period chips + share.
-          §11.2 — sharing is a plain-text summary via the Web Share API where the
-          device offers it (that is the sheet a phone user expects), falling back
-          to the clipboard. Deliberately NOT a link: the leaderboard sits behind
-          a tenant login, so a URL would be a dead end for anyone outside the
-          organisation, and names + points are the org's own data to post. */}
+          Sharing produces an image: a personal card, or the organisation's top
+          five. Deliberately NOT a link — the leaderboard sits behind a tenant
+          login, so a URL would be a dead end for anybody outside the
+          organisation. Names and points only ever leave; no idea content. */}
       <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:20 }}>
       <div className="chip-filter" style={{ marginBottom:0 }}>
         {PERIODS.map(p => (
@@ -189,11 +238,24 @@ export default function LeaderboardPage() {
           </div>
         ))}
       </div>
-        <button className="btn btn-outline btn-sm" style={{ marginLeft:'auto' }}
-          onClick={shareLeaderboard} disabled={!indivs.length}>
-          {t('lb.share')}
-        </button>
+        <div style={{ display:'flex',gap:8,marginLeft:'auto',flexWrap:'wrap' }}>
+          <button className="btn btn-primary btn-sm"
+            onClick={() => shareCard('personal')} disabled={!indivs.length}>
+            {t('lb.share_mine')}
+          </button>
+          <button className="btn btn-outline btn-sm"
+            onClick={() => shareCard('podium')} disabled={!indivs.length}>
+            {t('lb.share_top5')}
+          </button>
+          <button className="btn btn-outline btn-sm"
+            onClick={shareLeaderboardText} disabled={!indivs.length}>
+            {t('lb.share_text')}
+          </button>
+        </div>
       </div>
+
+      {/* Off-screen scratch surface the share cards are painted on. */}
+      <canvas ref={shareRef} style={{ display:'none' }} aria-hidden="true" />
 
       {loading && <div className="empty-state"><div className="spinner"></div></div>}
       {error   && <div className="alert alert-danger">{error}</div>}

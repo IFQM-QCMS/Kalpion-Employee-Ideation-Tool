@@ -128,6 +128,12 @@ export const ideasApi = {
   submit: (data) => api.post('/ideas/submit', data),
   reviewAction: (data) => api.post('/ideas/review-action', data),
   bulkReview: (data) => api.post('/ideas/bulk-review', data),
+  // The person-raised "this might be worth a patent" tick. Anyone may set it on
+  // their own idea, anyone in the review hierarchy on any idea — so it lives
+  // here rather than on ideaAdminApi.
+  setPatentableFlag: (idea_id, patentable) =>
+    api.post('/ideas/patentable-flag', { idea_id, patentable }),
+  bulkArchive: (data) => api.post('/ideas/bulk-archive', data),
   reviewerDecision: (data) => api.post('/ideas/reviewer-decision', data),
   assignReviewers: (data) => api.post('/ideas/assign-reviewers', data),
   checkDuplicate: (params) => api.get('/ideas/check-duplicate', { params }),
@@ -346,6 +352,8 @@ export const ideaAdminApi = {
   setArchived: (idea_id, archived, note = '') => api.post('/ideas/archive', { idea_id, archived, note }),
   setPatentability: (idea_id, patentability, patentability_note = '') =>
     api.post('/ideas/patentability', { idea_id, patentability, patentability_note }),
+  // Archive a whole selection, or everything before a date, in one request.
+  bulkArchive: (data) => api.post('/ideas/bulk-archive', data),
 };
 
 export const platformApi = {
@@ -370,6 +378,8 @@ export const platformApi = {
   updateDefaults: (data) => api.put('/platform/settings/defaults', data),
   tenantSettings: (id) => api.get(`/platform/tenants/${id}/settings`),
   updateTenantSettings: (id, data) => api.put(`/platform/tenants/${id}/settings`, data),
+
+  bulkArchiveTickets: (data) => api.post('/platform/tickets/bulk-archive', data),
 
   admins: () => api.get('/platform/admins'),
   createAdmin: (data) => api.post('/platform/admins', data),

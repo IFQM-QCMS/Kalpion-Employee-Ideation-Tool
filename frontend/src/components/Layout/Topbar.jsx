@@ -22,7 +22,20 @@ const PAGE_TITLES = {
   '/super-admin':  'nav.super_admin',
   '/profile':      'nav.profile',
   '/platform':     'nav.platform',
+  '/rejected':     'nav.rejected',
+  '/support':      'nav.support',
+  '/platform/registrations': 'nav.registrations',
+  '/platform/tickets':       'nav.support_tickets',
+  '/platform/settings':      'nav.platform_settings',
+  '/platform/logins':        'nav.login_activity',
 };
+
+// Anything not in the map above still gets a properly capitalised heading
+// rather than the raw path, which used to read "rejected".
+function titleFromPath(path) {
+  const last = path.split('/').filter(Boolean).pop() || '';
+  return last.replace(/-/g, ' ').replace(/\w/g, (c) => c.toUpperCase());
+}
 
 export default function Topbar({ onToggleSidebar }) {
   const { user, logout }                     = useAuth();
@@ -38,7 +51,9 @@ export default function Topbar({ onToggleSidebar }) {
   const langMenuRef                  = useRef(null);
   const notifPanelRef                = useRef(null);
 
-  const pageTitle = PAGE_TITLES[location.pathname] ? t(PAGE_TITLES[location.pathname]) : location.pathname.replace(/\//,'').replace(/-/g,' ');
+  const pageTitle = PAGE_TITLES[location.pathname]
+    ? t(PAGE_TITLES[location.pathname])
+    : titleFromPath(location.pathname);
 
   function toggleDark() {
     const next = isDark ? 'light' : 'dark';

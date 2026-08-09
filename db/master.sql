@@ -17,6 +17,16 @@ CREATE TABLE IF NOT EXISTS tenants (
   is_default    TINYINT(1) NOT NULL DEFAULT 0,
   logo_url      VARCHAR(500) NULL,
   primary_color VARCHAR(7)   NOT NULL DEFAULT '#4f46e5',
+  -- When anybody from this organisation last signed in. Reported, never
+  -- enforced: the platform console shows which organisations have gone quiet
+  -- without anything being switched off behind their back. `status` stays the
+  -- operator's deliberate choice; inactivity is derived from this.
+  last_login_at DATETIME NULL DEFAULT NULL,
+  -- Per-organisation limits. NULL means "use the platform default", so raising
+  -- the default lifts every organisation that has not been given its own number.
+  api_quota_total   INT NULL DEFAULT NULL,
+  api_quota_monthly INT NULL DEFAULT NULL,
+  storage_quota_mb  INT NULL DEFAULT NULL,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE KEY uq_domain (domain)
 );
@@ -127,7 +137,11 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   INDEX idx_tickets_status (status),
   INDEX idx_tickets_tenant (tenant_id),
   INDEX idx_tickets_requester (tenant_id, requester_user_id),
-  INDEX idx_tickets_updated (updated_at)
+  INDEX idx_tickets_updated (updated_at),
+  -- Archiving is not closing. Closing is the outcome of the conversation;
+  -- archiving is the operator saying "stop showing me this". Reversible.
+  archived_at DATETIME NULL DEFAULT NULL,
+  INDEX idx_tickets_archived (archived_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- The conversation. is_internal marks a note only IFQM staff may read; every
@@ -166,3 +180,118 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('approval_reviewer_roles',       'team_lead,project_lead,manager,senior_manager'),
   ('approval_final_approver_roles', 'executive,admin,super_admin'),
   ('approval_threshold',            '100');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Tables introduced by migrations 009, 010 and 012, folded in so a new
+-- registry starts complete. An existing registry gets them from the migration
+-- files instead; the two definitions are kept identical on purpose.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- MSME applications for a workspace. Nothing here becomes a tenant until a
+-- platform admin approves it.
+CREATE TABLE IF NOT EXISTS tenant_registrations (
+  id                    INT AUTO_INCREMENT PRIMARY KEY,
+  company_name          VARCHAR(150) NOT NULL,
+  proposed_slug         VARCHAR(50)  NOT NULL,
+  email_domain          VARCHAR(255) NOT NULL,
+  website               VARCHAR(255) NULL,
+  udyam_number          VARCHAR(30)  NULL,
+  gstin                 VARCHAR(20)  NULL,
+  pan                   VARCHAR(12)  NULL,
+  cin                   VARCHAR(30)  NULL,
+  entity_type           ENUM('proprietorship','partnership','llp','private_limited',
+                             'public_limited','cooperative','trust','society','other') NULL,
+  enterprise_category   ENUM('micro','small','medium') NULL,
+  sector                VARCHAR(100) NULL,
+  nic_code              VARCHAR(10)  NULL,
+  employee_count        INT          NULL,
+  annual_turnover_band  VARCHAR(40)  NULL,
+  year_established      SMALLINT     NULL,
+  address_line          VARCHAR(255) NULL,
+  city                  VARCHAR(100) NULL,
+  state                 VARCHAR(100) NULL,
+  pincode               VARCHAR(12)  NULL,
+  country               VARCHAR(80)  NOT NULL DEFAULT 'India',
+  contact_name          VARCHAR(120) NOT NULL,
+  contact_designation   VARCHAR(120) NULL,
+  contact_email         VARCHAR(255) NOT NULL,
+  contact_phone         VARCHAR(20)  NULL,
+  accepted_terms        TINYINT(1)   NOT NULL DEFAULT 0,
+  status                ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  review_note           TEXT         NULL,
+  reviewed_by           INT          NULL,
+  reviewed_at           DATETIME     NULL,
+  tenant_id             INT          NULL,
+  submitted_ip          VARCHAR(45)  NULL,
+  created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_treg_status (status, created_at),
+  KEY idx_treg_domain (email_domain),
+  KEY idx_treg_email (contact_email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Append-only record of every sign-in attempt, across every organisation.
+-- `login_attempts` above is lockout STATE and is cleared on success, so it can
+-- never answer "who signed in, and when". This can.
+CREATE TABLE IF NOT EXISTS platform_login_activity (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  actor_type    ENUM('platform_admin','tenant_user') NOT NULL,
+  actor_id      VARCHAR(40)  NULL,
+  actor_name    VARCHAR(120) NULL,
+  actor_email   VARCHAR(255) NULL,
+  tenant_id     INT          NULL,
+  tenant_slug   VARCHAR(50)  NULL,
+  outcome       ENUM('success','failure','lockout') NOT NULL,
+  ip            VARCHAR(45)  NULL,
+  user_agent    VARCHAR(255) NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_pla_created (created_at),
+  INDEX idx_pla_outcome (outcome, created_at),
+  INDEX idx_pla_tenant (tenant_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Request counters per organisation. Counted here rather than in memory: an
+-- in-process counter resets on every deploy and does not exist for a second
+-- worker, which is the same mistake the brute-force lockout had to be moved out of.
+CREATE TABLE IF NOT EXISTS tenant_api_usage (
+  tenant_id     INT          NOT NULL,
+  period        CHAR(7)      NOT NULL,   -- 'YYYY-MM', or 'total' for the lifetime counter
+  request_count INT          NOT NULL DEFAULT 0,
+  updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_id, period)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One-time sign-in codes.
+CREATE TABLE IF NOT EXISTS login_otps (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  identifier    VARCHAR(255) NOT NULL,
+  id_type       ENUM('phone','email') NOT NULL DEFAULT 'phone',
+  code_hash     VARCHAR(255) NOT NULL,
+  tenant_id     INT          NULL,
+  tenant_slug   VARCHAR(50)  NULL,
+  user_id       INT          NULL,
+  purpose       ENUM('login','dev_access') NOT NULL DEFAULT 'login',
+  -- Wrong guesses against THIS code. Without a per-code counter a six-digit
+  -- code is a million guesses and an attacker has the whole window to try them.
+  attempts      TINYINT      NOT NULL DEFAULT 0,
+  consumed_at   DATETIME     NULL,
+  expires_at    DATETIME     NOT NULL,
+  requested_ip  VARCHAR(45)  NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_otp_identifier (identifier, expires_at),
+  INDEX idx_otp_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One-time-code policy. Settings rather than constants so the validity window
+-- can be tuned during acceptance testing without a deploy.
+INSERT IGNORE INTO platform_settings (key_name, value) VALUES
+  ('otp_enabled',        '0'),
+  ('otp_length',         '6'),
+  ('otp_ttl_seconds',    '300'),
+  ('otp_max_attempts',   '5'),
+  ('otp_resend_seconds', '60'),
+  -- 'log' writes the code to the server log instead of sending it, which is
+  -- what makes testing possible before an SMS contract exists. It is refused
+  -- outright under NODE_ENV=production: a provider that logs sign-in codes in a
+  -- live system is a credential leak, not a fallback.
+  ('otp_provider',       'log');

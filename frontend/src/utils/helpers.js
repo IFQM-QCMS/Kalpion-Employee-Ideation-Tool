@@ -16,6 +16,19 @@ export function fmtDate(dateStr) {
   } catch { return dateStr; }
 }
 
+/* Submission time matters as much as the date - two ideas filed on the same day
+   are ordered by the clock, and people want to see that. Used everywhere an idea
+   or a decision is stamped. */
+export function fmtDateTime(dateStr) {
+  if (!dateStr) return '–';
+  try {
+    return new Date(dateStr).toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', hour12: true,
+    });
+  } catch { return dateStr; }
+}
+
 export function timeAgo(dateStr, t) {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();

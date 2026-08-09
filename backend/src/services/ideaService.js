@@ -129,6 +129,28 @@ export function summariseSolution(text, limit = 140) {
 }
 
 /**
+ * Trim a problem statement down to an extract.
+ *
+ * The solution was already held back from uninvolved colleagues, but the
+ * situation was not - and a well-written situation often contains the whole
+ * insight. Somebody who reads "we scrap 40 units a shift because the fixture
+ * shifts after 200 cycles" has the idea, whether or not they can see the
+ * proposed fix.
+ *
+ * Cuts on a sentence boundary where one is close enough, otherwise on a word
+ * boundary, so an extract is never a fragment ending mid-word.
+ */
+export function previewText(text, limit = 180) {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!clean || clean.length <= limit) return clean;
+  const window = clean.slice(0, limit);
+  const lastStop = Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? '));
+  if (lastStop > limit * 0.5) return clean.slice(0, lastStop + 1);
+  const lastSpace = window.lastIndexOf(' ');
+  return (lastSpace > limit * 0.6 ? window.slice(0, lastSpace) : window).trimEnd() + '…';
+}
+
+/**
  * May this viewer read the full solution of this idea?
  * The author and their co-suggesters always can; so can whoever has to judge it.
  */
@@ -150,13 +172,20 @@ export function canReadSolution(user, idea, mode = 'authors_reviewers') {
  * Mutates and returns the row. `solution_redacted` lets the UI say why the text
  * is short instead of looking like the field was left empty.
  */
-function redactSolution(user, idea, mode = 'authors_reviewers') {
+function redactSolution(user, idea, mode = 'authors_reviewers', previewChars = 180) {
   idea.solution_summary = summariseSolution(idea.proposed_solution);
   if (!canReadSolution(user, idea, mode)) {
     idea.proposed_solution = null;
     idea.solution_redacted = true;
+    // The situation goes the same way. Whoever may not read the fix may not
+    // read the whole problem either - only enough to know what it is about.
+    idea.situation_summary = previewText(idea.present_situation, previewChars);
+    idea.present_situation = null;
+    idea.situation_redacted = true;
   } else {
     idea.solution_redacted = false;
+    idea.situation_summary = previewText(idea.present_situation, previewChars);
+    idea.situation_redacted = false;
   }
   return idea;
 }
@@ -223,6 +252,7 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
   const settings = await getOrgSettings(db);
   const mode = visibilityMode(settings);
   const predMode = predictionMode(settings);
+  const previewChars = parseInt(settings.situation_preview_chars, 10) || 180;
   for (const idea of ideas) {
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
@@ -234,9 +264,11 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     // hundred rows of verbatim proposals sitting in the browser is exactly the
     // leak this is meant to close, and it is invisible to anyone reading only
     // the rendered table.
-    redactSolution(user, idea, mode);
+    redactSolution(user, idea, mode, previewChars);
     redactPrediction(user, idea, predMode);
+    // Neither full text ever travels with a browse list, for anybody.
     idea.proposed_solution = null;
+    idea.present_situation = null;
   }
   return { success: true, ideas };
 }
@@ -366,18 +398,22 @@ export async function get(db, user, id) {
   // Hold back the full proposal from colleagues who are neither its authors nor
   // its judges. Assigned reviewers count even when they are not the *current*
   // reviewer — in a multi-reviewer workflow every one of them has to read it.
-  const mode = visibilityMode(await getOrgSettings(db));
+  const detailSettings = await getOrgSettings(db);
+  const mode = visibilityMode(detailSettings);
+  const detailPreview = parseInt(detailSettings.situation_preview_chars, 10) || 180;
   const isAssignedReviewer = (idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid);
   const isCoSuggester = (idea.co_suggesters || []).some((c) => Number(c.id) === uid);
   // An assigned reviewer or co-suggester reads the full text in every mode
   // except managers_only, which is the whole point of that mode.
   if ((isAssignedReviewer || isCoSuggester) && mode !== 'managers_only') {
     idea.solution_summary = summariseSolution(idea.proposed_solution);
+    idea.situation_summary = previewText(idea.present_situation, detailPreview);
     idea.solution_redacted = false;
+    idea.situation_redacted = false;
   } else {
-    redactSolution(user, idea, mode);
+    redactSolution(user, idea, mode, detailPreview);
   }
-  redactPrediction(user, idea, predictionMode(await getOrgSettings(db)));
+  redactPrediction(user, idea, predictionMode(detailSettings));
 
   /*
    * MOM §13.13 — "Under review by ___" as one readable line, rather than making
@@ -460,6 +496,11 @@ export async function submitOrDraft(db, user, action, b) {
    */
   const timeRequired = TIME_REQUIRED_BANDS.includes(String(b.time_required ?? ''))
     ? String(b.time_required) : null;
+  // Anyone may raise the flag - the submitter who thinks their idea is novel,
+  // or a senior reviewing it. It records a claim; the organisation's own
+  // assessment lives in `patentability` and is not touched here.
+  const patentableFlag = (b.patentable_flag === true || b.patentable_flag === 1
+    || b.patentable_flag === '1') ? 1 : 0;
   const solutionTags = [...new Set(
     (Array.isArray(b.solution_tags) ? b.solution_tags : String(b.solution_tags ?? '').split(','))
       .map((x) => String(x).trim())
@@ -531,6 +572,7 @@ export async function submitOrDraft(db, user, action, b) {
         co_suggester_1_id=?,co_suggester_2_id=?,
         is_anonymous=?,challenge_id=?,template_type=?,
         time_required=?,solution_tags=?,
+        patentable_flag=?,patentable_flagged_by=?,
         status=?,submitted_at=COALESCE(submitted_at,?),
         review_due_date=COALESCE(review_due_date,?),
         current_reviewer_id=COALESCE(current_reviewer_id,?),
@@ -541,6 +583,7 @@ export async function submitOrDraft(db, user, action, b) {
         investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
         co1, co2, isAnon, challengeId, templateType,
         timeRequired, solutionTags,
+        patentableFlag, patentableFlag ? user.id : null,
         status, submittedAt, reviewDueDate, currentReviewerId,
         aiScore, aiReason,
         editId, user.id]
@@ -562,14 +605,15 @@ export async function submitOrDraft(db, user, action, b) {
               investment_required,feasibility,implementation_duration,
               expected_implementation_date,benefits_expected,support_required,
               co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
-              time_required,solution_tags,
+              time_required,solution_tags,patentable_flag,patentable_flagged_by,
               status,submitter_id,submitted_at,review_due_date,current_reviewer_id,
               ai_score,ai_reason)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [code, title, sit, sol, impacts, impLvl, tangible, intang,
             investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
             co1, co2, isAnon, challengeId, templateType,
             timeRequired, solutionTags,
+            patentableFlag, patentableFlag ? user.id : null,
             status, user.id, submittedAt, reviewDueDate, currentReviewerId,
             aiScore, aiReason]
         );
@@ -1124,4 +1168,119 @@ export async function setPatentability(db, user, b) {
 
   await addWorkflow(db, ideaId, user.id, 'Patentability', `${value}${note ? ` — ${note}` : ''}`);
   return { success: true, patentability: value, message: 'Patentability recorded.' };
+}
+
+/*
+ * The submitter's own "this may be patentable" tick, and the same tick from
+ * anybody senior enough to review. It is a flag raised by a person, separate
+ * from `patentability`, which is the organisation's formal assessment and stays
+ * an admin-only field.
+ */
+export async function setPatentableFlag(db, user, b) {
+  const ideaId = Number(b.idea_id) || 0;
+  if (!ideaId) throw badRequest('idea_id required.');
+  const flag = !(b.patentable === false || b.patentable === 0 || b.patentable === '0');
+
+  const [[idea]] = await db.execute(
+    'SELECT id, submitter_id, patentable_flag FROM ideas WHERE id=?', [ideaId]
+  );
+  if (!idea) throw notFound('Idea not found');
+
+  // Either your own idea, or you are senior enough to be reviewing ideas at all.
+  const isAuthor = Number(idea.submitter_id) === Number(user.id);
+  if (!isAuthor && !PRIVILEGED_SOLUTION.includes(user.role)) {
+    throw forbidden('You can only flag your own ideas as patentable.');
+  }
+  if (Number(idea.patentable_flag ? 1 : 0) === (flag ? 1 : 0)) {
+    return { success: true, patentable: flag, message: 'No change.' };
+  }
+
+  await db.execute(
+    'UPDATE ideas SET patentable_flag=?, patentable_flagged_by=?, updated_at=NOW() WHERE id=?',
+    [flag ? 1 : 0, flag ? user.id : null, ideaId]
+  );
+  await addWorkflow(db, ideaId, user.id, 'Patentable',
+    flag ? 'Marked as possibly patentable.' : 'Patentable mark removed.');
+
+  return {
+    success: true,
+    patentable: flag,
+    message: flag ? 'Marked as possibly patentable.' : 'Patentable mark removed.',
+  };
+}
+
+/*
+ * Bulk archive — MOM follow-up. Filtering an old idea out of a view does not
+ * archive it, so an administrator asking to "clear out last year" had to open
+ * every idea one at a time. This archives a whole selection in one statement.
+ *
+ * Two ways to choose what to archive:
+ *   ids            an explicit list, from tick boxes on the screen
+ *   before_date    everything submitted before that date
+ * Draft ideas are never touched: they belong to their author and are not yet
+ * part of the organisation's record.
+ */
+export async function bulkArchive(db, user, b) {
+  assertOrgAdmin(user, 'archive ideas');
+  const archive = !(b.archived === false || b.archived === 0 || b.archived === '0');
+  const ids = Array.isArray(b.ids)
+    ? [...new Set(b.ids.map((n) => Number(n)).filter((n) => n > 0))].slice(0, 2000)
+    : [];
+  const beforeDate = String(b.before_date ?? '').trim();
+
+  if (!ids.length && !beforeDate) {
+    throw badRequest('Choose the ideas to archive, or a date to archive before.');
+  }
+  if (beforeDate && !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
+    throw badRequest('before_date must be in YYYY-MM-DD form.');
+  }
+
+  const where = ["status <> 'Draft'"];
+  const params = [];
+  if (ids.length) {
+    where.push(`id IN (${ids.map(() => '?').join(',')})`);
+    params.push(...ids);
+  }
+  if (beforeDate) {
+    where.push('submitted_at < ?');
+    params.push(`${beforeDate} 00:00:00`);
+  }
+  // Archiving skips what is already archived, and restoring skips what is not,
+  // so re-running the same request is harmless.
+  where.push(archive ? 'archived_at IS NULL' : 'archived_at IS NOT NULL');
+
+  const [rows] = await db.execute(
+    `SELECT id FROM ideas WHERE ${where.join(' AND ')} LIMIT 2000`, params
+  );
+  if (!rows.length) {
+    return { success: true, affected: 0, message: 'Nothing to change.' };
+  }
+
+  const targetIds = rows.map((r) => r.id);
+  const holes = targetIds.map(() => '?').join(',');
+  if (archive) {
+    await db.execute(
+      `UPDATE ideas SET archived_at=NOW(), archived_by=?, updated_at=NOW() WHERE id IN (${holes})`,
+      [user.id, ...targetIds]
+    );
+  } else {
+    await db.execute(
+      `UPDATE ideas SET archived_at=NULL, archived_by=NULL, updated_at=NOW() WHERE id IN (${holes})`,
+      targetIds
+    );
+  }
+
+  // One timeline entry per idea, so the change is visible from the idea itself
+  // and not only from the audit trail.
+  for (const id of targetIds) {
+    await addWorkflow(db, id, user.id, archive ? 'Archived' : 'Restored',
+      archive ? 'Archived in bulk.' : 'Restored in bulk.');
+  }
+
+  return {
+    success: true,
+    affected: targetIds.length,
+    archived: archive,
+    message: `${targetIds.length} idea(s) ${archive ? 'archived' : 'restored'}.`,
+  };
 }

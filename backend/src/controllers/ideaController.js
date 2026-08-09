@@ -76,6 +76,14 @@ export const setArchived = asyncHandler(async (req, res) =>
   respond(res, await ideaService.setArchived(req.db, req.user, req.body || {}))
 );
 
+export const setPatentableFlag = asyncHandler(async (req, res) =>
+  respond(res, await ideaService.setPatentableFlag(req.db, req.user, req.body || {}))
+);
+
+export const bulkArchive = asyncHandler(async (req, res) =>
+  respond(res, await ideaService.bulkArchive(req.db, req.user, req.body || {}))
+);
+
 export const setPatentability = asyncHandler(async (req, res) =>
   respond(res, await ideaService.setPatentability(req.db, req.user, req.body || {}))
 );
@@ -83,5 +91,5 @@ export const setPatentability = asyncHandler(async (req, res) =>
 export default {
   list, my, review, get, submit, draft, reviewAction, dashboard,
   assignReviewers, reviewerDecision, checkDuplicate, bulkReview, updateRoi, updateImplementation,
-  setArchived, setPatentability,
+  setArchived, setPatentability, setPatentableFlag, bulkArchive,
 };

@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { ideasApi, votesApi, uploadApi, exportApi, ideaAdminApi } from '../services/api';
 import {
   statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas,
-  fmtDate, actionLabel, isPrivileged, communityScore,
+  fmtDate, fmtDateTime, actionLabel, isPrivileged, communityScore,
 } from '../utils/helpers';
 import ReviewActionModal from './ReviewActionModal';
 import AssignReviewersModal from './AssignReviewersModal';
@@ -33,11 +33,16 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   // §13.10 / §13.2 — org-admin controls. `pat` mirrors the idea so the select is
   // controlled; it re-syncs whenever the idea reloads.
   const [pat, setPat] = useState('not_assessed');
+  // The person-raised patentable tick, separate from the admin's formal
+  // assessment above. Mirrored into state so the box is controlled.
+  const [patentable, setPatentable] = useState(false);
+  const [busyFlag, setBusyFlag] = useState(false);
   const [busyAdmin, setBusyAdmin] = useState(false);
   const isOrgAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
   useEffect(() => { load(); }, [ideaId]);
   useEffect(() => { if (idea) setPat(idea.patentability || 'not_assessed'); }, [idea?.id, idea?.patentability]);
+  useEffect(() => { if (idea) setPatentable(!!idea.patentable_flag); }, [idea?.id, idea?.patentable_flag]);
 
   async function savePatentability(value) {
     const prev = pat;
@@ -114,6 +119,21 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   // Higher authorities in the review hierarchy can export the employee's idea as
   // a pre-formatted Closure Summary PDF. Gated server-side too — the button just
   // hides it from people who would get a 403.
+  async function togglePatentable(value) {
+    const prev = patentable;
+    setPatentable(value);              // optimistic: the box responds at once
+    setBusyFlag(true);
+    try {
+      const res = await ideasApi.setPatentableFlag(ideaId, value);
+      if (!res.data.success) { setPatentable(prev); showToast(res.data.error || t('msg.error'), 'danger'); }
+      else showToast(res.data.message, 'success');
+    } catch (err) {
+      setPatentable(prev);
+      showToast(err?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setBusyFlag(false);
+  }
+
   async function handleExportPdf() {
     setExporting(true);
     try {
@@ -128,6 +148,9 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
   const isSelf   = idea ? parseInt(idea.submitter_id) === parseInt(user?.id) : false;
   const isPriv   = isPrivileged(user?.role);
+  // The submitter may flag their own idea; anyone in the review hierarchy may
+  // flag any idea. Nobody else can move the tick.
+  const canFlagPatentable = isSelf || isPriv;
   const isMultiRv = idea?.workflow_type === 'multi_reviewer';
   const isAssignedReviewer = isPriv && !isSelf && idea && (idea.reviewers||[]).some(
     rv => parseInt(rv.reviewer_id) === parseInt(user?.id) && rv.decision === 'pending'
@@ -187,6 +210,21 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     </div>
                   </div>
 
+                  {/* Date and time of submission, shown to everybody. Two ideas
+                      filed on the same day are ordered by the clock, and people
+                      want to see which of theirs went in first. */}
+                  <div className="form-row" style={{ marginBottom:12,alignItems:'center' }}>
+                    <div><strong>{t('detail.submitted_at')}:</strong> {fmtDateTime(idea.submitted_at || idea.created_at)}</div>
+                    <div>
+                      <label style={{ display:'inline-flex',alignItems:'center',gap:8,cursor: canFlagPatentable ? 'pointer' : 'default' }}>
+                        <input type="checkbox" checked={!!patentable} disabled={!canFlagPatentable || busyFlag}
+                          onChange={(e) => togglePatentable(e.target.checked)} />
+                        <strong>{t('idea.patentable_short')}</strong>
+                        <InfoDot term="patentable" />
+                      </label>
+                    </div>
+                  </div>
+
                   {/* §13.13 — one line answering "where is this now?", rather
                       than leaving the reader to reconstruct it from the timeline. */}
                   {idea.review_stage && (
@@ -235,7 +273,20 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                   <div className="form-group">
                     <label>{t('detail.situation')}</label>
-                    <div data-protect style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.present_situation}</div>
+                    {/* Colleagues who only submit ideas see the opening lines of the
+                        problem, not the whole write-up. As with the solution, the
+                        server makes the decision and never sends the rest. */}
+                    {idea.situation_redacted ? (
+                      <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
+                        <div>{idea.situation_summary || '—'}</div>
+                        <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
+                          <span aria-hidden="true">🔒</span>
+                          <span>{t('idea.situation_hidden_hint')}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div data-protect style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.present_situation}</div>
+                    )}
                   </div>
                   <div className="form-group">
                     <label>{t('detail.solution')}</label>
@@ -437,7 +488,10 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
           <div className="modal-footer" id="idea-detail-footer">
             <button className="btn btn-outline" onClick={onClose}>{t('detail.close')}</button>
-            {isPriv && idea && (
+            {/* Open to everyone. The server builds the PDF from what this
+                particular reader is allowed to see, so an employee's copy
+                carries the same extract they see on screen. */}
+            {idea && (
               <button className="btn btn-outline" style={{ borderColor:'#1a7d6b',color:'#136052' }}
                 disabled={exporting} onClick={handleExportPdf}>
                 {exporting ? t('msg.loading') : `⤓ ${t('detail.export_pdf')}`}

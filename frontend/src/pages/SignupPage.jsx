@@ -78,6 +78,9 @@ const BLANK = {
   accepted_terms: false,
 };
 
+/* Entity types that are issued a CIN. Everything else never has one. */
+const COMPANY_TYPES = ['private_limited', 'public_limited', 'llp'];
+
 const STEPS = ['Your details', 'Business profile', 'Location & review'];
 
 export default function SignupPage() {
@@ -111,19 +114,102 @@ export default function SignupPage() {
     } catch { /* advisory only; submit is the authority */ }
   }
 
-  function next() {
-    if (step === 0) {
-      if (!form.company_name.trim()) return setError('Enter your registered company name.');
-      if (!form.contact_name.trim()) return setError('Enter your full name.');
-      if (!form.contact_email.trim()) return setError('Enter your work email address.');
-      if (emailNote) return setError(emailNote);
+  /*
+   * Every field on a step has to be filled before the next one opens.
+   *
+   * The reason is not tidiness. A half-filled application cannot be checked
+   * against the Udyam and GST registers, so it sits in the queue while somebody
+   * emails back and forth for the missing number - which used to be most of
+   * them. Asking once, while the applicant still has the certificate in front
+   * of them, is faster for everybody.
+   *
+   * The one conditional field is CIN. It is only ever issued to registered
+   * companies and LLPs; a proprietorship has never had one, so demanding it
+   * would make registration impossible for them.
+   */
+  const FIELD_RULES = {
+    company_name:  { label: 'registered company name', min: 3 },
+    proposed_slug: { label: 'preferred org code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
+                     hint: 'Lower-case letters, numbers, hyphen or underscore.' },
+    website:       { label: 'website', re: /^https?:\/\/[^\s.]+\.[^\s]{2,}$/i,
+                     hint: 'Include http:// or https://.' },
+    contact_name:  { label: 'full name', min: 3 },
+    contact_designation: { label: 'designation', min: 2 },
+    contact_email: { label: 'work email address', re: /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/ },
+    contact_phone: { label: 'phone number', re: /^(\+?91[-\s]?)?[6-9]\d{9}$/,
+                     hint: 'Ten digits, optionally with +91.' },
+
+    udyam_number:  { label: 'Udyam registration number', re: /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/i,
+                     hint: 'It looks like UDYAM-KR-03-0012345.' },
+    gstin:         { label: 'GSTIN', re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
+                     hint: 'Fifteen characters, as printed on your GST certificate.' },
+    pan:           { label: 'business PAN', re: /^[A-Z]{5}\d{4}[A-Z]$/i,
+                     hint: 'Five letters, four digits, one letter.' },
+    cin:           { label: 'CIN', re: /^[A-Z]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}$/i,
+                     hint: 'Twenty-one characters from your incorporation certificate.',
+                     onlyIf: (f) => COMPANY_TYPES.includes(f.entity_type) },
+    entity_type:         { label: 'entity type' },
+    enterprise_category: { label: 'MSME category' },
+    sector:              { label: 'sector' },
+    nic_code:            { label: 'NIC activity code', re: /^\d{2,5}$/,
+                           hint: 'Two to five digits from your Udyam certificate.' },
+    employee_count:      { label: 'number of employees', num: [1, 100000] },
+    annual_turnover_band:{ label: 'annual turnover' },
+    year_established:    { label: 'year established', num: [1850, new Date().getFullYear()] },
+
+    address_line: { label: 'registered address', min: 6 },
+    city:         { label: 'city or town', min: 2 },
+    state:        { label: 'state' },
+    pincode:      { label: 'PIN code', re: /^[1-9]\d{5}$/, hint: 'Six digits.' },
+    country:      { label: 'country', min: 2 },
+  };
+
+  const STEP_FIELDS = [
+    ['company_name', 'proposed_slug', 'website',
+     'contact_name', 'contact_designation', 'contact_email', 'contact_phone'],
+    ['udyam_number', 'gstin', 'pan', 'cin', 'entity_type', 'enterprise_category',
+     'sector', 'nic_code', 'employee_count', 'annual_turnover_band', 'year_established'],
+    ['address_line', 'city', 'state', 'pincode', 'country'],
+  ];
+
+  /** The first problem on a step, or '' when the step is complete. */
+  function checkStep(n) {
+    for (const key of STEP_FIELDS[n]) {
+      const rule = FIELD_RULES[key];
+      if (!rule) continue;
+      if (rule.onlyIf && !rule.onlyIf(form)) continue;
+      const value = String(form[key] ?? '').trim();
+      if (!value) return `Enter your ${rule.label}.`;
+      if (rule.min && value.length < rule.min) return `That ${rule.label} looks too short.`;
+      if (rule.re && !rule.re.test(value)) {
+        return `That ${rule.label} does not look right. ${rule.hint || ''}`.trim();
+      }
+      if (rule.num) {
+        const v = Number(value);
+        if (!Number.isFinite(v) || v < rule.num[0] || v > rule.num[1]) {
+          return `Enter a ${rule.label} between ${rule.num[0]} and ${rule.num[1]}.`;
+        }
+      }
     }
+    return '';
+  }
+
+  function next() {
+    const problem = checkStep(step);
+    if (problem) return setError(problem);
+    if (step === 0 && emailNote) return setError(emailNote);
     setError('');
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
   }
 
   async function submit(e) {
     e.preventDefault();
+    // Re-check every step: somebody can reach the last one, go back and clear a
+    // field, and the browser's own `required` never sees the earlier steps.
+    for (let n = 0; n < STEP_FIELDS.length; n += 1) {
+      const problem = checkStep(n);
+      if (problem) { setStep(n); return setError(problem); }
+    }
     if (!form.accepted_terms) return setError('Please confirm you are authorised to register this organisation.');
     setBusy(true);
     setError('');
@@ -144,6 +230,7 @@ export default function SignupPage() {
           font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif}
         .ifqm-signup *{box-sizing:border-box}
         .ifqm-signup .wrap{max-width:720px;margin:0 auto}
+        .ifqm-signup .req{color:#dc2626;font-weight:700;margin-left:2px}
         .ifqm-signup a{text-decoration:none}
         .ifqm-signup .brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:24px}
         .ifqm-signup .brand img{height:42px;background:#fff;border-radius:11px;padding:6px 10px;object-fit:contain;
@@ -227,7 +314,8 @@ export default function SignupPage() {
             <p className="lede">
               Tell us about your business and we will set up your workspace. Approval
               is manual — usually the same working day — and your team can be invited
-              as soon as it is live. Only the first three fields are required.
+              as soon as it is live. Every field is required: we verify the details
+              against the public registers before creating a workspace.
             </p>
 
             <div className="steps">
@@ -247,18 +335,18 @@ export default function SignupPage() {
                     <legend>Organisation</legend>
                     <div className="grid">
                       <div className="full">
-                        <label htmlFor="company_name">Registered company name</label>
+                        <label htmlFor="company_name">Registered company name <span className="req">*</span></label>
                         <input id="company_name" value={form.company_name} onChange={set('company_name')}
                           placeholder="Acme Precision Components Pvt Ltd" required />
                       </div>
                       <div>
-                        <label htmlFor="proposed_slug">Preferred org code <span className="opt">optional</span><InfoDot term="org_code" /></label>
+                        <label htmlFor="proposed_slug">Preferred org code <span className="req">*</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="acme" />
-                        <p className="hint">Short identifier for your workspace. We derive one from your email if you leave this blank.</p>
+                        <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
                       </div>
                       <div>
-                        <label htmlFor="website">Website <span className="opt">optional</span></label>
+                        <label htmlFor="website">Website <span className="req">*</span></label>
                         <input id="website" type="url" value={form.website} onChange={set('website')}
                           placeholder="https://acme.co.in" />
                       </div>
@@ -269,17 +357,17 @@ export default function SignupPage() {
                     <legend>Who is applying</legend>
                     <div className="grid">
                       <div>
-                        <label htmlFor="contact_name">Full name</label>
+                        <label htmlFor="contact_name">Full name <span className="req">*</span></label>
                         <input id="contact_name" value={form.contact_name} onChange={set('contact_name')}
                           placeholder="Priya Nair" required />
                       </div>
                       <div>
-                        <label htmlFor="contact_designation">Designation <span className="opt">optional</span></label>
+                        <label htmlFor="contact_designation">Designation <span className="req">*</span></label>
                         <input id="contact_designation" value={form.contact_designation}
                           onChange={set('contact_designation')} placeholder="Operations Head" />
                       </div>
                       <div className="full">
-                        <label htmlFor="contact_email">Work email</label>
+                        <label htmlFor="contact_email">Work email <span className="req">*</span></label>
                         <input id="contact_email" type="email" value={form.contact_email}
                           onChange={set('contact_email')} onBlur={validateEmail}
                           placeholder="priya@acme.co.in" required />
@@ -288,7 +376,7 @@ export default function SignupPage() {
                           : <p className="hint">Must be your company domain — personal mailboxes such as Gmail or Outlook cannot be verified as belonging to your organisation. You become the first administrator of the workspace.</p>}
                       </div>
                       <div>
-                        <label htmlFor="contact_phone">Phone <span className="opt">optional</span></label>
+                        <label htmlFor="contact_phone">Phone <span className="req">*</span></label>
                         <input id="contact_phone" value={form.contact_phone} onChange={set('contact_phone')}
                           placeholder="+91 98765 43210" />
                       </div>
@@ -302,38 +390,41 @@ export default function SignupPage() {
                   <fieldset>
                     <legend>Statutory identity</legend>
                     <p className="hint" style={{ marginTop: -6, marginBottom: 12 }}>
-                      Straight off your Udyam certificate. All optional — supply what
-                      you have and a reviewer will follow up if anything is needed.
+                      Straight off your Udyam certificate. We check these against the
+                      public registers before a workspace is created, which is why they
+                      are all required. CIN applies to companies and LLPs only.
                     </p>
                     <div className="grid">
                       <div>
-                        <label htmlFor="udyam_number">Udyam registration number <span className="opt">optional</span><InfoDot term="udyam" /></label>
+                        <label htmlFor="udyam_number">Udyam registration number <span className="req">*</span><InfoDot term="udyam" /></label>
                         <input id="udyam_number" value={form.udyam_number} onChange={set('udyam_number')}
                           placeholder="UDYAM-KR-03-0012345" />
                       </div>
                       <div>
-                        <label htmlFor="gstin">GSTIN <span className="opt">optional</span><InfoDot term="gstin" /></label>
+                        <label htmlFor="gstin">GSTIN <span className="req">*</span><InfoDot term="gstin" /></label>
                         <input id="gstin" value={form.gstin} onChange={set('gstin')} placeholder="29ABCDE1234F1Z5" />
-                        <p className="hint">Leave blank if you are below the GST threshold.</p>
+                        <p className="hint">Fifteen characters, exactly as printed on your GST certificate.</p>
                       </div>
                       <div>
-                        <label htmlFor="pan">Business PAN <span className="opt">optional</span></label>
+                        <label htmlFor="pan">Business PAN <span className="req">*</span></label>
                         <input id="pan" value={form.pan} onChange={set('pan')} placeholder="ABCDE1234F" />
                       </div>
                       <div>
-                        <label htmlFor="cin">CIN <span className="opt">optional</span></label>
+                        <label htmlFor="cin">CIN {COMPANY_TYPES.includes(form.entity_type)
+                          ? <span className="req">*</span>
+                          : <span className="opt">companies and LLPs only</span>}</label>
                         <input id="cin" value={form.cin} onChange={set('cin')} placeholder="U29100KA2015PTC012345" />
-                        <p className="hint">Companies only.</p>
+                        <p className="hint">Only issued to registered companies and LLPs.</p>
                       </div>
                       <div>
-                        <label htmlFor="entity_type">Entity type <span className="opt">optional</span></label>
+                        <label htmlFor="entity_type">Entity type <span className="req">*</span></label>
                         <select id="entity_type" value={form.entity_type} onChange={set('entity_type')}>
                           <option value="">Select…</option>
                           {ENTITY_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="enterprise_category">MSME category <span className="opt">optional</span></label>
+                        <label htmlFor="enterprise_category">MSME category <span className="req">*</span></label>
                         <select id="enterprise_category" value={form.enterprise_category} onChange={set('enterprise_category')}>
                           <option value="">Select…</option>
                           {CATEGORIES.map(([v, l, hint]) => <option key={v} value={v}>{l} — {hint}</option>)}
@@ -346,32 +437,32 @@ export default function SignupPage() {
                     <legend>Business profile</legend>
                     <div className="grid">
                       <div>
-                        <label htmlFor="sector">Sector <span className="opt">optional</span></label>
+                        <label htmlFor="sector">Sector <span className="req">*</span></label>
                         <select id="sector" value={form.sector} onChange={set('sector')}>
                           <option value="">Select…</option>
                           {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="nic_code">NIC activity code <span className="opt">optional</span><InfoDot term="nic_code" /></label>
+                        <label htmlFor="nic_code">NIC activity code <span className="req">*</span><InfoDot term="nic_code" /></label>
                         <input id="nic_code" value={form.nic_code} onChange={set('nic_code')} placeholder="25" />
                         <p className="hint">The 2-digit code from your Udyam certificate.</p>
                       </div>
                       <div>
-                        <label htmlFor="employee_count">Number of employees <span className="opt">optional</span></label>
+                        <label htmlFor="employee_count">Number of employees <span className="req">*</span></label>
                         <input id="employee_count" type="number" min="1" max="100000"
                           value={form.employee_count} onChange={set('employee_count')} placeholder="85" />
                         <p className="hint">Helps us size your workspace and suggest a rollout plan.</p>
                       </div>
                       <div>
-                        <label htmlFor="annual_turnover_band">Annual turnover <span className="opt">optional</span></label>
+                        <label htmlFor="annual_turnover_band">Annual turnover <span className="req">*</span></label>
                         <select id="annual_turnover_band" value={form.annual_turnover_band} onChange={set('annual_turnover_band')}>
                           <option value="">Select…</option>
                           {TURNOVER_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="year_established">Year established <span className="opt">optional</span></label>
+                        <label htmlFor="year_established">Year established <span className="req">*</span></label>
                         <input id="year_established" type="number" min="1850" max={new Date().getFullYear()}
                           value={form.year_established} onChange={set('year_established')} placeholder="2015" />
                       </div>
@@ -386,27 +477,27 @@ export default function SignupPage() {
                     <legend>Registered address</legend>
                     <div className="grid">
                       <div className="full">
-                        <label htmlFor="address_line">Address <span className="opt">optional</span></label>
+                        <label htmlFor="address_line">Address <span className="req">*</span></label>
                         <input id="address_line" value={form.address_line} onChange={set('address_line')}
                           placeholder="Plot 14, Phase II, Industrial Area" />
                       </div>
                       <div>
-                        <label htmlFor="city">City / town <span className="opt">optional</span></label>
+                        <label htmlFor="city">City / town <span className="req">*</span></label>
                         <input id="city" value={form.city} onChange={set('city')} placeholder="Bengaluru" />
                       </div>
                       <div>
-                        <label htmlFor="state">State <span className="opt">optional</span></label>
+                        <label htmlFor="state">State <span className="req">*</span></label>
                         <select id="state" value={form.state} onChange={set('state')}>
                           <option value="">Select…</option>
                           {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="pincode">PIN code <span className="opt">optional</span></label>
+                        <label htmlFor="pincode">PIN code <span className="req">*</span></label>
                         <input id="pincode" value={form.pincode} onChange={set('pincode')} placeholder="560058" />
                       </div>
                       <div>
-                        <label htmlFor="country">Country</label>
+                        <label htmlFor="country">Country <span className="req">*</span></label>
                         <input id="country" value={form.country} onChange={set('country')} />
                       </div>
                     </div>

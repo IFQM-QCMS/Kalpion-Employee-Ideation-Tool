@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import { STATUS_STYLE, PRIORITY_COLOR } from './SupportPage';
+import BulkArchivePanel from '../components/BulkArchivePanel';
 
 /*
  * Platform → Support Tickets. IFQM's queue across every organisation.
@@ -31,8 +32,10 @@ export default function PlatformTicketsPage() {
   const [q,       setQ]       = useState('');
   const [openId,  setOpenId]  = useState(null);
   const [showNew, setShowNew] = useState(false);
+  const [archived, setArchived] = useState('');   // '' = live only, '1' = archived only
+  const [includeOpen, setIncludeOpen] = useState(false);
 
-  useEffect(() => { load(); }, [status, priority]);
+  useEffect(() => { load(); }, [status, priority, archived]);
 
   async function load() {
     setLoading(true); setError('');
@@ -41,6 +44,7 @@ export default function PlatformTicketsPage() {
       if (status) params.status = status;
       if (priority) params.priority = priority;
       if (q.trim()) params.q = q.trim();
+      if (archived) params.archived = archived;
       const res = await platformApi.tickets(params);
       if (res.data.success) setData(res.data);
       else setError(res.data.error || t('msg.fail_load'));
@@ -88,8 +92,28 @@ export default function PlatformTicketsPage() {
           <option value="">{t('pt.all_priorities')}</option>
           {PRIORITIES.map((p) => <option key={p} value={p}>{t('sup.pri_' + p)}</option>)}
         </select>
+        <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'var(--text-muted)',cursor:'pointer' }}>
+          <input type="checkbox" checked={archived === '1'}
+            onChange={(e) => setArchived(e.target.checked ? '1' : '')}
+            style={{ accentColor:'var(--primary)' }} />
+          {t('pt.show_archived')}
+        </label>
         <button className="btn btn-outline" onClick={load}>{t('pt.search')}</button>
       </div>
+
+      {/* Clearing out an old queue in one go, rather than opening each ticket.
+          Resolved and closed tickets only, unless the operator opts in. */}
+      <BulkArchivePanel
+        visibleIds={tickets.map((tk) => tk.id)}
+        onRun={(payload) => platformApi.bulkArchiveTickets({ ...payload, include_open: includeOpen })}
+        onDone={load}
+        labelKey="bulk.tickets"
+        extra={
+          <label style={{ display:'flex',alignItems:'center',gap:8,fontSize:12.5,color:'var(--text-muted)' }}>
+            <input type="checkbox" checked={includeOpen} onChange={(e) => setIncludeOpen(e.target.checked)} />
+            {t('bulk.include_open')}
+          </label>
+        } />
 
       {loading && <div className="empty-state"><div className="spinner"></div></div>}
       {error   && <div className="alert alert-danger">{error}</div>}

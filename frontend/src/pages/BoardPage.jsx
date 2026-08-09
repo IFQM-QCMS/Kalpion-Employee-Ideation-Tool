@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { votesApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
+import ScreenGuard from '../components/ScreenGuard';
 
 export default function BoardPage() {
   const { user }      = useAuth();
@@ -38,7 +39,7 @@ export default function BoardPage() {
   }
 
   return (
-    <>
+    <ScreenGuard>
       <div className="filter-bar">
         <select className="form-control" value={sort} onChange={e => setSort(e.target.value)} style={{ width:180 }}>
           <option value="votes">{t('board.sort_votes')}</option>
@@ -124,6 +125,6 @@ export default function BoardPage() {
       </div>
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}
-    </>
+    </ScreenGuard>
   );
 }

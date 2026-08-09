@@ -28,6 +28,11 @@ const ROLE_BADGE_STYLE = {
   trainee:        { background:'var(--success-light)', color:'var(--success)', border:'1px solid var(--success-dim)' },
 };
 
+/* Top to bottom, the way an organisation chart reads. Used for the User List
+   filter; super_admin is left out because it is a single built-in account. */
+const HIERARCHY_ROLES = ['admin', 'plant_head', 'executive', 'senior_manager',
+  'department_manager', 'manager', 'project_lead', 'team_lead', 'employee', 'trainee'];
+
 const TAB_KEYS = ['admin.tab_overview','admin.tab_ideas','admin.tab_users','admin.tab_hierarchy','admin.tab_categories','admin.tab_system','admin.tab_approved','admin.tab_integration'];
 
 export default function AdminPage() {
@@ -42,6 +47,8 @@ export default function AdminPage() {
   const [ideasStatus, setIdeasStatus] = useState('');
   const [users,       setUsers]       = useState([]);
   const [usersSearch, setUsersSearch] = useState('');
+  const [usersRole,   setUsersRole]   = useState('');
+  const [usersStatus, setUsersStatus] = useState('');
   const [userPage,    setUserPage]    = useState(1);
   const [userMeta,    setUserMeta]    = useState({ total: 0, pages: 1 });
   const [managers,    setManagers]    = useState([]);
@@ -68,7 +75,7 @@ export default function AdminPage() {
     if (tab !== 2) return undefined;
     const id = setTimeout(() => { loadUsers(); }, usersSearch ? 300 : 0);
     return () => clearTimeout(id);
-  }, [tab, usersSearch, userPage]);
+  }, [tab, usersSearch, usersRole, usersStatus, userPage]);
 
   async function loadDash() {
     try {
@@ -88,7 +95,7 @@ export default function AdminPage() {
     setLoading(true);
     try {
       const [uRes, mRes] = await Promise.all([
-        usersApi.adminList({ q: usersSearch, page: userPage, limit: 25 }),
+        usersApi.adminList({ q: usersSearch, role: usersRole, status: usersStatus, page: userPage, limit: 25 }),
         usersApi.managers(),
       ]);
       setUsers(uRes.data.users || []);
@@ -136,8 +143,8 @@ export default function AdminPage() {
     // This is an explicit allowlist, not Object.fromEntries — a new field on the
     // form is invisible to the save until it is named here. solution_visibility
     // (MOM §13.1) is one of them.
-    ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
-    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
+    ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','max_file_mb','situation_preview_chars','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
+    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection','idea_screen_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
     try {
       const res = await settingsApi.update(data);
@@ -239,6 +246,20 @@ export default function AdminPage() {
               value={usersSearch}
               onChange={e => { setUsersSearch(e.target.value); setUserPage(1); }}
               style={{ maxWidth:280 }} id="admin-user-search" />
+            {/* Narrowing by level is the question an admin actually asks: "who
+                are my plant heads", "show me the trainees". Filtered in SQL, so
+                the paging stays correct. */}
+            <select className="form-control" style={{ width:190 }} value={usersRole}
+              onChange={e => { setUsersRole(e.target.value); setUserPage(1); }} id="admin-user-role">
+              <option value="">{t('filter.all_roles')}</option>
+              {HIERARCHY_ROLES.map(r => <option key={r} value={r}>{formatRole(r, t)}</option>)}
+            </select>
+            <select className="form-control" style={{ width:150 }} value={usersStatus}
+              onChange={e => { setUsersStatus(e.target.value); setUserPage(1); }}>
+              <option value="">{t('filter.all_statuses')}</option>
+              <option value="active">{t('admin.status_active')}</option>
+              <option value="inactive">{t('admin.status_inactive')}</option>
+            </select>
             <div style={{ display:'flex',gap:8 }}>
               <button className="btn btn-outline btn-sm" onClick={() => setShowImport(true)}>
                 ⬆ {t('imp.button')}
@@ -385,6 +406,37 @@ export default function AdminPage() {
                 <option value="seniors">{t('admin.pv_seniors')}</option>
                 <option value="everyone">{t('admin.pv_everyone')}</option>
               </select>
+            </div>
+
+            {/* Each organisation sets its own attachment ceiling. The platform
+                keeps a hard maximum above this, so raising it here can never
+                exceed what the server itself will accept. */}
+            <div className="form-row">
+              <div className="form-group">
+                <label>{t('admin.max_file_mb')}<InfoDot term="max_file_mb" /></label>
+                <input className="form-control" name="max_file_mb" type="number" min="1" max="50"
+                  defaultValue={settings.max_file_mb || 10} />
+                <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.max_file_hint')}</div>
+              </div>
+              <div className="form-group">
+                <label>{t('admin.situation_preview')}<InfoDot term="situation_preview" /></label>
+                <input className="form-control" name="situation_preview_chars" type="number" min="60" max="600"
+                  defaultValue={settings.situation_preview_chars || 180} />
+                <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.situation_preview_hint')}</div>
+              </div>
+            </div>
+
+            {/* On by default. Blanks idea text when the window loses focus, and
+                stamps the reader's name across it. The hint is honest about the
+                limits — no web page can truly stop a screenshot. */}
+            <div className="form-group" style={{ maxWidth:520 }}>
+              <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
+                <input type="checkbox" name="idea_screen_protection" value="1"
+                  defaultChecked={settings.idea_screen_protection !== '0'}
+                  style={{ accentColor:'var(--primary)' }} />
+                {t('admin.screen_protection')}<InfoDot term="screen_protection" />
+              </label>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sp_hint')}</div>
             </div>
 
             {/* MOM §7.2 — a deterrent, not a control. The hint says so plainly

@@ -107,6 +107,10 @@ function normaliseSlug(raw) {
  * Validate an application and return the row to insert.
  * Throws ApiError(400) with a single, actionable message on the first problem.
  */
+/* Entity types the Registrar of Companies issues a CIN to. Everything else
+   - proprietorships, partnership firms, societies - never has one. */
+const COMPANY_ENTITY_TYPES = ['private_limited', 'public_limited', 'llp'];
+
 function validateApplication(body) {
   const companyName = str(body.company_name);
   if (companyName.length < 2 || companyName.length > 150) {
@@ -183,6 +187,52 @@ function validateApplication(body) {
   const website = str(body.website);
   if (website && !/^https?:\/\/\S+\.\S+/.test(website)) {
     throw badRequest('Website must start with http:// or https://');
+  }
+
+  const designation = str(body.contact_designation);
+  const addressLine = str(body.address_line);
+  const city = str(body.city);
+  const stateName = str(body.state);
+  const country = str(body.country) || 'India';
+
+  /*
+   * Everything above validates the FORM of a value if one was supplied. This
+   * block is about whether it was supplied at all.
+   *
+   * An application missing its Udyam or GST number cannot be checked against
+   * the public registers, so it stalls in the queue while somebody chases the
+   * applicant by email. Requiring them at the point of application is the whole
+   * point - and it has to be enforced here, not only in the browser, because
+   * the browser is not a place where rules live.
+   *
+   * CIN is the exception: only companies and LLPs are ever issued one.
+   */
+  const required = [
+    [companyName, 'registered company name'],
+    [designation, 'designation'],
+    [phone, 'contact phone number'],
+    [website, 'website'],
+    [udyam, 'Udyam registration number'],
+    [gstin, 'GSTIN'],
+    [pan, 'business PAN'],
+    [entityType, 'entity type'],
+    [category, 'MSME category'],
+    [str(body.sector), 'sector'],
+    [nic, 'NIC activity code'],
+    [turnover, 'annual turnover range'],
+    [addressLine, 'registered address'],
+    [city, 'city or town'],
+    [stateName, 'state'],
+    [pincode, 'PIN code'],
+    [country, 'country'],
+  ];
+  for (const [value, label] of required) {
+    if (!value) throw badRequest(`Enter your ${label}.`);
+  }
+  if (employeeCount == null) throw badRequest('Enter your number of employees.');
+  if (year == null) throw badRequest('Enter the year your business was established.');
+  if (COMPANY_ENTITY_TYPES.includes(entityType) && !cin) {
+    throw badRequest('Enter your CIN. Registered companies and LLPs are always issued one.');
   }
 
   if (!body.accepted_terms) {

@@ -92,6 +92,11 @@ CREATE TABLE IF NOT EXISTS ideas (
   -- Patentability is a separate axis from approval: an idea can be approved and
   -- unpatentable, or rejected and still worth a provisional filing.
   patentability            ENUM('not_assessed','not_patentable','possible','recommended','filed') NOT NULL DEFAULT 'not_assessed',
+  -- Claimed by a person at submission, as distinct from the organisation's
+  -- assessment above. An employee ticking this is a prompt to look, not a
+  -- verdict, so it must never overwrite the admin's decision.
+  patentable_flag          TINYINT(1) NOT NULL DEFAULT 0,
+  patentable_flagged_by    INT NULL DEFAULT NULL,
   patentability_note       TEXT NULL DEFAULT NULL,
   -- Archiving hides an idea from working lists without destroying its points,
   -- audit trail or ROI figures. NULL = live.
@@ -322,7 +327,14 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   -- §14.10: voting is open to all; this governs the AI's written reasoning only.
   ('prediction_visibility',     'seniors'),
   -- §7.2: deterrents against casually copying idea text. Off by default.
-  ('content_protection',        '0');
+  ('content_protection',        '0'),
+  -- Each organisation sets its own attachment ceiling, bounded by the
+  -- platform-wide maximum so one tenant cannot decide to accept 2 GB uploads.
+  ('max_file_mb',               '10'),
+  -- Deterrents on the screens that list ideas. On by default: idea text is the
+  -- thing this product exists to protect.
+  ('idea_screen_protection',    '1'),
+  ('situation_preview_chars',   '180');
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,

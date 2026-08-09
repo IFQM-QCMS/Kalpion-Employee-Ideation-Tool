@@ -48,6 +48,8 @@ router.get('/health', platform.health);
 // Support queue — every tenant's tickets, plus IFQM-only internal notes.
 router.get('/tickets', support.platformList);
 router.post('/tickets', support.platformCreate);          // IFQM raises against a tenant
+// Registered before '/tickets/:id' so that "bulk-archive" is not read as an id.
+router.post('/tickets/bulk-archive', support.platformBulkArchive);
 router.get('/tickets/:id', support.platformGet);
 router.post('/tickets/:id/messages', support.platformReply);
 router.patch('/tickets/:id', support.platformUpdate);     // status / priority / assignee

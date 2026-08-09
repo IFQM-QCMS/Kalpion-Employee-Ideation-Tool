@@ -3,6 +3,7 @@ import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
 import { impactBadge, translateImpact, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
+import ScreenGuard from '../components/ScreenGuard';
 
 /*
   Rejected ideas — MOM §13.5 / §14.1.
@@ -36,7 +37,7 @@ export default function RejectedIdeasPage() {
   }
 
   return (
-    <>
+    <ScreenGuard>
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ margin: '0 0 4px' }}>{t('dash.rejected_title')}</div>
         <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '0 0 12px' }}>
@@ -96,6 +97,6 @@ export default function RejectedIdeasPage() {
       {/* The rejection reason lives in the idea's workflow timeline, which the
           detail modal already renders — no separate fetch needed. */}
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}
-    </>
+    </ScreenGuard>
   );
 }

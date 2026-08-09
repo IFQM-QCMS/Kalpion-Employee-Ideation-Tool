@@ -323,7 +323,7 @@ test('an employee can attach a document to the Support Required section', async 
   assert.equal(bad.status, 400, 'an unknown section must be rejected');
 });
 
-test('the single-idea Closure Summary PDF honours the review hierarchy and tenant boundary', async () => {
+test('the single-idea Closure Summary PDF is open to everyone and stops at the tenant boundary', async () => {
   const submit = await api('POST', '/api/ideas/submit', {
     token: AUSER,
     body: {
@@ -341,9 +341,14 @@ test('the single-idea Closure Summary PDF honours the review hierarchy and tenan
   assert.match(asAdmin.contentType, /application\/pdf/);
   assert.ok(asAdmin.text.startsWith('%PDF'), 'the body must be a PDF document');
 
-  // The employee who submitted it is not in the review hierarchy → forbidden.
+  // Everybody can export. What differs is the contents, not the permission: the
+  // PDF is built from ideaService.get(), which has already decided what this
+  // particular reader may see. A colleague who is neither the author nor a
+  // reviewer gets the extract, not the full proposal.
   const asUser = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: AUSER });
-  assert.equal(asUser.status, 403);
+  assert.equal(asUser.status, 200, 'an employee must be able to export an idea as a PDF');
+  assert.match(asUser.contentType, /application\/pdf/);
+  assert.ok(asUser.text.startsWith('%PDF'), 'the body must be a PDF document');
 
   // An admin in another tenant cannot reach org A's idea at all.
   const asOrgB = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: BADMIN });

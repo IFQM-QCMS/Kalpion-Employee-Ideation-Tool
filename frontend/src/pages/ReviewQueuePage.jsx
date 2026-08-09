@@ -8,6 +8,7 @@ import IdeaDetailModal from '../components/IdeaDetailModal';
 import ReviewActionModal from '../components/ReviewActionModal';
 import AssignReviewersModal from '../components/AssignReviewersModal';
 import ReviewerDecisionModal from '../components/ReviewerDecisionModal';
+import ScreenGuard from '../components/ScreenGuard';
 
 function EngBadge({ aiScore, avgRating, voteCount, t }) {
   const ei = engagementIndex(aiScore, avgRating, voteCount);
@@ -85,7 +86,7 @@ export default function ReviewQueuePage() {
   }
 
   return (
-    <>
+    <ScreenGuard>
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div id="bulk-action-bar" style={{
@@ -237,6 +238,6 @@ export default function ReviewQueuePage() {
       {openReviewId && <ReviewActionModal ideaId={openReviewId} ideaCode={openReviewCode} onClose={() => { setOpenReviewId(null); load(); }} />}
       {openAssignId && <AssignReviewersModal ideaId={openAssignId} ideaCode={openAssignCode} onClose={() => { setOpenAssignId(null); load(); }} />}
       {openRvDecId  && <ReviewerDecisionModal ideaId={openRvDecId} ideaCode={openRvDecCode} onClose={() => { setOpenRvDecId(null); load(); }} />}
-    </>
+    </ScreenGuard>
   );
 }

@@ -46,6 +46,10 @@ export const platformUpdate = asyncHandler(async (req, res) =>
   respond(res, await support.updatePlatformTicket(req.params.id, req.body || {}))
 );
 
+export const platformBulkArchive = asyncHandler(async (req, res) =>
+  respond(res, await support.bulkArchiveTickets(req.body || {}))
+);
+
 export const platformCreate = asyncHandler(async (req, res) =>
   respond(res, await support.createPlatformTicket(req.user, req.body || {}))
 );
@@ -53,4 +57,5 @@ export const platformCreate = asyncHandler(async (req, res) =>
 export default {
   listMine, create, getOne, reply, update,
   platformList, platformGet, platformReply, platformUpdate, platformCreate,
+  platformBulkArchive,
 };

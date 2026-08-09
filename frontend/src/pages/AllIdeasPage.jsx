@@ -3,9 +3,12 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { ideasApi, votesApi, saveBlob } from '../services/api';
-import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate, communityScore } from '../utils/helpers';
+import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact,
+         fmtDateTime, communityScore, isAdmin, isSuperAdmin } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import InfoDot from '../components/InfoDot';
+import ScreenGuard from '../components/ScreenGuard';
+import BulkArchivePanel from '../components/BulkArchivePanel';
 
 /* Escape for the print window — that HTML is built by string concatenation, so
    React's automatic escaping does not apply to it. */
@@ -51,6 +54,7 @@ export default function AllIdeasPage() {
   const [openId,  setOpenId]  = useState(null);
   const [archived, setArchived] = useState('');   // '' = live only, '1' = archived only
   const pollRef = useRef(null);
+  const canArchive = isAdmin(user?.role) || isSuperAdmin(user?.role);
 
   useEffect(() => {
     loadIdeas();
@@ -84,7 +88,7 @@ export default function AllIdeasPage() {
    * it would either be empty or a privacy hole depending on who clicked it.
    */
   function exportCsv() {
-    const cols = ['idea_code','title','solution_summary','submitter_name','department',
+    const cols = ['idea_code','title','solution_summary','patentable_flag','submitter_name','department',
       'impact_level','ai_score','status','submitted_at'];
     const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(','), ...ideas.map(r => cols.map(c => q(r[c])).join(','))].join('\r\n');
@@ -97,10 +101,11 @@ export default function AllIdeasPage() {
   function exportPdf() {
     const rows = ideas.map(i => `<tr>
         <td>${esc(i.idea_code)}</td><td>${esc(i.title)}</td>
-        <td>${esc(i.solution_summary)}</td><td>${esc(i.submitter_name)}</td>
+        <td>${esc(i.solution_summary)}</td>
+        <td>${i.patentable_flag ? 'Yes' : ''}</td><td>${esc(i.submitter_name)}</td>
         <td>${esc(i.department)}</td><td>${esc(i.impact_level)}</td>
         <td>${esc(i.ai_score)}</td><td>${esc(i.status)}</td>
-        <td>${i.submitted_at ? esc(fmtDate(i.submitted_at)) : ''}</td></tr>`).join('');
+        <td>${esc(fmtDateTime(i.submitted_at))}</td></tr>`).join('');
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -114,8 +119,8 @@ export default function AllIdeasPage() {
       <h1>IFQM — Ideas</h1>
       <p>${ideas.length} idea(s) · exported ${new Date().toLocaleString()}</p>
       <table><thead><tr>
-        <th>Code</th><th>Title</th><th>Solution (gist)</th><th>Submitter</th><th>Dept</th>
-        <th>Impact</th><th>Score</th><th>Status</th><th>Date</th>
+        <th>Code</th><th>Title</th><th>Solution (gist)</th><th>Patentable</th><th>Submitter</th><th>Dept</th>
+        <th>Impact</th><th>Score</th><th>Status</th><th>Date and time</th>
       </tr></thead><tbody>${rows}</tbody></table></body></html>`);
     w.document.close();
     w.focus();
@@ -123,7 +128,7 @@ export default function AllIdeasPage() {
   }
 
   return (
-    <>
+    <ScreenGuard>
       <div className="filter-bar">
         <input className="form-control" type="search" placeholder={t('filter.search_ideas')}
           value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth:260 }} />
@@ -161,6 +166,16 @@ export default function AllIdeasPage() {
         </div>
       </div>
 
+      {/* True archiving, not just a filter — an organisation admin can clear out
+          a whole year of ideas at once, and put them back the same way. */}
+      {canArchive && (
+        <BulkArchivePanel
+          visibleIds={ideas.map(i => i.id)}
+          onRun={(payload) => ideasApi.bulkArchive(payload)}
+          onDone={loadIdeas}
+          labelKey="bulk.ideas" />
+      )}
+
       {error && <div className="alert alert-danger">{error}</div>}
 
       <div className="card" style={{ overflowX:'auto' }}>
@@ -170,6 +185,7 @@ export default function AllIdeasPage() {
               <th>{t('table.code')}</th>
               <th>{t('table.title')}</th>
               <th>{t('table.solution_gist')}</th>
+              <th>{t('table.patentable')}<InfoDot term="patentable" /></th>
               <th>{t('table.submitter')}</th>
               <th>{t('table.dept')}</th>
               <th>{t('table.impact')}</th>
@@ -182,10 +198,10 @@ export default function AllIdeasPage() {
           </thead>
           <tbody id="all-ideas-tbody">
             {loading && (
-              <tr><td colSpan="11" className="text-center"><div className="spinner"></div></td></tr>
+              <tr><td colSpan="12" className="text-center"><div className="spinner"></div></td></tr>
             )}
             {!loading && !ideas.length && (
-              <tr><td colSpan="11" className="text-center">{t('msg.no_ideas')}</td></tr>
+              <tr><td colSpan="12" className="text-center">{t('msg.no_ideas')}</td></tr>
             )}
             {ideas.map(i => {
               const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
@@ -193,15 +209,23 @@ export default function AllIdeasPage() {
               return (
                 <tr key={i.id}>
                   <td><strong>{i.idea_code}</strong></td>
-                  <td title={i.title}>{i.title.length > 60 ? i.title.substring(0,60)+'…' : i.title}</td>
+                  <td title={i.title}>
+                    <div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div>
+                  </td>
                   {/* One line only. The full proposal is deliberately not sent to
                       this screen — see redactSolution() in ideaService. */}
-                  <td style={{ maxWidth:260,color:'var(--text-muted)',fontSize:12.5 }}>
+                  <td style={{ color:'var(--text-muted)',fontSize:12.5 }}>
                     {i.solution_summary
-                      ? <span title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
+                      ? <div className="cell-clamp" style={{ maxWidth:260 }}
+                             title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
                           {i.solution_summary}
                           {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">🔒</span>}
-                        </span>
+                        </div>
+                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                  </td>
+                  <td className="text-center">
+                    {i.patentable_flag
+                      ? <span className="badge badge-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
                       : <span style={{ color:'var(--subtle)' }}>—</span>}
                   </td>
                   <td>{i.submitter_name}</td>
@@ -225,7 +249,7 @@ export default function AllIdeasPage() {
                     }
                   </td>
                   <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span></td>
-                  <td>{i.submitted_at ? fmtDate(i.submitted_at) : '–'}</td>
+                  <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.submitted_at)}</td>
                   <td>
                     <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>
                       {t('btn.view')}
@@ -239,6 +263,6 @@ export default function AllIdeasPage() {
       </div>
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); loadIdeas(); }} />}
-    </>
+    </ScreenGuard>
   );
 }

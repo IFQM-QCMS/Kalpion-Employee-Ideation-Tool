@@ -378,6 +378,62 @@ export async function updatePlatformTicket(id, body) {
 }
 
 /**
+ * Archive a whole batch of tickets in one go.
+ *
+ * The screen already had a filter, but filtering only changes what you are
+ * looking at - the tickets stay in the queue for everybody else. Clearing out
+ * last year's closed tickets one at a time was the actual complaint.
+ *
+ * Choose them either by an explicit list of ids, or by everything last touched
+ * before a date. Open tickets are left alone unless `include_open` is set,
+ * because archiving something nobody has answered yet is how a customer gets
+ * forgotten.
+ */
+export async function bulkArchiveTickets(body = {}) {
+  const archive = !(body.archived === false || body.archived === 0 || body.archived === '0');
+  const ids = Array.isArray(body.ids)
+    ? [...new Set(body.ids.map((n) => Number(n)).filter((n) => n > 0))].slice(0, 2000)
+    : [];
+  const beforeDate = String(body.before_date ?? '').trim();
+  const includeOpen = body.include_open === true || body.include_open === '1';
+
+  if (!ids.length && !beforeDate) {
+    throw badRequest('Choose the tickets to archive, or a date to archive before.');
+  }
+  if (beforeDate && !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
+    throw badRequest('before_date must be in YYYY-MM-DD form.');
+  }
+
+  const where = [];
+  const params = [];
+  if (ids.length) {
+    where.push(`id IN (${ids.map(() => '?').join(',')})`);
+    params.push(...ids);
+  }
+  if (beforeDate) {
+    where.push('updated_at < ?');
+    params.push(`${beforeDate} 00:00:00`);
+  }
+  if (!includeOpen) where.push("status IN ('resolved','closed')");
+  where.push(archive ? 'archived_at IS NULL' : 'archived_at IS NOT NULL');
+
+  const [res] = await masterDb().execute(
+    `UPDATE support_tickets SET archived_at = ${archive ? 'NOW()' : 'NULL'}, updated_at = NOW()
+      WHERE ${where.join(' AND ')}`,
+    params
+  );
+  const n = res.affectedRows || 0;
+  return {
+    success: true,
+    affected: n,
+    archived: archive,
+    message: n
+      ? `${n} ticket(s) ${archive ? 'archived' : 'restored'}.`
+      : 'Nothing to change.',
+  };
+}
+
+/**
  * POST /api/platform/tickets — IFQM opens a ticket against a tenant (outreach,
  * maintenance notice, following up an incident). It lands in that org's list.
  */

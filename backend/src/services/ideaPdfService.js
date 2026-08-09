@@ -220,7 +220,12 @@ export function buildIdeaPdf(idea, res) {
   let ay = y;
   ay = field(doc, MARGIN, ay, colW, 'Theme / Defect Type', areas, { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Target Area / Line / Part No.', bu || dept, { labelW: 120 });
-  ay = field(doc, MARGIN, ay, colW, 'Symptom (What / Where Observed)', idea.present_situation, { labelW: 120 });
+  // When the reader is not entitled to the full write-up, ideaService sends the
+  // opening lines instead. Print those rather than an empty box, and say so.
+  ay = field(doc, MARGIN, ay, colW, 'Symptom (What / Where Observed)',
+    idea.present_situation
+      || (idea.situation_summary ? `${idea.situation_summary}\n[Extract only — the full description is shown to reviewers.]` : ''),
+    { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Scale (Impact Level)', s(idea.impact_level), { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Keywords / Search Tags', [areas, s(idea.template_type)].filter(Boolean).join(', '), { labelW: 120 });
   // chart box — caption INSIDE the box (never overlapping the section header)
@@ -243,7 +248,10 @@ export function buildIdeaPdf(idea, res) {
   // Section C — Solution Implemented
   y = sectionHeader(doc, y, 'SECTION C — SOLUTION IMPLEMENTED', 'CORRECTIVE ACTION');
   y = field(doc, MARGIN, y, CONTENT_W, 'Interim Containment (Use Today)', '', { labelW: 170 });
-  y = field(doc, MARGIN, y, CONTENT_W, 'Permanent Corrective Action', idea.proposed_solution, { labelW: 170 });
+  y = field(doc, MARGIN, y, CONTENT_W, 'Permanent Corrective Action',
+    idea.proposed_solution
+      || (idea.solution_summary ? `${idea.solution_summary}\n[Summary only — the full proposal is shown to reviewers.]` : ''),
+    { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Redeployment Effort (Ease / Cost / Impact)',
     [s(idea.feasibility) && `Feasibility: ${s(idea.feasibility)}`, fmtMoney(idea.investment_required)].filter(Boolean).join('  ·  '),
     { labelW: 210 });

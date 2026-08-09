@@ -136,7 +136,7 @@ export default {
   'role.project_lead':'Project Lead',
   'role.manager':'Manager',
   'role.senior_manager':'Senior Manager',
-  'role.executive':'Executive',
+  'role.executive':'Plant Head',
   // MOM §12.9 — spelled out rather than abbreviated. "Org Admin" next to
   // "Super Admin" read as two grades of the same thing; they are different jobs.
   'role.admin':'Organisation Admin',
@@ -170,9 +170,9 @@ export default {
   'info.explain':'What does this mean?',
 
   // -- Review & SLA --
-  'info.sla_days':'How many days a reviewer has before the idea is marked overdue. It is a reminder, not an action - nothing is reassigned or rejected automatically, the idea just starts showing as late so someone chases it. 7 days is typical.',
-  'info.escalation_days':'How many days an idea can sit untouched before it moves up to the next person in the approval chain. This one DOES move the idea. Set it longer than the SLA above, or ideas will jump to the next approver before the first one has run out of time.',
-  'info.review_sla':'"SLA" means service level agreement - the promise about how quickly a review happens. Here it is simply the number of days a reviewer is expected to respond in.',
+  'info.sla_days':'SLA stands for service level agreement — the promise about how quickly something gets done. Here it is the number of days a reviewer has before the idea is marked overdue. It is a reminder, not an action: nothing is reassigned or rejected automatically, the idea just starts showing as late so somebody chases it. Seven days is typical.',
+  'info.escalation_days':'How many days an idea can sit untouched before it moves up to the next person in the approval chain. Unlike the service level agreement (SLA) above, this one really does move the idea. Set it longer than the SLA, or ideas will jump to the next approver before the first one has run out of time.',
+  'info.review_sla':'SLA stands for service level agreement — a promise about how quickly a piece of work is done. Here it is simply the number of days a reviewer is expected to respond in.',
 
   // -- Approval workflow --
   'info.workflow_mode':'How ideas travel up your organisation for approval. Platform Default uses a sensible ready-made chain. Approval Chain lets you list the steps in order. Custom Roles lets you pick the job titles instead. Most organisations never need to change this.',
@@ -196,25 +196,25 @@ export default {
   'info.flag_email':'Whether the app sends email at all - review reminders, approval notices, password resets. The mail server details below have to be filled in first.',
 
   // -- Email --
-  'info.smtp':'The mail server the app sends email through. Your IT provider or email host supplies these values. Without them the app still works, but nobody receives notifications and password reset emails never arrive.',
-  'info.smtp_host':'The address of your mail server, e.g. smtp.gmail.com or smtp.office365.com. Your email provider publishes this.',
+  'info.smtp':'SMTP stands for simple mail transfer protocol — the standard method for sending email. These are the details of the mail server the app sends through; your IT provider or email host supplies them. Without them the app still works, but nobody receives notifications and password reset emails never arrive.',
+  'info.smtp_host':'The address of your SMTP (simple mail transfer protocol) server, for example smtp.gmail.com or smtp.office365.com. Your email provider publishes this.',
   'info.smtp_port':'The numbered channel the mail server listens on. 587 is the usual answer and the one to try first.',
   'info.smtp_user':'The mailbox the app signs in as to send mail. Usually a full email address.',
   'info.smtp_pass':'The password for that mailbox. Many providers require an app-specific password rather than the normal one. Leave blank to keep the password already saved.',
   'info.smtp_from':'The address employees will see messages arriving from. It normally has to belong to the same domain as the mailbox above, or the mail gets rejected as spam.',
 
   // -- Scoring --
-  'info.ai_score':'An automatic quality score out of 100, worked out from how complete and well-argued the submission is across six areas. It is a sorting aid so good ideas surface first - not a decision. A reviewer can approve a low-scoring idea or reject a high-scoring one.',
+  'info.ai_score':'AI stands for artificial intelligence. This is an automatic quality score out of 100, worked out from how complete and well-argued the submission is across six areas. It is a sorting aid so good ideas surface first — not a decision. A reviewer can approve a low-scoring idea or turn down a high-scoring one.',
   'info.community_score':'The automatic score adjusted by how colleagues voted. Upvotes push it up, downvotes pull it down. It shows whether the people who do the work agree with the machine.',
-  'info.engagement_index':'A single number combining an idea\u2019s score, its star ratings and how many people voted. High means the idea is both well-formed and getting attention; low often just means nobody has looked at it yet.',
+  'info.engagement_index':'A single number combining an idea’s score, its star ratings and how many people voted. High means the idea is both well-formed and getting attention; low often just means nobody has looked at it yet.',
   'info.impact_level':'How big a difference this idea would make if implemented. Your own judgement - there is no formula. It helps reviewers sort what to look at first.',
   'info.feasibility':'How realistically this can be done with what the organisation has today. Green is straightforward, amber needs some effort or spend, red needs significant investment or a decision nobody has taken yet.',
   'info.time_required':'Roughly how long implementation would take once approved. A rough band is fine - it is there so reviewers can tell a quick win from a long project.',
-  'info.solution_tags':'What kind of improvement this is. QCD stands for Quality, Cost and Delivery - the three things most improvement programmes measure. Pick every one that applies.',
+  'info.solution_tags':'What kind of improvement this is. QCD stands for quality, cost and delivery — the three things most improvement programmes measure. Pick every one that applies.',
   'info.tangible_benefit':'A benefit you can put a number on: money saved, hours saved, scrap reduced. E.g. "about \u20b950,000 a year in rework".',
   'info.intangible_benefit':'A real benefit you cannot easily put a number on: safer working, less frustration, a better audit result. These count too - say so plainly.',
-  'info.roi':'Return on investment - what the organisation actually got back after the idea was implemented, recorded once it is done. This is the real figure, not the estimate made at submission.',
-  'info.patentability':'Whether this idea might be worth protecting as intellectual property. Kept separate from approval on purpose: an idea can be approved and not patentable, or turned down on cost and still worth filing.',
+  'info.roi':'ROI stands for return on investment — what the organisation actually got back after the idea was carried out, recorded once it is done. This is the real figure, not the estimate made at submission.',
+  'info.patentability':'Whether this idea might be worth protecting as intellectual property — that is, registering a patent so the idea cannot simply be copied. Kept separate from approval on purpose: an idea can be approved and not patentable, or turned down on cost and still worth filing.',
   'info.duplicate_check':'As you type a title, the app looks for ideas that already exist. It is a heads-up, not a block - if yours is genuinely different, carry on.',
 
   // -- Idea states --
@@ -224,26 +224,26 @@ export default {
   'info.co_suggesters':'Colleagues who worked on this idea with you. They are credited alongside you and can read the full write-up.',
 
   // -- Platform console --
-  'info.org_code':'A short nickname for the organisation, used in web addresses and at sign-in, e.g. "acme". Lower-case letters, numbers, - and _ only. It cannot clash with another organisation\u2019s code.',
+  'info.org_code':'A short nickname for the organisation, used in web addresses and at sign-in, for example “acme”. Sometimes called a slug. Lower-case letters, numbers, hyphen and underscore only. It cannot clash with another organisation’s code.',
   'info.default_org':'The organisation people reach when they sign in without giving an organisation code. There can only be one, and it cannot be put on hold - that would lock out everyone who signs in that way.',
   'info.on_hold':'Something YOU did to this organisation: their access is paused. Nobody there can sign in until you take them off hold. Their data is untouched.',
   'info.activity_state':'Something the ORGANISATION did, or stopped doing. "Inactive" simply means nobody has signed in for 5 days or more. Information only - nothing is switched off, and they can still sign in normally.',
   'info.tenant':'One customer organisation. Each has its own separate database, so no organisation can see another\u2019s people, ideas or files.',
-  'info.api_quota':'A cap on how many requests one organisation can make. It stops a single customer, or a faulty integration, from consuming the whole platform. Raise it for that organisation if they legitimately need more.',
-  'info.qcms_pushed':'Approved ideas handed over to the QCMS tool to be carried out. It is the point where an idea stops being a suggestion and becomes tracked work.',
+  'info.api_quota':'API stands for application programming interface — the way another system talks to this one. This is a cap on how many such requests one organisation may make, so a single customer or a faulty integration cannot consume the whole platform. Raise it for an organisation that legitimately needs more.',
+  'info.qcms_pushed':'QCMS stands for Quality Control Management System — the separate tool where work is actually tracked. This counts the approved ideas handed over to it: the point where an idea stops being a suggestion and becomes tracked work.',
   'info.platform_admin_limit':'How many IFQM staff accounts may exist. Every one of them can reach every customer organisation, so the number should stay small and deliberate.',
   'info.registration_queue':'Businesses that have applied for a workspace. Approving one creates their database and their first admin account, so read the details before deciding.',
-  'info.udyam':'The registration number an Indian MSME receives from the government Udyam portal. It is how a business shows it qualifies as a micro, small or medium enterprise.',
-  'info.gstin':'The 15-character GST identification number. Businesses below the GST turnover threshold genuinely do not have one, so it is optional.',
-  'info.nic_code':'A government code for what kind of business this is. It appears on the Udyam certificate.',
+  'info.udyam':'The registration number an Indian MSME receives from the government Udyam portal. MSME stands for micro, small and medium enterprise. The number is how a business shows it qualifies as one.',
+  'info.gstin':'GSTIN stands for Goods and Services Tax Identification Number — the 15-character number every GST-registered business in India is issued. It is printed at the top of your GST registration certificate.',
+  'info.nic_code':'NIC stands for National Industrial Classification — the government’s code for what kind of business this is. It appears on your Udyam certificate, usually as two digits.',
 
   // -- User management --
-  'info.employee_id':'Your organisation\u2019s own staff number. It must be unique, and it is what bulk import matches on when updating people who already exist.',
+  'info.employee_id':'Your organisation’s own staff number. It must be unique, and it is what bulk import matches on when updating people who already exist.',
   'info.bulk_import':'Add many employees at once from a spreadsheet. Download the template, fill it in, upload it. Each person gets a temporary password they must change when they first sign in.',
   'info.year_of_birth':'Used only to build the temporary first-login password. The year alone is enough, which is why the full date is no longer asked for.',
   'info.must_change_password':'This person signed in with a temporary password and has not replaced it yet. They cannot use the rest of the app until they do.',
   'info.reporting_line':'This person\u2019s managers, all the way up. Ideas they submit travel along this line for approval.',
-  'info.qcms_api_key':'The key that lets this app hand approved ideas to your QCMS tool. Once saved it is never shown again - not on screen, in exports, or in logs. To change it, paste a new one; leaving it blank keeps the current key.',
+  'info.qcms_api_key':'The key that lets this app hand approved ideas to your QCMS (Quality Control Management System) tool. API stands for application programming interface — the way two systems talk to each other without a person in between. Once saved the key is never shown again: not on screen, in exports, or in logs. To change it, paste a new one; leaving it blank keeps the current key.',
 
   // ── MOM 29 Jul 2026 ──
   // §14.5 Time Required
@@ -285,7 +285,7 @@ export default {
   'btn.export_csv':'Export CSV',
   'btn.export_pdf':'Export PDF',
   // §13.5 / §14.1 rejected view
-  'nav.rejected':'Rejected ideas',
+  'nav.rejected':'Rejected Ideas',
   'dash.rejected_title':'Rejected ideas',
   'dash.rejected_sub':'Ideas that did not proceed, with the reviewer’s reason. Worth revisiting before a similar idea is filed again.',
   'dash.rejected_none':'No rejected ideas.',
@@ -579,13 +579,13 @@ export default {
   'sa.tab_users':'Users',
   'sa.tab_system':'System',
   'sa.last_refreshed':'Last refreshed:',
-  'sa.executives':'Executives',
+  'sa.executives':'Plant Heads',
   'sa.sub_excl_drafts':'Excluding drafts',
   'sa.sub_pending':'Submitted + Under Review',
   'sa.sub_awaiting':'Awaiting implementation',
   'sa.sub_completed':'Completed ideas',
   'sa.sub_breakdown':'{a} admins · {m} mgrs · {e} emp',
-  'sa.sub_exec_accounts':'Executive-level accounts',
+  'sa.sub_exec_accounts':'Plant Head-level accounts',
   'sa.rescore_title':'AI Re-Score All Ideas',
   'sa.rescore_desc':'Triggers the AI to re-evaluate and re-score all submitted ideas in the organisation. Use after updating prompts or models.',
   'sa.no_users':'No users found.',
@@ -919,7 +919,7 @@ export default {
   'platform.db_error':'DB unreachable',
   'platform.view_org':'View Org',
   'platform.admins':'Admins',
-  'platform.executives':'Executives',
+  'platform.executives':'Plant Heads',
   'platform.managers':'Managers',
   'platform.employees':'Employees',
   'platform.reports_to':'Reports to:',
@@ -1009,8 +1009,8 @@ export default {
   'msg.fail_analytics':'Failed to load analytics. Check server connection.',
   'msg.fail_idea':'Failed to load idea. Please try again.',
   'msg.fail_load':'Failed to load data.',
-  'msg.audit_restricted':'Audit Trail is only available to Managers, Admins and Executives.',
-  'msg.analytics_restricted':'Analytics is only available to Managers, Admins and Executives.',
+  'msg.audit_restricted':'Audit Trail is only available to Managers, Admins and Plant Heads.',
+  'msg.analytics_restricted':'Analytics is only available to Managers, Admins and Plant Heads.',
   'msg.decision_ok':'Decision Submitted',
   'msg.rescore_ok':'Rescored {n} ideas successfully.',
 
@@ -1122,4 +1122,90 @@ export default {
 
   'pa.chart_status':'Organisation Status',
   'pa.chart_ideas_by_org':'Ideas by Organisation',
+
+
+  // ── Patentable, timestamps, previews ─────────────────────────────────
+  'table.patentable':'Patentable',
+  'idea.patentable_short':'Patentable',
+  'idea.patentable_hint':'Someone has marked this idea as possibly worth protecting as intellectual property.',
+  'idea.situation_hidden_hint':'You are seeing the opening lines of the problem. The full write-up is shown to the people reviewing this idea and to whoever submitted it.',
+  'form.patentable':'This idea may be worth patenting',
+  'form.patentable_hint':'Tick this if you think the idea is new enough to be protected. It flags the idea for a closer look — it does not affect approval either way.',
+
+  // ── Bulk archive ─────────────────────────────────────────────────────
+  'bulk.open':'Archive in bulk',
+  'bulk.title':'Archive in bulk',
+  'bulk.help_ideas':'Filtering only changes what you are looking at. Archiving takes ideas out of everybody’s day-to-day lists. Nothing is deleted and points, history and savings are all kept.',
+  'bulk.help_tickets':'Filtering only changes what you are looking at. Archiving takes tickets out of the working queue. Nothing is deleted, and any ticket can be brought back.',
+  'bulk.mode_visible':'Everything currently on screen ({n})',
+  'bulk.mode_before':'Everything older than',
+  'bulk.include_open':'Include tickets nobody has answered yet',
+  'bulk.archive_btn':'Archive these',
+  'bulk.restore_btn':'Restore these',
+  'bulk.reversible_note':'Reversible. Use Restore with the same selection to bring them back.',
+  'bulk.nothing_on_screen':'There is nothing on screen to archive.',
+  'bulk.pick_date':'Choose a date first.',
+  'bulk.confirm_archive_n':'Archive {n} record(s)? They come out of the everyday lists but nothing is deleted.',
+  'bulk.confirm_archive_before':'Archive everything older than {date}? Nothing is deleted.',
+  'bulk.confirm_restore_n':'Restore {n} record(s) to the everyday lists?',
+  'bulk.confirm_restore_before':'Restore everything older than {date}?',
+
+  // ── Platform: sign-in activity ───────────────────────────────────────
+  'nav.login_activity':'Login Activity',
+  'la.title':'Login Activity',
+  'la.subtitle':'Who signed in, when, from where, and whether it worked — across every organisation.',
+  'la.success':'Signed in',
+  'la.failure':'Wrong password',
+  'la.lockout':'Locked out',
+  'la.all_outcomes':'All outcomes',
+  'la.last_n':'Last {n}',
+  'la.search_ph':'Search name, email, org code or address…',
+  'la.col_when':'Date and time',
+  'la.col_who':'Who',
+  'la.col_kind':'Account',
+  'la.col_org':'Organisation',
+  'la.col_outcome':'Outcome',
+  'la.col_ip':'Address',
+  'la.col_device':'Browser / device',
+  'la.kind_platform':'IFQM staff',
+  'la.kind_tenant':'Customer',
+  'la.none':'No sign-in activity recorded yet.',
+  'la.retention_note':'Sign-in activity is kept for 180 days and then removed automatically.',
+  'la.kpi_success_24h':'Signed in (24h)',
+  'la.kpi_failed_24h':'Failed attempts (24h)',
+  'la.kpi_lockouts_24h':'Lockouts (24h)',
+  'la.kpi_shown':'Shown below',
+
+  // ── Platform: organisation inactivity ────────────────────────────────
+  'pa.all_activity':'All activity',
+  'pa.kpi_inactive':'Gone quiet',
+  'pa.kpi_never_login':'Never signed in',
+  'pt.show_archived':'Show archived tickets',
+
+  // ── Admin: per-organisation limits ───────────────────────────────────
+  'admin.max_file_mb':'Largest attachment (MB)',
+  'admin.max_file_hint':'The biggest single file anyone here may attach to an idea. The platform keeps its own ceiling above this, so a number set higher than the platform allows is trimmed to it.',
+  'admin.situation_preview':'Problem preview length',
+  'admin.situation_preview_hint':'How many characters of the problem statement colleagues who are not reviewing the idea can read. Around 180 is a sentence or two.',
+  'admin.screen_protection':'Protect ideas on screen',
+  'admin.sp_hint':'Hides idea text whenever the window loses focus or the page is printed, and stamps the reader’s name across it. It makes capture awkward and any leak traceable. It cannot stop a phone camera pointed at the monitor — no web page can.',
+  'admin.status_active':'Active',
+  'admin.status_inactive':'Inactive',
+  'filter.all_roles':'All levels',
+
+  // ── Leaderboard sharing ──────────────────────────────────────────────
+  'lb.share_mine':'Share my score',
+  'lb.share_top5':'Share top 5',
+  'lb.share_text':'Copy as text',
+  'lb.share_ok':'Shared.',
+  'lb.share_saved':'Image saved — attach it wherever you like.',
+  'lb.share_no_rank':'You are not on this leaderboard yet. Submit an idea to get on it.',
+
+  // ── Information bubbles added with the above ─────────────────────────
+  'info.patentable':'A tick meaning “this might be new enough to protect as intellectual property”. Anyone can raise it on their own idea, and any reviewer can raise it on any idea. It is only a flag for a closer look — it does not affect whether the idea is approved, and it is separate from the formal patentability decision an administrator records later.',
+  'info.max_file_mb':'The largest single file anyone in your organisation may attach to an idea. MB stands for megabyte: a photo from a phone is usually 2 to 5 MB, a scanned drawing 1 to 2 MB. The platform holds its own maximum above this, so setting a bigger number here can never let through a file the server itself will refuse.',
+  'info.situation_preview':'How much of the problem statement is shown to colleagues who are neither the author nor a reviewer. They see the opening lines and nothing more, so an idea cannot be lifted before it has been assessed. Measured in characters — 180 is roughly a sentence or two.',
+  'info.screen_protection':'Hides idea text the moment the browser window loses focus, which is what most screen-capture tools do first, and lays the reader’s own name faintly across the page so anything that does get captured can be traced back. Printing produces a notice instead of the ideas. Be clear about the limit: no web page can stop a phone camera pointed at the monitor. What genuinely protects an idea is that the full text is never sent to people who are not entitled to it.',
+  'info.ip_address':'IP stands for internet protocol. An IP address is the number the internet uses to identify the connection a request came from — roughly, which office, home line or mobile network. It is not a person, and several people behind the same office connection share one.',
+  'detail.submitted_at':'Submitted on',
 };

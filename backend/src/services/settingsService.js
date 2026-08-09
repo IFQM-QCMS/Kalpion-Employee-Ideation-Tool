@@ -12,6 +12,10 @@ import {
   DEFAULT_FINAL_ROLES as CHAIN_DEFAULT_FINALS,
 } from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
+import config from '../config/index.js';
+
+/** The ceiling no organisation may exceed, from the server environment. */
+const PLATFORM_MAX_FILE_MB = config.maxFileMb;
 
 const SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
@@ -24,6 +28,9 @@ const SETTINGS_WHITELIST = [
   'solution_visibility', 'idea_tags_enabled', 'patentability_enabled',
   // §14.10 — who may read the AI's reasoning. Voting stays open to everyone.
   'prediction_visibility',
+  // Per-organisation attachment ceiling, idea-screen deterrents, and how much
+  // of a problem statement an uninvolved colleague may read.
+  'max_file_mb', 'idea_screen_protection', 'situation_preview_chars',
 ];
 
 /** Accepted values for solution_visibility, loosest last. */
@@ -158,6 +165,14 @@ export async function updateSettings(db, body) {
     // that would publish every solution in the org on a typo.
     if (key === 'solution_visibility' && !SOLUTION_VISIBILITY_MODES.includes(String(value))) continue;
     if (key === 'prediction_visibility' && !PREDICTION_VISIBILITY_MODES.includes(String(value))) continue;
+    // Bounded by the platform maximum: an organisation may lower its own limit
+    // but not raise it past what the server is willing to accept.
+    if (key === 'max_file_mb') {
+      value = String(Math.max(1, Math.min(PLATFORM_MAX_FILE_MB, parseInt(value, 10) || 10)));
+    }
+    if (key === 'situation_preview_chars') {
+      value = String(Math.max(60, Math.min(600, parseInt(value, 10) || 180)));
+    }
     if (key === 'approval_threshold') {
       value = String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));
     }

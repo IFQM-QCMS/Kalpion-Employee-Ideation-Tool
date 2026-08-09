@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import config from '../config/index.js';
 import { badRequest, forbidden, ApiError } from '../utils/respond.js';
 import { masterDb } from '../database/master.js';
+import { getOrgSettings } from './mailerService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_BASE = path.join(__dirname, '..', '..', 'uploads');
@@ -91,8 +92,17 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
 
   if (!file) throw badRequest('No file uploaded.');
 
-  const maxBytes = config.maxFileMb * 1024 * 1024;
-  if (file.size > maxBytes) throw badRequest(`File exceeds ${config.maxFileMb}MB limit.`);
+  /*
+   * Each organisation sets its own attachment ceiling, bounded by the
+   * platform-wide one. A workshop attaching phone photographs and a firm
+   * attaching CAD drawings do not want the same number, and neither of them
+   * should be able to raise it past what the server will accept - so the
+   * tenant value is clamped rather than trusted.
+   */
+  const settings = await getOrgSettings(db);
+  const orgMb = Math.max(1, Math.min(config.maxFileMb, parseInt(settings.max_file_mb, 10) || config.maxFileMb));
+  const maxBytes = orgMb * 1024 * 1024;
+  if (file.size > maxBytes) throw badRequest(`File exceeds this organisation's ${orgMb} MB limit.`);
 
   const ext = path.extname(file.originalname).slice(1).toLowerCase();
   if (!ALLOWED_EXT.includes(ext)) throw badRequest('File type not allowed.');

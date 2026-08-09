@@ -526,6 +526,19 @@ td{
 tbody tr{transition:background var(--t-fast) var(--ease)}
 tbody tr:hover td{background:var(--table-row-hover)}
 tbody tr:last-child td{border-bottom:none}
+/* A long unbroken run of text — a pasted URL, a sentence with no spaces — used to
+   push its column wider than the card and shove the later columns off the edge,
+   which read as text spilling across neighbouring cells. Break inside the word
+   as a last resort so a cell can never widen the table on its own. */
+td{overflow-wrap:anywhere;word-break:break-word}
+/* One-line cell: shows as much as fits, then an ellipsis. The full text stays
+   available through the cell's title attribute. */
+.cell-clamp{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
 
 /* ── BADGES ─────────────────────────────────────────────────────────────── */
 .badge{

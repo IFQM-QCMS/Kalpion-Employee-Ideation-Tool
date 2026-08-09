@@ -104,7 +104,9 @@ export default function SubmitPage() {
   const [coResults, setCoResults] = useState([]);
 
   // Step 6 options
-  const [templateType, setTemplateType] = useState('');
+  // Anyone may mark their own idea as worth a patent check. A reviewer can do the
+  // same from the idea itself; this is the submitter's side of it.
+  const [patentable, setPatentable] = useState(false);
   const [challengeId,  setChallengeId]  = useState('');
   const [challenges,   setChallenges]   = useState([]);
 
@@ -211,7 +213,7 @@ export default function SubmitPage() {
       co_suggester_ids:   coSuggesters.map(c => c.id),
       // §14.8: always identified. Existing anonymous ideas are untouched.
       is_anonymous:       0,
-      template_type:      templateType || null,
+      patentable_flag:    patentable,
       challenge_id:       challengeId || null,
     };
   }
@@ -270,7 +272,7 @@ export default function SubmitPage() {
     setInvestment(''); setFeasibility(''); setImplDuration(''); setImplDate('');
     setBenefits(''); setSupport('');
     setCoSuggesters([]); setCoQuery(''); setCoResults([]);
-    setAnonymous(false); setTemplateType(''); setChallengeId('');
+    setAnonymous(false); setPatentable(false); setChallengeId('');
     setDraftId(null); setStep(1); setError(''); setDupWarning([]);
   }
 
@@ -611,16 +613,6 @@ export default function SubmitPage() {
             )}
 
             <div className="form-row" style={{ marginTop:16,gap:20 }}>
-              <div className="form-group">
-                <label>{t('form.template')}</label>
-                <select className="form-control" value={templateType} onChange={e => setTemplateType(e.target.value)}>
-                  <option value="">{t('form.no_template')}</option>
-                  <option value="cost">{t('form.tpl_cost')}</option>
-                  <option value="quality">{t('form.tpl_quality')}</option>
-                  <option value="safety">{t('form.tpl_safety')}</option>
-                  <option value="process">{t('form.tpl_process')}</option>
-                </select>
-              </div>
               {challenges.length > 0 && (
                 <div className="form-group">
                   <label>{t('form.challenge')}</label>
@@ -630,6 +622,21 @@ export default function SubmitPage() {
                   </select>
                 </div>
               )}
+            </div>
+
+            <div className="form-group" style={{ marginTop:4 }}>
+              <label style={{ display:'flex',alignItems:'flex-start',gap:9,cursor:'pointer',fontWeight:500 }}>
+                <input type="checkbox" id="idea-patentable" checked={patentable}
+                  style={{ marginTop:2,width:16,height:16,flexShrink:0 }}
+                  onChange={e => setPatentable(e.target.checked)} />
+                <span>
+                  {t('form.patentable')}
+                  <InfoDot term="patentable" />
+                  <span style={{ display:'block',fontSize:12,color:'var(--text-muted)',fontWeight:400 }}>
+                    {t('form.patentable_hint')}
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* MOM §14.8 — "Submit Idea Anonymously" is gone. The column and the

@@ -79,6 +79,7 @@ export default function PlatformDashPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [search,  setSearch]  = useState('');
   const [status,  setStatus]  = useState('');
+  const [activity, setActivity] = useState('');
   const [menuFor, setMenuFor] = useState(null);
   const [busy,    setBusy]    = useState(false);
 
@@ -124,7 +125,8 @@ export default function PlatformDashPage() {
     const q = search.trim().toLowerCase();
     const matchQ = !q || [ten.name, ten.slug, ten.admin_email, ten.admin_name]
       .some((v) => String(v || '').toLowerCase().includes(q));
-    return matchQ && (!status || ten.status === status);
+    const matchAct = !activity || (ten.activity_state || 'active') === activity;
+    return matchQ && (!status || ten.status === status) && matchAct;
   });
 
   const counts = {
@@ -132,6 +134,11 @@ export default function PlatformDashPage() {
     active:    tenants.filter((x) => x.status === 'active').length,
     suspended: tenants.filter((x) => x.status === 'suspended').length,
     pending:   tenants.filter((x) => x.status === 'pending').length,
+    // Gone quiet: signed in at some point, but not in the last few days. Kept
+    // apart from orgs that have never signed in at all, which is a different
+    // problem (a handover that never happened).
+    inactive:  tenants.filter((x) => x.activity_state === 'inactive').length,
+    never:     tenants.filter((x) => x.activity_state === 'never_logged_in').length,
     users:     tenants.reduce((s, x) => s + (x.user_count || 0), 0),
     ideas:     tenants.reduce((s, x) => s + (x.idea_count || 0), 0),
   };
@@ -152,7 +159,7 @@ export default function PlatformDashPage() {
    * no endpoint. Values are quoted and internal quotes doubled — an org named
    * O"Brien, Inc. would otherwise split into extra columns. */
   function exportCsv() {
-    const cols = ['name', 'slug', 'status', 'admin_name', 'admin_email', 'user_count', 'idea_count', 'implemented_count', 'last_activity'];
+    const cols = ['name', 'slug', 'status', 'activity_state', 'days_since_login', 'admin_name', 'admin_email', 'user_count', 'idea_count', 'implemented_count', 'last_activity'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(','), ...filtered.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\r\n');
     saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'ifqm-organisations.csv');
@@ -168,6 +175,10 @@ export default function PlatformDashPage() {
     // then §12.5's QCMS figure as the business-value endpoint of that path.
     ['ideas',     t('pa.kpi_implemented'), totals.implemented, 'var(--primary)', 'var(--primary-light)'],
     ['ideas',     t('pa.qcms_pushed'),     totals.qcms_pushed, 'var(--info)',    'var(--info-light)'],
+    // Inactivity is reported, never acted upon. Nothing is suspended because of
+    // it; it is here so the platform team can pick up the phone.
+    ['orgs',      t('pa.kpi_inactive'),    counts.inactive,    'var(--warning)', 'var(--warning-light)'],
+    ['orgs',      t('pa.kpi_never_login'), counts.never,       'var(--danger)',  'var(--danger-light)'],
   ];
 
   return (
@@ -251,6 +262,13 @@ export default function PlatformDashPage() {
           <option value="active">{t('pa.status_active')}</option>
           <option value="suspended">{t('pa.status_suspended')}</option>
           <option value="pending">{t('pa.status_pending')}</option>
+        </select>
+        <select className="form-control" style={{ width:190 }} value={activity} onChange={(e) => setActivity(e.target.value)}>
+          <option value="">{t('pa.all_activity')}</option>
+          <option value="active">{t('pa.act_active')}</option>
+          <option value="inactive">{t('pa.act_inactive')}</option>
+          <option value="never_logged_in">{t('pa.act_never')}</option>
+          <option value="on_hold">{t('pa.act_on_hold')}</option>
         </select>
         <button className="btn btn-outline" onClick={exportCsv} disabled={!filtered.length}>{t('pa.export_csv')}</button>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('pa.new_org')}</button>

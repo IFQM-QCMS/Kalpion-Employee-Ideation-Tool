@@ -28,6 +28,7 @@ import PlatformTenantsPage from './pages/PlatformTenantsPage';
 import PlatformTicketsPage from './pages/PlatformTicketsPage';
 import PlatformRegistrationsPage from './pages/PlatformRegistrationsPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
+import PlatformLoginsPage from './pages/PlatformLoginsPage';
 import SupportPage from './pages/SupportPage';
 
 function PrivateRoute({ children }) {
@@ -111,6 +112,7 @@ function AppRoutes() {
       <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tickets" element={<PrivateRoute><AppShell><PlatformTicketsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
+      <Route path="/platform/logins"   element={<PrivateRoute><AppShell><PlatformLoginsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
