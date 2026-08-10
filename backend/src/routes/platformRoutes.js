@@ -6,11 +6,33 @@ import { Router } from 'express';
 import * as platform from '../controllers/platformController.js';
 import * as support from '../controllers/supportController.js';
 import * as registrations from '../controllers/registrationController.js';
+import * as billing from '../controllers/billingController.js';
 import { requirePlatformAuth } from '../middleware/auth.js';
 
 const router = Router();
 
 router.use(requirePlatformAuth);
+
+/*
+ * Billing. The plan catalogue is what IFQM sells; the per-tenant routes are what
+ * a particular organisation is on. Both are staff-only — this whole router sits
+ * behind requirePlatformAuth above.
+ *
+ * '/plans' is declared before '/tenants/:id' for the usual reason: a literal
+ * path that could be read as a parameter has to be registered first.
+ */
+router.get('/plans', billing.listPlans);
+router.post('/plans', billing.createPlan);
+router.get('/plans/:id', billing.getPlan);
+router.patch('/plans/:id', billing.updatePlan);
+router.delete('/plans/:id', billing.retirePlan);      // retires, never deletes
+
+router.get('/tenants/:id/subscription', billing.subscription);
+router.post('/tenants/:id/plan', billing.assignPlan);
+router.post('/tenants/:id/trial', billing.setTrial);
+router.post('/tenants/:id/mark-paid', billing.markPaid);
+// Sweep everyone whose period has ended. ?dry_run=1 reports without changing.
+router.post('/billing/sweep', billing.sweep);
 
 router.get('/tenants', platform.tenants);                       // action=tenants
 router.get('/tenants/:id', platform.tenantDetail);              // action=tenant_detail

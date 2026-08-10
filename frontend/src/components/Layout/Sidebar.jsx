@@ -12,6 +12,7 @@ const NAV_ICONS = {
   review: <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><polyline points="9 14 11 16 15 12"/></svg>,
   allIdeas: <svg viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1" fill="currentColor" stroke="none"/></svg>,
   board: <svg viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/><path d="M7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/></svg>,
+  help: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>,
   audit: <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   leaderboard: <svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M17 3h3l-1 5a4 4 0 01-4 3M7 3H4l1 5a4 4 0 004 3"/><path d="M7 11a5 5 0 0010 0V3H7v8z"/></svg>,
   analytics: <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
@@ -117,6 +118,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           <NavItem path="/platform" icon={NAV_ICONS.platformDash} label={t('nav.organisations')} />
           <NavItem path="/platform/registrations" icon={NAV_ICONS.platformTenants} label={t('nav.registrations')} />
           <NavItem path="/platform/tickets" icon={NAV_ICONS.support} label={t('nav.support_tickets')} />
+          <NavItem path="/platform/plans" icon={NAV_ICONS.analytics} label={t('nav.plans')} />
           <NavItem path="/platform/logins" icon={NAV_ICONS.audit} label={t('nav.login_activity')} />
           <NavItem path="/platform/settings" icon={NAV_ICONS.admin} label={t('nav.platform_settings')} />
         </>
@@ -127,6 +129,7 @@ export default function Sidebar({ collapsed, onToggle }) {
           {/* Support is for everyone in the tenant, not just admins — the person
               who hits a bug is the person who should be able to report it. */}
           <div className="nav-section">{t('section.help')}</div>
+          <NavItem path="/help" icon={NAV_ICONS.help} label={t('nav.help')} />
           <NavItem path="/support" icon={NAV_ICONS.support} label={t('nav.support')} />
           <NavItem path="/profile" icon={NAV_ICONS.profile} label={t('nav.profile')} />
         </>

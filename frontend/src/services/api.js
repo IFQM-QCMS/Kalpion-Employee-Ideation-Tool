@@ -21,17 +21,6 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('ifqm_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  /*
-   * The browser's own time zone, sent with every request so the sign-in record
-   * can describe roughly where a platform-admin session came from. It is a
-   * string the browser already knows; nothing is looked up anywhere, and no
-   * address is handed to a third party.
-   */
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    if (tz) config.headers['X-Client-Timezone'] = tz;
-  } catch { /* very old browsers simply do not report one */ }
-
   const org = localStorage.getItem('ifqm_org');
   if (org && !config.params?.org_slug) {
     config.params = { ...config.params, org_slug: org };
@@ -113,8 +102,25 @@ function isAuthEndpoint(url = '') {
 export default api;
 
 // ── Auth ──────────────────────────────────────────────────────────
+/** The browser's IANA time zone, e.g. "Asia/Kolkata". Empty on very old ones. */
+function clientTimezone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; }
+  catch { return ''; }
+}
+
 export const authApi = {
-  login: (data) => api.post('/auth/login', data),
+  /*
+   * The browser's own time zone travels with the sign-in request itself, in the
+   * body, so the platform console can say roughly where a staff sign-in came
+   * from without anybody's address being sent to a geolocation service.
+   *
+   * It was briefly a header on EVERY request, which was a mistake: a custom
+   * header forces the browser to send a CORS preflight for calls that would
+   * otherwise be simple, so any server whose allowlist did not yet name the
+   * header rejected the whole application rather than just this feature. A
+   * field in the one request that needs it costs nothing and cannot do that.
+   */
+  login: (data) => api.post('/auth/login', { ...data, client_timezone: clientTimezone() }),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
@@ -230,6 +236,8 @@ export const scoreApi = {
 
 // ── Settings ──────────────────────────────────────────────────────
 export const settingsApi = {
+  // Where this organisation's own account stands: plan, dates, days left.
+  subscription: () => api.get('/settings/subscription'),
   get: () => api.get('/settings'),
   update: (data) => api.post('/settings', data),
   testEmail: () => api.get('/settings/test-email'),
@@ -372,7 +380,10 @@ export const platformApi = {
   registrations: (status = '') => api.get('/platform/registrations', { params: { status } }),
   // §12.12 — sign-in activity feed.
   activity: (params = {}) => api.get('/platform/activity', { params }),
-  approveRegistration: (id, slug) => api.post(`/platform/registrations/${id}/approve`, { slug }),
+  // The plan and trial length are chosen at the moment of approval, when the
+  // company's size and turnover are in front of the approver.
+  approveRegistration: (id, data) => api.post(`/platform/registrations/${id}/approve`,
+    typeof data === 'string' ? { slug: data } : data),
   rejectRegistration: (id, note) => api.post(`/platform/registrations/${id}/reject`, { note }),
   tenantDetail: (id) => api.get(`/platform/tenants/${id}`),
   createTenant: (data) => api.post('/platform/tenants', data),
@@ -391,6 +402,24 @@ export const platformApi = {
   updateTenantSettings: (id, data) => api.put(`/platform/tenants/${id}/settings`, data),
 
   bulkArchiveTickets: (data) => api.post('/platform/tickets/bulk-archive', data),
+
+  // ── Billing ──
+  // The plan catalogue, and what each organisation is on.
+  plans: (params = {}) => api.get('/platform/plans', { params }),
+  plan: (id) => api.get(`/platform/plans/${id}`),
+  createPlan: (data) => api.post('/platform/plans', data),
+  updatePlan: (id, data) => api.patch(`/platform/plans/${id}`, data),
+  // Retires rather than deletes: organisations point at plans, and their
+  // history refers to them.
+  retirePlan: (id) => api.delete(`/platform/plans/${id}`),
+
+  subscription: (tenantId) => api.get(`/platform/tenants/${tenantId}/subscription`),
+  assignPlan: (tenantId, data) => api.post(`/platform/tenants/${tenantId}/plan`, data),
+  setTrial: (tenantId, data) => api.post(`/platform/tenants/${tenantId}/trial`, data),
+  markPaid: (tenantId, data) => api.post(`/platform/tenants/${tenantId}/mark-paid`, data),
+  // dry_run reports who would be held without changing anything.
+  sweepBilling: (dryRun = false) =>
+    api.post('/platform/billing/sweep', null, { params: dryRun ? { dry_run: 1 } : {} }),
 
   admins: () => api.get('/platform/admins'),
   createAdmin: (data) => api.post('/platform/admins', data),

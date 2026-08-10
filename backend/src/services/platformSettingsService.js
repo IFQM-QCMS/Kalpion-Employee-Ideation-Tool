@@ -64,6 +64,11 @@ const DEFAULTS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'approval_mode', 'approval_reviewer_roles',
   'approval_final_approver_roles', 'approval_threshold', 'approval_stages',
+  // Billing. These are platform-wide policy, not per-organisation settings:
+  // how long a new organisation evaluates for, when it starts being warned,
+  // whether lapsing actually locks anybody out, and who to contact about it.
+  'default_trial_days', 'billing_warn_days', 'billing_enforce',
+  'billing_contact_email', 'billing_contact_phone',
 ];
 
 /** Mirrors settingsService's whitelist — what IFQM may change on a live tenant. */
@@ -100,11 +105,44 @@ function normaliseSetting(key, rawValue) {
   if (key === 'review_sla_days' || key === 'escalation_days') {
     return String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));
   }
+  // Zero is a real answer here - "no trial, billing starts on day one" - so it
+  // is clamped rather than treated as unset.
+  if (key === 'default_trial_days') {
+    const n = parseInt(value, 10);
+    return String(Math.max(0, Math.min(365, Number.isFinite(n) ? n : 14)));
+  }
+  if (key === 'billing_warn_days') {
+    const n = parseInt(value, 10);
+    return String(Math.max(0, Math.min(90, Number.isFinite(n) ? n : 5)));
+  }
+  if (key === 'billing_enforce') {
+    return value === '1' || value === 1 || value === true ? '1' : '0';
+  }
   if (key === 'approval_reviewer_roles' || key === 'approval_final_approver_roles') {
     return String(value).split(',').map((s) => s.trim())
       .filter((r) => VALID_CHAIN_ROLES.includes(r)).join(',');
   }
   return String(value);
+}
+
+/**
+ * One platform setting by name.
+ *
+ * The billing services need a single value on a hot path (every sweep, every
+ * approval), and pulling the whole settings table to read one row is wasteful.
+ * Returns null when the key has never been written, so the caller can apply its
+ * own default rather than being handed an empty string that looks deliberate.
+ */
+export async function getPlatformSetting(key) {
+  try {
+    const [[row]] = await masterDb().execute(
+      'SELECT value FROM platform_settings WHERE key_name = ? LIMIT 1', [String(key)]
+    );
+    return row ? row.value : null;
+  } catch {
+    // A missing settings table must not take down whatever asked.
+    return null;
+  }
 }
 
 // ── 1. New-tenant defaults ─────────────────────────────────────────

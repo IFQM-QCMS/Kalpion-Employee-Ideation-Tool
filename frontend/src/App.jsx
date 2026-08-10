@@ -29,7 +29,11 @@ import PlatformTicketsPage from './pages/PlatformTicketsPage';
 import PlatformRegistrationsPage from './pages/PlatformRegistrationsPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
 import PlatformLoginsPage from './pages/PlatformLoginsPage';
+import PlatformPlansPage from './pages/PlatformPlansPage';
 import SupportPage from './pages/SupportPage';
+import NotFoundPage from './pages/NotFoundPage';
+import HelpPage from './pages/HelpPage';
+import PageMeta from './components/PageMeta';
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth();
@@ -82,7 +86,9 @@ function PublicRoute({ children }) {
 
 function AppRoutes() {
   return (
-    <Routes>
+    <>
+      <PageMeta />
+      <Routes>
       <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
@@ -108,14 +114,20 @@ function AppRoutes() {
       <Route path="/super-admin"     element={<PrivateRoute><AppShell><SuperAdminPage /></AppShell></PrivateRoute>} />
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
+      <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
       <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tickets" element={<PrivateRoute><AppShell><PlatformTicketsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/logins"   element={<PrivateRoute><AppShell><PlatformLoginsPage /></AppShell></PrivateRoute>} />
+      <Route path="/platform/plans"    element={<PrivateRoute><AppShell><PlatformPlansPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      {/* A page, not a silent redirect. Bouncing somebody to the landing page
+          hides whether they mistyped, followed a stale link, or are simply not
+          signed in — and gives them nothing to do about any of it. */}
+      <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </>
   );
 }
 

@@ -32,7 +32,13 @@ export const approve = asyncHandler(async (req, res) =>
     // req.user.id for a platform admin is the string "pa_<n>" (see authService);
     // the registry column stores the numeric platform_admins.id.
     adminId: Number(String(req.user?.id || '').replace(/^pa_/, '')) || null,
+    adminName: req.user?.name || null,
     slug: req.body?.slug || '',
+    // Chosen by the approver, who has the company's size and turnover in front
+    // of them at exactly this moment.
+    planId: req.body?.plan_id || null,
+    trialDays: req.body?.trial_days,
+    billingNote: req.body?.billing_note || '',
   }))
 );
 

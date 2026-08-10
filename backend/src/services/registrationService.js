@@ -16,6 +16,7 @@
  */
 import { masterDb } from '../database/master.js';
 import { ApiError, badRequest, notFound } from '../utils/respond.js';
+import { assignPlan, defaultTrialDays } from './subscriptionService.js';
 import logger from '../utils/logger.js';
 import { createTenant } from './platformService.js';
 
@@ -372,7 +373,10 @@ async function requireRegistration(id) {
  * have not proved control of the mailbox, so the credential has to travel out
  * of band, and must_change_password forces it to be replaced on first sign-in.
  */
-export async function approveRegistration(id, { adminId = null, slug: slugOverride = '' } = {}) {
+export async function approveRegistration(id, {
+  adminId = null, adminName = null, slug: slugOverride = '',
+  planId = null, trialDays = null, billingNote = '',
+} = {}) {
   const reg = await requireRegistration(id);
   if (reg.status !== 'pending') {
     throw new ApiError(409, `This application has already been ${reg.status}.`);
@@ -402,11 +406,47 @@ export async function approveRegistration(id, { adminId = null, slug: slugOverri
     admin_password: tempPassword,
   });
 
+  /*
+   * Put the new organisation on a plan straight away.
+   *
+   * This is the right moment: the approver has the company's details in front
+   * of them — size, turnover, sector — which is exactly what decides which plan
+   * they belong on. Leaving it until later means somebody has to remember, and
+   * an organisation with no plan has no trial end date, so it would never lapse
+   * and never be billed.
+   *
+   * If no plan is chosen, the trial still starts. A workspace nobody has priced
+   * yet should be evaluating, not quietly free forever.
+   */
+  const days = trialDays === null || trialDays === undefined || trialDays === ''
+    ? await defaultTrialDays()
+    : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0));
+
+  if (planId) {
+    try {
+      await assignPlan(created.tenant_id, {
+        planId, trialDays: days, note: billingNote,
+      }, { id: adminId, name: adminName });
+    } catch (e) {
+      // A billing mishap must not undo a workspace that has just been created.
+      // The organisation exists and can be put on a plan from its own page.
+      logger.warn(`registration ${reg.id}: plan not applied — ${e.message}`);
+    }
+  } else if (days > 0) {
+    const endsAt = new Date(Date.now() + days * 86400000)
+      .toISOString().slice(0, 19).replace('T', ' ');
+    await master.execute(
+      "UPDATE tenants SET billing_status = 'trial', trial_days = ?, trial_ends_at = ? WHERE id = ?",
+      [days, endsAt, created.tenant_id]
+    ).catch(() => {});
+  }
+
   await master.execute(
     `UPDATE tenant_registrations
-        SET status = 'approved', tenant_id = ?, reviewed_by = ?, reviewed_at = NOW()
+        SET status = 'approved', tenant_id = ?, reviewed_by = ?, reviewed_at = NOW(),
+            assigned_plan_id = ?, assigned_trial_days = ?
       WHERE id = ?`,
-    [created.tenant_id, adminId, reg.id]
+    [created.tenant_id, adminId, planId || null, days, reg.id]
   );
 
   // The approved organisation's own domain becomes its tenant domain, so a user

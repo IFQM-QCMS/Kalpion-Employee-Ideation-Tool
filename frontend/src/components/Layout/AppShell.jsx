@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import ContentProtection from '../ContentProtection';
+import BillingBanner from '../BillingBanner';
+import Breadcrumbs from './Breadcrumbs';
 import { settingsApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
@@ -35,6 +37,11 @@ export default function AppShell({ children }) {
       <div id="main">
         <Topbar onToggleSidebar={() => setCollapsed(v => !v)} />
         <div id="content">
+          {/* Where the organisation's account stands, if it is worth saying.
+              Renders nothing at all while there is plenty of time left. */}
+          <BillingBanner />
+          {/* Renders nothing on a top-level screen — see Breadcrumbs. */}
+          <Breadcrumbs />
           {children}
         </div>
       </div>

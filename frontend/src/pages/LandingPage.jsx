@@ -565,9 +565,13 @@ export default function LandingPage() {
             <details className="rv"><summary>Will people on the shop floor actually use it?</summary>
               <p>That is the real risk, and it is why the design pushes back on it in three ways: the interface is available in seven Indian languages, an idea can be submitted from a phone in a few minutes, and every submitter can see exactly where their idea has reached. Points, leaderboards and time-boxed challenges exist to make the first month of habit-building easier.</p></details>
             <details className="rv"><summary>What does it cost?</summary>
-              <p>The platform is free while it is in preview, with no card required. Paid plans will be introduced later; organisations that join during the preview get notice well before anything changes, and can export their data at any time.</p></details>
+              <p>Every organisation starts with a 14-day free trial — the whole product, no card, nothing withheld. After that you go onto a plan sized to your business, quoted when we approve your application. Plans are priced per organisation rather than per seat, so inviting the whole shop floor does not change the bill. GST is shown separately on every quote.</p></details>
+            <details className="rv"><summary>What happens when the trial ends?</summary>
+              <p>We tell you before it does, not after. Access pauses if a plan is not in place, but nothing is deleted — your ideas, your people and your history stay exactly as they are, and everything resumes the moment payment is arranged. You can export your data at any point, including while access is paused.</p></details>
+            <details className="rv"><summary>How quickly do you reply to support?</summary>
+              <p>Within one working day for any ticket, and within four working hours for anything marked urgent — Monday to Saturday, 9am to 6pm IST. Support is raised from inside the app, so we can see which organisation is asking without you explaining it first. Support stays reachable even if your access has paused for payment.</p></details>
             <details className="rv"><summary>Who can see our ideas?</summary>
-              <p>Only your own people, according to the role you give them. Each organisation runs on its own database with its own admin. Platform operators can see aggregate counts for support and billing — never the content of an idea.</p></details>
+              <p>Only your own people, according to the role you give them. Each organisation runs on its own database with its own admin. IFQM's own staff can see counts — how many people, how many ideas — for support and billing, and never the content of an idea.</p></details>
             <details className="rv"><summary>Do we need an IT person to run it?</summary>
               <p>No. Everything an administrator needs — users, categories, approval stages, branding, exports — is a screen in the app. Bulk user import takes a spreadsheet.</p></details>
             <details className="rv"><summary>Can we get our data out?</summary>

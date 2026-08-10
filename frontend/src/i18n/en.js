@@ -1245,4 +1245,10 @@ export default {
   'btn.clear':'Clear',
   'btn.summary':'Summary',
   'idea.summary_only_hint':'Download a one-page summary. The full write-up is shown to whoever raised this idea and to the people reviewing it.',
+
+  'nav.plans':'Plans',
+  'info.billing_status':'Where this organisation stands on payment. A trial is the free evaluation period; active means they are paid up; expired means the time has run out. Kept separate from the Status column, which is what a person deliberately did to the account — an organisation can be put on hold for a reason that has nothing to do with money, and paying should not silently undo that.',
+  'info.trial_days':'How many days of free evaluation this organisation gets. Counted from today whenever you change it, so entering 30 means thirty days from now — not thirty added to whatever is left. Enter 0 for no trial, meaning billing starts immediately.',
+  'info.gst_mode':'Whether the amount you typed already contains GST, or GST is added on top of it. Getting this the wrong way round is an 18% error on every invoice, which is why it is asked rather than assumed. The breakdown underneath shows what the organisation will actually pay.',
+  'nav.help':'Help',
 };

@@ -24,10 +24,12 @@ const PAGE_TITLES = {
   '/platform':     'nav.platform',
   '/rejected':     'nav.rejected',
   '/support':      'nav.support',
+  '/help':         'nav.help',
   '/platform/registrations': 'nav.registrations',
   '/platform/tickets':       'nav.support_tickets',
   '/platform/settings':      'nav.platform_settings',
   '/platform/logins':        'nav.login_activity',
+  '/platform/plans':         'nav.plans',
 };
 
 // Anything not in the map above still gets a properly capitalised heading

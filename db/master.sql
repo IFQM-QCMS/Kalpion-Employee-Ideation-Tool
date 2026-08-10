@@ -27,8 +27,22 @@ CREATE TABLE IF NOT EXISTS tenants (
   api_quota_total   INT NULL DEFAULT NULL,
   api_quota_monthly INT NULL DEFAULT NULL,
   storage_quota_mb  INT NULL DEFAULT NULL,
+  -- ── Billing ──
+  -- Which plan this organisation is on, where the money stands, and until when.
+  -- billing_status is held apart from `status` above on purpose: `status` is
+  -- what a PERSON did to this organisation, billing_status is where the money
+  -- stands. An operator may suspend an account for a reason unrelated to
+  -- payment, and paying must not silently undo that.
+  plan_id        INT NULL DEFAULT NULL,
+  billing_status ENUM('trial','active','past_due','expired','exempt') NOT NULL DEFAULT 'trial',
+  trial_days     INT NOT NULL DEFAULT 14,
+  trial_ends_at  DATETIME NULL DEFAULT NULL,
+  period_start   DATETIME NULL DEFAULT NULL,
+  period_end     DATETIME NULL DEFAULT NULL,
+  billing_note   VARCHAR(500) NULL DEFAULT NULL,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_domain (domain)
+  UNIQUE KEY uq_domain (domain),
+  KEY idx_tenants_billing (billing_status, period_end)
 );
 
 -- Default IFQM tenant for local development
@@ -224,6 +238,10 @@ CREATE TABLE IF NOT EXISTS tenant_registrations (
   reviewed_at           DATETIME     NULL,
   tenant_id             INT          NULL,
   submitted_ip          VARCHAR(45)  NULL,
+  -- Chosen by the approver at the moment they say yes, when the company's size
+  -- and turnover are in front of them.
+  assigned_plan_id      INT          NULL,
+  assigned_trial_days   INT          NULL,
   created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_treg_status (status, created_at),
   KEY idx_treg_domain (email_domain),
@@ -304,3 +322,84 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   -- outright under NODE_ENV=production: a provider that logs sign-in codes in a
   -- live system is a credential leak, not a fallback.
   ('otp_provider',       'log');
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Billing (migration 016), folded in so a new registry starts complete.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+-- What IFQM sells.
+--
+-- Money is stored in paise as a whole number, never as a decimal. A price is an
+-- exact quantity and floating point is not: 2500.10 has no exact binary form,
+-- and the error compounds the moment 18% tax is applied to it and part of it is
+-- later refunded. Everything monetary here is an integer count of the smallest
+-- unit, converted only for display.
+CREATE TABLE IF NOT EXISTS plans (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  code           VARCHAR(40)  NOT NULL UNIQUE,
+  name           VARCHAR(80)  NOT NULL,
+  description    VARCHAR(255) NULL,
+  long_description TEXT       NULL,
+  tier           ENUM('trial','starter','professional','enterprise','custom')
+                 NOT NULL DEFAULT 'starter',
+  amount_paise   BIGINT       NOT NULL DEFAULT 0,
+  billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time')
+                 NOT NULL DEFAULT 'yearly',
+  gst_percent    DECIMAL(5,2) NOT NULL DEFAULT 18.00,
+  -- Whether the stored amount already contains the tax or the tax is added to
+  -- it. Recorded per plan rather than assumed: getting it wrong is an 18% error
+  -- on every invoice.
+  gst_mode       ENUM('included','excluded') NOT NULL DEFAULT 'included',
+  is_custom      TINYINT(1)   NOT NULL DEFAULT 0,
+  -- NULL means no limit. Zero would be a real limit meaning nobody may join,
+  -- which is never what an operator means by leaving a box empty.
+  max_users      INT          NULL DEFAULT NULL,
+  max_departments INT         NULL DEFAULT NULL,
+  max_ideas      INT          NULL DEFAULT NULL,
+  storage_gb     INT          NULL DEFAULT NULL,
+  support_level  ENUM('basic','standard','priority','dedicated') NOT NULL DEFAULT 'standard',
+  status         ENUM('active','inactive') NOT NULL DEFAULT 'active',
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_plans_status (status, tier)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO plans
+  (code, name, description, tier, amount_paise, billing_cycle, gst_percent, gst_mode,
+   max_users, max_departments, storage_gb, support_level, status)
+VALUES
+  ('TRIAL',   'Free Trial',   'Full access while the organisation evaluates the platform.',
+   'trial',        0,        'monthly',   18.00, 'included', NULL, NULL, 5,  'standard', 'active'),
+  ('STARTER', 'Starter',      'For a single plant getting started with structured ideation.',
+   'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 'standard', 'active'),
+  ('PRO',     'Professional', 'For multi-plant MSMEs running ideation across departments.',
+   'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 'priority', 'active');
+
+-- Who changed an organisation's plan, when, from what to what, and why. A
+-- billing dispute is answered from a record or it is answered from memory.
+CREATE TABLE IF NOT EXISTS tenant_billing_events (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  tenant_id      INT          NOT NULL,
+  event          ENUM('plan_assigned','plan_changed','trial_extended','trial_shortened',
+                      'period_renewed','marked_paid','lapsed','put_on_hold','reinstated','note')
+                 NOT NULL,
+  from_plan_id   INT          NULL,
+  to_plan_id     INT          NULL,
+  from_value     VARCHAR(120) NULL,
+  to_value       VARCHAR(120) NULL,
+  note           VARCHAR(500) NULL,
+  actor_id       INT          NULL,          -- NULL when the nightly sweep did it
+  actor_name     VARCHAR(120) NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_tbe_tenant (tenant_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO platform_settings (key_name, value) VALUES
+  ('default_trial_days',    '14'),
+  ('billing_warn_days',     '5'),
+  -- Off in a fresh install: nobody should be locked out of a system whose
+  -- prices have not been set yet.
+  ('billing_enforce',       '0'),
+  ('billing_contact_email', ''),
+  ('billing_contact_phone', '');

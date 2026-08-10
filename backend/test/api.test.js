@@ -430,6 +430,106 @@ test('a colleague outside an idea gets a summary sheet, not the full record', as
     'the author still reads their own idea in full');
 });
 
+test('billing: a plan is priced correctly, and a lapsed organisation is held', async () => {
+  // Money is stored in paise. ₹2,500 with GST included must break down to a
+  // base and a tax that add back to exactly ₹2,500 — the whole reason prices
+  // are not kept as decimals.
+  let res = await api('GET', '/api/platform/plans', { token: PA });
+  assert.equal(res.status, 200);
+  const starter = res.data.plans.find((p) => p.code === 'STARTER');
+  assert.ok(starter, 'the seeded Starter plan must exist');
+  assert.equal(starter.total_rupees, 2500);
+  assert.equal(starter.base_rupees + starter.gst_rupees, starter.total_rupees,
+    'base + GST must add back to the price exactly');
+
+  // GST excluded is added on top instead.
+  res = await api('POST', '/api/platform/plans', {
+    token: PA,
+    body: {
+      code: 'TESTPLAN', name: 'Test Plan', tier: 'starter',
+      amount_rupees: '1,000', billing_cycle: 'monthly',
+      gst_percent: 18, gst_mode: 'excluded', max_users: '', storage_gb: 5,
+    },
+  });
+  assert.equal(res.status, 200);
+  const planId = res.data.plan_id;
+  res = await api('GET', `/api/platform/plans/${planId}`, { token: PA });
+  assert.equal(res.data.plan.total_rupees, 1180);
+  assert.equal(res.data.plan.max_users, null, 'a blank limit means unlimited, not zero');
+
+  // Put org B on it with a two-day trial, then wind the clock past it.
+  const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
+  res = await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: PA, body: { plan_id: planId, trial_days: 2 },
+  });
+  assert.equal(res.status, 200);
+
+  res = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: PA });
+  assert.equal(res.data.subscription.days_left, 2);
+  assert.equal(res.data.subscription.blocked, false);
+
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants
+        SET trial_ends_at = DATE_SUB(NOW(), INTERVAL 1 DAY),
+            period_end = DATE_SUB(NOW(), INTERVAL 1 DAY)
+      WHERE id = ${orgb.id}`);
+
+  // Expiry is derived from the dates on every read, not from a flag some sweep
+  // has to set first.
+  res = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: PA });
+  assert.equal(res.data.subscription.state, 'expired');
+  assert.equal(res.data.subscription.blocked, true);
+
+  // With enforcement off — the default — the sweep reports and changes nothing
+  // anybody would notice. Nobody is locked out of a system whose prices have
+  // not been set.
+  res = await api('POST', '/api/platform/billing/sweep', { token: PA });
+  assert.equal(res.data.enforced, false);
+  assert.equal(res.data.held, 0);
+  let [row] = await sql('ifqm_test_master', `SELECT status FROM ifqm_test_master.tenants WHERE id=${orgb.id}`);
+  assert.equal(row.status, 'active', 'enforcement off must never suspend anybody');
+
+  // Switched on, it holds the organisation and writes down why.
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '1' } });
+  await sql('ifqm_test_master', `UPDATE ifqm_test_master.tenants SET billing_status='trial' WHERE id=${orgb.id}`);
+  res = await api('POST', '/api/platform/billing/sweep', { token: PA });
+  assert.ok(res.data.held >= 1);
+  [row] = await sql('ifqm_test_master',
+    `SELECT status, billing_note FROM ifqm_test_master.tenants WHERE id=${orgb.id}`);
+  assert.equal(row.status, 'suspended');
+  assert.match(row.billing_note, /non-payment/i, 'the reason must be on file, not guessed later');
+
+  // Recording payment puts them back.
+  res = await api('POST', `/api/platform/tenants/${orgb.id}/mark-paid`, { token: PA, body: { periods: 1 } });
+  assert.equal(res.status, 200);
+  [row] = await sql('ifqm_test_master',
+    `SELECT status, billing_status FROM ifqm_test_master.tenants WHERE id=${orgb.id}`);
+  assert.equal(row.status, 'active');
+  assert.equal(row.billing_status, 'active');
+
+  // Put everything back so the rest of the suite is unaffected.
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '0' } });
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants SET billing_status='exempt', plan_id=NULL,
+            trial_ends_at=NULL, period_end=NULL, billing_note=NULL WHERE id=${orgb.id}`);
+});
+
+test('billing: only IFQM staff may price anything', async () => {
+  let res = await api('GET', '/api/platform/plans', { token: AADMIN });
+  assert.ok([401, 403].includes(res.status), 'an org admin must not read the catalogue');
+
+  const [orga] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orga'");
+  res = await api('POST', `/api/platform/tenants/${orga.id}/plan`, {
+    token: AADMIN, body: { plan_id: 1, trial_days: 999 },
+  });
+  assert.ok([401, 403].includes(res.status), 'nor put themselves on a plan');
+
+  // They can see their own account, without the internal note.
+  res = await api('GET', '/api/settings/subscription', { token: AADMIN });
+  assert.equal(res.status, 200);
+  assert.equal(res.data.subscription?.billing_note, undefined);
+});
+
 // ── Login with no org code — email or registered phone ──────────────────────
 
 test('a user signs in with just their email — no organisation code needed', async () => {

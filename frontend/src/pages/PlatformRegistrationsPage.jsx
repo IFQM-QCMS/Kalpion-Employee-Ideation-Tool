@@ -78,6 +78,7 @@ export default function PlatformRegistrationsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [openId, setOpenId] = useState(null);
+  const [approving, setApproving] = useState(null);
   const [issued, setIssued] = useState(null);
   const [search, setSearch] = useState('');
 
@@ -105,19 +106,35 @@ export default function PlatformRegistrationsPage() {
       .some((v) => String(v || '').toLowerCase().includes(q)));
   }, [rows, search]);
 
-  async function approve(reg) {
-    const slug = window.prompt(t('pa.reg_slug_prompt'), reg.proposed_slug || '');
-    if (!slug) return;
+  /*
+   * Approving no longer means typing an org code into a browser prompt.
+   *
+   * The plan and the trial length are decided at exactly this moment - the
+   * approver has the company's size, turnover and sector in front of them,
+   * which is what decides both. Asking later means somebody has to remember,
+   * and an organisation with no plan has no end date, so it would never lapse
+   * and never be billed.
+   */
+  function openApproval(reg) {
+    setApproving(reg);
+  }
+
+  async function submitApproval({ slug, planId, trialDays, note }) {
     setBusy(true);
     try {
-      const res = await platformApi.approveRegistration(reg.id, slug.trim().toLowerCase());
+      const res = await platformApi.approveRegistration(approving.id, {
+        slug: String(slug).trim().toLowerCase(),
+        plan_id: planId || null,
+        trial_days: trialDays,
+        billing_note: note || '',
+      });
       if (res.data.success) {
         setIssued({ email: res.data.admin_email, password: res.data.temp_password, slug: res.data.slug });
-        showToast(t('pa.reg_approved_ok'), 'success');
+        setApproving(null);
         await load();
-      } else showToast(res.data.error || t('msg.error'), 'danger');
-    } catch (e) {
-      showToast(e?.response?.data?.error || t('msg.network_error'), 'danger');
+      } else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (err) {
+      showToast(err?.response?.data?.error || t('msg.network_error'), 'danger');
     }
     setBusy(false);
   }
@@ -142,6 +159,11 @@ export default function PlatformRegistrationsPage() {
     <>
       {/* One-time credential. Deliberately not a toast: it must stay on screen
           until the operator has copied it, because it cannot be shown again. */}
+      {approving && (
+        <ApprovalDialog reg={approving} busy={busy}
+          onClose={() => setApproving(null)} onSubmit={submitApproval} />
+      )}
+
       {issued && (
         <div className="alert alert-warning" style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>
@@ -218,7 +240,7 @@ export default function PlatformRegistrationsPage() {
                     <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => reject(r)}>
                       {t('pa.reg_reject')}
                     </button>
-                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => approve(r)}>
+                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => openApproval(r)}>
                       {t('pa.reg_approve')}
                     </button>
                   </>
@@ -292,5 +314,120 @@ export default function PlatformRegistrationsPage() {
         );
       })}
     </>
+  );
+}
+
+/*
+ * What happens when an application is approved: a workspace is provisioned, a
+ * first administrator account is created, and the organisation goes onto a plan
+ * with a trial. All three are decided here, together, because they are one
+ * decision.
+ */
+function ApprovalDialog({ reg, busy, onClose, onSubmit }) {
+  const { t } = useLang();
+  const [slug, setSlug] = useState(reg.proposed_slug || '');
+  const [planId, setPlanId] = useState('');
+  const [trialDays, setTrialDays] = useState('');
+  const [note, setNote] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [defaultDays, setDefaultDays] = useState(14);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.allSettled([platformApi.plans(), platformApi.getDefaults()]).then(([p, d]) => {
+      if (cancelled) return;
+      if (p.status === 'fulfilled' && p.value.data.success) {
+        setPlans((p.value.data.plans || []).filter((x) => x.status === 'active'));
+      }
+      // The platform-wide default, so the common case needs no typing at all.
+      if (d.status === 'fulfilled' && d.value.data.success) {
+        const n = parseInt(d.value.data.defaults?.default_trial_days, 10);
+        const days = Number.isFinite(n) ? n : 14;
+        setDefaultDays(days);
+        setTrialDays(String(days));
+      } else setTrialDays('14');
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  function go() {
+    if (!/^[a-z0-9][a-z0-9_-]{1,29}$/.test(String(slug).trim().toLowerCase())) {
+      return setError('Organisation code must be 2-30 characters: lower-case letters, numbers, hyphen or underscore.');
+    }
+    const n = parseInt(trialDays, 10);
+    if (!Number.isFinite(n) || n < 0 || n > 365) return setError('Trial days must be between 0 and 365.');
+    setError('');
+    onSubmit({ slug, planId, trialDays: n, note });
+  }
+
+  const chosen = plans.find((p) => String(p.id) === String(planId));
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <h3 style={{ margin: 0 }}>Approve {reg.company_name}</h3>
+          <button className="btn btn-sm" onClick={onClose} aria-label="Close">×</button>
+        </div>
+        <div className="modal-body">
+          {error && <div className="alert alert-danger">{error}</div>}
+
+          <div className="form-group">
+            <label>Organisation code<InfoDot term="org_code" /></label>
+            <input className="form-control" value={slug} onChange={(e) => setSlug(e.target.value)} />
+            <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>
+              Their people will see this when they sign in. It cannot be changed casually afterwards.
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Plan</label>
+            <select className="form-control" value={planId} onChange={(e) => setPlanId(e.target.value)}>
+              <option value="">Decide later</option>
+              {plans.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — ₹{Number(p.total_rupees).toLocaleString('en-IN')} {p.cycle_label.toLowerCase()}
+                  {p.max_users_label !== 'Unlimited' ? ` · up to ${p.max_users_label} users` : ''}
+                </option>
+              ))}
+            </select>
+            {chosen?.description && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>{chosen.description}</div>
+            )}
+          </div>
+
+          <div className="form-group" style={{ maxWidth: 220 }}>
+            <label>Free trial (days)<InfoDot term="trial_days" /></label>
+            <input className="form-control" value={trialDays} inputMode="numeric"
+              onChange={(e) => setTrialDays(e.target.value)} />
+            <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>
+              Platform default is {defaultDays}. Enter 0 to start billing immediately.
+            </div>
+          </div>
+
+          <div className="form-group">
+            <label>Note (optional)</label>
+            <input className="form-control" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="What was agreed on the call" />
+          </div>
+
+          <div style={{
+            background: 'var(--panel-bg)', border: '1px solid var(--border)',
+            borderRadius: 10, padding: '10px 12px', fontSize: 12.5, color: 'var(--text-muted)',
+          }}>
+            Approving creates the workspace and a first administrator account for{' '}
+            <strong>{reg.contact_name}</strong> ({reg.contact_email}). The temporary password is shown
+            once, on the next screen — it is never retrievable afterwards.
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+          <button className="btn btn-success" disabled={busy} onClick={go}>
+            {busy ? 'Creating…' : 'Approve and create workspace'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

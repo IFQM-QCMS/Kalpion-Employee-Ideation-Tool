@@ -226,6 +226,68 @@ async function tenantShell(t) {
       WHERE role IN ('admin','super_admin') ORDER BY ${ROLE_ORDER.replace(/u\./g, '')}, name`
   );
 
+  /*
+   * How much of the product this organisation is actually using.
+   *
+   * Each figure is wrapped on its own rather than fetched in one statement,
+   * because a tenant that has not run the latest migration is missing a column
+   * and a single query would return nothing at all. A missing figure should
+   * read as zero, not blank the whole page.
+   */
+  const count = async (sql) => {
+    try {
+      const [[row]] = await db.query(sql);
+      return Number(row.c) || 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const usage = {
+    ideas_total: await count("SELECT COUNT(*) AS c FROM ideas WHERE status != 'Draft'"),
+    ideas_draft: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Draft'"),
+    ideas_approved: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Approved'"),
+    ideas_implemented: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Implemented'"),
+    ideas_rejected: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Rejected'"),
+    // The point at which an idea stops being a suggestion and becomes tracked
+    // work in the QCMS tool - the figure that shows the platform paid for itself.
+    qcms_pushed: await count(
+      "SELECT COUNT(*) AS c FROM ideas WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status = 'success'"
+    ),
+    qcms_failed: await count(
+      "SELECT COUNT(*) AS c FROM ideas WHERE qcms_push_status = 'failed'"
+    ),
+    patentable_flagged: await count('SELECT COUNT(*) AS c FROM ideas WHERE patentable_flag = 1'),
+    attachments: await count('SELECT COUNT(*) AS c FROM idea_attachments'),
+    comments: await count('SELECT COUNT(*) AS c FROM idea_comments WHERE is_deleted = 0'),
+    challenges: await count('SELECT COUNT(*) AS c FROM challenges'),
+    departments: await count(
+      "SELECT COUNT(DISTINCT department) AS c FROM users WHERE department IS NOT NULL AND department != ''"
+    ),
+    active_users: await count("SELECT COUNT(*) AS c FROM users WHERE status = 'active' AND role != 'super_admin'"),
+  };
+
+  // Realised savings, where anybody has recorded them.
+  let roiTotal = 0;
+  try {
+    const [[roi]] = await db.query(
+      "SELECT COALESCE(SUM(roi_value),0) AS v FROM ideas WHERE status = 'Implemented'"
+    );
+    roiTotal = Number(roi.v) || 0;
+  } catch { /* column absent on an un-migrated tenant */ }
+
+  let lastIdea = null;
+  try {
+    const [[row]] = await db.query("SELECT MAX(submitted_at) AS d FROM ideas WHERE status != 'Draft'");
+    lastIdea = row?.d || null;
+  } catch { /* ignore */ }
+
+  const [monthly] = await db.query(
+    `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS cnt
+       FROM ideas WHERE submitted_at IS NOT NULL AND status != 'Draft'
+      GROUP BY month ORDER BY month DESC LIMIT 12`
+  ).catch(() => [[]]);
+
   return {
     user_count: Number(uc.c),
     role_distribution: roleRows.map((r) => ({
@@ -234,6 +296,10 @@ async function tenantShell(t) {
       active_count: Number(r.active_cnt),
     })),
     idea_stats: ideaStats,
+    usage,
+    roi_total: roiTotal,
+    last_idea_at: lastIdea,
+    monthly_trend: (monthly || []).slice().reverse(),
     admins,
   };
 }
@@ -248,7 +314,32 @@ async function tenantShell(t) {
 export async function tenantDetail(tenantId) {
   const t = await requireTenantRow(tenantId);
   try {
-    return { success: true, tenant: safeTenant(t), ...(await tenantShell(t)) };
+    const shell = await tenantShell(t);
+
+    /*
+     * The application this organisation was created from.
+     *
+     * Everything a person would want to check about a company - Udyam number,
+     * GSTIN, PAN, CIN, entity type, sector, size, turnover, registered address
+     * - was collected once, at registration, and then never shown again. It sat
+     * in tenant_registrations where nobody looked. This joins it back on.
+     *
+     * Absent for organisations IFQM created directly rather than from an
+     * application, which is why every reader has to cope with null.
+     */
+    const [[registration] = []] = await masterDb().execute(
+      `SELECT * FROM tenant_registrations
+        WHERE tenant_id = ? ORDER BY reviewed_at DESC, id DESC LIMIT 1`,
+      [t.id]
+    );
+
+    return {
+      success: true,
+      tenant: safeTenant(t),
+      registration: registration || null,
+      activity: activityOf(t),
+      ...shell,
+    };
   } catch (e) {
     if (e instanceof ApiError) throw e;
     throw new ApiError(503, 'Tenant database is unavailable.');

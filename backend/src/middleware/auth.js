@@ -19,11 +19,33 @@ import { masterDb } from '../database/master.js';
 import { ApiError, unauthorized, forbidden } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { meterTenantRequest } from './tenantQuota.js';
+import { billingState } from '../services/subscriptionService.js';
+import { getPlatformSetting } from '../services/platformSettingsService.js';
 
 function getBearer(req) {
   const h = req.headers.authorization || '';
   if (h.startsWith('Bearer ')) return h.slice(7).trim();
   return '';
+}
+
+/*
+ * Whether lapsed organisations are actually blocked.
+ *
+ * Cached: this is consulted on every single request and it changes about once a
+ * year. Re-read every minute so switching it on in the console takes effect
+ * without a restart, and treated as OFF whenever the lookup fails — a settings
+ * outage must not lock every customer out.
+ */
+let billingEnforceCache = { value: false, at: 0 };
+async function billingEnforced() {
+  if (Date.now() - billingEnforceCache.at < 60000) return billingEnforceCache.value;
+  try {
+    const raw = await getPlatformSetting('billing_enforce');
+    billingEnforceCache = { value: String(raw) === '1', at: Date.now() };
+  } catch {
+    billingEnforceCache = { value: false, at: Date.now() };
+  }
+  return billingEnforceCache.value;
 }
 
 async function attachTenantDb(req, orgSlug) {
@@ -41,6 +63,7 @@ async function attachTenantDb(req, orgSlug) {
    * metering error.
    */
   await meterTenantRequest(req);
+  req.billingEnforced = await billingEnforced();
 }
 
 /**
@@ -160,6 +183,59 @@ function enforcePasswordChange(req) {
 }
 
 /**
+ * What a lapsed organisation may still reach.
+ *
+ * Signing in has to work, or nobody can see the message telling them why they
+ * cannot get in. Support has to work, because the people locked out are exactly
+ * the people who need to talk to somebody. Branding and notifications are what
+ * the shell fetches before it can draw anything at all — refusing them produces
+ * a blank page instead of an explanation.
+ */
+const BILLING_ALLOWED = [
+  '/api/auth',
+  '/api/support/tickets',
+  '/api/branding',
+  '/api/notifications',
+  '/api/health',
+  '/api/ready',
+];
+
+/**
+ * Stop an organisation whose trial or paid period has ended.
+ *
+ * The check reads the dates already loaded with the tenant, so it costs nothing
+ * extra per request. Two deliberate limits:
+ *
+ *   - it is off until the platform team switches enforcement on, so nobody is
+ *     locked out of a system whose prices have not been set;
+ *   - `exempt` organisations are never touched, which is what every
+ *     organisation that existed before billing arrived is marked as.
+ *
+ * The refusal carries a flag the screens use to show a "your access has paused"
+ * page rather than a generic error, and it names the contact so somebody can
+ * act on it without hunting for an email address.
+ */
+function enforceBilling(req) {
+  const tenant = req.tenant;
+  if (!tenant) return;
+
+  const path = (req.originalUrl || '').split('?')[0];
+  if (BILLING_ALLOWED.some((allowed) => path === allowed || path.startsWith(allowed + '/'))) return;
+
+  // An organisation admin keeps read access so they can see the state of their
+  // own account and reach the people who can restore it.
+  const state = billingState(tenant);
+  if (!state.blocked) return;
+  if (!req.billingEnforced) return;
+
+  throw new ApiError(402, 'Your organisation\'s access is paused pending payment.', {
+    billing_blocked: true,
+    billing_state: state.state,
+    ends_at: state.ends_at || null,
+  });
+}
+
+/**
  * Decode the token (if any) and populate req.user/req.db without rejecting.
  * Used by endpoints (like auth/me) that must respond for both states.
  */
@@ -272,6 +348,9 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     req.user = await loadLiveUser(req, payload);
     // A user still on their temporary password may only change it.
     enforcePasswordChange(req);
+    // And an organisation whose paid period has run out is paused, with a
+    // message that says so rather than a generic refusal.
+    enforceBilling(req);
   }
   next();
 });

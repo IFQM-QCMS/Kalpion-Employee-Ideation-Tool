@@ -4,6 +4,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
+import OrgProfilePanel from '../components/OrgProfilePanel';
 
 /*
  * Platform → Organisation detail.
@@ -155,9 +156,19 @@ export default function PlatformTenantsPage() {
             ))}
           </div>
 
-          <div style={{ fontSize:11,color:'var(--subtle)',margin:'14px 0 0',lineHeight:1.6 }}>
+          <div style={{ fontSize:11,color:'var(--subtle)',margin:'14px 0 18px',lineHeight:1.6 }}>
             {t('pa.privacy_note')}
           </div>
+
+          {/* Who this company is, what they are using, and what they pay. All
+              three were previously either invisible or in a database client. */}
+          <OrgProfilePanel
+            tenantId={id}
+            registration={data.registration}
+            usage={data.usage}
+            roiTotal={data.roi_total}
+            lastIdeaAt={data.last_idea_at}
+            activity={data.activity} />
 
           {/* Role spread — counts only, no people */}
           <div className="card" style={{ marginTop:20 }}>
