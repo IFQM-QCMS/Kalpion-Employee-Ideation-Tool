@@ -158,8 +158,39 @@ def bullets(doc, items, style="List Bullet"):
         p.paragraph_format.space_after = Pt(2)
 
 
+# Figure number → the file drawn for it by arch_drawings.py. A figure with no
+# entry here falls back to its monospace art, so adding a drawing is additive
+# and removing one cannot break the build.
+FIGURE_IMAGES = {
+    "Figure A-1": "A1_context", "Figure A-2": "A2_containers",
+    "Figure A-3": "A3_stack", "Figure A-4": "A4_modules",
+    "Figure A-5": "A5_deployment", "Figure A-6": "A6_security",
+    "Figure A-7": "A7_integration",
+    "Figure D-1": "D1_workflow", "Figure D-2": "D2_dfd0", "Figure D-3": "D3_dfd1",
+    "Figure D-4": "D4_er_master", "Figure D-5": "D5_er_tenant",
+    "Figure D-6": "D6_usecase", "Figure D-7": "D7_seq_login",
+    "Figure D-8": "D8_seq_submit", "Figure D-9": "D9_seq_approval",
+    "Figure D-10": "D10_seq_register", "Figure D-11": "D11_seq_qcms",
+    "Figure D-12": "D12_class", "Figure D-13": "D13_screenflow",
+    "Figure D-14": "D14_wireframes", "Figure D-15": "D15_errors",
+}
+
+DIAGRAM_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "diagrams")
+
+
 def figure(doc, number, title, art, note=None, legend=None):
-    """A titled monospace diagram with an optional legend and note."""
+    """
+    A titled figure with an optional legend and note.
+
+    Every figure is now a drawing. The diagrams used to be box-drawing
+    characters in a monospace block, which kept the whole document in one text
+    file but read as a wall of dashes — and an entity relationship diagram drawn
+    in `+---+` is genuinely hard to follow, because the one thing it cannot show
+    is which end of a relationship is the "many" end.
+
+    The monospace art is still passed in and is still used if a drawing is
+    missing, so the document builds either way.
+    """
     cap = doc.add_paragraph()
     r = cap.add_run("%s  %s" % (number, title))
     r.bold = True
@@ -170,19 +201,30 @@ def figure(doc, number, title, art, note=None, legend=None):
     cap.paragraph_format.space_after = Pt(4)
     cap.paragraph_format.keep_with_next = True
 
-    tbl = doc.add_table(rows=1, cols=1)
-    tbl.style = "Table Grid"
-    tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
-    cell = tbl.rows[0].cells[0]
-    cell.text = ""
-    for i, line in enumerate(art.rstrip("\n").split("\n")):
-        p = cell.paragraphs[0] if i == 0 else cell.add_paragraph()
-        run = p.add_run(line)
-        run.font.name = MONO_FONT
-        run.font.size = Pt(7.6)
-        run.font.color.rgb = BLACK
-        p.paragraph_format.space_after = Pt(0)
-        p.paragraph_format.line_spacing = 1.0
+    image = FIGURE_IMAGES.get(number)
+    path = os.path.join(DIAGRAM_DIR, image + ".png") if image else None
+
+    if path and os.path.exists(path):
+        pic = doc.add_paragraph()
+        pic.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        pic.paragraph_format.space_after = Pt(2)
+        # Sized to the text column so a wide diagram is never cropped by the
+        # page margin. Word scales the height to match.
+        pic.add_run().add_picture(path, width=Inches(6.3))
+    else:
+        tbl = doc.add_table(rows=1, cols=1)
+        tbl.style = "Table Grid"
+        tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
+        cell = tbl.rows[0].cells[0]
+        cell.text = ""
+        for i, line in enumerate(art.rstrip("\n").split("\n")):
+            para = cell.paragraphs[0] if i == 0 else cell.add_paragraph()
+            run = para.add_run(line)
+            run.font.name = MONO_FONT
+            run.font.size = Pt(7.6)
+            run.font.color.rgb = BLACK
+            para.paragraph_format.space_after = Pt(0)
+            para.paragraph_format.line_spacing = 1.0
 
     if legend:
         lp = doc.add_paragraph()

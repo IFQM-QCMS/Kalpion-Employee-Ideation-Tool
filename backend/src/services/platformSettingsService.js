@@ -74,6 +74,24 @@ const DEFAULTS_WHITELIST = [
   'quota_enforce', 'quota_grace_percent', 'quota_warn_percent',
 ];
 
+/**
+ * Which of those are actually SEEDED into a new organisation.
+ *
+ * The list above answers "what may a platform admin edit here". This answers a
+ * different question — "what does a new organisation start with" — and
+ * conflating them meant adding billing policy to the console silently copied
+ * `billing_enforce`, `quota_grace_percent` and the rest into every new tenant's
+ * org_settings, where they mean nothing and nobody can edit them.
+ *
+ * Billing and quota policy is platform-wide by definition. It belongs in the
+ * registry, not in each customer's own settings table.
+ */
+const NEW_TENANT_KEYS = [
+  'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
+  'challenges_enabled', 'approval_mode', 'approval_reviewer_roles',
+  'approval_final_approver_roles', 'approval_threshold', 'approval_stages',
+];
+
 /** Mirrors settingsService's whitelist — what IFQM may change on a live tenant. */
 const TENANT_SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
@@ -200,7 +218,7 @@ export async function defaultsForNewTenant() {
   try {
     const [rows] = await masterDb().query('SELECT key_name, value FROM platform_settings');
     if (!rows.length) return BUILT_IN;
-    return rows.filter((r) => DEFAULTS_WHITELIST.includes(r.key_name)).map((r) => [r.key_name, r.value]);
+    return rows.filter((r) => NEW_TENANT_KEYS.includes(r.key_name)).map((r) => [r.key_name, r.value]);
   } catch (e) {
     logger.warn('platform_settings unreadable, using built-in tenant defaults', e.message);
     return BUILT_IN;

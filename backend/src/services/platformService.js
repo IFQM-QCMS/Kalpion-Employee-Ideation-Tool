@@ -357,6 +357,66 @@ export async function tenantDetail(tenantId) {
    createTenant), so the app no longer hand-splits SQL on ';' — a splitter that
    could never be made safe against semicolons inside comments and strings. */
 
+/**
+ * Turn a database failure into something the operator can act on.
+ *
+ * Deliberately a fixed set of sentences rather than the driver's message: the
+ * mapping is what makes it safe to show. An unrecognised failure still says
+ * nothing specific, because that is the case where we do not know what the text
+ * would reveal.
+ *
+ * The raw error is logged either way; this only decides what reaches the screen.
+ */
+function describeCreateFailure(e) {
+  const code = e?.code || '';
+  const msg = String(e?.sqlMessage || e?.message || '');
+
+  if (code === 'ER_DUP_ENTRY') {
+    // Which uniqueness was violated changes what the operator has to fix.
+    if (/uq_domain|domain/i.test(msg)) {
+      return 'That organisation code is already taken by another organisation. Choose a different one.';
+    }
+    if (/email/i.test(msg)) {
+      return 'That administrator email address is already registered. Use a different address, '
+        + 'or add this person to the existing organisation instead of creating a new one.';
+    }
+    if (/employee_id/i.test(msg)) {
+      return 'The administrator employee number derived from this organisation code is already in use. '
+        + 'Choose a different organisation code.';
+    }
+    return 'Something in this form is already in use by another organisation — most likely the '
+      + 'organisation code or the administrator email address.';
+  }
+
+  if (code === 'ER_CON_COUNT_ERROR' || code === 'ER_TOO_MANY_USER_CONNECTIONS'
+      || code === 'ER_USER_LIMIT_REACHED') {
+    return 'The database is at its connection limit right now. Wait a minute and try again; '
+      + 'if it keeps happening the database plan needs more connections.';
+  }
+  if (code === 'ER_DBACCESS_DENIED_ERROR' || code === 'ER_ACCESS_DENIED_ERROR'
+      || code === 'ER_CANT_CREATE_DB' || code === 'ER_SPECIFIC_ACCESS_DENIED_ERROR') {
+    return 'The database account this server uses is not allowed to create a new database. '
+      + 'It needs CREATE privileges on the ifqm_% schemas.';
+  }
+  if (code === 'ER_DB_CREATE_EXISTS') {
+    return 'A database for that organisation code already exists, left over from an earlier attempt. '
+      + 'Choose a different code, or ask for the leftover database to be removed.';
+  }
+  if (code === 'PROTOCOL_CONNECTION_LOST' || code === 'ETIMEDOUT' || code === 'ECONNREFUSED'
+      || code === 'ENOTFOUND') {
+    return 'The database could not be reached while setting the organisation up. '
+      + 'Nothing was created. Try again in a moment.';
+  }
+  if (code === 'ER_PARSE_ERROR' || code === 'ER_SYNTAX_ERROR') {
+    return 'The organisation was not created because the tenant schema could not be applied. '
+      + 'This is a fault on our side, not in what you entered — please report it.';
+  }
+  if (code === 'ER_DISK_FULL' || /disk|quota/i.test(msg)) {
+    return 'The database is out of space, so the organisation could not be created.';
+  }
+  return '';
+}
+
 export async function createTenant(body) {
   const orgName = String(body.org_name ?? '').trim();
   const slug = String(body.slug ?? '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
@@ -377,6 +437,13 @@ export async function createTenant(body) {
   const [dup] = await master.execute('SELECT id FROM tenants WHERE slug=? LIMIT 1', [slug]);
   if (dup.length) throw new ApiError(409, 'Organization code already in use.');
 
+  /*
+   * The code is normalised, so what an operator types is not always what they
+   * get: "My Org Name" becomes "myorgname". That is the right behaviour — it has
+   * to be usable in a URL — but silently keeping a different value than somebody
+   * typed is how they end up telling a customer the wrong sign-in code. The
+   * normalised value is returned so the screen can show what was actually used.
+   */
   const dbName = 'ifqm_' + slug.replace(/[^a-z0-9_]/g, '_');
   const adminEmpId = slug.toUpperCase() + '-ADMIN';
 
@@ -443,6 +510,10 @@ export async function createTenant(body) {
       tenant_id: res.insertId,
       org_name: orgName,
       slug,
+      // True when the code had to be changed to be usable, so the screen can
+      // point it out rather than letting somebody circulate the wrong one.
+      slug_adjusted: slug !== String(body.slug ?? '').trim(),
+      slug_requested: String(body.slug ?? '').trim(),
       db_name: dbName,
       login_url: '?org=' + slug,
       admin_email: adminEmail,
@@ -452,8 +523,19 @@ export async function createTenant(body) {
     try { await master.query(`DROP DATABASE IF EXISTS \`${dbName}\``); } catch { /* ignore */ }
     // Don't echo the raw driver error back to the client — it can disclose
     // schema names, credentials and internal paths. Log it, return a generic.
-    logger.error(`createTenant failed for slug "${slug}"`, e);
-    throw new ApiError(500, 'Failed to create organisation. Check the server logs.');
+    logger.error(`createTenant failed for slug "${slug}" (${e?.code || 'no code'})`, e);
+
+    /*
+     * Say what went wrong where we can name it safely. The reader is IFQM staff
+     * in a browser with no access to any log, so "check the server logs" was an
+     * instruction they could not follow — it turned every failure into a call to
+     * a developer.
+     */
+    const reason = describeCreateFailure(e);
+    throw new ApiError(500,
+      reason || 'The organisation could not be created, and the reason was not one we recognise. '
+        + `Nothing was left behind. Quote this when reporting it: ${e?.code || 'unknown'}.`,
+      { failure_code: e?.code || null });
   } finally {
     if (conn) await conn.end();
   }

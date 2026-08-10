@@ -1,7 +1,11 @@
 # IFQM EIT — Flows and Timeline
 
-MOM 29 Jul 2026 §2.1. Diagrams are Mermaid; GitHub renders them inline, and
-VS Code does with the Markdown Preview Mermaid extension.
+MOM 29 Jul 2026 §2.1.
+
+Each flow is a drawn diagram. The Mermaid source that describes it is kept
+underneath in a collapsed block — open it to edit the flow, then rebuild the
+images with `python docs/flow_drawings.py`. The picture is what most readers
+want; the source is what the next person to change it wants.
 
 ---
 
@@ -9,6 +13,11 @@ VS Code does with the Markdown Preview Mermaid extension.
 
 The core loop. Everything else in the product exists to keep an idea moving
 along this path.
+
+![1. Idea lifecycle](diagrams/F1_idea_lifecycle.png)
+
+<details>
+<summary>Mermaid source for this diagram</summary>
 
 ```mermaid
 flowchart TD
@@ -41,6 +50,8 @@ flowchart TD
     O --> W[Visible in Rejected Ideas<br/>with its reason]
 ```
 
+</details>
+
 **SLA and escalation.** `review_sla_days` flags an idea as overdue; nothing is
 reassigned. `escalation_days` moves it up the chain. Both are per organisation,
 and the distinction is the reason those fields carry info buttons (§12.13).
@@ -51,6 +62,11 @@ and the distinction is the reason those fields carry info buttons (§12.13).
 
 Nothing an anonymous caller does provisions anything. The worst a flood of junk
 applications achieves is a full review queue.
+
+![2. MSME registration and approval](diagrams/F2_registration.png)
+
+<details>
+<summary>Mermaid source for this diagram</summary>
 
 ```mermaid
 flowchart TD
@@ -74,6 +90,8 @@ flowchart TD
     Q --> R[Organisation live]
 ```
 
+</details>
+
 A duplicate application returns the same response as a new one. Telling an
 anonymous caller "this company already has an account" is a free customer-list
 lookup.
@@ -81,6 +99,11 @@ lookup.
 ---
 
 ## 3. Authentication
+
+![3. Authentication](diagrams/F3_authentication.png)
+
+<details>
+<summary>Mermaid source for this diagram</summary>
 
 ```mermaid
 flowchart TD
@@ -100,6 +123,8 @@ flowchart TD
     K -- no --> M[Dashboard for their role]
 ```
 
+</details>
+
 Every subsequent request re-reads the user from the database, so deactivation,
 role change and password reset take effect immediately rather than at token
 expiry.
@@ -107,6 +132,11 @@ expiry.
 ---
 
 ## 4. Who sees what
+
+![4. Who sees what](diagrams/F4_visibility.png)
+
+<details>
+<summary>Mermaid source for this diagram</summary>
 
 ```mermaid
 flowchart LR
@@ -125,6 +155,8 @@ flowchart LR
     end
     Platform -.->|provisions, never reads| Org
 ```
+
+</details>
 
 The full proposal text follows the org's `solution_visibility` setting, on top
 of the role scoping above.
