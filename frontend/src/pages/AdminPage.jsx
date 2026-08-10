@@ -59,6 +59,7 @@ export default function AdminPage() {
   // array because the form is a set of tick boxes; stored comma-separated.
   const [empSections, setEmpSections] = useState(['solution']);
   const [usersRole,   setUsersRole]   = useState('');
+  const [usersError,  setUsersError]  = useState('');
   const [usersStatus, setUsersStatus] = useState('');
   const [userPage,    setUserPage]    = useState(1);
   const [userMeta,    setUserMeta]    = useState({ total: 0, pages: 1 });
@@ -104,15 +105,34 @@ export default function AdminPage() {
 
   async function loadUsers() {
     setLoading(true);
-    try {
-      const [uRes, mRes] = await Promise.all([
-        usersApi.adminList({ q: usersSearch, role: usersRole, status: usersStatus, page: userPage, limit: 25 }),
-        usersApi.managers(),
-      ]);
-      setUsers(uRes.data.users || []);
-      setUserMeta({ total: uRes.data.total ?? 0, pages: uRes.data.pages ?? 1 });
-      setManagers(mRes.data.managers || []);
-    } catch {}
+    setUsersError('');
+    /*
+     * These two used to be a single Promise.all inside an empty catch. One of
+     * them failing meant NEITHER result was applied and nothing was reported,
+     * so a server error rendered as "No users" - an organisation with four
+     * employees looked empty, and there was nothing on screen to say why.
+     *
+     * allSettled so the list still loads when only the manager dropdown fails,
+     * and the other way round.
+     */
+    const [uRes, mRes] = await Promise.allSettled([
+      usersApi.adminList({ q: usersSearch, role: usersRole, status: usersStatus, page: userPage, limit: 25 }),
+      usersApi.managers(),
+    ]);
+
+    if (uRes.status === 'fulfilled') {
+      setUsers(uRes.value.data.users || []);
+      setUserMeta({ total: uRes.value.data.total ?? 0, pages: uRes.value.data.pages ?? 1 });
+    } else {
+      setUsers([]);
+      setUserMeta({ total: 0, pages: 1 });
+      setUsersError(uRes.reason?.response?.data?.error || t('msg.fail_load'));
+    }
+
+    // The manager dropdown is a convenience on the edit form; losing it must
+    // not take the list with it.
+    if (mRes.status === 'fulfilled') setManagers(mRes.value.data.managers || []);
+
     setLoading(false);
   }
 
@@ -297,6 +317,8 @@ export default function AdminPage() {
               <button className="btn btn-primary btn-sm" onClick={() => { setEditUser(null); setShowUserForm(true); }}>{t('btn.add_user')}</button>
             </div>
           </div>
+          {usersError && <div className="alert alert-danger">{usersError}</div>}
+
           <div className="card" style={{ overflowX:'auto' }}>
             <table className="table">
               <thead>

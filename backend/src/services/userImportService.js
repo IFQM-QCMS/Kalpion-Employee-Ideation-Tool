@@ -775,9 +775,14 @@ export async function getJob(db, jobId) {
 }
 
 async function topErrors(db, jobId, limit = 200) {
+  // The row cap is built into the text, not bound: MySQL 8.4 rejects LIMIT as a
+  // prepared-statement parameter. Clamped to an integer first, so nothing but a
+  // number can reach the statement.
+  const n = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 1000);
   const [rows] = await db.execute(
-    'SELECT `row_number`, employee_id, email, message FROM user_import_errors WHERE job_id=? ORDER BY `row_number` LIMIT ?',
-    [jobId, limit]
+    'SELECT `row_number`, employee_id, email, message FROM user_import_errors '
+    + `WHERE job_id=? ORDER BY \`row_number\` LIMIT ${n}`,
+    [jobId]
   );
   return rows;
 }

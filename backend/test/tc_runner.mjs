@@ -1447,6 +1447,41 @@ async function main() {
   });
   const quiet = () => {};
 
+  await tc(DT, DTn, 'Paginated queries do not bind LIMIT or OFFSET',
+    'No prepared statement takes a row limit as a parameter - MySQL 8 rejects it', async () => {
+      /*
+       * This is a portability trap that a passing test suite cannot catch on
+       * its own, which is why it is checked in the source rather than by
+       * running a query.
+       *
+       * MariaDB (what most people run locally) accepts LIMIT ? and OFFSET ? as
+       * bound parameters. MySQL 8 does not: the prepared-statement protocol
+       * refuses them with "Incorrect arguments to mysqld_stmt_execute". So a
+       * paginated list works perfectly in development and returns 500 in
+       * production against a managed MySQL - which is exactly what happened to
+       * the admin console's user list. An organisation with four employees
+       * showed an empty table, and the only visible symptom was the absence of
+       * data.
+       *
+       * The fix everywhere is to build the row count into the statement text
+       * after clamping it to an integer, as activityService already did.
+       */
+      const files = fs.readdirSync(path.join(REPO_DIR, 'backend', 'src', 'services'))
+        .filter((f) => f.endsWith('.js'));
+      const offenders = [];
+      for (const f of files) {
+        const src = readRepo(`backend/src/services/${f}`);
+        // Look inside execute()/query() calls only, so a LIMIT ? appearing in a
+        // comment or a string of prose does not trip it.
+        for (const m of src.matchAll(/(?:execute|query)\(\s*(`[^`]*`|'[^']*'|"[^"]*")/g)) {
+          if (/\b(?:LIMIT|OFFSET)\s+\?/i.test(m[1])) offenders.push(f);
+        }
+      }
+      const unique = [...new Set(offenders)];
+      return ok(unique.length === 0,
+        unique.length ? `bound LIMIT/OFFSET in: ${unique.join(', ')}` : `${files.length} service files clean`);
+    });
+
   await tc(DT, DTn, 'Migration runner applied against the live schemas',
     'Pending migrations applied and recorded in the ledger', async () => {
       const ran = await runMigrations(migConn, quiet, 'ifqm_test_master');

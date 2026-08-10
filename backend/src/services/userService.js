@@ -85,6 +85,16 @@ export async function list(db, actor, q) {
  */
 export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', department = '', status = '', manager_id: managerId = '' } = {}) {
   const search = String(q || '').trim();
+  /*
+   * These two are built into the statement text rather than bound, because
+   * MySQL 8.4 rejects LIMIT and OFFSET as prepared-statement parameters
+   * ("Incorrect arguments to mysqld_stmt_execute"). MariaDB accepts them, so
+   * this list worked in development and returned 500 in production - an
+   * organisation with four employees showed an empty user list.
+   *
+   * Safe, and stays safe: both go through parseInt and a clamp on the two lines
+   * below, so only a plain number can ever reach the string.
+   */
   const perPage = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
   const pageNum = Math.max(parseInt(page, 10) || 1, 1);
   const offset = (pageNum - 1) * perPage;
@@ -137,8 +147,8 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', 
        FROM users u LEFT JOIN users m ON m.id=u.manager_id
        ${whereSql}
       ORDER BY FIELD(u.role,'admin','executive','plant_head','senior_manager','department_manager','manager','project_lead','team_lead','employee','trainee'), u.name
-      LIMIT ? OFFSET ?`,
-    [...params, perPage, offset]
+      LIMIT ${perPage} OFFSET ${offset}`,
+    params
   );
 
   // The department list comes from the data, not a constant: an org's
@@ -453,8 +463,7 @@ export async function hierarchy(db) {
        ) i ON i.submitter_id = u.id
       WHERE u.role != 'super_admin'
       ORDER BY FIELD(u.role,'admin','executive','plant_head','senior_manager','department_manager','manager','project_lead','team_lead','employee','trainee'), u.name
-      LIMIT ?`,
-    [HIERARCHY_MAX + 1]
+      LIMIT ${HIERARCHY_MAX + 1}`
   );
 
   const truncated = users.length > HIERARCHY_MAX;
