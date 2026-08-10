@@ -56,10 +56,33 @@ export default function AllIdeasPage() {
   const pollRef = useRef(null);
   const canArchive = isAdmin(user?.role) || isSuperAdmin(user?.role);
 
+  /*
+   * Refresh while somebody is actually looking.
+   *
+   * This used to poll every 10 seconds and keep polling while the tab sat in
+   * the background — 360 requests an hour from one person, all day. Ideas do
+   * not change that fast. A minute is plenty, the timer stops while the tab is
+   * hidden, and returning to the tab fetches once immediately so nobody is
+   * looking at stale rows while waiting for the next tick.
+   */
   useEffect(() => {
     loadIdeas();
-    pollRef.current = setInterval(loadIdeas, 10000);
-    return () => clearInterval(pollRef.current);
+
+    const start = () => {
+      clearInterval(pollRef.current);
+      pollRef.current = setInterval(loadIdeas, 60000);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') { loadIdeas(); start(); }
+      else clearInterval(pollRef.current);
+    };
+
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(pollRef.current);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [search, status, impact, archived]);
 
   async function loadIdeas() {

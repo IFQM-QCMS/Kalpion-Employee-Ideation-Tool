@@ -7,9 +7,21 @@
  * botnet looks like thousands. This counts by TENANT, which is the unit the
  * commercial limits are actually expressed in.
  *
- * Two limits, both from the MOM:
- *   • 10,000 requests total (lifetime)
- *   • 2,000 requests per calendar month
+ * Counting always happens. BLOCKING does not: a limit applies only where a
+ * platform admin has deliberately set one on a particular organisation
+ * (tenants.api_quota_total / api_quota_monthly). There is no platform-wide cap.
+ *
+ * That is a deliberate change from the MOM's 10,000 total / 2,000 monthly.
+ * Those figures describe an integration allowance; applied to every page load
+ * they are consumed in hours. One employee with All Ideas open generates 360
+ * requests an hour by itself, and four people merely signed in generate about
+ * 170,000 a month from the notification poll — against a 2,000 cap. The first
+ * organisation to use the product in earnest hit the limit and every screen
+ * started answering 429.
+ *
+ * A cap that stops a paying customer opening a page is not a commercial limit;
+ * it is an outage wearing a quota message. So the ceiling is opt-in, for the
+ * case it was really meant for: one organisation behaving badly.
  *
  * Counting is deliberately asynchronous and slightly lossy. The alternative —
  * an awaited UPDATE on every request — puts a database round trip in front of
@@ -109,9 +121,23 @@ async function limitsFor(tenantId) {
   );
   const used = Object.fromEntries(usage.map((r) => [r.period, Number(r.request_count) || 0]));
 
+  /*
+   * NULL means no limit, and that is now the default at every level. A number
+   * on the tenant row wins; failing that, a number in platform_settings; and if
+   * neither has been set deliberately, there is no ceiling.
+   *
+   * `?? 0` is deliberately NOT used: zero would be a real limit meaning "this
+   * organisation may make no requests at all", which is never what an unset
+   * field means.
+   */
+  const num = (v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
   const entry = {
-    total: t?.api_quota_total ?? d.api_quota_total ?? 10000,
-    monthly: t?.api_quota_monthly ?? d.api_quota_monthly ?? 2000,
+    total: num(t?.api_quota_total) ?? num(d.api_quota_total) ?? null,
+    monthly: num(t?.api_quota_monthly) ?? num(d.api_quota_monthly) ?? null,
     used_total: used.total || 0,
     used_month: used[currentPeriod()] || 0,
     at: Date.now(),
@@ -125,10 +151,11 @@ async function limitsFor(tenantId) {
  *
  * Called from the auth middleware immediately after the tenant is resolved —
  * the earliest point at which "which organisation is this?" has an answer.
- * Throws ApiError(429) when a limit is exceeded; resolves silently otherwise.
+ * Always counts. Throws ApiError(429) only where somebody has deliberately set
+ * a ceiling on this organisation; with no ceiling set it counts and returns.
  *
- * Read-only requests count too: the MOM's number is about consumption, not
- * writes. Health and readiness probes are unauthenticated and never reach here.
+ * Read-only requests count too — the figure is about consumption, not writes.
+ * Health and readiness probes are unauthenticated and never reach here.
  */
 export async function meterTenantRequest(req) {
   const tenantId = Number(req.tenant?.id) || 0;
@@ -152,13 +179,17 @@ export async function meterTenantRequest(req) {
   const usedMonth = lim.used_month + inFlight;
   const usedTotal = lim.used_total + inFlight;
 
-  if (usedMonth > lim.monthly) {
+  // No ceiling set for this organisation: the count is kept for reporting and
+  // nothing is refused. This is the normal case.
+  if (lim.monthly == null && lim.total == null) return;
+
+  if (lim.monthly != null && usedMonth > lim.monthly) {
     throw new ApiError(429,
       `This organisation has reached its monthly limit of ${lim.monthly} API requests. `
       + 'It resets at the start of next month. Contact IFQM if you need a higher limit.',
       { quota: { scope: 'monthly', limit: lim.monthly, used: usedMonth } });
   }
-  if (usedTotal > lim.total) {
+  if (lim.total != null && usedTotal > lim.total) {
     throw new ApiError(429,
       `This organisation has reached its total limit of ${lim.total} API requests. `
       + 'Contact IFQM to raise it.',

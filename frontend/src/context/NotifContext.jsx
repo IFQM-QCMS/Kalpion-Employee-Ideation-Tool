@@ -27,8 +27,21 @@ export function NotifProvider({ children }) {
   useEffect(() => {
     if (!user || user.role === 'platform_admin') return;
     loadNotifications();
-    const interval = setInterval(loadNotifications, 60000);
-    return () => clearInterval(interval);
+    /*
+     * Notifications kept polling in every background tab, for every signed-in
+     * person, all day. Two minutes is more than responsive enough for "somebody
+     * commented on your idea", and the timer stops entirely while the tab is
+     * hidden — a laptop left open overnight now costs nothing.
+     */
+    const interval = setInterval(loadNotifications, 120000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') loadNotifications();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [user, loadNotifications]);
 
   const markAllRead = useCallback(async () => {

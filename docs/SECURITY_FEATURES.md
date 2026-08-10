@@ -321,9 +321,14 @@ protection does not apply to string concatenation.
   each against a thousand accounts. This is what caps that. Only failures count
   against the budget.
 - **Expensive operations** (rescoring, large exports) have their own hourly cap.
-- **Per-organisation request quotas**, counted in the shared registry rather
-  than in memory, so they are not reset by a deploy and are correct across
-  several servers. *(`src/middleware/rateLimiter.js`, `tenantQuota.js`)*
+- **Per-organisation request counting**, kept in the shared registry rather
+  than in memory, so it is not reset by a deploy and is correct across several
+  servers. It is a usage figure, not a cap: nothing is refused unless somebody
+  has deliberately set a ceiling on a particular organisation. An earlier
+  platform-wide cap of 2,000 requests a month was applied to ordinary page
+  loads and took a live customer offline within days — a limit that stops a
+  paying customer opening a page is an outage, not a commercial control.
+  *(`src/middleware/rateLimiter.js`, `tenantQuota.js`)*
 
 ---
 
