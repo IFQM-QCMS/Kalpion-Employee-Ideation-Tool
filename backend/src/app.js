@@ -54,7 +54,10 @@ export function createApp() {
         return cb(new Error(`Origin ${origin} not allowed by CORS`));
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      // X-Client-Timezone must be listed or the browser's preflight rejects it
+      // and every cross-origin request from the deployed frontend fails - not
+      // just the ones that care about the header.
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Client-Timezone'],
     })
   );
 

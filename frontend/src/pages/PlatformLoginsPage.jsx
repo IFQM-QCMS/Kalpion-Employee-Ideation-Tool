@@ -5,15 +5,56 @@ import { fmtDateTime } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 
 /*
- * Sign-in activity for the whole platform.
+ * Sign-in activity for the IFQM platform console.
  *
- * The record it reads is append-only and separate from the lockout counter,
- * which is wiped on every successful sign-in and so can never answer "who
- * signed in, and when". Kept for 180 days, then trimmed.
+ * Staff accounts only. It used to list every employee sign-in across every
+ * customer organisation, which buried the thing the page exists to answer —
+ * who has been in this console — and put customers' internal staff movements
+ * on a screen that has no business showing them.
  *
- * Failures are as interesting as successes: a run of them against one account,
- * or from one address, is the first sign of somebody guessing passwords.
+ * The record is append-only and separate from the lockout counter, which is
+ * wiped on every successful sign-in and so could never answer "who signed in,
+ * and when". Kept for 180 days, then trimmed.
+ *
+ * Failures matter as much as successes: a run of them against one account, or
+ * from one address, is the first sign of somebody guessing passwords.
  */
+
+/*
+ * Turn a user-agent string into something a person can read.
+ *
+ * Deliberately shallow. Every browser lies in its user-agent for historical
+ * reasons — Chrome claims to be Safari, Edge claims to be Chrome — so this
+ * checks in the order that gets the common cases right and gives up gracefully
+ * rather than pretending to be a full parser. The raw string stays in the
+ * tooltip for anyone who needs the truth.
+ */
+function describeDevice(ua) {
+  const s = String(ua || '');
+  if (!s) return '—';
+  const browser =
+      /Edg\//.test(s)                        ? 'Edge'
+    : /OPR\/|Opera/.test(s)                  ? 'Opera'
+    : /Chrome\//.test(s) && !/Chromium/.test(s) ? 'Chrome'
+    : /Firefox\//.test(s)                    ? 'Firefox'
+    : /Safari\//.test(s)                     ? 'Safari'
+    : 'Browser';
+  const version = s.match(/(?:Edg|OPR|Chrome|Firefox|Version)\/(\d+)/)?.[1];
+  const os =
+      /Windows NT 10/.test(s)  ? 'Windows'
+    : /Windows/.test(s)        ? 'Windows'
+    : /Android/.test(s)        ? 'Android'
+    : /iPhone|iPad|iOS/.test(s)? 'iOS'
+    : /Mac OS X/.test(s)       ? 'macOS'
+    : /Linux/.test(s)          ? 'Linux'
+    : '';
+  return `${browser}${version ? ' ' + version : ''}${os ? ' on ' + os : ''}`;
+}
+
+/* An address on a private range is almost always the hosting provider's own
+   proxy rather than anything about the person, so the row says so instead of
+   leaving an operator to wonder why every sign-in is from 10.x. */
+const NETWORK_NOTE = { private: 'internal network', local: 'this machine', public: '' };
 
 const OUTCOME_STYLE = {
   success: { bg: 'var(--success-light)', fg: 'var(--success)' },
@@ -62,13 +103,13 @@ export default function PlatformLoginsPage() {
   const filtered = rows.filter((r) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return [r.actor_name, r.actor_email, r.tenant_slug, r.ip]
+    return [r.actor_name, r.actor_email, r.ip, r.location]
       .some((v) => String(v || '').toLowerCase().includes(q));
   });
 
   function exportCsv() {
-    const cols = ['created_at', 'actor_type', 'actor_name', 'actor_email',
-      'tenant_slug', 'outcome', 'ip', 'user_agent'];
+    const cols = ['created_at', 'actor_name', 'actor_email', 'outcome',
+      'location', 'ip', 'network', 'user_agent'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(','), ...filtered.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\r\n');
     saveBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), 'ifqm-login-activity.csv');
@@ -137,17 +178,16 @@ export default function PlatformLoginsPage() {
             <tr>
               <th>{t('la.col_when')}</th>
               <th>{t('la.col_who')}</th>
-              <th>{t('la.col_kind')}</th>
-              <th>{t('la.col_org')}</th>
               <th>{t('la.col_outcome')}</th>
+              <th>{t('la.col_location')}<InfoDot term="approx_location" /></th>
               <th>{t('la.col_ip')}<InfoDot term="ip_address" /></th>
               <th>{t('la.col_device')}</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="7" className="text-center"><div className="spinner"></div></td></tr>}
+            {loading && <tr><td colSpan="6" className="text-center"><div className="spinner"></div></td></tr>}
             {!loading && !filtered.length && (
-              <tr><td colSpan="7" className="text-center">{t('la.none')}</td></tr>
+              <tr><td colSpan="6" className="text-center">{t('la.none')}</td></tr>
             )}
             {!loading && filtered.map((r) => (
               <tr key={r.id}>
@@ -156,15 +196,19 @@ export default function PlatformLoginsPage() {
                   <div style={{ fontWeight: 600, color: 'var(--heading)' }}>{r.actor_name || '—'}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>{r.actor_email || '—'}</div>
                 </td>
-                <td style={{ fontSize: 12.5 }}>
-                  {r.actor_type === 'platform_admin' ? t('la.kind_platform') : t('la.kind_tenant')}
-                </td>
-                <td style={{ fontSize: 12.5 }}>{r.tenant_slug || '—'}</td>
                 <td><OutcomeBadge outcome={r.outcome} t={t} /></td>
-                <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>{r.ip || '—'}</td>
-                <td style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
-                  <div className="cell-clamp" style={{ maxWidth: 260 }} title={r.user_agent || ''}>
-                    {r.user_agent || '—'}
+                <td style={{ fontSize: 12.5 }}>
+                  {r.location || <span style={{ color: 'var(--subtle)' }}>—</span>}
+                </td>
+                <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                  {r.ip || '—'}
+                  {NETWORK_NOTE[r.network] && (
+                    <div style={{ fontSize: 11, color: 'var(--subtle)' }}>{NETWORK_NOTE[r.network]}</div>
+                  )}
+                </td>
+                <td style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                  <div className="cell-clamp" style={{ maxWidth: 220 }} title={r.user_agent || ''}>
+                    {describeDevice(r.user_agent)}
                   </div>
                 </td>
               </tr>

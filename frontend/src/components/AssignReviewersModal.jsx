@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { ideasApi, usersApi } from '../services/api';
+import { loadOrgSettings, numSetting } from '../utils/orgSettings';
 
 export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
   const { t }         = useLang();
@@ -9,7 +10,16 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
   const [query,     setQuery]     = useState('');
   const [results,   setResults]   = useState([]);
   const [selected,  setSelected]  = useState([]);
+  // Start from whatever the organisation has configured rather than assuming
+  // unanimity. The person routing the idea can still change it for this one.
   const [threshold, setThreshold] = useState(100);
+  useEffect(() => {
+    let cancelled = false;
+    loadOrgSettings().then((cfg) => {
+      if (!cancelled) setThreshold(numSetting(cfg, 'approval_threshold', 100));
+    });
+    return () => { cancelled = true; };
+  }, []);
   const [loading,   setLoading]   = useState(false);
   const timerRef = useRef(null);
 

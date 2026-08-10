@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { ideasApi, challengesApi, uploadApi, usersApi, categoriesApi } from '../services/api';
 import { translateStatus, translateImpact, translateArea } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
+import { loadOrgSettings, numSetting } from '../utils/orgSettings';
 
 const IMPACT_LEVELS = ['Low','Medium','High','Critical'];
 const FEASIBILITY_LEVELS = ['Low','Medium','High'];
@@ -107,6 +108,39 @@ export default function SubmitPage() {
   // Anyone may mark their own idea as worth a patent check. A reviewer can do the
   // same from the idea itself; this is the submitter's side of it.
   const [patentable, setPatentable] = useState(false);
+
+  /*
+   * The attachment ceiling belongs to the organisation, so the note under the
+   * file box has to come from their settings rather than from a fixed string.
+   * It said "Max 10 MB" to an organisation that had set 5, and the first they
+   * learned otherwise was a rejected upload.
+   */
+  const [maxFileMb, setMaxFileMb] = useState(10);
+  useEffect(() => {
+    let cancelled = false;
+    loadOrgSettings().then((cfg) => {
+      if (!cancelled) setMaxFileMb(numSetting(cfg, 'max_file_mb', 10));
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  /* Refuse an oversized file here, where the person can still pick another one,
+     rather than letting them finish the form and fail on upload. The server
+     enforces the same limit regardless — this is courtesy, not the control. */
+  function pickFile(setter) {
+    return (e) => {
+      const f = e.target.files?.[0] || null;
+      if (f && f.size > maxFileMb * 1024 * 1024) {
+        showToast(t('form.attach_too_big', {
+          name: f.name, size: (f.size / 1048576).toFixed(1), mb: maxFileMb,
+        }), 'danger');
+        e.target.value = '';
+        setter(null);
+        return;
+      }
+      setter(f);
+    };
+  }
   const [challengeId,  setChallengeId]  = useState('');
   const [challenges,   setChallenges]   = useState([]);
 
@@ -497,9 +531,9 @@ export default function SubmitPage() {
                   to. Uploaded after the idea is created — see uploadFiles(). */}
               <label style={{ marginTop:10,display:'block' }}>{t('form.attach_support')}</label>
               <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                onChange={e => setFileSup(e.target.files[0]||null)} />
+                onChange={pickFile(setFileSup)} />
               {fileSup && <div style={{ fontSize:12,color:'var(--subtle)',marginTop:4 }}>{fileSup.name}</div>}
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.attach_note')}</div>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('form.attach_note', { mb: maxFileMb })}</div>
             </div>
           </div>
         )}
@@ -510,16 +544,16 @@ export default function SubmitPage() {
             <div className="form-group">
               <label>{t('form.attach_situation')}</label>
               <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                onChange={e => setFileSit(e.target.files[0]||null)} />
+                onChange={pickFile(setFileSit)} />
               {fileSit && <div style={{ fontSize:12,color:'var(--subtle)',marginTop:4 }}>{fileSit.name}</div>}
             </div>
             <div className="form-group">
               <label>{t('form.attach_solution')}</label>
               <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-                onChange={e => setFileSol(e.target.files[0]||null)} />
+                onChange={pickFile(setFileSol)} />
               {fileSol && <div style={{ fontSize:12,color:'var(--subtle)',marginTop:4 }}>{fileSol.name}</div>}
             </div>
-            <div style={{ fontSize:12,color:'var(--subtle)' }}>{t('form.attach_note')}</div>
+            <div style={{ fontSize:12,color:'var(--subtle)' }}>{t('form.attach_note', { mb: maxFileMb })}</div>
           </div>
         )}
 

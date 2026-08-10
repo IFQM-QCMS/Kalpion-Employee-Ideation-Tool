@@ -12,13 +12,60 @@
  *     depth nests correctly.
  */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
+import { getOrgSettings } from './mailerService.js';
+import { employeeSections } from './ideaSections.js';
 
 const ADMIN_ROLES = ['admin', 'executive', 'super_admin'];
+// The same set ideaService treats as entitled to read a full proposal. Somebody
+// in one of these roles is judging ideas, so the discussion is theirs to read.
+const PRIVILEGED = ['manager', 'department_manager', 'senior_manager', 'plant_head',
+  'executive', 'admin', 'super_admin'];
+
+/**
+ * Is this discussion open to this person?
+ *
+ * The author, their co-suggesters, the assigned reviewers and anyone senior
+ * enough to be reviewing always see it. For everybody else it is one of the
+ * sections the organisation controls, and the thread is where an idea gets
+ * picked apart in detail - so an organisation that hides the proposal and
+ * leaves the comments open has not hidden anything.
+ */
+async function canReadThread(db, user, ideaId) {
+  if (!user) return false;
+  if (PRIVILEGED.includes(user.role)) return true;
+
+  const uid = Number(user.id);
+  const [[idea] = []] = await db.execute(
+    'SELECT submitter_id, current_reviewer_id, co_suggester_1_id, co_suggester_2_id FROM ideas WHERE id = ?',
+    [ideaId]
+  );
+  if (!idea) return true;   // a missing idea is the caller's problem, not ours
+  if ([idea.submitter_id, idea.current_reviewer_id,
+       idea.co_suggester_1_id, idea.co_suggester_2_id].some((x) => Number(x) === uid)) {
+    return true;
+  }
+  const [[cos] = []] = await db.execute(
+    'SELECT 1 AS yes FROM idea_co_suggesters WHERE idea_id = ? AND user_id = ? LIMIT 1', [ideaId, uid]
+  );
+  if (cos) return true;
+  const [[rv] = []] = await db.execute(
+    'SELECT 1 AS yes FROM idea_reviewers WHERE idea_id = ? AND reviewer_id = ? LIMIT 1', [ideaId, uid]
+  );
+  if (rv) return true;
+
+  return employeeSections(await getOrgSettings(db)).includes('comments');
+}
 
 // ── LIST ────────────────────────────────────────────────────────────
-export async function list(db, ideaId) {
+export async function list(db, ideaId, user = null) {
   ideaId = Number(ideaId) || 0;
   if (!ideaId) throw badRequest('idea_id is required.');
+
+  // `user` is optional so existing callers keep working; when it is supplied
+  // the organisation's section rules are applied.
+  if (user && !(await canReadThread(db, user, ideaId))) {
+    return { success: true, comments: [], comments_hidden: true };
+  }
 
   const [rows] = await db.execute(
     `SELECT c.id, c.idea_id, c.parent_id, c.content, c.is_deleted, c.created_at,

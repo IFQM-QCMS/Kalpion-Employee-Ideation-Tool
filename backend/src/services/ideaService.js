@@ -23,6 +23,7 @@ import { getApprovalConfig } from './settingsService.js';
 import { getOrgSettings, queueEmail } from './mailerService.js';
 import { generateIdeaCode, addNotification, addWorkflow, addPoints } from './coreHelpers.js';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
+import { IDEA_SECTIONS, employeeSections } from './ideaSections.js';
 
 const POINTS = config.points;
 
@@ -150,6 +151,64 @@ export function previewText(text, limit = 180) {
   return (lastSpace > limit * 0.6 ? window.slice(0, lastSpace) : window).trimEnd() + '…';
 }
 
+/*
+ * Strip the sections this organisation does not let ordinary colleagues see.
+ *
+ * Called only for viewers who are already outside the idea. It empties fields
+ * rather than deleting them, and records what was withheld in `hidden_sections`
+ * so the screen can say "your organisation does not show this" instead of
+ * rendering what looks like an idea nobody bothered to fill in.
+ */
+function applySectionVisibility(idea, allowed) {
+  const hidden = IDEA_SECTIONS.filter((x) => !allowed.includes(x));
+  if (!hidden.length) { idea.hidden_sections = []; return idea; }
+
+  for (const section of hidden) {
+    switch (section) {
+      case 'situation':
+        idea.present_situation = null;
+        idea.situation_summary = null;
+        break;
+      case 'solution':
+        idea.proposed_solution = null;
+        idea.solution_summary = null;
+        break;
+      case 'benefits':
+        idea.tangible_benefit = null;
+        idea.intangible_benefit = null;
+        break;
+      case 'business_case':
+        idea.investment_required = null;
+        idea.feasibility = null;
+        idea.implementation_duration = null;
+        idea.expected_implementation_date = null;
+        idea.time_required = null;
+        idea.roi_value = null;
+        idea.roi_type = null;
+        idea.roi_note = null;
+        break;
+      case 'attachments':
+        idea.attachments = [];
+        break;
+      case 'co_suggesters':
+        idea.co_suggesters = [];
+        idea.co_suggesters_display = '';
+        idea.co1_name = null;
+        idea.co2_name = null;
+        break;
+      case 'timeline':
+        idea.workflow = [];
+        idea.reviewers = [];
+        break;
+      // 'comments' is served by its own endpoint; see commentService.
+      default:
+        break;
+    }
+  }
+  idea.hidden_sections = hidden;
+  return idea;
+}
+
 /**
  * May this viewer read the full solution of this idea?
  * The author and their co-suggesters always can; so can whoever has to judge it.
@@ -253,6 +312,7 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
   const mode = visibilityMode(settings);
   const predMode = predictionMode(settings);
   const previewChars = parseInt(settings.situation_preview_chars, 10) || 180;
+  const listSections = employeeSections(settings);
   for (const idea of ideas) {
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
@@ -265,6 +325,12 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     // leak this is meant to close, and it is invisible to anyone reading only
     // the rendered table.
     redactSolution(user, idea, mode, previewChars);
+    // The browse list shows a one-line gist. If the organisation does not let
+    // ordinary colleagues read even that, the column has to be empty for them.
+    if (idea.solution_redacted && !listSections.includes('solution')) {
+      idea.solution_summary = null;
+      idea.solution_hidden_by_policy = true;
+    }
     redactPrediction(user, idea, predMode);
     // Neither full text ever travels with a browse list, for anybody.
     idea.proposed_solution = null;
@@ -410,8 +476,16 @@ export async function get(db, user, id) {
     idea.situation_summary = previewText(idea.present_situation, detailPreview);
     idea.solution_redacted = false;
     idea.situation_redacted = false;
+    idea.hidden_sections = [];
   } else {
     redactSolution(user, idea, mode, detailPreview);
+    // Somebody who could not be given the full text is by definition outside
+    // this idea, so the organisation's section rules apply to them.
+    if (idea.solution_redacted) {
+      applySectionVisibility(idea, employeeSections(detailSettings));
+    } else {
+      idea.hidden_sections = [];
+    }
   }
   redactPrediction(user, idea, predictionMode(detailSettings));
 
@@ -882,9 +956,23 @@ export async function dashboard(db, user) {
 export async function assignReviewers(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   let reviewerIds = (b.reviewer_ids ?? []).map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x));
-  const threshold = Math.max(1, Math.min(100, parseInt(b.threshold ?? 100, 10) || 100));
 
   if (!ideaId || !reviewerIds.length) throw badRequest('idea_id and reviewer_ids required.');
+
+  /*
+   * The share of the committee that has to approve.
+   *
+   * Two things were wrong here. The screen sends `approval_threshold` and this
+   * read `b.threshold`, so whatever the person chose was thrown away; and when
+   * nothing was sent it fell back to a hard-coded 100%, ignoring the figure the
+   * organisation had set in the admin panel. Both meant every committee needed
+   * a unanimous decision no matter what anybody configured.
+   */
+  const orgThreshold = (await getApprovalConfig(db)).threshold;
+  const requested = b.approval_threshold ?? b.threshold;
+  const threshold = requested === undefined || requested === null || requested === ''
+    ? orgThreshold
+    : Math.max(1, Math.min(100, parseInt(requested, 10) || orgThreshold));
 
   const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
   const idea = irows[0];

@@ -21,6 +21,17 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('ifqm_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  /*
+   * The browser's own time zone, sent with every request so the sign-in record
+   * can describe roughly where a platform-admin session came from. It is a
+   * string the browser already knows; nothing is looked up anywhere, and no
+   * address is handed to a third party.
+   */
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz) config.headers['X-Client-Timezone'] = tz;
+  } catch { /* very old browsers simply do not report one */ }
+
   const org = localStorage.getItem('ifqm_org');
   if (org && !config.params?.org_slug) {
     config.params = { ...config.params, org_slug: org };

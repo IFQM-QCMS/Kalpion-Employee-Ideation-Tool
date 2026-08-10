@@ -148,6 +148,22 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
   const isSelf   = idea ? parseInt(idea.submitter_id) === parseInt(user?.id) : false;
   const isPriv   = isPrivileged(user?.role);
+  /*
+   * Sections this organisation does not show to colleagues outside the idea.
+   * The server sends the list and has already emptied the fields; this only
+   * decides whether to draw a short explanation in their place. An empty box
+   * with no explanation reads as a badly filled-in idea, which is worse than
+   * saying plainly that the organisation keeps that part private.
+   */
+  const hiddenSections = idea?.hidden_sections || [];
+  const isHidden = (name) => hiddenSections.includes(name);
+  const HiddenNote = ({ section }) => (
+    <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:12.5,
+                  color:'var(--text-muted)',display:'flex',gap:7,alignItems:'flex-start' }}>
+      <span aria-hidden="true">🔒</span>
+      <span>{t('idea.section_hidden').replace('{section}', t(`section.${section}`))}</span>
+    </div>
+  );
   // The submitter may flag their own idea; anyone in the review hierarchy may
   // flag any idea. Nobody else can move the tick.
   const canFlagPatentable = isSelf || isPriv;
@@ -276,7 +292,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     {/* Colleagues who only submit ideas see the opening lines of the
                         problem, not the whole write-up. As with the solution, the
                         server makes the decision and never sends the rest. */}
-                    {idea.situation_redacted ? (
+                    {isHidden('situation') ? <HiddenNote section="situation" /> : idea.situation_redacted ? (
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
                         <div>{idea.situation_summary || '—'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
@@ -293,7 +309,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     {/* Colleagues who are neither the author nor a reviewer get the
                         one-line gist. The server decides — the full text is never
                         sent to them, so this is not a display-only restriction. */}
-                    {idea.solution_redacted ? (
+                    {isHidden('solution') ? <HiddenNote section="solution" /> : idea.solution_redacted ? (
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
                         <div>{idea.solution_summary || '—'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
@@ -309,8 +325,12 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>
                     <div><strong>{t('detail.impact_level')}<InfoDot term="impact_level" />:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'–'}</span></div>
                   </div>
-                  {idea.tangible_benefit   && <div style={{ marginTop:8 }}><strong>{t('detail.tangible')}:</strong> {idea.tangible_benefit}</div>}
-                  {idea.intangible_benefit && <div style={{ marginTop:8 }}><strong>{t('detail.intangible')}:</strong> {idea.intangible_benefit}</div>}
+                  {isHidden('benefits')
+                    ? <div style={{ marginTop:8 }}><HiddenNote section="benefits" /></div>
+                    : <>
+                        {idea.tangible_benefit   && <div style={{ marginTop:8 }}><strong>{t('detail.tangible')}:</strong> {idea.tangible_benefit}</div>}
+                        {idea.intangible_benefit && <div style={{ marginTop:8 }}><strong>{t('detail.intangible')}:</strong> {idea.intangible_benefit}</div>}
+                      </>}
                   {(idea.co_suggesters_display || idea.co1_name) && (
                     <div style={{ marginTop:8 }}><strong>{t('detail.co_suggesters')}:</strong> {idea.co_suggesters_display || (idea.co1_name + (idea.co2_name?', '+idea.co2_name:''))}</div>
                   )}
@@ -460,14 +480,16 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                 {/* Tab 1: Timeline */}
                 <div id="dtab2" className={`tab-content${activeTab===1?' active':''}`} style={{ display:activeTab===1?'block':'none' }}>
-                  {!(idea.workflow||[]).length
+                  {isHidden('timeline')
+                    ? <HiddenNote section="timeline" />
+                    : !(idea.workflow||[]).length
                     ? <div className="empty-state">{t('detail.no_timeline')}</div>
                     : (idea.workflow||[]).map((w, i) => (
                       <div key={i} className="tl-item">
                         <div className="tl-dot tl-dot-blue">{actionLabel(w.action)}</div>
                         <div>
                           <div className="tl-title">{translateStatus(w.action, t)}</div>
-                          <div className="tl-meta">{w.actor_name} · {fmtDate(w.created_at)}</div>
+                          <div className="tl-meta">{w.actor_name} · {fmtDateTime(w.created_at)}</div>
                           {w.comment && <div className="tl-comment">{w.comment}</div>}
                         </div>
                       </div>
@@ -477,9 +499,11 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                 {/* Tab 2: Attachments */}
                 <div id="dtab3" className={`tab-content${activeTab===2?' active':''}`} style={{ display:activeTab===2?'block':'none' }}>
-                  {!(idea.attachments||[]).length
-                    ? <div className="empty-state">{t('detail.no_attachments')}</div>
-                    : (idea.attachments||[]).map(a => <Attachment key={a.id} att={a} t={t} />)
+                  {isHidden('attachments')
+                    ? <HiddenNote section="attachments" />
+                    : !(idea.attachments||[]).length
+                      ? <div className="empty-state">{t('detail.no_attachments')}</div>
+                      : (idea.attachments||[]).map(a => <Attachment key={a.id} att={a} t={t} />)
                   }
                 </div>
               </>

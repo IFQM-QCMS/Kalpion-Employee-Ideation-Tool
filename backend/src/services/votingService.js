@@ -14,7 +14,8 @@
  *     idea_community_votes; does not touch the counter columns.
  */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
-import { summariseSolution, canReadSolution, visibilityMode } from './ideaService.js';
+import { summariseSolution, previewText, canReadSolution, visibilityMode } from './ideaService.js';
+import { employeeSections } from './ideaSections.js';
 import { getOrgSettings } from './mailerService.js';
 
 const num = (v) => Number(v ?? 0);
@@ -218,7 +219,10 @@ export async function board(db, user, sort) {
   );
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
-  const mode = visibilityMode(await getOrgSettings(db));
+  const boardSettings = await getOrgSettings(db);
+  const mode = visibilityMode(boardSettings);
+  const previewChars = parseInt(boardSettings.situation_preview_chars, 10) || 180;
+  const sections = employeeSections(boardSettings);
   for (const idea of ideas) {
     if (idea.is_anonymous && !canSeeAnon) {
       idea.submitter_name = 'Anonymous';
@@ -239,10 +243,31 @@ export async function board(db, user, sort) {
      * side by side (§11.3).
      */
     idea.solution_summary = summariseSolution(idea.proposed_solution);
-    idea.situation_summary = summariseSolution(idea.present_situation);
+    idea.situation_summary = previewText(idea.present_situation, previewChars);
     idea.solution_redacted = !canReadSolution(user, idea, mode);
     idea.proposed_solution = null;
     idea.present_situation = null;
+
+    /*
+     * And the organisation's own rule about what a colleague outside an idea
+     * may read. The board is where that rule bites hardest: All Ideas only ever
+     * shows an employee their own submissions, so the board is the one screen
+     * where they see everybody else's.
+     */
+    if (idea.solution_redacted) {
+      if (!sections.includes('solution')) {
+        idea.solution_summary = null;
+        idea.solution_hidden_by_policy = true;
+      }
+      if (!sections.includes('situation')) {
+        idea.situation_summary = null;
+        idea.situation_hidden_by_policy = true;
+      }
+      if (!sections.includes('benefits')) {
+        idea.tangible_benefit = null;
+        idea.intangible_benefit = null;
+      }
+    }
   }
   return { success: true, ideas };
 }

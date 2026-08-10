@@ -5,6 +5,8 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { usersApi, ideasApi, settingsApi, scoreApi, brandingApi, categoriesApi, integrationApi } from '../services/api';
 import { formatRole, statusBadge, translateStatus, fmtDate } from '../utils/helpers';
+import { resetOrgSettings } from '../utils/orgSettings';
+import ReportingLineLookup from '../components/ReportingLineLookup';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import BulkImportModal from '../components/BulkImportModal';
 import InfoDot from '../components/InfoDot';
@@ -30,6 +32,12 @@ const ROLE_BADGE_STYLE = {
 
 /* Top to bottom, the way an organisation chart reads. Used for the User List
    filter; super_admin is left out because it is a single built-in account. */
+/* Mirrors IDEA_SECTIONS in the backend's ideaSections.js. Order is the order
+   they appear on an idea, so the tick boxes read top to bottom the way the
+   screen does. */
+const IDEA_SECTION_KEYS = ['situation', 'solution', 'benefits', 'business_case',
+  'attachments', 'comments', 'co_suggesters', 'timeline'];
+
 const HIERARCHY_ROLES = ['admin', 'plant_head', 'executive', 'senior_manager',
   'department_manager', 'manager', 'project_lead', 'team_lead', 'employee', 'trainee'];
 
@@ -47,6 +55,9 @@ export default function AdminPage() {
   const [ideasStatus, setIdeasStatus] = useState('');
   const [users,       setUsers]       = useState([]);
   const [usersSearch, setUsersSearch] = useState('');
+  // Which sections of an idea an ordinary colleague may read. Held as an
+  // array because the form is a set of tick boxes; stored comma-separated.
+  const [empSections, setEmpSections] = useState(['solution']);
   const [usersRole,   setUsersRole]   = useState('');
   const [usersStatus, setUsersStatus] = useState('');
   const [userPage,    setUserPage]    = useState(1);
@@ -108,7 +119,16 @@ export default function AdminPage() {
   async function loadSettings() {
     try {
       const res = await settingsApi.get();
-      if (res.data.success) setSettings(res.data.settings);
+      if (res.data.success) {
+        const cfg = res.data.settings;
+        setSettings(cfg);
+        // An absent key means the built-in default; a stored empty string means
+        // the admin deliberately chose "title only". The two are not the same.
+        const raw = cfg.employee_visible_sections;
+        setEmpSections(raw === undefined || raw === null
+          ? ['solution']
+          : String(raw).split(',').map(x => x.trim()).filter(x => IDEA_SECTION_KEYS.includes(x)));
+      }
     } catch {}
   }
 
@@ -144,11 +164,21 @@ export default function AdminPage() {
     // form is invisible to the save until it is named here. solution_visibility
     // (MOM §13.1) is one of them.
     ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','max_file_mb','situation_preview_chars','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
+    // Tick boxes, not a form field — and an empty list is a real answer meaning
+    // "title only", so it is sent as an empty string rather than skipped.
+    data.employee_visible_sections = empSections.join(',');
     ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection','idea_screen_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
     try {
       const res = await settingsApi.update(data);
-      if (res.data.success) { setSettingsMsg(t('admin.settings_saved')); showToast(t('admin.settings_saved'),'success'); }
+      if (res.data.success) {
+        setSettingsMsg(t('admin.settings_saved'));
+        showToast(t('admin.settings_saved'),'success');
+        // Other screens cache these for the session; drop the cache so the
+        // submit form's attachment limit and the guard reflect the new values
+        // without anybody having to reload.
+        resetOrgSettings();
+      }
       else setSettingsMsg(res.data.error || t('admin.settings_failed'));
     } catch { setSettingsMsg(t('msg.network_error')); }
   }
@@ -406,6 +436,30 @@ export default function AdminPage() {
                 <option value="seniors">{t('admin.pv_seniors')}</option>
                 <option value="everyone">{t('admin.pv_everyone')}</option>
               </select>
+            </div>
+
+            {/* What a colleague who is neither the author nor a reviewer may
+                read on somebody else's idea. The title, code, status, impact
+                and score are never hidden — they are what makes an idea
+                findable and what the leaderboard counts. */}
+            <div className="form-group" style={{ marginTop:8 }}>
+              <label>{t('admin.employee_sections')}<InfoDot term="employee_sections" /></label>
+              <div style={{ fontSize:11,color:'var(--subtle)',margin:'2px 0 8px' }}>{t('admin.employee_sections_hint')}</div>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:'8px 18px',maxWidth:620 }}>
+                {IDEA_SECTION_KEYS.map(k => (
+                  <label key={k} style={{ display:'flex',alignItems:'center',gap:7,cursor:'pointer',fontSize:13,minWidth:180 }}>
+                    <input type="checkbox" checked={empSections.includes(k)}
+                      style={{ accentColor:'var(--primary)' }}
+                      onChange={e => setEmpSections(prev => (
+                        e.target.checked ? [...prev, k] : prev.filter(x => x !== k)
+                      ))} />
+                    {t(`section.${k}`)}
+                  </label>
+                ))}
+              </div>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:8 }}>
+                {empSections.length ? t('admin.sections_chosen', { n: empSections.length }) : t('admin.sections_none')}
+              </div>
             </div>
 
             {/* Each organisation sets its own attachment ceiling. The platform
@@ -1130,15 +1184,23 @@ function HierarchyTab({ t, showToast, currentUserId }) {
               </div>
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.final_hint')}</div>
             </div>
-            <div className="form-group" style={{ marginBottom:8,maxWidth:220 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.threshold')}<InfoDot term="approval_threshold" /></label>
-              <input className="form-control" type="number" min="1" max="100" value={threshold}
-                onChange={e => setThreshold(e.target.value)}
-                onBlur={() => setThreshold(v => Math.max(1, Math.min(100, parseInt(v, 10) || 100)))} />
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.threshold_hint')}</div>
-            </div>
           </div>
         )}
+
+        {/* The threshold used to live inside the "custom roles" block, so an
+            organisation on any other mode could not see or change it — yet it
+            governs every idea routed to a committee, in every mode. */}
+        <div className="form-group" style={{ marginBottom:14,maxWidth:260 }}>
+          <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.threshold')}<InfoDot term="approval_threshold" /></label>
+          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+            <input className="form-control" type="number" min="1" max="100" value={threshold}
+              style={{ width:110 }}
+              onChange={e => setThreshold(e.target.value)}
+              onBlur={() => setThreshold(v => Math.max(1, Math.min(100, parseInt(v, 10) || 100)))} />
+            <span style={{ fontSize:13,color:'var(--text-muted)' }}>%</span>
+          </div>
+          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.threshold_hint')}</div>
+        </div>
 
         <div style={{ fontSize:12,background:'var(--bg)',border:'1px dashed var(--border)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14 }}>
           <strong style={{ fontSize:11,textTransform:'uppercase',letterSpacing:.5,color:'var(--subtle)' }}>{t('hier.chain_preview')}<InfoDot term="chain_preview" /></strong>
@@ -1153,6 +1215,10 @@ function HierarchyTab({ t, showToast, currentUserId }) {
           {wfMsg && <span style={{ fontSize:13,color:wfMsg.ok?'var(--success)':'var(--danger)' }}>{wfMsg.text}</span>}
         </div>
       </div>
+
+      {/* Looking one person up is a different question from reading the whole
+          tree, and it is the one that gets asked. Kept above the chart. */}
+      <ReportingLineLookup />
 
       {/* ── Reporting Structure ── */}
       <div className="card">

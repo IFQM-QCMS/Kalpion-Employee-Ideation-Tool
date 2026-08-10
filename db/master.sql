@@ -244,9 +244,18 @@ CREATE TABLE IF NOT EXISTS platform_login_activity (
   outcome       ENUM('success','failure','lockout') NOT NULL,
   ip            VARCHAR(45)  NULL,
   user_agent    VARCHAR(255) NULL,
+  -- Roughly where the sign-in came from, from the time zone the browser reports
+  -- about itself. The IP is deliberately not looked up anywhere: that would mean
+  -- sending administrators addresses to a third-party service on every sign-in,
+  -- and behind a hosting proxy the address is private and unresolvable anyway.
+  location      VARCHAR(120) NULL,
+  -- public / private / local, derived from the address itself. Explains at a
+  -- glance why every sign-in appears to come from 10.x behind a load balancer.
+  network       VARCHAR(16)  NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_pla_created (created_at),
   INDEX idx_pla_outcome (outcome, created_at),
+  INDEX idx_pla_actor_created (actor_type, created_at),
   INDEX idx_pla_tenant (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

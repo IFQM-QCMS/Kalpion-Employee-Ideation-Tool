@@ -13,6 +13,7 @@ import {
 } from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
 import config from '../config/index.js';
+import { IDEA_SECTIONS } from './ideaSections.js';
 
 /** The ceiling no organisation may exceed, from the server environment. */
 const PLATFORM_MAX_FILE_MB = config.maxFileMb;
@@ -31,6 +32,8 @@ const SETTINGS_WHITELIST = [
   // Per-organisation attachment ceiling, idea-screen deterrents, and how much
   // of a problem statement an uninvolved colleague may read.
   'max_file_mb', 'idea_screen_protection', 'situation_preview_chars',
+  // Which parts of somebody else's idea an ordinary colleague may read.
+  'employee_visible_sections',
 ];
 
 /** Accepted values for solution_visibility, loosest last. */
@@ -172,6 +175,13 @@ export async function updateSettings(db, body) {
     }
     if (key === 'situation_preview_chars') {
       value = String(Math.max(60, Math.min(600, parseInt(value, 10) || 180)));
+    }
+    // An unknown section name is dropped rather than stored, so a typo can
+    // never open a section by accident - the filter keeps only what the idea
+    // service actually knows how to hide.
+    if (key === 'employee_visible_sections') {
+      const wanted = String(value).split(',').map((x) => x.trim()).filter(Boolean);
+      value = IDEA_SECTIONS.filter((x) => wanted.includes(x)).join(',');
     }
     if (key === 'approval_threshold') {
       value = String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));

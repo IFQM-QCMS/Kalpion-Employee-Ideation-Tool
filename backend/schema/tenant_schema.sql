@@ -334,7 +334,10 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   -- Deterrents on the screens that list ideas. On by default: idea text is the
   -- thing this product exists to protect.
   ('idea_screen_protection',    '1'),
-  ('situation_preview_chars',   '180');
+  ('situation_preview_chars',   '180'),
+  -- Which parts of somebody else's idea an ordinary colleague may read. See
+  -- ideaSections.js for the vocabulary; empty means title only.
+  ('employee_visible_sections', 'solution');
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,

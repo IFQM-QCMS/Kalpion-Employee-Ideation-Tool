@@ -179,7 +179,7 @@ export default {
   'info.approval_stages':'The steps an idea passes through, in order, from the person who submitted it to whoever gives final sign-off. Add or remove steps to match how your organisation actually approves things. The last step is the one that closes the idea.',
   'info.reviewer_roles':'The job titles that can look at an idea and pass it upward. They cannot close it - they move it to the next person. Someone must hold at least one of these roles, or submitted ideas will have nobody to go to.',
   'info.final_roles':'The job titles that can give the final Approved or Rejected decision. Once someone in one of these roles decides, the idea stops moving. Your organisation admin is always included, so an idea can never get stuck with nobody able to close it.',
-  'info.approval_threshold':'When several people review the same idea, this is the share of them that must approve before it counts as approved. 100% means everyone has to agree; 50% means half of them is enough.',
+  'info.approval_threshold':'When several people review the same idea together, this is the share of them that must approve before it counts as approved. 100% means everyone has to agree; 50% means half of them is enough. It applies to any idea routed to a committee, whichever approval mode your organisation uses, and the figure set here is what the routing screen starts from.',
   'info.chain_preview':'A plain reading of the chain you have built above - who sees an idea, in what order, and who gives the final decision. Check it matches how approvals really work in your organisation before saving.',
   'info.reporting_structure':'Who each person reports to. Ideas escalate up this chain, so if someone reports to the wrong manager, their ideas go to the wrong reviewer.',
   'info.multi_reviewer':'A committee reviews the idea together instead of it passing up one person at a time. The approval threshold decides how many of them must agree.',
@@ -391,7 +391,7 @@ export default {
   'form.impact_level':'Overall Impact Level',
   'form.attach_situation':'Supporting Document — Situation (Optional)',
   'form.attach_solution':'Supporting Document — Solution (Optional)',
-  'form.attach_note':'Supported: PDF, Word, Excel, images. Max 10 MB each.',
+  'form.attach_note':'Supported: PDF, Word, Excel, images. Max {mb} MB each.',
   'form.co1':'Co-Suggester 1',
   'form.co2':'Co-Suggester 2',
   'form.co_search_ph':'Search by name or employee ID…',
@@ -862,7 +862,7 @@ export default {
   'hier.final_roles':'Final Approver Roles (can give final approval — no further escalation)',
   'hier.final_hint':'When an idea reaches any of these roles, it gets a final Approved or Rejected decision — no more escalation.',
   'hier.threshold':'Default Approval Threshold (%)',
-  'hier.threshold_hint':'% of reviewers who must approve. 100% = all must approve.',
+  'hier.threshold_hint':'When an idea is sent to a committee, this is the share of them that has to approve before it counts as approved. 100% means everyone must agree; 50% means half of them is enough. It is the starting figure on the routing screen, and whoever routes a particular idea can still change it for that one.',
   'hier.chain_preview':'Escalation preview',
   'hier.final_short':'Final',
   'hier.save_workflow':'Save Workflow',
@@ -1153,7 +1153,7 @@ export default {
   // ── Platform: sign-in activity ───────────────────────────────────────
   'nav.login_activity':'Login Activity',
   'la.title':'Login Activity',
-  'la.subtitle':'Who signed in, when, from where, and whether it worked — across every organisation.',
+  'la.subtitle':'Every sign-in to this console by IFQM staff: who, when, from where, and whether it worked. Customer organisations’ own employee sign-ins are not listed here.',
   'la.success':'Signed in',
   'la.failure':'Wrong password',
   'la.lockout':'Locked out',
@@ -1208,4 +1208,39 @@ export default {
   'info.screen_protection':'Hides idea text the moment the browser window loses focus, which is what most screen-capture tools do first, and lays the reader’s own name faintly across the page so anything that does get captured can be traced back. Printing produces a notice instead of the ideas. Be clear about the limit: no web page can stop a phone camera pointed at the monitor. What genuinely protects an idea is that the full text is never sent to people who are not entitled to it.',
   'info.ip_address':'IP stands for internet protocol. An IP address is the number the internet uses to identify the connection a request came from — roughly, which office, home line or mobile network. It is not a person, and several people behind the same office connection share one.',
   'detail.submitted_at':'Submitted on',
+  'form.attach_too_big':'"{name}" is {size} MB. This organisation allows {mb} MB per file.',
+
+
+  // ── Section visibility ───────────────────────────────────────────────
+  'section.situation':'The problem (extract)',
+  'section.solution':'The proposal (one line)',
+  'section.benefits':'Benefits',
+  'section.business_case':'Business case',
+  'section.attachments':'Attachments',
+  'section.comments':'Discussion',
+  'section.co_suggesters':'Co-suggesters',
+  'section.timeline':'Approval history',
+  'idea.section_hidden':'Your organisation does not show {section} to colleagues outside an idea.',
+  'admin.employee_sections':'What colleagues can read on someone else’s idea',
+  'admin.employee_sections_hint':'Applies only to people who are neither the author, a co-suggester, nor a reviewer of that idea. The title, code, status, department, impact and score are always visible — they are what makes an idea findable and what the leaderboard counts. Authors always read their own idea in full, and reviewers always read what they are judging.',
+  'admin.sections_chosen':'{n} section(s) open to colleagues.',
+  'admin.sections_none':'Colleagues see the title and nothing else.',
+
+  // ── Login activity, continued ────────────────────────────────────────
+  'la.col_location':'Location (approx.)',
+
+  // ── Information bubbles ──────────────────────────────────────────────
+  'info.employee_sections':'Which parts of somebody else’s idea an ordinary colleague may read. It does not affect the author, who always sees their own idea in full, nor anyone reviewing it, who has to read what they are deciding on. Untick a section and it disappears for everybody else, with a short note in its place so the idea does not look half-filled-in. The safest starting point is the one-line proposal alone: people can see what is being worked on without being able to lift the detail.',
+  'info.approx_location':'Roughly where the sign-in came from, worked out from the time zone the browser reports about itself. The IP address is deliberately NOT looked up anywhere: that would mean sending our own administrators’ addresses to somebody else’s service on every sign-in, and behind a hosting provider a private address cannot be resolved regardless. Treat it as a hint, not evidence — a time zone is a band of the world, it follows whatever the machine is set to, and anyone travelling or on a VPN will report elsewhere.',
+
+  'hier.lookup_title':'Look up a reporting line',
+  'hier.lookup_hint':'Start typing a name, employee number or email and pick the person. You will see everyone above them, all the way to the top, and everyone who reports to them. This is the route an idea of theirs travels for approval.',
+  'hier.lookup_ph':'Type a name, employee number or email…',
+  'hier.lookup_none':'Nobody matches that.',
+  'hier.this_person':'the person you looked up',
+  'hier.chain_up':'Reports up through',
+  'hier.chain_top':'Nobody is above this person — they are at the top of the chart.',
+  'hier.direct_reports':'Reports directly to them',
+  'hier.no_reports':'Nobody reports to this person.',
+  'btn.clear':'Clear',
 };

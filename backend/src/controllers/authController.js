@@ -30,7 +30,14 @@ export const login = asyncHandler(async (req, res) => {
     host: hostOf(req),
     // MOM §12.12 — where the sign-in came from, for the activity feed. Read
     // here rather than in the service so the service stays free of req.
-    meta: { ip: req.ip, userAgent: req.get('user-agent') },
+    meta: {
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+      // The browser's own time zone, which it sends with the sign-in. Used to
+      // describe roughly where a platform-admin sign-in came from without
+      // handing anybody's address to a geolocation service.
+      timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
+    },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
 });
@@ -48,7 +55,14 @@ export const otpRequest = asyncHandler(async (req, res) =>
   respond(res, await otpService.requestOtp({
     identifier: req.body?.identifier,
     purpose: req.body?.purpose || 'login',
-    meta: { ip: req.ip, userAgent: req.get('user-agent') },
+    meta: {
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+      // The browser's own time zone, which it sends with the sign-in. Used to
+      // describe roughly where a platform-admin sign-in came from without
+      // handing anybody's address to a geolocation service.
+      timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
+    },
   }))
 );
 
@@ -56,7 +70,14 @@ export const otpVerify = asyncHandler(async (req, res) => {
   const result = await otpService.verifyOtp({
     identifier: req.body?.identifier,
     code: req.body?.code,
-    meta: { ip: req.ip, userAgent: req.get('user-agent') },
+    meta: {
+      ip: req.ip,
+      userAgent: req.get('user-agent'),
+      // The browser's own time zone, which it sends with the sign-in. Used to
+      // describe roughly where a platform-admin sign-in came from without
+      // handing anybody's address to a geolocation service.
+      timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
+    },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
 });

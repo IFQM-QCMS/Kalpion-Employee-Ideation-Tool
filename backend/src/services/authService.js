@@ -119,7 +119,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     // see in the activity feed, so it is recorded rather than only thrown.
     recordLogin({
       actorType: 'tenant_user', actorEmail: email, tenantSlug: cleanSlug || null,
-      outcome: 'lockout', ip: meta.ip, userAgent: meta.userAgent,
+      outcome: 'lockout', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
     });
     throw tooMany(
       `Too many failed attempts. Please try again in ${Math.ceil(attempts.locked_for / 60)} minute(s).`,
@@ -154,7 +154,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
       // §12.12 — append-only sign-in record for the console's activity feed.
       recordLogin({
         actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
-        actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent,
+        actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
       });
       return { user: session, token };
     }
@@ -181,7 +181,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     await recordFailedAttempt(loginId);
     recordLogin({
       actorType: 'tenant_user', actorEmail: email, tenantSlug: cleanSlug || null,
-      outcome: 'failure', ip: meta.ip, userAgent: meta.userAgent,
+      outcome: 'failure', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
     });
     const after = await getFailedAttempts(loginId);
     const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
@@ -227,7 +227,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     recordLogin({
       actorType: 'tenant_user', actorId: user?.id ?? null, actorName: user?.name ?? null,
       actorEmail: email, tenantId: tenant.id || null, tenantSlug: tenant.slug,
-      outcome: remaining > 0 ? 'failure' : 'lockout', ip: meta.ip, userAgent: meta.userAgent,
+      outcome: remaining > 0 ? 'failure' : 'lockout', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
     });
     const err =
       remaining > 0
@@ -281,7 +281,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
   recordLogin({
     actorType: 'tenant_user', actorId: user.id, actorName: user.name, actorEmail: user.email,
     tenantId: tenant.id || null, tenantSlug: tenant.slug, outcome: 'success',
-    ip: meta.ip, userAgent: meta.userAgent,
+    ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
   });
   return { user: session, token };
 }

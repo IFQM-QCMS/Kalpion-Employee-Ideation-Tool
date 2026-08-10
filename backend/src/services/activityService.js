@@ -16,6 +16,51 @@ import logger from '../utils/logger.js';
 const RETENTION_DAYS = 180;
 
 /**
+ * What kind of network an address belongs to.
+ *
+ * Worth recording because behind a hosting provider's load balancer the address
+ * we see is often the provider's own internal one (10.x), and an operator
+ * looking at "10.29.78.132" with no explanation reasonably concludes the field
+ * is broken. Naming the network says it is not.
+ */
+function classifyNetwork(ip) {
+  const a = String(ip || '').trim().replace(/^::ffff:/, '');
+  if (!a) return null;
+  if (a === '::1' || a.startsWith('127.')) return 'local';
+  if (a.startsWith('10.') || a.startsWith('192.168.') || a.startsWith('169.254.')
+      || /^172\.(1[6-9]|2\d|3[01])\./.test(a)
+      || a.toLowerCase().startsWith('fc') || a.toLowerCase().startsWith('fd')) {
+    return 'private';
+  }
+  return 'public';
+}
+
+/**
+ * A readable, approximate location.
+ *
+ * The browser tells us its own time zone; we do not look the IP address up
+ * anywhere. An IP lookup would mean handing our administrators' addresses to a
+ * third-party service on every sign-in, and behind a proxy the address is
+ * private and unresolvable regardless.
+ *
+ * A time zone is a band of the world rather than a place, and it follows the
+ * machine's own setting, so this is a signal ("someone signed in on a European
+ * clock at 3am") and not evidence of where anybody was.
+ */
+function describeLocation(timeZone) {
+  const tz = String(timeZone || '').trim().slice(0, 60);
+  if (!tz || !/^[A-Za-z_+\-0-9/]+$/.test(tz)) return null;
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(new Date());
+    const offset = parts.find((x) => x.type === 'timeZoneName')?.value;
+    return offset ? `${tz.replace(/_/g, ' ')} (${offset})` : tz.replace(/_/g, ' ');
+  } catch {
+    return null;                 // an unknown zone name is simply not recorded
+  }
+}
+
+/**
  * Record one sign-in attempt.
  * @param {object} entry
  * @param {'platform_admin'|'tenant_user'} entry.actorType
@@ -23,13 +68,15 @@ const RETENTION_DAYS = 180;
 export function recordLogin({
   actorType, actorId = null, actorName = null, actorEmail = null,
   tenantId = null, tenantSlug = null, outcome = 'success', ip = null, userAgent = null,
+  timeZone = null,
 } = {}) {
   // Fire-and-forget: the caller is on a login path and must not wait for this.
   masterDb()
     .execute(
       `INSERT INTO platform_login_activity
-         (actor_type, actor_id, actor_name, actor_email, tenant_id, tenant_slug, outcome, ip, user_agent)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+         (actor_type, actor_id, actor_name, actor_email, tenant_id, tenant_slug,
+          outcome, ip, user_agent, location, network)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [
         actorType, actorId == null ? null : String(actorId).slice(0, 40),
         actorName ? String(actorName).slice(0, 120) : null,
@@ -37,6 +84,7 @@ export function recordLogin({
         tenantId ?? null, tenantSlug ? String(tenantSlug).slice(0, 50) : null,
         outcome, ip ? String(ip).slice(0, 45) : null,
         userAgent ? String(userAgent).slice(0, 255) : null,
+        describeLocation(timeZone), classifyNetwork(ip),
       ]
     )
     .catch((e) => logger.warn('login activity write failed', e.message));
@@ -44,11 +92,26 @@ export function recordLogin({
 
 /**
  * Recent sign-in activity for the platform console.
- * @param {{ limit?: number, outcome?: string, tenantId?: number }} opts
+ *
+ * IFQM staff only, by default and in practice. The page is there to answer "who
+ * has been in the platform console" — mixing in every employee sign-in across
+ * every customer buried that in noise, and a customer's staff movements are
+ * their business, not something to browse from here.
+ *
+ * `actorType: 'all'` still exists for the notification feed, which legitimately
+ * wants both.
+ *
+ * @param {{ limit?: number, outcome?: string, tenantId?: number, actorType?: string }} opts
  */
-export async function recentActivity({ limit = 50, outcome = '', tenantId = null } = {}) {
+export async function recentActivity({
+  limit = 50, outcome = '', tenantId = null, actorType = 'platform_admin',
+} = {}) {
   const where = [];
   const params = [];
+  if (actorType === 'platform_admin' || actorType === 'tenant_user') {
+    where.push('actor_type = ?');
+    params.push(actorType);
+  }
   if (['success', 'failure', 'lockout'].includes(outcome)) {
     where.push('outcome = ?');
     params.push(outcome);
@@ -68,7 +131,9 @@ export async function recentActivity({ limit = 50, outcome = '', tenantId = null
               SUM(outcome='failure') AS failures,
               SUM(outcome='lockout') AS lockouts
          FROM platform_login_activity
-        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)`
+        WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          ${actorType === 'all' ? '' : 'AND actor_type = ?'}`,
+      actorType === 'all' ? [] : [actorType]
     );
     return {
       success: true,

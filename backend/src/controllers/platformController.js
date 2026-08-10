@@ -11,7 +11,11 @@ import asyncHandler from '../utils/asyncHandler.js';
 // MOM §12.12 — recent sign-in activity for the console's notifications.
 export const loginActivity = asyncHandler(async (req, res) =>
   respond(res, await activity.recentActivity({
-    limit: req.query.limit, outcome: req.query.outcome || '', tenantId: req.query.tenant_id || null,
+    limit: req.query.limit,
+    outcome: req.query.outcome || '',
+    tenantId: req.query.tenant_id || null,
+    // Defaults to IFQM staff. 'all' is what the notification feed asks for.
+    actorType: req.query.actor_type || 'platform_admin',
   }))
 );
 
