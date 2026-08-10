@@ -1,11 +1,36 @@
-# IFQM EIT — Flows and Timeline
+# IFQM Employee Ideation Tool — Flows and Timeline
 
-MOM 29 Jul 2026 §2.1.
+**How an idea travels, how an organisation joins, who can see what, and when
+each part was built.**
 
-Each flow is a drawn diagram. The Mermaid source that describes it is kept
-underneath in a collapsed block — open it to edit the flow, then rebuild the
-images with `python docs/flow_drawings.py`. The picture is what most readers
-want; the source is what the next person to change it wants.
+<table>
+<tr>
+<td><b>Audience</b></td>
+<td>Anyone who needs to understand how the product behaves without reading the code — a new engineer, a reviewer of the design, or IFQM staff answering a customer.</td>
+</tr>
+<tr>
+<td><b>How to read it</b></td>
+<td>Each flow is a picture. The Mermaid source that describes it is folded away underneath, for the next person who has to change it.</td>
+</tr>
+<tr>
+<td><b>Source</b></td>
+<td>MOM 29 July 2026, §2.1. Diagrams are drawn by <code>docs/flow_drawings.py</code>.</td>
+</tr>
+</table>
+
+---
+
+![How these flows fit together](diagrams/F0_overview.png)
+
+### Contents
+
+| | Flow | What it answers |
+|---|---|---|
+| **1** | [Idea lifecycle](#1-idea-lifecycle) | What happens between somebody noticing a problem and the saving being recorded |
+| **2** | [MSME registration and approval](#2-msme-registration-and-approval) | How an organisation gets a workspace, and what stops anybody helping themselves to one |
+| **3** | [Authentication](#3-authentication) | How somebody signs in, and what happens when they get it wrong |
+| **4** | [Who sees what](#4-who-sees-what) | Which parts of an idea reach which people |
+| **5** | [Timeline](#5-timeline) | When each part of the product was built |
 
 ---
 
@@ -14,10 +39,29 @@ want; the source is what the next person to change it wants.
 The core loop. Everything else in the product exists to keep an idea moving
 along this path.
 
-![1. Idea lifecycle](diagrams/F1_idea_lifecycle.png)
+![The idea lifecycle](diagrams/F1_idea_lifecycle.png)
+
+| | |
+|---|---|
+| **Starts when** | An employee opens Submit |
+| **Ends in** | Implemented and measured, rejected with a reason, or archived |
+| **Points** | +10 submitted · +25 approved · +65 implemented, each awarded once |
+| **Who decides** | The line manager, or a committee where the organisation routes it that way |
+| **Settings that bite** | `review_sla_days`, `escalation_days`, `approval_threshold` |
+
+> [!IMPORTANT]
+> **An overdue idea and an escalated idea are different things.**
+> `review_sla_days` marks an idea as late so somebody chases it — nothing moves
+> and nobody is reassigned. `escalation_days` is what actually moves it up the
+> chain. Both are per organisation, and confusing the two is why those fields
+> carry information buttons in the admin panel.
+
+> [!NOTE]
+> A draft is private to its author, has not entered the process, and can be
+> resumed at any time. Nothing happens to it until it is submitted.
 
 <details>
-<summary>Mermaid source for this diagram</summary>
+<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
 
 ```mermaid
 flowchart TD
@@ -52,21 +96,32 @@ flowchart TD
 
 </details>
 
-**SLA and escalation.** `review_sla_days` flags an idea as overdue; nothing is
-reassigned. `escalation_days` moves it up the chain. Both are per organisation,
-and the distinction is the reason those fields carry info buttons (§12.13).
-
 ---
 
 ## 2. MSME registration and approval
 
-Nothing an anonymous caller does provisions anything. The worst a flood of junk
-applications achieves is a full review queue.
+![MSME registration and approval](diagrams/F2_registration.png)
 
-![2. MSME registration and approval](diagrams/F2_registration.png)
+| | |
+|---|---|
+| **Starts when** | A business fills in the form on the landing page |
+| **Ends in** | A provisioned workspace with a first administrator, or a rejection with a reason |
+| **Decided by** | IFQM platform staff, who also set the plan and the trial length |
+| **Checked** | Corporate email domain, then Udyam, GSTIN, PAN, CIN, NIC and PIN formats |
+
+> [!WARNING]
+> **Nothing an anonymous caller does provisions anything.**
+> The worst a flood of junk applications achieves is a full review queue. No
+> database is created, no account exists, and no email is sent to anybody but
+> the applicant until a human approves it.
+
+> [!TIP]
+> A duplicate application returns exactly the same response as a new one.
+> Telling an anonymous caller "this company already has an account" would be a
+> free customer-list lookup for anybody who wanted one.
 
 <details>
-<summary>Mermaid source for this diagram</summary>
+<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
 
 ```mermaid
 flowchart TD
@@ -92,18 +147,32 @@ flowchart TD
 
 </details>
 
-A duplicate application returns the same response as a new one. Telling an
-anonymous caller "this company already has an account" is a free customer-list
-lookup.
-
 ---
 
 ## 3. Authentication
 
-![3. Authentication](diagrams/F3_authentication.png)
+![Signing in](diagrams/F3_authentication.png)
+
+| | |
+|---|---|
+| **Sign in with** | Email, registered phone number, or employee number |
+| **Organisation code** | Optional — the sign-in directory resolves it when it is left out |
+| **Wrong passwords** | Five, then a 15-minute lock. The right password does not open it early |
+| **Session** | A signed token that carries the account's password-change stamp |
+
+> [!IMPORTANT]
+> **The token is a claim, not a source of truth.**
+> Every request re-reads the user from the database, so deactivating somebody,
+> changing their role, or resetting their password takes effect on their very
+> next request rather than whenever the token happens to expire.
+
+> [!NOTE]
+> Every failure — unknown account, wrong password, deactivated account — answers
+> the same way and takes the same time. A response that differs is a way to test
+> which addresses are registered.
 
 <details>
-<summary>Mermaid source for this diagram</summary>
+<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
 
 ```mermaid
 flowchart TD
@@ -125,18 +194,32 @@ flowchart TD
 
 </details>
 
-Every subsequent request re-reads the user from the database, so deactivation,
-role change and password reset take effect immediately rather than at token
-expiry.
-
 ---
 
 ## 4. Who sees what
 
-![4. Who sees what](diagrams/F4_visibility.png)
+![Who sees what](diagrams/F4_visibility.png)
+
+| Who | Sees |
+|---|---|
+| **Employee** | Their own ideas in full. For everybody else's: the title, the status, and whatever their organisation has opened up |
+| **Manager** | The ideas of the people who report to them |
+| **Plant head / executive** | Every idea in the organisation |
+| **Organisation admin** | Everything in their organisation, plus the settings that govern it |
+| **IFQM platform staff** | Which organisations exist, how many people and ideas each has, the registration queue, support tickets and sign-in activity |
+
+> [!CAUTION]
+> **IFQM staff never see the content of an idea, an employee record, or a file.**
+> The platform console provisions organisations and counts them. It does not read
+> them, and there is no screen anywhere in it that could.
+
+> [!NOTE]
+> On top of the role scoping above, each organisation chooses how much of a
+> proposal a colleague outside an idea may read — the one-line gist by default.
+> Authors and reviewers are never restricted by that setting.
 
 <details>
-<summary>Mermaid source for this diagram</summary>
+<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
 
 ```mermaid
 flowchart LR
@@ -158,12 +241,11 @@ flowchart LR
 
 </details>
 
-The full proposal text follows the org's `solution_visibility` setting, on top
-of the role scoping above.
-
 ---
 
 ## 5. Timeline
+
+![How the product was built](diagrams/F5_timeline.png)
 
 | When | Milestone |
 |---|---|
@@ -179,8 +261,19 @@ of the role scoping above.
 | **29 Jul 2026** | **Review meeting — this MOM** |
 | Aug 2026 | MSME self-registration, solution privacy, podium leaderboard, on-hold vs inactive, quotas, patentability, archiving |
 | Aug 2026 | Free-tier deployment live (Vercel + Render + Aiven) |
-| Next | SMTP in production · OTP login · UAT · Azure OAuth + SSO · billing |
+| Aug 2026 | Subscription plans, trials and billing; organisation profile dashboard |
+| Next | SMTP in production · OTP login · UAT · Azure OAuth + SSO |
 
-Dates before the MOM are deliberately unanchored: the repository history has the
-commit dates, and inventing precise milestones for a handover document would be
-worse than saying so.
+> [!NOTE]
+> Dates before the review meeting are deliberately unanchored. The repository
+> history carries the commit dates, and inventing precise milestones for a
+> handover document would be worse than saying so.
+
+---
+
+<sub>Diagrams are drawn, not hand-placed: run <code>python docs/flow_drawings.py</code>
+after changing any Mermaid block above, or the picture and the source will
+disagree. Colour is consistent across every diagram in this project — indigo for
+the path through the system, teal for stored data, amber for a decision, green
+for an outcome somebody wanted, red for a refusal, slate for anything outside
+our control.</sub>

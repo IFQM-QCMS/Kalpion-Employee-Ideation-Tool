@@ -219,14 +219,94 @@ def f4_visibility():
     return save(fig, 'F4_visibility')
 
 
+def f0_overview():
+    """How the five flows fit together — the map before the detail."""
+    fig, ax = canvas(10.0, 3.4)
+
+    ax.text(50, 32, 'How these flows fit together', ha='center', fontsize=9.4,
+            fontweight='bold', family='DejaVu Sans')
+
+    stages = [
+        ('1', 'An MSME applies\nand is approved', EXTERNAL_FILL, EXTERNAL, 'once'),
+        ('2', 'Their people\nsign in', PRIMARY_FILL, PRIMARY, 'every day'),
+        ('3', 'Ideas are raised,\nreviewed, implemented', PRIMARY_MID, PRIMARY, 'the core loop'),
+        ('4', 'Who may read\nwhat, throughout', DATA_FILL, DATA, 'always'),
+    ]
+    x = 3
+    for num, label, fill, edge, cadence in stages:
+        box(ax, x, 12, 20, 11, label, fill=fill, edge=edge, size=7.0)
+        # The number sits on the block, so the section it points at is obvious.
+        box(ax, x + 0.8, 21.4, 4, 4, num, fill=edge, edge=edge, size=7.2, bold=True)
+        ax.text(x + 10, 9.6, cadence, ha='center', va='top', fontsize=6.2,
+                family='DejaVu Sans', color=GREY)
+        if x > 3:
+            arrow(ax, (x - 3.6, 17.5), (x, 17.5))
+        x += 23.6
+
+    note(ax, 50, 6,
+         'Sections 1 to 4 below take each of these in turn. Section 5 is when each part was built.',
+         ha='center')
+    return save(fig, 'F0_overview')
+
+
+def f5_timeline():
+    """When each part of the product was built."""
+    fig, ax = canvas(10.2, 4.2)
+
+    ax.text(51, 40, 'How the product was built', ha='center', fontsize=9.4,
+            fontweight='bold', family='DejaVu Sans')
+
+    # The spine. Phases before the review meeting are deliberately unanchored —
+    # the repository has the commit dates, and inventing precise milestones for
+    # a handover document would be worse than saying so.
+    ax.plot([6, 96], [24, 24], color=PRIMARY, lw=2.4, zorder=2)
+
+    phases = [
+        ('Early 2026', ['PHP prototype', 'capture + basic review'], EXTERNAL_FILL, EXTERNAL, 12),
+        ('Foundations', ['multi-tenancy', 'React + Node rewrite', 'JWT sessions'], PRIMARY_FILL, PRIMARY, 30),
+        ('The product', ['approval chains · SLA', 'points · leaderboard',
+                         'ROI · analytics · audit'], PRIMARY_MID, PRIMARY, 50),
+        ('Hardening', ['lockout · per-request auth', '7 languages · bulk import',
+                       'QCMS integration'], DATA_FILL, DATA, 70),
+        ('Now', ['self-registration · billing', 'privacy controls', 'live deployment'],
+         GOOD_FILL, GOOD, 90),
+    ]
+    for i, (title, items, fill, edge, x) in enumerate(phases):
+        above = i % 2 == 0
+        y = 27 if above else 8
+        h = 9.5
+        box(ax, x - 9, y, 18, h, title + '\n\n' + '\n'.join(items),
+            fill=fill, edge=edge, size=5.8)
+        # A marker on the spine, and a stem to the card.
+        ax.plot([x, x], [24, y + (0 if above else h)], color=edge, lw=1.2, zorder=3)
+        ax.add_patch(__import__('matplotlib').patches.Circle(
+            (x, 24), 1.5, linewidth=1.6, edgecolor=edge, facecolor='white', zorder=4))
+
+    # The one date that is anchored.
+    ax.plot([62, 62], [24, 21], color=STOP, lw=1.4, zorder=3)
+    ax.text(62, 19.6, '29 Jul 2026\nreview meeting', ha='center', va='top', fontsize=6.2,
+            family='DejaVu Sans', color=STOP, fontweight='bold')
+
+    note(ax, 51, 4,
+         'Phases before the review meeting are deliberately unanchored: the repository history carries the\n'
+         'commit dates, and inventing precise milestones for a handover document would be worse than saying so.',
+         ha='center')
+    return save(fig, 'F5_timeline')
+
+
+# Declared after every function, and the entry point after that, so a drawing
+# appended to the bottom of this file cannot silently fail to be rendered.
 ALL = {
+    'F0_overview': f0_overview,
     'F1_idea_lifecycle': f1_idea_lifecycle,
     'F2_registration': f2_registration,
     'F3_authentication': f3_authentication,
     'F4_visibility': f4_visibility,
+    'F5_timeline': f5_timeline,
 }
+
 
 if __name__ == '__main__':
     for name, fn in ALL.items():
         print('drew %-20s -> %s' % (name, fn()))
-    print('\n%d diagram(s) written.' % len(ALL))
+    print(chr(10) + '%d diagram(s) written.' % len(ALL))
