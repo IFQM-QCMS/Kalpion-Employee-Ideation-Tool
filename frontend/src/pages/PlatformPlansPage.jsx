@@ -41,8 +41,23 @@ const BLANK = {
   code: '', name: '', description: '', long_description: '', tier: 'starter',
   amount_rupees: '', billing_cycle: 'yearly', gst_percent: '18', gst_mode: 'included',
   is_custom: false, max_users: '', max_departments: '', storage_gb: '',
-  support_level: 'standard', status: 'active',
+  api_quota_monthly: '', support_level: 'standard', status: 'active',
 };
+
+/*
+ * A sensible monthly request allowance for a plan with this many users.
+ * Mirrors suggestQuota() in the backend's planService — the same arithmetic,
+ * shown next to the field so an operator can see whether the number they typed
+ * is in the right order of magnitude.
+ *
+ * A signed-in person costs roughly 500 requests on a working day, so about
+ * 11,000 a month; 15,000 leaves room for a heavy user, an import and exports.
+ */
+function suggestQuota(maxUsers) {
+  const n = parseInt(maxUsers, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(100000, n * 15000);
+}
 
 /* A four-step configurator, because a plan has four unrelated kinds of decision
    in it and one long form makes people miss the ones that matter. */
@@ -68,6 +83,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
       gst_percent: String(plan.gst_percent ?? '18'), gst_mode: plan.gst_mode || 'included',
       is_custom: !!plan.is_custom,
       max_users: plan.max_users == null ? '' : String(plan.max_users),
+      api_quota_monthly: plan.api_quota_monthly == null ? '' : String(plan.api_quota_monthly),
       max_departments: plan.max_departments == null ? '' : String(plan.max_departments),
       storage_gb: plan.storage_gb == null ? '' : String(plan.storage_gb),
       support_level: plan.support_level || 'standard', status: plan.status || 'active',
@@ -285,6 +301,34 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                     placeholder="Unlimited" inputMode="numeric" />
                 </Field>
               </div>
+              {/* Sized from the user cap rather than guessed. A cap that is
+                  too small does not degrade the product — it stops it, which is
+                  exactly what happened when a flat 2,000-a-month figure was
+                  applied to page loads. */}
+              <div className="form-group">
+                <label>Monthly request allowance<InfoDot term="request_allowance" /></label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="form-control" style={{ width: 190 }} inputMode="numeric"
+                    value={form.api_quota_monthly} onChange={set('api_quota_monthly')}
+                    placeholder="Unlimited" />
+                  {suggestQuota(form.max_users) && (
+                    <button type="button" className="btn btn-outline btn-sm"
+                      onClick={() => setForm((f) => ({
+                        ...f, api_quota_monthly: String(suggestQuota(f.max_users)),
+                      }))}>
+                      Use suggested: {suggestQuota(form.max_users).toLocaleString('en-IN')}
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>
+                  {suggestQuota(form.max_users)
+                    ? `About 15,000 requests per permitted user per month — roughly thirty times what `
+                      + `ordinary use costs, so a busy month never reaches it.`
+                    : 'Empty = unlimited. With no user cap there is nothing to size an allowance from, '
+                      + 'so leaving it empty is the right answer.'}
+                </div>
+              </div>
+
               <div className="form-row">
                 <Field label="Maximum departments" hint="Empty = unlimited">
                   <input className="form-control" value={form.max_departments} onChange={set('max_departments')}
@@ -313,6 +357,9 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                   ['Billing cycle', CYCLES.find(([v]) => v === form.billing_cycle)?.[1]],
                   ['Maximum users', form.max_users === '' ? 'Unlimited' : form.max_users],
                   ['Storage', form.storage_gb === '' ? 'Unlimited' : `${form.storage_gb} GB`],
+                  ['Request allowance', form.api_quota_monthly === ''
+                    ? 'Unlimited'
+                    : `${Number(form.api_quota_monthly).toLocaleString('en-IN')} / month`],
                   ['Support', SUPPORT.find(([v]) => v === form.support_level)?.[1]],
                   ['Status', form.status === 'active' ? 'Active' : 'Retired'],
                 ].map(([label, value]) => (
@@ -484,15 +531,16 @@ export default function PlatformPlansPage() {
               <th>Billing cycle</th>
               <th>Max users</th>
               <th>Storage</th>
+              <th>Requests / month</th>
               <th>Organisations</th>
               <th>Status</th>
               <th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan="9" className="text-center"><div className="spinner"></div></td></tr>}
+            {loading && <tr><td colSpan="10" className="text-center"><div className="spinner"></div></td></tr>}
             {!loading && !filtered.length && (
-              <tr><td colSpan="9" className="text-center">
+              <tr><td colSpan="10" className="text-center">
                 {plans.length ? 'No plan matches that.' : 'No plans yet. Create the first one.'}
               </td></tr>
             )}
@@ -513,6 +561,17 @@ export default function PlatformPlansPage() {
                 <td style={{ fontSize: 12.5 }}>{p.cycle_label}</td>
                 <td style={{ fontSize: 12.5 }}>{p.max_users_label}</td>
                 <td style={{ fontSize: 12.5 }}>{p.storage_label}</td>
+                <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                  {p.quota_label}
+                  {p.api_quota_monthly != null && p.suggested_quota
+                   && p.api_quota_monthly < p.suggested_quota * 0.5 && (
+                    <div style={{ fontSize: 10.5, color: 'var(--warning)' }}
+                      title={`For ${p.max_users_label} users this should be around `
+                        + `${p.suggested_quota.toLocaleString('en-IN')}`}>
+                      looks low
+                    </div>
+                  )}
+                </td>
                 <td>
                   <span className="badge badge-info">{p.subscriber_count || 0} org(s)</span>
                 </td>

@@ -211,6 +211,40 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
               that was held for non-payment.
             </div>
 
+            {/* Usage against the plan's allowance. Shown so the platform team
+                sees somebody approaching a limit before their staff do — the
+                failure mode last time was a customer finding out when their
+                screens stopped working. */}
+            {sub?.quota?.monthly != null && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between',
+                              alignItems: 'baseline', flexWrap: 'wrap', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                    Requests this month<InfoDot term="request_allowance" />
+                  </span>
+                  <span style={{ fontSize: 13 }}>
+                    <strong>{Number(sub.quota.used_month).toLocaleString('en-IN')}</strong>
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {' '}of {Number(sub.quota.monthly).toLocaleString('en-IN')} ({sub.quota.percent}%)
+                    </span>
+                  </span>
+                </div>
+                <div style={{ height: 6, borderRadius: 3, background: 'var(--chip-bg)', marginTop: 6 }}>
+                  <div style={{
+                    width: `${Math.min(100, sub.quota.percent || 0)}%`, height: '100%', borderRadius: 3,
+                    background: sub.quota.percent >= 100 ? 'var(--danger)'
+                      : sub.quota.percent >= 80 ? 'var(--warning)' : 'var(--success)',
+                  }} />
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 5 }}>
+                  From the {sub.quota.source}. Resets at the start of next month.
+                  {sub.quota.enforced
+                    ? ` Requests are refused past ${sub.quota.grace_percent}% over.`
+                    : ' Enforcement is off, so nothing is refused.'}
+                </div>
+              </div>
+            )}
+
             {!!(sub?.history || []).length && (
               <details style={{ marginTop: 14 }}>
                 <summary style={{ cursor: 'pointer', fontSize: 12.5, color: 'var(--text-muted)' }}>

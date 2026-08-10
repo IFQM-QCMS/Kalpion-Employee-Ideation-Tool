@@ -20,6 +20,7 @@ import { badRequest, notFound } from '../utils/respond.js';
 import { decoratePlan, CYCLE_DAYS } from './planService.js';
 import { getPlatformSetting } from './platformSettingsService.js';
 import logger from '../utils/logger.js';
+import { invalidateQuotaCache, usageFor } from '../middleware/tenantQuota.js';
 
 const DAY = 86400000;
 
@@ -118,8 +119,14 @@ export async function subscriptionFor(tenantId) {
     [tenant.id]
   );
 
+  // How much of the plan's request allowance this organisation has used. Shown
+  // beside the plan so the platform team sees somebody approaching a limit
+  // before the customer does.
+  const quota = await usageFor(tenant.id);
+
   return {
     success: true,
+    quota,
     subscription: {
       tenant_id: tenant.id,
       billing_status: tenant.billing_status,
@@ -196,6 +203,14 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
       id,
     ]
   );
+
+  /*
+   * The request allowance comes from the plan, and limits are cached for a
+   * minute. Without this, moving somebody onto a bigger plan leaves them
+   * refused for up to a minute afterwards — which is exactly the moment they
+   * are watching, because they just paid to be moved.
+   */
+  invalidateQuotaCache(id);
 
   await record(id, tenant.plan_id ? 'plan_changed' : 'plan_assigned', {
     fromPlanId: tenant.plan_id, toPlanId: plan.id,

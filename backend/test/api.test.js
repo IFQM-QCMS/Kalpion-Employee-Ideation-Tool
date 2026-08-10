@@ -530,6 +530,89 @@ test('billing: only IFQM staff may price anything', async () => {
   assert.equal(res.data.subscription?.billing_note, undefined);
 });
 
+test('the request allowance comes from the plan, and can never lock a workspace out', async () => {
+  /*
+   * A flat 2,000-a-month cap once took a live customer offline: it was an
+   * integration allowance applied to ordinary page loads. The allowance now
+   * comes from the plan and is sized from its user cap, and three things are
+   * checked here — the sizing, the grace band, and the allowlist that keeps a
+   * customer able to sign in and complain.
+   */
+  let res = await api('GET', '/api/platform/plans', { token: PA });
+  const starter = res.data.plans.find((p) => p.code === 'STARTER');
+  assert.equal(starter.api_quota_monthly, 1_500_000,
+    '100 users at ~15,000 requests each per month');
+  assert.equal(starter.api_quota_monthly, starter.suggested_quota,
+    'the shipped figure must match the arithmetic the screen suggests');
+
+  const trial = res.data.plans.find((p) => p.code === 'TRIAL');
+  assert.equal(trial.api_quota_monthly, null,
+    'an organisation deciding whether to buy must never meet a limit while deciding');
+
+  // A deliberately small plan, so the limit can be reached in a test.
+  res = await api('POST', '/api/platform/plans', {
+    token: PA,
+    body: { code: 'QUOTATEST', name: 'Quota Test', description: 'Small allowance.',
+            tier: 'starter', amount_rupees: 1, gst_percent: 18,
+            max_users: 5, api_quota_monthly: 1000 },
+  });
+  assert.equal(res.status, 200);
+  const planId = res.data.plan_id;
+
+  const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
+  await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: PA, body: { plan_id: planId, trial_days: 30 },
+  });
+
+  const setUsage = async (n) => {
+    await sql('ifqm_test_master',
+      `INSERT INTO ifqm_test_master.tenant_api_usage (tenant_id, period, request_count)
+       VALUES (${orgb.id}, DATE_FORMAT(NOW(),'%Y-%m'), ${n})
+       ON DUPLICATE KEY UPDATE request_count = ${n}`);
+    // Assigning the plan again drops the cached allowance, so the next request
+    // re-reads it. Without that a plan change takes up to a minute to be
+    // believed — which is the minute the customer is watching.
+    await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+      token: PA, body: { plan_id: planId, trial_days: 30 },
+    });
+  };
+
+  // Just over the line is tolerated: the allowance estimates normal use, it
+  // does not measure it, and somebody 5% over is busy rather than abusive.
+  await setUsage(1050);
+  res = await api('GET', '/api/ideas/dashboard', { token: BADMIN });
+  assert.equal(res.status, 200, '5% over the allowance must not be refused');
+
+  // Well past the grace band, ordinary screens are refused.
+  await setUsage(5000);
+  res = await api('GET', '/api/ideas/dashboard', { token: BADMIN });
+  assert.equal(res.status, 429);
+  assert.match(JSON.stringify(res.data.quota), /plan \(Quota Test\)/,
+    'the refusal must say which limit it came from');
+
+  // …but the allowlist still answers. A customer who has run out has to be able
+  // to sign in, see why, and raise a ticket about it.
+  for (const path of ['/api/settings', '/api/notifications', '/api/support/tickets', '/api/branding']) {
+    const r = await api('GET', path, { token: BADMIN });
+    assert.equal(r.status, 200, `${path} must keep working at the limit`);
+  }
+  const relogin = await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb');
+  assert.ok(relogin.token, 'signing in must keep working at the limit');
+
+  // A number set on the organisation itself beats the plan's.
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants SET api_quota_monthly = 900000 WHERE id = ${orgb.id}`);
+  await setUsage(5000);
+  res = await api('GET', '/api/ideas/dashboard', { token: BADMIN });
+  assert.equal(res.status, 200, 'an organisation override must win over the plan');
+
+  // Put org B back as the rest of the suite expects it.
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants SET api_quota_monthly = NULL, plan_id = NULL,
+            billing_status = 'exempt', trial_ends_at = NULL, period_end = NULL WHERE id = ${orgb.id}`);
+  await sql('ifqm_test_master', `DELETE FROM ifqm_test_master.tenant_api_usage WHERE tenant_id = ${orgb.id}`);
+});
+
 // ── Login with no org code — email or registered phone ──────────────────────
 
 test('a user signs in with just their email — no organisation code needed', async () => {

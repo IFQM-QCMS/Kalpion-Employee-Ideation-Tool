@@ -358,6 +358,16 @@ CREATE TABLE IF NOT EXISTS plans (
   max_departments INT         NULL DEFAULT NULL,
   max_ideas      INT          NULL DEFAULT NULL,
   storage_gb     INT          NULL DEFAULT NULL,
+  -- How many API requests this plan allows an organisation per month, and in
+  -- total. NULL means unlimited.
+  --
+  -- Sized from the user cap at roughly 15,000 per permitted user per month —
+  -- about thirty times what ordinary use costs. The figure is large by design:
+  -- an earlier flat cap of 2,000 a month was applied to ordinary page loads and
+  -- took a live customer offline within days, because one signed-in employee
+  -- generates several hundred requests in a working day.
+  api_quota_monthly INT       NULL DEFAULT NULL,
+  api_quota_total   INT       NULL DEFAULT NULL,
   support_level  ENUM('basic','standard','priority','dedicated') NOT NULL DEFAULT 'standard',
   status         ENUM('active','inactive') NOT NULL DEFAULT 'active',
   created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -367,14 +377,16 @@ CREATE TABLE IF NOT EXISTS plans (
 
 INSERT IGNORE INTO plans
   (code, name, description, tier, amount_paise, billing_cycle, gst_percent, gst_mode,
-   max_users, max_departments, storage_gb, support_level, status)
+   max_users, max_departments, storage_gb, api_quota_monthly, support_level, status)
 VALUES
+  -- The trial has no request allowance on purpose: an organisation deciding
+  -- whether to buy the product should never meet a limit while deciding.
   ('TRIAL',   'Free Trial',   'Full access while the organisation evaluates the platform.',
-   'trial',        0,        'monthly',   18.00, 'included', NULL, NULL, 5,  'standard', 'active'),
+   'trial',        0,        'monthly',   18.00, 'included', NULL, NULL, 5,  NULL,     'standard', 'active'),
   ('STARTER', 'Starter',      'For a single plant getting started with structured ideation.',
-   'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 'standard', 'active'),
+   'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 1500000,  'standard', 'active'),
   ('PRO',     'Professional', 'For multi-plant MSMEs running ideation across departments.',
-   'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 'priority', 'active');
+   'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 22500000, 'priority', 'active');
 
 -- Who changed an organisation's plan, when, from what to what, and why. A
 -- billing dispute is answered from a record or it is answered from memory.
@@ -402,4 +414,10 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   -- prices have not been set yet.
   ('billing_enforce',       '0'),
   ('billing_contact_email', ''),
-  ('billing_contact_phone', '');
+  ('billing_contact_phone', ''),
+  -- Request allowances. Enforced, but with a grace band above the line and an
+  -- allowlist that always answers, so reaching a limit can never take a
+  -- workspace fully offline.
+  ('quota_enforce',        '1'),
+  ('quota_grace_percent',  '20'),
+  ('quota_warn_percent',   '80');

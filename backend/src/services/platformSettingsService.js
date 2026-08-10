@@ -69,6 +69,9 @@ const DEFAULTS_WHITELIST = [
   // whether lapsing actually locks anybody out, and who to contact about it.
   'default_trial_days', 'billing_warn_days', 'billing_enforce',
   'billing_contact_email', 'billing_contact_phone',
+  // Request allowances: whether the plan's limit is enforced, how far over is
+  // tolerated, and where the warning starts.
+  'quota_enforce', 'quota_grace_percent', 'quota_warn_percent',
 ];
 
 /** Mirrors settingsService's whitelist — what IFQM may change on a live tenant. */
@@ -115,8 +118,16 @@ function normaliseSetting(key, rawValue) {
     const n = parseInt(value, 10);
     return String(Math.max(0, Math.min(90, Number.isFinite(n) ? n : 5)));
   }
-  if (key === 'billing_enforce') {
+  if (key === 'billing_enforce' || key === 'quota_enforce') {
     return value === '1' || value === 1 || value === true ? '1' : '0';
+  }
+  if (key === 'quota_grace_percent') {
+    const n = parseInt(value, 10);
+    return String(Math.max(0, Math.min(200, Number.isFinite(n) ? n : 20)));
+  }
+  if (key === 'quota_warn_percent') {
+    const n = parseInt(value, 10);
+    return String(Math.max(1, Math.min(100, Number.isFinite(n) ? n : 80)));
   }
   if (key === 'approval_reviewer_roles' || key === 'approval_final_approver_roles') {
     return String(value).split(',').map((s) => s.trim())

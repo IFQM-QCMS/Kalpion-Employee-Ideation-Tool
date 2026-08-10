@@ -33,6 +33,24 @@ const CYCLE_LABEL = {
   one_time: 'One-time',
 };
 
+/**
+ * A sensible monthly request allowance for a plan with this many users.
+ *
+ * The arithmetic, so nobody has to guess: a signed-in person costs roughly 500
+ * requests on a working day — a notification poll every two minutes, a screen
+ * refreshing while they read it, and ordinary navigation. Over 22 working days
+ * that is about 11,000 a month. Rounded to 15,000 to leave room for a heavy
+ * user, a bulk import and a few exports.
+ *
+ * No user cap means no request cap: a limit derived from "unlimited" is a
+ * contradiction, and a trial should never meet one at all.
+ */
+export function suggestQuota(maxUsers) {
+  const n = parseInt(maxUsers, 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.max(100000, n * 15000);
+}
+
 /** Rupees in, paise out. Accepts "2,500.50" as typed. */
 export function toPaise(rupees) {
   const n = Number(String(rupees ?? '').replace(/[^0-9.]/g, ''));
@@ -81,6 +99,13 @@ export function decoratePlan(row) {
     // join, which is never what an operator means by leaving a box empty.
     max_users_label: row.max_users == null ? 'Unlimited' : String(row.max_users),
     storage_label: row.storage_gb == null ? 'Unlimited' : `${row.storage_gb} GB`,
+    quota_label: row.api_quota_monthly == null
+      ? 'Unlimited'
+      : `${Number(row.api_quota_monthly).toLocaleString('en-IN')} / month`,
+    // What this plan's allowance would be if it were derived from its user cap.
+    // Shown next to the field so an operator can see whether the stored number
+    // is sane rather than having to work it out.
+    suggested_quota: suggestQuota(row.max_users),
   };
 }
 
@@ -171,6 +196,17 @@ function validate(body, { partial = false } = {}) {
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
   if (has('max_users') || !partial) out.max_users = limit(body.max_users);
+  /*
+   * The monthly request allowance.
+   *
+   * Sized from the user cap: roughly 15,000 requests per permitted user per
+   * month, which is about thirty times what ordinary use costs. A blank field
+   * means unlimited. Getting this wrong is how a live customer was locked out
+   * of their own workspace once already, so `suggestQuota` below exists to stop
+   * anybody typing a number off the top of their head.
+   */
+  if (has('api_quota_monthly') || !partial) out.api_quota_monthly = limit(body.api_quota_monthly);
+  if (has('api_quota_total')) out.api_quota_total = limit(body.api_quota_total);
   if (has('max_departments') || !partial) out.max_departments = limit(body.max_departments);
   if (has('max_ideas') || !partial) out.max_ideas = limit(body.max_ideas);
   if (has('storage_gb') || !partial) out.storage_gb = limit(body.storage_gb);
@@ -248,5 +284,5 @@ export async function retirePlan(id) {
 
 export default {
   listPlans, getPlan, createPlan, updatePlan, retirePlan,
-  toPaise, toRupees, priceBreakdown, decoratePlan, CYCLE_DAYS,
+  toPaise, toRupees, priceBreakdown, decoratePlan, suggestQuota, CYCLE_DAYS,
 };
