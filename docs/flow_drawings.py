@@ -4,13 +4,18 @@ The four flows in PROJECT_FLOWCHART.md, drawn.
 
     python docs/flow_drawings.py
 
-Same monochrome style as the architecture document: black lines, white and grey
-fills. Each of these mirrors the Mermaid source kept beside it in the Markdown —
-change one and change the other, or the picture starts lying.
+Same palette as the architecture document: indigo for the path through the
+system, amber for a decision, green for an outcome somebody wanted, red for a
+refusal, slate for anything outside our control.
+
+Each of these mirrors the Mermaid source kept beside it in the Markdown — change
+one and change the other, or the picture starts lying.
 """
 from diagram_kit import (
     canvas, save, box, diamond, arrow, note, group, band,
     FILL_PLAIN, FILL_SOFT, FILL_MED, FILL_DARK, LINE, GREY,
+    PRIMARY, PRIMARY_FILL, PRIMARY_MID, DATA, DATA_FILL, DECISION,
+    GOOD, GOOD_FILL, GOOD_MID, STOP, STOP_FILL, EXTERNAL, EXTERNAL_FILL,
 )
 
 
@@ -67,8 +72,9 @@ def f1_idea_lifecycle():
     arrow(ax, (46, 30.8), (38, 25.5))
     arrow(ax, (48, 20.8), (39, 22))
 
-    box(ax, 2, 12, 22, 6, 'Rejected —\nthe reason is recorded', fill=FILL_SOFT, size=6.0)
-    arrow(ax, (22, 19.5), (14, 18), label='reject')
+    box(ax, 2, 12, 22, 6, 'Rejected —\nthe reason is recorded',
+        fill=STOP_FILL, edge=STOP, size=6.0)
+    arrow(ax, (22, 19.5), (14, 18), label='reject', colour=STOP)
 
     # The loop back to a reviewer is stated on the box rather than drawn. Routed
     # as a line it had to cross three other shapes, and a loop drawn through the
@@ -77,17 +83,19 @@ def f1_idea_lifecycle():
         fill=FILL_PLAIN, size=6.0)
     arrow(ax, (30, 19), (40, 17.2), label='approve, not final', label_offset=(-4, -2.2))
 
-    box(ax, 64, 11, 28, 6, 'Approved\n+25 points', fill=FILL_MED, size=6.0)
+    box(ax, 64, 11, 28, 6, 'Approved\n+25 points', fill=GOOD_FILL, edge=GOOD, size=6.0)
     # Label placed near the tail of the arrow: at the midpoint it landed on the
     # committee box, which is where every earlier attempt put it.
-    arrow(ax, (38, 21.5), (64, 15.5), label='approve, final',
+    arrow(ax, (38, 21.5), (64, 15.5), label='approve, final', colour=GOOD,
           label_pos=0.16, label_offset=(0, -2.2), rad=-0.08)
 
-    box(ax, 64, 1.5, 28, 6, 'Implemented\n+65 points · ROI recorded', fill=FILL_DARK, size=6.0)
-    arrow(ax, (78, 11), (78, 7.6))
+    box(ax, 64, 1.5, 28, 6, 'Implemented\n+65 points · ROI recorded',
+        fill=GOOD_MID, edge=GOOD, size=6.0)
+    arrow(ax, (78, 11), (78, 7.6), colour=GOOD)
 
-    box(ax, 28, 1.5, 30, 6, 'Pushed to QCMS\nwhere it is configured', fill=FILL_PLAIN, size=6.0)
-    arrow(ax, (64, 4.5), (58, 4.5))
+    box(ax, 28, 1.5, 30, 6, 'Pushed to QCMS\nwhere it is configured',
+        fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.0)
+    arrow(ax, (64, 4.5), (58, 4.5), colour=EXTERNAL)
 
     note(ax, 3, 7.5, 'Points are awarded once, at each step.\nAn idea can be archived from any state — that hides it, it does not delete it.')
     return save(fig, 'F1_idea_lifecycle')
@@ -109,7 +117,8 @@ def f2_registration():
     d = diamond(ax, 15, 19, 22, 8, 'Work email\ndomain?')
     arrow(ax, (15, 27), (15, 23))
 
-    box(ax, 3, 8, 24, 6, 'Refused there and then,\nbefore the long form', fill=FILL_SOFT, size=6.2)
+    box(ax, 3, 8, 24, 6, 'Refused there and then,\nbefore the long form',
+        fill=STOP_FILL, edge=STOP, size=6.2)
     arrow(ax, (15, 15), (15, 14), label='gmail / outlook /\ndisposable', label_offset=(0, -3.5))
 
     box(ax, 36, 27, 26, 5.6, 'Step 2  statutory identity\nUdyam · GSTIN · PAN · CIN', fill=FILL_PLAIN, size=6.2)
@@ -127,12 +136,13 @@ def f2_registration():
     d2 = diamond(ax, 82, 19, 22, 8, 'Approve or\nreject?')
     arrow(ax, (82, 27), (82, 23))
 
-    box(ax, 70, 8, 24, 6, 'Rejected — with a reason,\nthey can apply again', fill=FILL_SOFT, size=6.2)
-    arrow(ax, (73, 17), (78, 14), label='reject')
+    box(ax, 70, 8, 24, 6, 'Rejected — with a reason,\nthey can apply again',
+        fill=STOP_FILL, edge=STOP, size=6.2)
+    arrow(ax, (73, 17), (78, 14), label='reject', colour=STOP)
 
     box(ax, 36, 2, 58, 5, 'Approved  —  database provisioned  ·  first admin created  ·  plan and trial set  ·  '
-                          'temporary password shown once', fill=FILL_MED, size=6.2)
-    arrow(ax, (86, 15), (86, 7))
+                          'temporary password shown once', fill=GOOD_FILL, edge=GOOD, size=6.2)
+    arrow(ax, (86, 15), (86, 7), colour=GOOD)
 
     note(ax, 3, 5.5, 'Nothing an anonymous caller does provisions anything.\n'
                      'The worst a flood of junk applications achieves is a full review queue.')
@@ -163,11 +173,13 @@ def f3_authentication():
     d2 = diamond(ax, 46, 8, 24, 7, 'Correct?')
     arrow(ax, (46, 15), (46, 11.5))
 
-    box(ax, 66, 5, 26, 6, 'Signed in — token carries\nthe password stamp', fill=FILL_MED, size=6.2)
-    arrow(ax, (58, 8), (66, 8), label='yes')
+    box(ax, 66, 5, 26, 6, 'Signed in — token carries\nthe password stamp',
+        fill=GOOD_FILL, edge=GOOD, size=6.2)
+    arrow(ax, (58, 8), (66, 8), label='yes', colour=GOOD)
 
-    box(ax, 4, 5, 26, 6, 'Counted. Five wrong\n= locked for 15 minutes', fill=FILL_SOFT, size=6.2)
-    arrow(ax, (34, 8), (30, 8), label='no')
+    box(ax, 4, 5, 26, 6, 'Counted. Five wrong\n= locked for 15 minutes',
+        fill=STOP_FILL, edge=STOP, size=6.2)
+    arrow(ax, (34, 8), (30, 8), label='no', colour=STOP)
 
     note(ax, 4, 3, 'Every failure answers the same way and takes the same time, so the response cannot be used to\n'
                    'test which addresses are registered. The user is re-read from the database on every later request,\n'
@@ -189,7 +201,7 @@ def f4_visibility():
         box(ax, x, y, 16, 6, label, fill=FILL_SOFT, size=5.9)
 
     box(ax, 3, 12, 40, 6, 'NEVER: employee rows · idea content · files',
-        fill=FILL_PLAIN, size=6.4, dashed=True)
+        fill=STOP_FILL, edge=STOP, size=6.4, dashed=True)
 
     group(ax, 50, 8, 44, 30, 'Inside one organisation')
     for label, x, y, fill in [

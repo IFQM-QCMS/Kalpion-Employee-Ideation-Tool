@@ -8,9 +8,10 @@ detailed design) so a reader can move between the two without translating.
 
     python docs/arch_drawings.py        # rebuild them all
 
-Monochrome: black lines, white and grey fills. The document's brief was to keep
-everything black, and that has not changed — what has changed is that a box is
-now drawn as a box rather than spelled out in dashes.
+Colour is meaningful, not decorative: indigo for the system and the path
+through it, teal for anywhere data rests, amber for a decision, green for an
+outcome somebody wanted, red for a refusal, slate for anything outside our
+control. See the palette at the top of diagram_kit.py.
 """
 from matplotlib.patches import Rectangle
 
@@ -18,6 +19,8 @@ from diagram_kit import (
     canvas, save, box, store, cylinder, diamond, actor, oval, band, group,
     arrow, note, entity, stack, elbow, crow, sequence,
     FILL_PLAIN, FILL_SOFT, FILL_MED, FILL_DARK, LINE, GREY,
+    PRIMARY, PRIMARY_FILL, PRIMARY_MID, DATA, DATA_FILL, DECISION,
+    GOOD, GOOD_FILL, GOOD_MID, STOP, STOP_FILL, EXTERNAL, EXTERNAL_FILL,
 )
 
 
@@ -44,8 +47,8 @@ def a1_context():
     group(ax, 18, 2, 52, 14, 'Outside services — every one optional, configured per customer')
     for label, x in [('Email\n(SMTP)', 21), ('SMS\n(one-time codes)', 33),
                      ('QCMS\n(quality system)', 45), ('AI scoring\n(optional)', 57)]:
-        box(ax, x, 4, 11, 7, label, fill=FILL_PLAIN, size=6.2)
-        arrow(ax, (x + 5.5, 11), (x + 5.5, 22), dashed=True)
+        box(ax, x, 4, 11, 7, label, fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.2)
+        arrow(ax, (x + 5.5, 11), (x + 5.5, 22), dashed=True, colour=EXTERNAL)
 
     return save(fig, 'A1_context')
 
@@ -199,7 +202,7 @@ def a7_integration():
     box(ax, 32, 11, 22, 10, 'IFQM Employee\nIdeation Tool', fill=FILL_MED, size=8, bold=True)
     for label, x, y in [('QCMS\nquality system', 66, 19), ('Email server\n(SMTP)', 66, 5),
                         ('SMS provider', 3, 19), ('AI scoring\n(optional)', 3, 5)]:
-        box(ax, x, y, 16, 8, label, fill=FILL_PLAIN, size=6.3)
+        box(ax, x, y, 16, 8, label, fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.3)
         if x > 32:
             arrow(ax, (54, y + 4), (x, y + 4), label='out')
         else:
@@ -226,20 +229,20 @@ def d1_workflow():
     diamond(ax, 76, 37, 18, 9, 'Reviewer\ndecides')
     arrow(ax, (62, 37), (67, 37))
 
-    box(ax, 62, 20, 17, 6, 'Rejected\nreason recorded', fill=FILL_SOFT, size=6.3)
-    arrow(ax, (76, 32.5), (72, 26), label='reject')
+    box(ax, 62, 20, 17, 6, 'Rejected\nreason recorded', fill=STOP_FILL, edge=STOP, size=6.3)
+    arrow(ax, (76, 32.5), (72, 26), label='reject', colour=STOP)
 
-    box(ax, 38, 20, 17, 6, 'Approved\n+25 points', fill=FILL_MED, size=6.3)
+    box(ax, 38, 20, 17, 6, 'Approved\n+25 points', fill=GOOD_FILL, edge=GOOD, size=6.3)
     arrow(ax, (69, 34.5), (55, 24), label='approve, final', rad=0.12)
 
     box(ax, 38, 9, 17, 6, 'Escalated\nup the chain', fill=FILL_SOFT, size=6.3)
     arrow(ax, (68, 33), (55, 13), label='approve, not final', rad=0.18)
     arrow(ax, (46, 15), (46, 20))
 
-    box(ax, 13, 20, 17, 6, 'Implemented\n+65 points · ROI', fill=FILL_DARK, size=6.3)
+    box(ax, 13, 20, 17, 6, 'Implemented\n+65 points · ROI', fill=GOOD_MID, edge=GOOD, size=6.3)
     arrow(ax, (38, 23), (30, 23), label='carried out')
 
-    box(ax, 13, 9, 17, 6, 'Pushed to QCMS\nif configured', fill=FILL_PLAIN, size=6.3)
+    box(ax, 13, 9, 17, 6, 'Pushed to QCMS\nif configured', fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.3)
     arrow(ax, (21, 20), (21, 15))
 
     note(ax, 46, 6, 'Points are awarded once, at each step. An idea can be archived from any state —\n'
@@ -250,10 +253,10 @@ def d1_workflow():
 def d2_dfd0():
     """Context data-flow diagram."""
     fig, ax = canvas(8.4, 3.2)
-    box(ax, 3, 19, 16, 7, 'Employee', fill=FILL_PLAIN, size=7.0, rounded=False)
-    box(ax, 3, 5, 16, 7, 'Reviewer', fill=FILL_PLAIN, size=7.0, rounded=False)
-    box(ax, 65, 19, 16, 7, 'Administrator', fill=FILL_PLAIN, size=7.0, rounded=False)
-    box(ax, 65, 5, 16, 7, 'QCMS', fill=FILL_PLAIN, size=7.0, rounded=False)
+    box(ax, 3, 19, 16, 7, 'Employee', fill=EXTERNAL_FILL, edge=EXTERNAL, size=7.0, rounded=False)
+    box(ax, 3, 5, 16, 7, 'Reviewer', fill=EXTERNAL_FILL, edge=EXTERNAL, size=7.0, rounded=False)
+    box(ax, 65, 19, 16, 7, 'Administrator', fill=EXTERNAL_FILL, edge=EXTERNAL, size=7.0, rounded=False)
+    box(ax, 65, 5, 16, 7, 'QCMS', fill=EXTERNAL_FILL, edge=EXTERNAL, size=7.0, rounded=False)
 
     box(ax, 30, 11, 24, 10, '0\nIdeation\nsystem', fill=FILL_MED, size=8.2, bold=True)
 
@@ -268,9 +271,9 @@ def d2_dfd0():
 def d3_dfd1():
     """Level-1 data-flow diagram."""
     fig, ax = canvas(9.2, 4.6)
-    box(ax, 2, 34, 14, 6, 'Employee', fill=FILL_PLAIN, size=6.8, rounded=False)
-    box(ax, 2, 12, 14, 6, 'Reviewer', fill=FILL_PLAIN, size=6.8, rounded=False)
-    box(ax, 76, 22, 14, 6, 'QCMS', fill=FILL_PLAIN, size=6.8, rounded=False)
+    box(ax, 2, 34, 14, 6, 'Employee', fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.8, rounded=False)
+    box(ax, 2, 12, 14, 6, 'Reviewer', fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.8, rounded=False)
+    box(ax, 76, 22, 14, 6, 'QCMS', fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.8, rounded=False)
 
     box(ax, 23, 33, 16, 7, '1\nCapture\nan idea', fill=FILL_MED, size=6.5)
     box(ax, 47, 33, 16, 7, '2\nScore it', fill=FILL_MED, size=6.5)
@@ -307,21 +310,21 @@ def d4_er_master():
     # Positions come from the heights the entities turn out to be. An entity's
     # height depends on how many columns it has, so anything hard-coded starts
     # colliding the moment a table gains a field.
-    left = stack(ax, 2, 60, 24, [
+    left = stack(ax, 2, 60, 24, accent=GOOD, specs=[
         ('plans', [('PK', 'id'), ('', 'code  (unique)'), ('', 'name'),
                    ('', 'amount_paise'), ('', 'billing_cycle'),
                    ('', 'gst_percent  ·  gst_mode'), ('', 'max_users'),
                    ('', 'api_quota_monthly')]),
         ('platform_admins', [('PK', 'id'), ('', 'name  ·  email'), ('', 'password_hash')]),
     ])
-    middle = stack(ax, 34, 60, 26, [
+    middle = stack(ax, 34, 60, 26, accent=PRIMARY, specs=[
         ('tenants', [('PK', 'id'), ('', 'name'), ('', 'slug  (unique)'),
                      ('', 'db_name'), ('', 'status'), ('FK', 'plan_id → plans'),
                      ('', 'billing_status'), ('', 'trial_ends_at'), ('', 'period_end')]),
         ('login_directory', [('PK', 'id'), ('', 'identifier  (unique)'),
                              ('FK', 'tenant_id → tenants'), ('', 'user_id')]),
     ])
-    right = stack(ax, 69, 60, 27, [
+    right = stack(ax, 69, 60, 27, accent=DATA, specs=[
         ('tenant_registrations', [('PK', 'id'), ('', 'company_name'),
                                   ('', 'udyam_number  ·  gstin'), ('', 'pan  ·  cin'),
                                   ('', 'status'), ('FK', 'tenant_id → tenants'),
@@ -342,7 +345,7 @@ def d4_er_master():
     elbow(ax, middle['tenants'], right['support_tickets'], label='raises', mid=62)
     elbow(ax, middle['tenants'], middle['login_directory'], label='indexes', mid=32)
 
-    note(ax, 50, 5,
+    note(ax, 50, 12,
          'PK identifies a row.  FK points at another table.  Three prongs mean “many”, a single bar means “one”.\n'
          'The registry holds no employee and no idea — it is deliberately thin.', ha='center')
     return save(fig, 'D4_er_master')
@@ -354,7 +357,7 @@ def d5_er_tenant():
     ax.text(51, 80, 'ifqm_<organisation>  —  repeated once per customer  (18 tables)',
             ha='center', fontsize=9.0, fontweight='bold', family='DejaVu Sans')
 
-    left = stack(ax, 2, 76, 25, [
+    left = stack(ax, 2, 76, 25, accent=GOOD, specs=[
         ('users', [('PK', 'id'), ('', 'employee_id  (unique)'), ('', 'name  ·  email'),
                    ('', 'role'), ('FK', 'manager_id → users.id'), ('', 'status'),
                    ('', 'points')]),
@@ -364,7 +367,7 @@ def d5_er_tenant():
                            ('FK', 'user_id → users'), ('', 'parent_id → self'),
                            ('', 'is_deleted')]),
     ])
-    middle = stack(ax, 36, 76, 27, [
+    middle = stack(ax, 36, 76, 27, accent=PRIMARY, specs=[
         ('ideas', [('PK', 'id'), ('', 'idea_code  (unique)'),
                    ('FK', 'submitter_id → users'), ('', 'title'),
                    ('', 'present_situation'), ('', 'proposed_solution'),
@@ -375,7 +378,7 @@ def d5_er_tenant():
         ('idea_attachments', [('PK', 'id'), ('FK', 'idea_id → ideas'),
                               ('', 'section'), ('', 'filename  ·  filepath')]),
     ])
-    right = stack(ax, 73, 76, 26, [
+    right = stack(ax, 73, 76, 26, accent=DATA, specs=[
         ('categories', [('PK', 'id'), ('', 'name'), ('', 'sort_order')]),
         ('idea_workflow', [('PK', 'id'), ('FK', 'idea_id → ideas'),
                            ('FK', 'actor_id → users'), ('', 'action'),
@@ -400,7 +403,7 @@ def d5_er_tenant():
     ax.text(u['left'] - 6.2, u['cy'], 'reports to', ha='center', va='center',
             fontsize=6.2, family='DejaVu Sans', rotation=90)
 
-    note(ax, 51, 6,
+    note(ax, 51, 20,
          'users.manager_id points back at users. That self-reference IS the reporting line — the route an idea\n'
          'travels for approval. Every table here exists once per customer, in a database of its own.', ha='center')
     return save(fig, 'D5_er_tenant')
@@ -525,12 +528,12 @@ def d15_errors():
     arrow(ax, (44, 33), (44, 29))
 
     box(ax, 3, 14, 31, 6, 'No — refuse it, with a message\nthat says what to change',
-        fill=FILL_SOFT, size=6.4)
-    arrow(ax, (32, 24), (19, 20.2), label='no')
+        fill=STOP_FILL, edge=STOP, size=6.4)
+    arrow(ax, (32, 24), (19, 20.2), label='no', colour=STOP)
 
     box(ax, 54, 14, 32, 6, 'Yes — write it down and carry on\n(mail, metering, audit)',
-        fill=FILL_SOFT, size=6.4)
-    arrow(ax, (56, 24), (70, 20.2), label='yes')
+        fill=GOOD_FILL, edge=GOOD, size=6.4)
+    arrow(ax, (56, 24), (70, 20.2), label='yes', colour=GOOD)
 
     box(ax, 3, 4, 31, 6, 'The caller sees a sentence,\nnever a stack trace', fill=FILL_PLAIN, size=6.4)
     arrow(ax, (18, 14), (18, 10))
