@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { votesApi } from '../services/api';
+import { votesApi, exportApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import ScreenGuard from '../components/ScreenGuard';
@@ -28,6 +28,17 @@ export default function BoardPage() {
       else setError(res.data.error || t('board.load_failed'));
     } catch { setError(t('board.load_failed')); }
     setLoading(false);
+  }
+
+
+  /* The one-page summary. Same endpoint as the full export - the server sends
+     whichever document this reader is entitled to. */
+  async function downloadGist(idea) {
+    try {
+      await exportApi.ideaPdf(idea.id, idea.idea_code);
+    } catch {
+      showToast(t('msg.network_error'), 'danger');
+    }
   }
 
   async function castVote(ideaId, voteType) {
@@ -115,7 +126,15 @@ export default function BoardPage() {
                       {translateImpact(i.impact_level, t)} {t('idea.impact_suffix')}
                     </span>
                     {i.ai_score > 0 && <span className={scoreBadgeClass(i.ai_score)}>AI: {i.ai_score}/100</span>}
-                    <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>{t('btn.view')}</button>
+                    {/* The board is where an employee sees other people's ideas,
+                        so this is the button that matters. Somebody outside the
+                        idea is offered the summary, not a full view. */}
+                    {i.viewer_inside === false ? (
+                      <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
+                        onClick={() => downloadGist(i)}>{t('btn.summary')}</button>
+                    ) : (
+                      <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>{t('btn.view')}</button>
+                    )}
                   </div>
                 </div>
               </div>

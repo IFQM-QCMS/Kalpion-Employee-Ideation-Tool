@@ -14,7 +14,7 @@
  *     idea_community_votes; does not touch the counter columns.
  */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
-import { summariseSolution, previewText, canReadSolution, visibilityMode } from './ideaService.js';
+import { summariseSolution, previewText, canReadSolution, visibilityMode, isInsideIdea } from './ideaService.js';
 import { employeeSections } from './ideaSections.js';
 import { getOrgSettings } from './mailerService.js';
 
@@ -242,6 +242,7 @@ export async function board(db, user, sort) {
      * sitting in the response the whole time. Found by comparing the two views
      * side by side (§11.3).
      */
+    idea.viewer_inside = isInsideIdea(user, idea);
     idea.solution_summary = summariseSolution(idea.proposed_solution);
     idea.situation_summary = previewText(idea.present_situation, previewChars);
     idea.solution_redacted = !canReadSolution(user, idea, mode);

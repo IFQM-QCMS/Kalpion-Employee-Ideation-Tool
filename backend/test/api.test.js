@@ -13,6 +13,7 @@ import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import {
+  getBaseUrl,
   setupSuite, teardownSuite, api, login, sql, signToken,
   tinyPng, fakePng, PASSWORDS,
 } from './helpers.js';
@@ -353,6 +354,80 @@ test('the single-idea Closure Summary PDF is open to everyone and stops at the t
   // An admin in another tenant cannot reach org A's idea at all.
   const asOrgB = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: BADMIN });
   assert.equal(asOrgB.status, 404);
+});
+
+test('a colleague outside an idea gets a summary sheet, not the full record', async () => {
+  /*
+   * The two documents are checked by what actually lands in the bytes, not by
+   * what the screen renders. The marker strings sit in the SECOND sentence of
+   * each field, because a gist is the first sentence — put them in the first
+   * and the check cannot tell a summary from the whole thing.
+   */
+  const problemTail = 'ZZQPROBLEMTAIL it shifts after two hundred cycles and we scrap forty units a shift.';
+  const solutionTail = 'ZZQSOLUTIONTAIL the pin costs under two thousand rupees and the re-datum takes four minutes.';
+
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Re-datum the press fixture on a cycle count',
+      present_situation: `The press fixture drifts during a shift. ${problemTail}`,
+      proposed_solution: `Fit a hardened locating pin and re-datum on a cycle count. ${solutionTail}`,
+      tangible_benefit: 'ZZQBENEFIT about four lakh rupees a year in avoided scrap',
+      support_required: 'ZZQSUPPORT two hours of maintenance time on a Sunday',
+    },
+  });
+  const ideaId = submit.data.idea_id;
+  assert.ok(ideaId, 'the idea must be created');
+
+  // Somebody in the same organisation with no connection to this idea.
+  await sql('ifqm_test_a', `INSERT IGNORE INTO ifqm_test_a.users
+    (employee_id, name, email, password_hash, role, department, status)
+    VALUES ('E-OUTPDF', 'Outside Reader', 'outsidepdf@orga.test',
+            (SELECT password_hash FROM (SELECT password_hash FROM ifqm_test_a.users
+              WHERE email = 'user@orga.test') x),
+            'employee', 'Assembly', 'active')`);
+  const outsider = (await login('outsidepdf@orga.test', PASSWORDS.orgaUser, 'orga')).token;
+
+  // The shared helper reads bodies with res.text(), which decodes as UTF-8 and
+  // mangles a PDF. Take the bytes.
+  const grab = async (token) => {
+    const res = await fetch(`${getBaseUrl()}/api/export/idea/${ideaId}/pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return {
+      status: res.status,
+      disposition: res.headers.get('content-disposition') || '',
+      bytes: Buffer.from(await res.arrayBuffer()),
+    };
+  };
+
+  const asAuthor = await grab(AUSER);
+  const asOutsider = await grab(outsider);
+
+  assert.equal(asAuthor.status, 200);
+  assert.equal(asOutsider.status, 200, 'a colleague may still export — the contents differ, not the permission');
+
+  assert.match(asAuthor.disposition, /closure_summary\.pdf/,
+    'the author gets the full closure record');
+  assert.doesNotMatch(asOutsider.disposition, /closure/,
+    'a bystander gets a summary sheet, not the closure record');
+
+  assert.ok(asAuthor.bytes.length > asOutsider.bytes.length,
+    `the closure record must be the larger document (${asAuthor.bytes.length} vs ${asOutsider.bytes.length})`);
+
+  // And the flag the screens use to decide whether to offer a full view at all.
+  const detailOut = await api('GET', `/api/ideas/${ideaId}`, { token: outsider });
+  assert.equal(detailOut.data.idea.viewer_inside, false);
+  assert.equal(detailOut.data.idea.present_situation, null, 'no full problem statement over the wire');
+  assert.equal(detailOut.data.idea.proposed_solution, null, 'no full proposal over the wire');
+  assert.equal(detailOut.data.idea.tangible_benefit, null, 'benefits are closed by default');
+  assert.equal(detailOut.data.idea.support_required, null,
+    'support_required is benefit text under another name — it must close with the section');
+
+  const detailOwn = await api('GET', `/api/ideas/${ideaId}`, { token: AUSER });
+  assert.equal(detailOwn.data.idea.viewer_inside, true);
+  assert.ok(detailOwn.data.idea.present_situation.includes('ZZQPROBLEMTAIL'),
+    'the author still reads their own idea in full');
 });
 
 // ── Login with no org code — email or registered phone ──────────────────────

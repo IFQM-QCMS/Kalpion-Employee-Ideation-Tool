@@ -1243,4 +1243,6 @@ export default {
   'hier.direct_reports':'Reports directly to them',
   'hier.no_reports':'Nobody reports to this person.',
   'btn.clear':'Clear',
+  'btn.summary':'Summary',
+  'idea.summary_only_hint':'Download a one-page summary. The full write-up is shown to whoever raised this idea and to the people reviewing it.',
 };

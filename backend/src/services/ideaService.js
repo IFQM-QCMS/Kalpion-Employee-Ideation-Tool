@@ -176,6 +176,11 @@ function applySectionVisibility(idea, allowed) {
       case 'benefits':
         idea.tangible_benefit = null;
         idea.intangible_benefit = null;
+        // These two are benefit text under different column names. Leaving them
+        // behind meant the section looked closed on screen while the export
+        // still printed it.
+        idea.benefits_expected = null;
+        idea.support_required = null;
         break;
       case 'business_case':
         idea.investment_required = null;
@@ -186,6 +191,8 @@ function applySectionVisibility(idea, allowed) {
         idea.roi_value = null;
         idea.roi_type = null;
         idea.roi_note = null;
+        idea.implementation_status = null;
+        idea.implementation_note = null;
         break;
       case 'attachments':
         idea.attachments = [];
@@ -207,6 +214,36 @@ function applySectionVisibility(idea, allowed) {
   }
   idea.hidden_sections = hidden;
   return idea;
+}
+
+/**
+ * Is this person inside this idea?
+ *
+ * Inside means: they wrote it, they are credited on it, they have been asked to
+ * decide on it, or they are senior enough that deciding on ideas is their job.
+ * Everybody else is a bystander - entitled to know the idea exists and roughly
+ * what it is about, and nothing more.
+ *
+ * The same question drives three separate decisions, so it is answered once:
+ * how much text the server sends, which sections it strips, and whether the
+ * screen offers a "view full idea" button at all. Answering it three times in
+ * three places is how they drift apart.
+ *
+ * Deliberately does NOT consider solution_visibility. That setting governs how
+ * much text a bystander receives; it does not make them a participant.
+ */
+export function isInsideIdea(user, idea) {
+  const uid = Number(user?.id);
+  if (!uid) return false;
+  if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
+  if (Number(idea.submitter_id) === uid) return true;
+  if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
+  if (Number(idea.current_reviewer_id) === uid) return true;
+  // Populated by get(); absent on list rows, where the four checks above are
+  // what the list query can answer.
+  if ((idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid)) return true;
+  if ((idea.co_suggesters || []).some((c) => Number(c.id) === uid)) return true;
+  return false;
 }
 
 /**
@@ -324,6 +361,10 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     // hundred rows of verbatim proposals sitting in the browser is exactly the
     // leak this is meant to close, and it is invisible to anyone reading only
     // the rendered table.
+    // Whether this person is a participant in this idea, not merely allowed to
+    // read some of it. The screens use it to decide whether to offer a full
+    // view at all, rather than offering one that opens a mostly-empty overlay.
+    idea.viewer_inside = isInsideIdea(user, idea);
     redactSolution(user, idea, mode, previewChars);
     // The browse list shows a one-line gist. If the organisation does not let
     // ordinary colleagues read even that, the column has to be empty for them.
@@ -471,6 +512,7 @@ export async function get(db, user, id) {
   const isCoSuggester = (idea.co_suggesters || []).some((c) => Number(c.id) === uid);
   // An assigned reviewer or co-suggester reads the full text in every mode
   // except managers_only, which is the whole point of that mode.
+  idea.viewer_inside = isInsideIdea(user, idea);
   if ((isAssignedReviewer || isCoSuggester) && mode !== 'managers_only') {
     idea.solution_summary = summariseSolution(idea.proposed_solution);
     idea.situation_summary = previewText(idea.present_situation, detailPreview);

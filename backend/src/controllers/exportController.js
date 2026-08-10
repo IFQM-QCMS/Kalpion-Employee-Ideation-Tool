@@ -3,7 +3,7 @@
  */
 import * as exportService from '../services/exportService.js';
 import * as ideaService from '../services/ideaService.js';
-import { buildIdeaPdf } from '../services/ideaPdfService.js';
+import { buildIdeaPdf, buildIdeaGistPdf } from '../services/ideaPdfService.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 function csvHeaders(res, filename) {
@@ -39,11 +39,32 @@ export const analytics = asyncHandler(async (req, res) => {
 // from another organisation simply 404s (no cross-tenant read is possible).
 export const ideaPdf = asyncHandler(async (req, res) => {
   const { idea } = await ideaService.get(req.db, req.user, req.params.id);
-  const filename = `idea_${(idea.idea_code || idea.id)}_closure_summary.pdf`;
+
+  /*
+   * Two documents, chosen by who is asking.
+   *
+   * Somebody inside the idea - its author, a colleague credited on it, or one
+   * of the people reviewing it - gets the closure summary: the full working
+   * record. Everybody else gets a one-page gist.
+   *
+   * The split is not only about what the reader may read. ideaService has
+   * already emptied the fields they are not entitled to, so handing them the
+   * closure form would produce two pages of blank boxes: it looks like a broken
+   * export and it invites the reader to wonder what was removed. A document
+   * that says "summary" on its face is both safer and more honest.
+   */
+  const inside = idea.viewer_inside === true;
+  const code = idea.idea_code || idea.id;
+  const filename = inside
+    ? `idea_${code}_closure_summary.pdf`
+    : `idea_${code}_summary.pdf`;
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-cache, no-store');
-  buildIdeaPdf(idea, res);
+
+  if (inside) buildIdeaPdf(idea, res);
+  else buildIdeaGistPdf(idea, res, req.user);
 });
 
 export default { ideas, leaderboard, analytics, ideaPdf };

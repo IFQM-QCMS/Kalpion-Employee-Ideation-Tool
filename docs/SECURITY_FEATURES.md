@@ -193,10 +193,27 @@ them. All three are masked together. *(`src/services/ideaService.js`)*
 vote; who may read the automatic reasoning is its own setting, defaulting to
 managers. Authors always see the assessment of their own idea.
 
-**Exports carry only what the person may see.** The single-idea PDF is built
-from the same filtered view as the screen, so opening it to everybody did not
-open the data — an employee's copy contains the extract, a reviewer's the full
-text. *(`src/controllers/exportController.js`, `ideaPdfService.js`)*
+**Exports carry only what the person may see, and say so.** The single-idea PDF
+is built from the same filtered view as the screen, so opening the export to
+everybody did not open the data. There are two documents: whoever raised the
+idea, the colleagues credited on it and the people reviewing it get the full
+two-page closure record; everybody else gets a one-page summary sheet carrying
+the title, who raised it, where it has got to, and a one-line gist.
+
+The second document exists for a reason beyond redaction. Handing a bystander
+the closure form with two pages of emptied boxes looks like a broken export and
+invites the reader to wonder what was removed. A sheet that says "summary" on
+its face is both safer and more honest, and it is stamped with the name of the
+person who exported it, so a leaked copy is traceable.
+*(`src/controllers/exportController.js`, `ideaPdfService.js`)*
+
+**The screens do not offer what the server will not give.** A colleague outside
+an idea is shown a "Summary" button rather than "View" — opening the full
+overlay would produce a title and a row of locked notices. The button is chosen
+from `viewer_inside`, computed on the server by one function
+(`isInsideIdea`), which also drives how much text is sent and which sections
+are stripped. Answering the same question in three places is how the three
+answers drift apart. *(`src/services/ideaService.js`)*
 
 **Drafts are private.** An unsubmitted draft and its attachments are visible
 only to their author and the organisation's administrators.
@@ -223,9 +240,19 @@ capture awkward and make any leak attributable. The actual protection is section
 ## 7. Handling what users send us
 
 **Every query is parameterised.** User-supplied values are always bound, never
-concatenated into SQL. The few places where a fragment is built as text build
-only *structure* — a column name chosen from a fixed pair, a list of `?`
-placeholders, a set of whitelisted column names — never a value.
+concatenated into SQL. The places where a fragment is built as text build only
+*structure* — a column name chosen from a fixed pair, a list of `?`
+placeholders, a set of whitelisted column names, a date filter picked from a
+fixed map.
+
+There is one deliberate exception, stated because a blanket claim would be
+false: row limits. MySQL 8 refuses `LIMIT` and `OFFSET` as bound parameters, so
+three paginated queries build the number into the statement. Each one passes
+through `parseInt` and a clamp on the line above, so only a plain integer can
+ever reach the string — a text value cannot survive the journey. This is
+checked by the assurance suite, which fails the build if any service binds a
+row limit (the portability trap that made the admin user list return 500 on the
+production database while passing every local test).
 
 **Settings are an explicit allowlist.** A setting not named in the list cannot be
 written, so a new form field is inert until it is deliberately accepted. Values

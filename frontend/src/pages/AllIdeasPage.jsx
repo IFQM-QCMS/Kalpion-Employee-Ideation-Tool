@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { ideasApi, votesApi, saveBlob } from '../services/api';
+import { ideasApi, votesApi, exportApi, saveBlob } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact,
          fmtDateTime, communityScore, isAdmin, isSuperAdmin } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
@@ -68,6 +68,16 @@ export default function AllIdeasPage() {
       setIdeas(res.data.ideas || []);
     } catch { /* non-blocking poll */ }
     setLoading(false);
+  }
+
+  /* The one-page summary. Same endpoint as the full export - the server sends
+     whichever document this reader is entitled to. */
+  async function downloadGist(idea) {
+    try {
+      await exportApi.ideaPdf(idea.id, idea.idea_code);
+    } catch {
+      showToast(t('msg.network_error'), 'danger');
+    }
   }
 
   async function castVote(ideaId, voteType) {
@@ -251,9 +261,19 @@ export default function AllIdeasPage() {
                   <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span></td>
                   <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.submitted_at)}</td>
                   <td>
-                    <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>
-                      {t('btn.view')}
-                    </button>
+                    {/* Outside the idea? No full view is offered - the overlay
+                        would be a title and a row of locked notices. The gist
+                        they are entitled to is downloadable instead. */}
+                    {i.viewer_inside === false ? (
+                      <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
+                        onClick={() => downloadGist(i)}>
+                        {t('btn.summary')}
+                      </button>
+                    ) : (
+                      <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>
+                        {t('btn.view')}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

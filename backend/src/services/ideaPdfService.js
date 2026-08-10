@@ -54,6 +54,16 @@ function fmtDate(v) {
   return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function fmtDateTimeLocal(v) {
+  if (!v) return '';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return s(v);
+  return d.toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: true,
+  });
+}
+
 // Money is INR. Format with Indian digit grouping and a ₹ prefix.
 function fmtMoney(v) {
   if (v === null || v === undefined || v === '') return '';
@@ -181,6 +191,103 @@ function calloutBox(doc, x, y, w, h, title, lines) {
     doc.text(ln, x + 20, ly, { width: w - 26 });
     ly += Math.max(doc.heightOfString(ln, { width: w - 26 }), 9) + 4;
   }
+}
+
+// ── summary sheet, for readers outside the idea ──────────────────────
+/**
+ * A one-page gist.
+ *
+ * The closure summary above is a working document: it has a place for the root
+ * cause, the corrective action, the money saved and who signed it off. Handing
+ * that form to a colleague who may not read any of those fields produces two
+ * pages of empty boxes - which looks like a broken export, and invites the
+ * reader to wonder what was in them.
+ *
+ * So a bystander gets a different document instead: what the idea is, who
+ * raised it, where it has got to, and a line or two of what it is about. It
+ * says on its face that it is a summary, so nobody mistakes it for the whole
+ * record or forwards it as one.
+ *
+ * The fields printed here are the ones the server already decided this reader
+ * may see. Nothing is re-fetched and nothing is filtered a second time: if
+ * ideaService withheld it, it is not in the object.
+ */
+export function buildIdeaGistPdf(idea, res, viewer = null) {
+  const doc = new PDFDocument({
+    size: 'A4', bufferPages: true,
+    margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 12 },
+  });
+  doc.registerFont('R', FONT_REG);
+  doc.registerFont('B', FONT_BOLD);
+  doc.font('R');
+  doc.pipe(res);
+
+  // Title
+  doc.font('B').fontSize(15).fillColor(BLUE).text('IDEA SUMMARY', MARGIN, MARGIN);
+  doc.font('R').fontSize(7.5).fillColor(MUTED)
+    .text('Summary only - the full write-up is held for the author and the reviewers',
+      MARGIN, MARGIN + 19);
+  doc.font('B').fontSize(7.5).fillColor(BLUE)
+    .text('SUMMARY', MARGIN, MARGIN + 2, { width: CONTENT_W, align: 'right' })
+    .text('1-PAGE FORMAT', MARGIN, MARGIN + 12, { width: CONTENT_W, align: 'right' });
+  doc.rect(MARGIN, MARGIN + 34, CONTENT_W, 3).fill(BLUE);
+
+  let y = headerGrid(doc, MARGIN + 45, [
+    ['Idea Title', s(idea.title)],
+    ['Idea No.', s(idea.idea_code)],
+    ['Raised By', idea.is_anonymous ? 'Anonymous' : (s(idea.submitter_name) || '-')],
+    ['Department', s(idea.department) || s(idea.business_unit) || '-'],
+    ['Submitted', fmtDateTimeLocal(idea.submitted_at || idea.created_at)],
+    ['Current Status', s(idea.status)],
+  ]);
+
+  y = sectionHeader(doc, y, 'WHAT THIS IDEA IS ABOUT', 'SUMMARY');
+
+  const problem = s(idea.situation_summary);
+  const proposal = s(idea.solution_summary);
+
+  y = field(doc, MARGIN, y, CONTENT_W, 'The problem, in short',
+    problem || 'Not shown to colleagues outside this idea.', { labelW: 150 });
+  y = field(doc, MARGIN, y, CONTENT_W, 'The proposal, in short',
+    proposal || 'Not shown to colleagues outside this idea.', { labelW: 150 });
+
+  // Only the headline figures, and only where they survived the section rules.
+  const facts = [
+    ['Impact level', s(idea.impact_level)],
+    ['Improvement area', s(idea.impact_areas)],
+    ['Assessment score', idea.ai_score > 0 ? `${idea.ai_score} / 100` : ''],
+    ['Colleague votes', `${Number(idea.upvotes) || 0} up, ${Number(idea.downvotes) || 0} down`],
+    ['Possibly patentable', idea.patentable_flag ? 'Yes' : ''],
+  ].filter(([, v]) => s(v));
+  if (facts.length) {
+    y = sectionHeader(doc, y, 'AT A GLANCE', 'HEADLINE FIGURES');
+    for (const [label, value] of facts) {
+      y = field(doc, MARGIN, y, CONTENT_W, label, value, { labelW: 150 });
+    }
+  }
+
+  // The explanation, boxed, so nobody has to guess why the sheet is short.
+  y += 6;
+  const note =
+    'This is a summary. The full problem statement, the proposed solution, the '
+    + 'benefits and the approval history are shown to whoever raised this idea, '
+    + 'to the colleagues credited on it, and to the people reviewing it. If you '
+    + 'need the detail - to build on the idea, or because you are being asked to '
+    + 'assess it - ask your organisation administrator to add you to it.';
+  const noteH = doc.font('R').fontSize(8).heightOfString(note, { width: CONTENT_W - 16 }) + 16;
+  doc.rect(MARGIN, y, CONTENT_W, noteH).fillAndStroke(BOX_BG, LINE);
+  doc.font('R').fontSize(8).fillColor(INK).text(note, MARGIN + 8, y + 8, { width: CONTENT_W - 16 });
+  y += noteH + 12;
+
+  // Footer: who this copy was produced for, and when. A summary that leaks is
+  // then traceable to the person who exported it.
+  doc.font('R').fontSize(6.8).fillColor(MUTED).text(
+    `Produced ${fmtDateTimeLocal(new Date())}`
+    + (viewer ? ` for ${viewer.name}${viewer.employee_id ? ` (${viewer.employee_id})` : ''}` : '')
+    + '  -  IFQM Employee Ideation Tool',
+    MARGIN, 812 - 20, { width: CONTENT_W, align: 'center' });
+
+  doc.end();
 }
 
 // ── main ─────────────────────────────────────────────────────────────
