@@ -115,16 +115,16 @@ export default function AnalyticsPage() {
         {kpis.map(([label, val, suffix, icon, hint], i) => {
           const c = KPI_ACCENTS[i % KPI_ACCENTS.length];
           return (
-            <div key={label} className="card kpi-card" style={{ '--kpi-accent': c, borderTop: `3px solid ${c}`, position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div className="kpi-icon" style={{ background: tint(c), color: c, borderRadius: 10, padding: 8 }}>{icon}</div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, background: tint(c), color: c, padding: '2px 8px', borderRadius: 12 }}>
+            <div key={label} className="card" style={{ padding: '16px 18px', borderTop: `4px solid ${c}`, borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 125 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <div style={{ background: tint(c), color: c, borderRadius: 10, padding: '8px 10px', display: 'inline-flex', alignItems: 'center' }}>{icon}</div>
+                <span style={{ fontSize: 10.5, fontWeight: 700, background: tint(c), color: c, padding: '3px 10px', borderRadius: 12 }}>
                   {hint}
                 </span>
               </div>
-              <div className="kpi-body">
-                <div className="kpi-val" data-target={val} data-suffix={suffix} style={{ color: c, fontSize: 28, fontWeight: 800, letterSpacing: '-.5px' }}>0{suffix}</div>
-                <div className="kpi-label" style={{ fontWeight: 650, fontSize: 13 }}>{label}</div>
+              <div>
+                <div className="kpi-val" data-target={val} data-suffix={suffix} style={{ color: c, fontSize: 30, fontWeight: 800, letterSpacing: '-.5px', lineHeight: 1.1 }}>0{suffix}</div>
+                <div style={{ fontWeight: 650, fontSize: 13, color: 'var(--heading)', marginTop: 6 }}>{label}</div>
               </div>
             </div>
           );

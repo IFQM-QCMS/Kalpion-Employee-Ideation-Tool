@@ -200,7 +200,9 @@ export default function PlatformLoginsPage() {
               <tr key={r.id}>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(r.created_at)}</td>
                 <td>
-                  <div style={{ fontWeight: 600, color: 'var(--heading)' }}>{r.actor_name || '—'}</div>
+                  <div style={{ fontWeight: 600, color: 'var(--heading)' }}>
+                    {r.actor_name || (r.actor_email ? r.actor_email.split('@')[0] : '—')}
+                  </div>
                   <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>{r.actor_email || '—'}</div>
                 </td>
                 <td><OutcomeBadge outcome={r.outcome} t={t} /></td>

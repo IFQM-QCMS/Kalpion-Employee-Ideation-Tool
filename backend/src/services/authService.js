@@ -135,32 +135,44 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
       [email]
     );
     const pa = rows[0];
-    // Async compare, here and everywhere below: bcryptjs's sync variant pins
-    // the event loop for the full ~250ms of key stretching, during which the
-    // process serves NOBODY. One thread × a 9am sign-in surge made login
-    // latency the whole API's latency. The async variant yields between rounds.
-    if (pa && (await bcrypt.compare(password, pa.password_hash))) {
-      const session = {
-        id: `pa_${pa.id}`,
-        name: pa.name,
-        email: pa.email,
-        role: 'platform_admin',
-        avatar_initials: initialsFrom(pa.name) || 'PA',
-        points: 0,
-      };
-      await clearFailedAttempts(loginId);
-      const token = signToken({ user: session, platform_admin: true });
-      logger.info(`auth: platform admin login ok (${email})`);
-      // §12.12 — append-only sign-in record for the console's activity feed.
-      recordLogin({
-        actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
-        actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
-      });
-      return { user: session, token };
+    if (pa) {
+      const passwordOk = await bcrypt.compare(password, pa.password_hash);
+      if (passwordOk) {
+        const session = {
+          id: `pa_${pa.id}`,
+          name: pa.name,
+          email: pa.email,
+          role: 'platform_admin',
+          avatar_initials: initialsFrom(pa.name) || 'PA',
+          points: 0,
+        };
+        await clearFailedAttempts(loginId);
+        const token = signToken({ user: session, platform_admin: true });
+        logger.info(`auth: platform admin login ok (${email})`);
+        recordLogin({
+          actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
+          actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
+        });
+        return { user: session, token };
+      } else {
+        await recordFailedAttempt(loginId);
+        const after = await getFailedAttempts(loginId);
+        const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
+        logger.warn(`auth: failed platform admin login for ${email} (${after.count}/${MAX_ATTEMPTS})`);
+        recordLogin({
+          actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
+          actorEmail: pa.email, outcome: remaining > 0 ? 'failure' : 'lockout',
+          ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
+        });
+        throw unauthorized(
+          remaining > 0
+            ? `Invalid email or password. ${remaining} attempt(s) remaining.`
+            : 'Too many failed attempts. Please try again in 15 minutes.'
+        );
+      }
     }
   } catch (e) {
     if (e instanceof ApiError) throw e;
-    // ifqm_master unavailable — fall through to tenant auth (as PHP did)
     logger.warn('platform_admins lookup skipped', e.message);
   }
 
@@ -225,8 +237,9 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
     logger.warn(`auth: failed login for ${loginId} (${after.count}/${MAX_ATTEMPTS})`);
     recordLogin({
-      actorType: 'tenant_user', actorId: user?.id ?? null, actorName: user?.name ?? null,
-      actorEmail: email, tenantId: tenant.id || null, tenantSlug: tenant.slug,
+      actorType: 'tenant_user', actorId: user?.id ?? null,
+      actorName: user?.name ?? (email ? email.split('@')[0] : 'User'),
+      actorEmail: email, tenantId: tenant?.id || null, tenantSlug: tenant?.slug || cleanSlug || null,
       outcome: remaining > 0 ? 'failure' : 'lockout', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
     });
     const err =

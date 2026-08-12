@@ -31,13 +31,15 @@ const PAGE_TITLES = {
   '/platform/settings':      'nav.platform_settings',
   '/platform/logins':        'nav.login_activity',
   '/platform/plans':         'nav.plans',
+  '/billing':                'nav.billing',
 };
 
 // Anything not in the map above still gets a properly capitalised heading
 // rather than the raw path, which used to read "rejected".
 function titleFromPath(path) {
   const last = path.split('/').filter(Boolean).pop() || '';
-  return last.replace(/-/g, ' ').replace(/\w/g, (c) => c.toUpperCase());
+  const s = last.replace(/-/g, ' ');
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 }
 
 export default function Topbar({ onToggleSidebar }) {

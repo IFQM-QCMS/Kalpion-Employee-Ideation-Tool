@@ -1467,8 +1467,6 @@ export default {
   'msgg.email_orgs_on':'Organisations sending',
   'msgg.email_off_backlog':'{n} queued message(s) belong to organisations that have email switched off. They are not stuck — nobody asked for them to be sent. They will go out if that organisation turns email on, or can be left where they are.',
 
-  'msgg.recent':'Recent messages',
-  'msgg.recent_hint':'The last twenty send attempts. Numbers are stored with only their final four digits, and the message body — which contains the code — is never recorded.',
   'msgg.recent_none':'Nothing sent yet.',
   'msgg.col_when':'When',
   'msgg.col_to':'To',
@@ -1478,4 +1476,11 @@ export default {
   'msgg.col_detail':'Detail',
   'msgg.accepted':'Accepted',
   'msgg.refused':'Refused',
+
+  'analytics.title':'Analytics Overview',
+  'nav.billing':'Billing',
+  'analytics.status_dist':'Status Distribution',
+  'analytics.impact_dist':'Impact Area Distribution',
+  'analytics.monthly_trend':'Monthly Submission Trend',
+  'analytics.score_dist':'AI Quality Score Distribution',
 };
