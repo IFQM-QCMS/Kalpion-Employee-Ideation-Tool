@@ -71,7 +71,7 @@ def build(doc, H, para, bullets, table, figure, fig):
     H(doc, "4.1 The screens", 2)
     table(doc, ["Component", "Responsible for", "Not responsible for"], [
         ["Single-page application",
-         "Drawing 24 screens, collecting input, showing results, holding the signed-in session "
+         "Drawing 28 screens, collecting input, showing results, holding the signed-in session "
          "in the browser, and switching language.",
          "Deciding what anybody is allowed to see or do. It draws what it is given."],
         ["One API client file",
@@ -131,8 +131,9 @@ def build(doc, H, para, bullets, table, figure, fig):
          "React is good at. Vite builds plain static files, so hosting the screens costs nothing "
          "and needs no server."],
         ["No UI framework",
-         "The design is a small set of tokens and about thirty components. A framework would have "
-         "added a large dependency and a house style that would then need overriding everywhere."],
+         "The design is a small set of CSS tokens and 18 shared components. A framework would "
+         "have added a large dependency and a house style that would then need overriding "
+         "everywhere."],
         ["Node.js with Express",
          "The work is mostly waiting - on the database, on mail, on QCMS - which is exactly what "
          "Node is efficient at. Express is small enough that the whole request path can be read "
@@ -159,9 +160,15 @@ def build(doc, H, para, bullets, table, figure, fig):
     para(doc, "The server is organised in four layers plus a set of cross-cutting concerns. A "
               "request travels down the layers and the answer comes back up. No layer reaches "
               "past the one below it.")
+    para(doc, "This section is the outside view - which layers exist and what belongs in each. "
+              "Section 13 is the inside view of one of those layers: what a single module "
+              "actually exports, what it keeps private, and which other modules it may call. "
+              "The two are deliberately in different parts, because the first is a structural "
+              "question and the second is a design one.", italic=True)
     figure(doc, "Figure A-4", "Modules and their dependencies", F.A4_MODULES, legend=F.A4_LEGEND,
-           note="There are 32 services. They are grouped here by what they are about rather than "
-                "alphabetically, because that is how somebody looking for one would think about it.")
+           note="There are 35 services. They are grouped here by what they are about rather than "
+                "alphabetically, because that is how somebody looking for one would think about "
+                "it. Section 13.2 names all 35.")
 
     H(doc, "6.1 The rule that keeps this honest", 2)
     para(doc, "Every service takes a database connection as its first argument and never touches "
@@ -173,13 +180,21 @@ def build(doc, H, para, bullets, table, figure, fig):
               "route it through the same function rather than to write the rule a second time.")
 
     H(doc, "6.2 Screens", 2)
-    table(doc, ["Group", "Screens"], [
-        ["Public", "Landing page, sign in, sign up (apply for a workspace)"],
-        ["Employee", "Dashboard, my ideas, submit, challenges, all ideas, rejected ideas, "
-                     "idea board, leaderboard, profile, support"],
-        ["Reviewer", "Review queue, and the decision overlays"],
-        ["Organisation admin", "Admin panel with eight tabs, analytics, audit trail, org hierarchy"],
-        ["IFQM platform", "Organisations, registrations, support tickets, platform settings, "
-                          "one organisation in detail"],
-        ["Shared", "Idea detail overlay, assign reviewers, review action, bulk import, charts"],
-    ], widths=[1.5, 4.7], font_size=8.5)
+    table(doc, ["Group", "No.", "Screens"], [
+        ["Public", "3", "Landing page, sign in, apply for a workspace"],
+        ["Employee", "11", "Dashboard, my ideas, submit, challenges, all ideas, rejected ideas, "
+                           "idea board, leaderboard, profile, support, help"],
+        ["Reviewer", "1", "Review queue"],
+        ["Organisation admin", "4",
+         "Admin panel (eight tabs: overview, ideas, users, hierarchy, categories, system, "
+         "approved ideas, integration), analytics, audit trail, super admin"],
+        ["IFQM platform", "7", "Organisations, one organisation in detail, registrations, plans "
+                               "and billing, support tickets, sign-in activity, platform settings"],
+        ["Everywhere else", "2", "The forced password change screen, and the page shown for an "
+                                 "address that does not exist"],
+    ], widths=[1.4, 0.4, 4.4], font_size=8.5,
+        caption="Table 6.1  All 28 screens, grouped by who reaches them")
+    para(doc, "Alongside those sit 18 shared components that are not screens in their own right: "
+              "the idea detail overlay, assign reviewers, review action, bulk import, bulk "
+              "archive, the reporting-line lookup, the charts, the billing banner, breadcrumbs "
+              "and the rest.", italic=True)

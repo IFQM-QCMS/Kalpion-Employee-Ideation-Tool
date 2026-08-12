@@ -13,6 +13,24 @@
  */
 import nodemailer from 'nodemailer';
 import logger from '../utils/logger.js';
+import { mailConfig, sendZeptoMail } from './zeptoMailService.js';
+
+/**
+ * The platform-wide sender, used when no tenant SMTP applies.
+ *
+ * Throws rather than returning false on failure, because that is the contract
+ * sendSmtpEmail already has with the queue processor: a thrown error marks the
+ * row failed and leaves it visible, whereas a quiet false would mark it sent.
+ */
+export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
+  const cfg = await mailConfig();
+  if (!cfg.zepto_enabled) {
+    throw new Error('No SMTP host for this organisation, and the platform mail provider is switched off.');
+  }
+  const r = await sendZeptoMail({ to: toEmail, toName, subject, html: bodyHtml, cfg });
+  if (!r.sent) throw new Error(r.detail || 'Platform mail provider refused the message.');
+  return true;
+}
 
 /** Fetch all org_settings as a key→value map (PHP getOrgSettings). */
 export async function getOrgSettings(db) {
@@ -66,6 +84,16 @@ function headerSafe(s) {
  * (matching the PHP contract used by the queue processor).
  */
 export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml) {
+  /*
+   * A tenant with its own SMTP host keeps using it — mail appearing to come
+   * from the customer's own domain is a feature. Everything else falls through
+   * to the platform provider, which is the only route available for mail with
+   * no tenant behind it and the only one that works where the host blocks
+   * outbound SMTP ports.
+   */
+  if (!String(settings?.smtp_host || '').trim()) {
+    return sendViaPlatform(toEmail, toName, subject, bodyHtml);
+  }
   const transport = buildTransport(settings);
   const from = headerSafe(settings.smtp_from || settings.smtp_user || '');
   const fromName = headerSafe(settings.smtp_from_name || 'IFQM Ideation');
@@ -97,9 +125,18 @@ export async function queueEmail(db, toEmail, toName, subject, body) {
 export async function processEmailQueue(db) {
   const settings = await getOrgSettings(db);
   if ((settings.email_enabled ?? '0') !== '1') return;
+
+  // No tenant SMTP is no longer a dead end: the platform provider can carry it.
+  // Only give up when neither route exists, and say which is missing — this
+  // used to log "smtp_host is not configured" once a minute forever with no
+  // hint that a platform-wide provider would solve it.
   if (!String(settings.smtp_host || '').trim()) {
-    logger.error('processEmailQueue: smtp_host is not configured.');
-    return;
+    const cfg = await mailConfig();
+    if (!cfg.zepto_enabled) {
+      logger.warn('processEmailQueue: no SMTP host for this organisation and no platform '
+        + 'mail provider — queued mail cannot be delivered.');
+      return;
+    }
   }
 
   const [emails] = await db.query(

@@ -29,6 +29,8 @@ import PlatformTicketsPage from './pages/PlatformTicketsPage';
 import PlatformRegistrationsPage from './pages/PlatformRegistrationsPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
 import PlatformLoginsPage from './pages/PlatformLoginsPage';
+import PlatformBillingPage from './pages/PlatformBillingPage';
+import BillingPage from './pages/BillingPage';
 import PlatformPlansPage from './pages/PlatformPlansPage';
 import SupportPage from './pages/SupportPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -113,6 +115,7 @@ function AppRoutes() {
       <Route path="/admin"           element={<PrivateRoute><AppShell><AdminPage /></AppShell></PrivateRoute>} />
       <Route path="/super-admin"     element={<PrivateRoute><AppShell><SuperAdminPage /></AppShell></PrivateRoute>} />
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
+      <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
       <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
       <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
@@ -121,6 +124,7 @@ function AppRoutes() {
       <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/logins"   element={<PrivateRoute><AppShell><PlatformLoginsPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/plans"    element={<PrivateRoute><AppShell><PlatformPlansPage /></AppShell></PrivateRoute>} />
+      <Route path="/platform/billing"  element={<PrivateRoute><AppShell><PlatformBillingPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
       {/* A page, not a silent redirect. Bouncing somebody to the landing page
           hides whether they mistyped, followed a stale link, or are simply not

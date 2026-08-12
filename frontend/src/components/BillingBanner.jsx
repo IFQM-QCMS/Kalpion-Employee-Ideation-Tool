@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { settingsApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
@@ -63,9 +64,16 @@ export default function BillingBanner() {
           Your ideas, your people and your history are all still here and nothing has been deleted.
           Access resumes as soon as payment is recorded.
           {isAdmin
-            ? ' Contact IFQM to arrange it, or raise a support ticket — Support stays open.'
+            ? ' You can settle it on the billing page, or raise a support ticket — Support stays open.'
             : ' Please ask your organisation administrator to arrange payment with IFQM.'}
         </div>
+        {/* Billing stays reachable while everything else is paused, so this is a
+            live route rather than an invitation to send an email. */}
+        {isAdmin && (
+          <Link className="btn btn-primary btn-sm" to="/billing" style={{ marginTop: 12 }}>
+            Go to billing
+          </Link>
+        )}
         {plan && (
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 10 }}>
             Your plan: <strong>{plan.name}</strong> — ₹
@@ -92,9 +100,10 @@ export default function BillingBanner() {
         </strong>
         {sub.ends_at && <> — on {fmtDate(sub.ends_at)}.</>}
         {isAdmin
-          ? ' Arrange payment with IFQM to keep access running.'
+          ? ' Renew on the billing page to keep access running.'
           : ' Your organisation administrator has been notified.'}
       </div>
+      {isAdmin && <Link className="btn btn-sm btn-primary" to="/billing">Billing</Link>}
       <button className="btn btn-sm btn-outline" onClick={() => setDismissed(true)}>Dismiss</button>
     </div>
   );

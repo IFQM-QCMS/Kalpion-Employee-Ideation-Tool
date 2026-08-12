@@ -42,11 +42,58 @@ export default function BoardPage() {
   }
 
   async function castVote(ideaId, voteType) {
+    const prev = [...ideas];
+    setIdeas((list) =>
+      list.map((item) => {
+        if (item.id !== ideaId) return item;
+        const current = item.user_vote;
+        let nextVote = voteType;
+        let upDelta = 0;
+        let downDelta = 0;
+        if (current === voteType) {
+          nextVote = null;
+          if (voteType === 'up') upDelta = -1;
+          if (voteType === 'down') downDelta = -1;
+        } else if (current === 'up' && voteType === 'down') {
+          upDelta = -1;
+          downDelta = 1;
+        } else if (current === 'down' && voteType === 'up') {
+          downDelta = -1;
+          upDelta = 1;
+        } else {
+          if (voteType === 'up') upDelta = 1;
+          if (voteType === 'down') downDelta = 1;
+        }
+        return {
+          ...item,
+          user_vote: nextVote,
+          upvotes: Math.max(0, (parseInt(item.upvotes) || 0) + upDelta),
+          downvotes: Math.max(0, (parseInt(item.downvotes) || 0) + downDelta),
+        };
+      })
+    );
     try {
-      const res = await votesApi.communityVote({ idea_id: ideaId, vote_type: voteType }); // POST /votes/community
-      if (res.data.success) load();
-      else showToast(res.data.error || t('msg.error'), 'danger');
-    } catch { showToast(t('msg.network_error'), 'danger'); }
+      const res = await votesApi.communityVote({ idea_id: ideaId, vote_type: voteType });
+      if (res.data.success) {
+        setIdeas((list) =>
+          list.map((item) => {
+            if (item.id !== ideaId) return item;
+            return {
+              ...item,
+              upvotes: res.data.upvotes,
+              downvotes: res.data.downvotes,
+              user_vote: res.data.user_vote,
+            };
+          })
+        );
+      } else {
+        setIdeas(prev);
+        showToast(res.data.error || t('msg.error'), 'danger');
+      }
+    } catch {
+      setIdeas(prev);
+      showToast(t('msg.network_error'), 'danger');
+    }
   }
 
   return (

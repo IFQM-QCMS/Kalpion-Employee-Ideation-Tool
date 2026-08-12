@@ -11,6 +11,7 @@ import ReviewActionModal from './ReviewActionModal';
 import AssignReviewersModal from './AssignReviewersModal';
 import ReviewerDecisionModal from './ReviewerDecisionModal';
 import InfoDot from './InfoDot';
+import ScreenGuard from './ScreenGuard';
 
 const TAB_KEYS = ['modal.details', 'modal.timeline', 'modal.attachments'];
 
@@ -171,8 +172,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const isAssignedReviewer = isPriv && !isSelf && idea && (idea.reviewers||[]).some(
     rv => parseInt(rv.reviewer_id) === parseInt(user?.id) && rv.decision === 'pending'
   );
-  const canDirectReview   = isPriv && !isSelf && !isMultiRv && idea && ['Submitted','Under Review'].includes(idea.status);
-  const canRouteReviewers = isPriv && !isSelf && !isMultiRv && idea && ['Submitted','Under Review'].includes(idea.status);
+  const canDirectReview   = isPriv && user?.role !== 'admin' && !isSelf && !isMultiRv && idea && ['Submitted','Under Review'].includes(idea.status);
+  const canRouteReviewers = isPriv && user?.role !== 'admin' && !isSelf && !isMultiRv && idea && ['Submitted','Under Review'].includes(idea.status);
   const selfNote = isPriv && isSelf && idea && ['Submitted','Under Review'].includes(idea.status);
 
   const upvotes   = parseInt(commData?.upvotes||0);
@@ -190,9 +191,9 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
     : `${cScoreVal-(parseInt(idea?.ai_score)||0)}`;
 
   return (
-    <>
+    <ScreenGuard>
       <div className="modal-overlay open" id="modal-idea-detail" onClick={e => e.target===e.currentTarget && onClose()}>
-        <div className="modal" style={{ maxWidth:740 }}>
+        <div className="modal" style={{ maxWidth:740 }} data-protect data-guard>
           <div className="modal-header">
             <span>
               <strong id="modal-idea-code">{loading ? t('msg.loading') : idea ? `#${idea.idea_code}` : ''}</strong>
@@ -548,7 +549,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
         <ReviewerDecisionModal ideaId={ideaId} ideaCode={idea.idea_code}
           onClose={() => { setShowRvDecision(false); onClose(); }} />
       )}
-    </>
+    </ScreenGuard>
   );
 }
 

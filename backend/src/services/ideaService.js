@@ -818,6 +818,9 @@ export async function reviewAction(db, user, b) {
 }
 
 async function reviewActionLocked(db, user, ideaId, decision, comment) {
+  if (user.role === 'admin') {
+    throw forbidden('Org Admins are strictly prohibited from approving or acting on submitted ideas.');
+  }
   const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
   const idea = irows[0];
   if (!idea) throw notFound('Idea not found.');
@@ -996,6 +999,9 @@ export async function dashboard(db, user) {
 
 // ── ASSIGN REVIEWERS (→ multi_reviewer workflow) ────────────────────
 export async function assignReviewers(db, user, b) {
+  if (user.role === 'admin') {
+    throw forbidden('Org Admins are strictly prohibited from routing ideas.');
+  }
   const ideaId = Number(b.idea_id) || 0;
   let reviewerIds = (b.reviewer_ids ?? []).map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x));
 

@@ -179,7 +179,9 @@ export const leaderboardApi = {
 // ── Notifications ─────────────────────────────────────────────────
 export const notifApi = {
   list: () => api.get('/notifications'),
-  markRead: (ids) => api.post('/notifications/mark-read', { ids }),
+  // No argument means "mark every one read", including any beyond the page the
+  // panel is showing. Passing ids marks exactly those.
+  markRead: (ids) => api.post('/notifications/mark-read', Array.isArray(ids) ? { ids } : {}),
 };
 
 // ── Users ─────────────────────────────────────────────────────────
@@ -236,6 +238,12 @@ export const scoreApi = {
 
 // ── Settings ──────────────────────────────────────────────────────
 export const settingsApi = {
+  // The organisation's own billing page. Reading is open to anybody signed in;
+  // the two pay calls are refused server-side for non-admins regardless of who
+  // can see the button.
+  billing: () => api.get('/settings/billing'),
+  payStart: (data) => api.post('/settings/billing/pay', data),
+  payVerify: (data) => api.post('/settings/billing/verify', data),
   // Where this organisation's own account stands: plan, dates, days left.
   subscription: () => api.get('/settings/subscription'),
   get: () => api.get('/settings'),
@@ -403,6 +411,17 @@ export const platformApi = {
 
   bulkArchiveTickets: (data) => api.post('/platform/tickets/bulk-archive', data),
 
+  // ── Messaging: the SMS/DLT connector, code policy, and email health ──
+  // Same contract as smtp_pass above and for the same reason: the gateway API
+  // key never comes back (only api_key_set), and an empty field on the way in
+  // means "keep the stored one" rather than "erase it".
+  messaging: () => api.get('/platform/messaging'),
+  updateMessaging: (data) => api.put('/platform/messaging', data),
+  // A real send to a real handset — see messagingService for why a dry check
+  // would not prove anything worth knowing.
+  testSms: (data) => api.post('/platform/messaging/test', data),
+  testMail: (data) => api.post('/platform/messaging/test-mail', data),
+
   // ── Billing ──
   // The plan catalogue, and what each organisation is on.
   plans: (params = {}) => api.get('/platform/plans', { params }),
@@ -413,6 +432,16 @@ export const platformApi = {
   // history refers to them.
   retirePlan: (id) => api.delete(`/platform/plans/${id}`),
 
+  // Every organisation's billing state in one request. One call rather than
+  // one per organisation: the page shows a summary and a table that have to
+  // agree, and totals computed in the browser from N responses drift the
+  // moment one of them fails.
+  billingOverview: (params = {}) => api.get('/platform/billing/overview', { params }),
+  // The Razorpay merchant account. Same secret contract as everywhere else:
+  // key_secret never comes back, and an empty field means "keep it".
+  gateway: () => api.get('/platform/billing/gateway'),
+  updateGateway: (data) => api.put('/platform/billing/gateway', data),
+  testGateway: () => api.post('/platform/billing/gateway/test'),
   subscription: (tenantId) => api.get(`/platform/tenants/${tenantId}/subscription`),
   assignPlan: (tenantId, data) => api.post(`/platform/tenants/${tenantId}/plan`, data),
   setTrial: (tenantId, data) => api.post(`/platform/tenants/${tenantId}/trial`, data),
@@ -420,6 +449,7 @@ export const platformApi = {
   // dry_run reports who would be held without changing anything.
   sweepBilling: (dryRun = false) =>
     api.post('/platform/billing/sweep', null, { params: dryRun ? { dry_run: 1 } : {} }),
+  sendMonthlyInvoices: () => api.post('/platform/billing/send-invoices'),
 
   admins: () => api.get('/platform/admins'),
   createAdmin: (data) => api.post('/platform/admins', data),

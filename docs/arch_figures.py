@@ -471,7 +471,9 @@ D4_ER_MASTER = r"""
                                     └──────────────────────────┘
 """
 
-D4_LEGEND = "PK = the column that identifies a row. FK = a pointer to another table."
+D4_LEGEND = ("PK = the column that identifies a row. FK = a pointer to another table. "
+             "Three prongs on a line mean 'many', a single bar means 'one'. "
+             "13 tables in the registry; the 7 principal ones are drawn.")
 
 D5_ER_TENANT = r"""
    ONE ORGANISATION  (ifqm_<code>)  -  repeated once per customer, never shared
@@ -534,7 +536,11 @@ D5_ER_TENANT = r"""
    └──────────────────────────┘
 """
 
-D5_LEGEND = "17 tables per organisation. Every one of them exists once per customer, in a separate database."
+D5_LEGEND = ("17 tables per organisation, every one of them existing once per customer in a "
+             "separate database. The 9 that carry the idea path are drawn; the remaining 8 "
+             "(notifications, email_queue, password_reset_tokens, user_import_jobs, "
+             "user_import_errors, idea_co_suggesters, idea_community_votes, challenges) hang "
+             "off users or ideas without adding a relationship worth drawing.")
 
 D6_USECASE = r"""
                     ┌──────────────────────────────────────────────┐
@@ -758,6 +764,24 @@ D11_SEQ_QCMS = r"""
       matters, and retrying would create a second copy.
 """
 
+# Sequence diagrams share one convention, so they share one legend rather than
+# repeating it five times with five chances to drift apart.
+SEQ_LEGEND = ("Each column is a participant and time runs downward. A solid arrow is a call, "
+              "a dashed arrow is the answer to it, and a box across a column is that "
+              "participant doing work.")
+
+D7_LEGEND = SEQ_LEGEND + " The database read on the far right is the per-request re-check " \
+                         "that makes a removal or a demotion take effect immediately."
+D8_LEGEND = SEQ_LEGEND + " Scoring, the workflow entry, the points award and the email all " \
+                         "happen before the submitter is answered, except the email, which is " \
+                         "queued."
+D9_LEGEND = SEQ_LEGEND + " The whole decision runs inside a named database lock, so two " \
+                         "clicks in the same instant cannot both be recorded."
+D10_LEGEND = SEQ_LEGEND + " Nothing on the left half of this diagram creates anything. The " \
+                          "database is not built until a human on the right approves."
+D11_LEGEND = SEQ_LEGEND + " A duplicate answer from QCMS is recorded as success, not failure " \
+                          "- the idea has arrived, and retrying would create a second copy."
+
 D12_CLASS = r"""
    The code is organised in modules rather than classes, so this shows the shape
    of each service and what it is responsible for. Every service takes a database
@@ -813,7 +837,9 @@ D12_CLASS = r"""
                 -  internal to the module
 """
 
-D12_LEGEND = "Boxes are modules. Lines show which module calls which."
+D12_LEGEND = ("Boxes are modules, not classes - there are no classes in this codebase. "
+              "A plus sign is an exported function; a minus sign is private to the file. "
+              "Arrows point from caller to called and only ever travel downward.")
 
 D13_SCREENFLOW = r"""
                         ┌──────────────────────────┐

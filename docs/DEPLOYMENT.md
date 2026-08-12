@@ -180,7 +180,7 @@ server {
   add_header X-Frame-Options DENY always;
   add_header Referrer-Policy no-referrer always;
   add_header Content-Security-Policy
-    "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'" always;
+    "default-src 'self'; img-src 'self' data: blob: https://*.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' https://checkout.razorpay.com; connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com; frame-src https://api.razorpay.com https://checkout.razorpay.com https://*.razorpay.com; form-action 'self' https://api.razorpay.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'" always;
 
   client_max_body_size 12m;   # must exceed MAX_FILE_MB
 
@@ -204,6 +204,29 @@ server {                      # http -> https
 
 `X-Forwarded-Proto` matters: the app trusts it to decide whether a request
 arrived over TLS.
+
+### The Razorpay entries in that CSP
+
+The four `razorpay.com` allowances are what make the **Pay** button on
+*Settings → Billing* work. Razorpay's checkout is a hosted script and an iframe,
+not something we bundle:
+
+| Directive | Why |
+|---|---|
+| `script-src https://checkout.razorpay.com` | The checkout script itself, loaded on demand when somebody presses Pay. |
+| `frame-src …razorpay.com` | The checkout window, and the bank/UPI pages it opens inside itself. |
+| `connect-src https://api.razorpay.com https://lumberjack.razorpay.com` | The checkout's own API and telemetry calls. |
+| `img-src https://*.razorpay.com` | Card and bank logos inside the window. |
+
+Without them the browser blocks the script and the user is told the payment
+window could not load — with nothing in the server logs, because the refusal
+happens entirely in the browser. If you are **not** taking card payments (the
+gateway is off, and organisations pay by transfer for a platform admin to
+record), delete all four and the policy tightens back to first-party only.
+
+The secret key is never involved here. It stays on the server, signs the order
+and verifies the callback; only the public `rzp_…` key id ever reaches a
+browser.
 
 ---
 

@@ -9,7 +9,7 @@
  * required.
  */
 import { masterDb } from '../database/master.js';
-import { resolveTenant, getTenantPool } from '../database/tenant.js';
+import { resolveTenant, getTenantPool, heldForNonPayment } from '../database/tenant.js';
 import logger from '../utils/logger.js';
 
 export function isEmail(v) {
@@ -98,11 +98,15 @@ export async function resolveTenantByLogin(rawIdentifier) {
     logger.warn('login_directory lookup failed', e.message);
   }
 
-  // 2) Fallback — scan active tenants, then cache the hit.
+  // 2) Fallback — scan the tenants a person may still sign in to, then cache
+  // the hit. That includes organisations on hold for non-payment: they can
+  // reach their own bill and nothing else (see enforceBilling), and finding
+  // them here is what lets somebody sign in without typing an org code to do
+  // it. The fast path above already accepts them, via resolveTenant.
   let tenants;
   try {
-    const [rows] = await master.execute("SELECT * FROM tenants WHERE status = 'active'");
-    tenants = rows;
+    const [rows] = await master.execute("SELECT * FROM tenants WHERE status IN ('active','suspended')");
+    tenants = rows.filter((t) => t.status === 'active' || heldForNonPayment(t));
   } catch {
     return null;
   }

@@ -6,6 +6,7 @@ import { useNotif } from '../../context/NotifContext';
 import { useToast } from '../../context/ToastContext';
 import { SUPPORTED_LANGS, LANG_LABELS, LANG_NAMES } from '../../i18n/translations';
 import { formatRole, timeAgo } from '../../utils/helpers';
+import IdeaDetailModal from '../IdeaDetailModal';
 
 const PAGE_TITLES = {
   '/dashboard':    'nav.dashboard',
@@ -42,7 +43,7 @@ function titleFromPath(path) {
 export default function Topbar({ onToggleSidebar }) {
   const { user, logout }                     = useAuth();
   const { t, lang, setLang }                = useLang();
-  const { notifs, unreadCount, markAllRead } = useNotif();
+  const { notifs, unreadCount, total, busy, markAllRead, markOneRead } = useNotif();
   const { showToast }                        = useToast();
   const navigate  = useNavigate();
   const location  = useLocation();
@@ -50,8 +51,29 @@ export default function Topbar({ onToggleSidebar }) {
   const [isDark, setIsDark]         = useState(document.documentElement.getAttribute('data-theme') === 'dark');
   const [showNotif, setShowNotif]   = useState(false);
   const [showLang, setShowLang]     = useState(false);
+  // The idea a notification points at, opened as an overlay from wherever the
+  // reader happens to be. Navigating to a list page and hoping it opens the
+  // right row would depend on that page's own state; this does not.
+  const [notifIdeaId, setNotifIdeaId] = useState(null);
   const langMenuRef                  = useRef(null);
   const notifPanelRef                = useRef(null);
+
+  /**
+   * Open what a notification is about.
+   *
+   * Every notification the server writes carries the idea it concerns —
+   * submitted, escalated, assigned, committee-routed, approved, rejected,
+   * implemented — so this is not special-cased per type. Reading it also marks
+   * that one read, which is what a person means by opening it.
+   */
+  function openNotification(n) {
+    markOneRead(n.id);
+    if (n.idea_id) {
+      setShowNotif(false);
+      setNotifIdeaId(null);
+      setTimeout(() => setNotifIdeaId(n.idea_id), 20);
+    }
+  }
 
   const pageTitle = PAGE_TITLES[location.pathname]
     ? t(PAGE_TITLES[location.pathname])
@@ -133,44 +155,88 @@ export default function Topbar({ onToggleSidebar }) {
           )}
         </div>
 
-        {/* Notifications bell */}
-        <div
-          id="notif-bell-btn"
-          className="notif-bell"
-          onClick={() => setShowNotif(v => !v)}
-          title={t('topbar.notifications')}
-          style={{ display:'flex',alignItems:'center',gap:6 }}
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
-          </svg>
-          <span>{t('topbar.notifications')}</span>
-          {unreadCount > 0 && (
-            <div className="notif-badge" style={{ position:'relative',top:'auto',right:'auto',margin:0 }}>
-              {unreadCount}
+        {/* Notifications bell.
+            The panel is a child of this wrapper so it opens beneath the bell
+            rather than at the window's right edge — see .notif-wrap in the
+            stylesheet for why that changed. */}
+        <div className="notif-wrap">
+          <div
+            id="notif-bell-btn"
+            className="notif-bell"
+            onClick={() => setShowNotif(v => !v)}
+            title={t('topbar.notifications')}
+            style={{ display:'flex',alignItems:'center',gap:6 }}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
+            </svg>
+            <span>{t('topbar.notifications')}</span>
+            {unreadCount > 0 && (
+              <div className="notif-badge" style={{ position:'relative',top:'auto',right:'auto',margin:0 }}>
+                {unreadCount}
+              </div>
+            )}
+          </div>
+
+          {showNotif && (
+            <div className="notification-panel" ref={notifPanelRef}>
+              <div style={{
+                padding:'10px 14px',borderBottom:'1px solid var(--border)',
+                display:'flex',justifyContent:'space-between',alignItems:'center',
+                gap:10,flex:'0 0 auto',
+              }}>
+                <strong style={{ fontSize:13 }}>{t('notif.header')}</strong>
+                <button className="btn btn-outline btn-sm"
+                  disabled={busy || !unreadCount}
+                  onClick={markAllRead}>
+                  {t('topbar.mark_read')}
+                </button>
+              </div>
+
+              <div id="notif-list">
+                {!notifs.length
+                  ? <div className="empty-state">{t('msg.no_notif')}</div>
+                  : notifs.map(n => {
+                    // Every notification the server writes carries the idea it
+                    // is about, so every one of them can be opened — not just
+                    // "new idea submitted". Where the link is genuinely absent
+                    // the row is rendered as text rather than a dead button.
+                    const canOpen = !!n.idea_id;
+                    return (
+                      <button
+                        key={n.id}
+                        type="button"
+                        className={`notif-item${!n.is_read ? ' unread' : ''}${canOpen ? '' : ' static'}`}
+                        onClick={() => openNotification(n)}
+                        aria-label={n.title || n.message}
+                      >
+                        <div className="notif-item-title">{n.title || n.message}</div>
+                        {n.title && n.message && n.message !== n.title && (
+                          <div style={{ fontSize:12,color:'var(--text-muted)',marginTop:2,lineHeight:1.45 }}>
+                            {n.message}
+                          </div>
+                        )}
+                        <div className="notif-item-meta">
+                          {timeAgo(n.created_at, t)}
+                          {canOpen && <> · {t('notif.open')}</>}
+                        </div>
+                      </button>
+                    );
+                  })
+                }
+              </div>
+
+              {total > notifs.length && (
+                <div style={{
+                  padding:'8px 14px',borderTop:'1px solid var(--border)',
+                  fontSize:11.5,color:'var(--subtle)',flex:'0 0 auto',
+                }}>
+                  {t('notif.showing', { shown: notifs.length, total })}
+                </div>
+              )}
             </div>
           )}
         </div>
-
-        {showNotif && (
-          <div className="notification-panel" ref={notifPanelRef}>
-            <div style={{ padding:'10px 14px',borderBottom:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-              <strong style={{ fontSize:13 }}>{t('notif.header')}</strong>
-              <button className="btn btn-outline btn-sm" onClick={markAllRead}>{t('topbar.mark_read')}</button>
-            </div>
-            <div id="notif-list">
-              {!notifs.length
-                ? <div className="empty-state">{t('msg.no_notif')}</div>
-                : notifs.map(n => (
-                  <div key={n.id} className={`notif-item${!n.is_read ? ' unread' : ''}`}>
-                    <div className="notif-item-title">{n.title || n.message}</div>
-                    <div className="notif-item-meta">{timeAgo(n.created_at, t)}</div>
-                  </div>
-                ))
-              }
-            </div>
-          </div>
-        )}
 
         {/* User chip.
             MOM §12.10 — a platform admin sees "Superadmin signed in as <name>"
@@ -191,6 +257,11 @@ export default function Topbar({ onToggleSidebar }) {
 
         <button className="btn btn-outline btn-sm" onClick={doLogout}>{t('topbar.logout')}</button>
       </div>
+
+      {/* Opened from a notification, so it works on every page. */}
+      {notifIdeaId && (
+        <IdeaDetailModal ideaId={notifIdeaId} onClose={() => setNotifIdeaId(null)} />
+      )}
     </div>
   );
 }

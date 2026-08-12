@@ -285,7 +285,55 @@ test('platform admin account guards hold', async () => {
 test('notification polling as a platform admin returns empty, not 500', async () => {
   const r = await api('GET', '/api/notifications', { token: PA });
   assert.equal(r.status, 200);
-  assert.deepEqual(r.data, { success: true, notifications: [], unread_count: 0 });
+  assert.deepEqual(r.data, { success: true, notifications: [], unread_count: 0, total: 0 });
+});
+
+test('notifications: the unread badge counts the account, not the visible page', async () => {
+  const rows = await sql('ifqm_test_a', "SELECT id FROM ifqm_test_a.users WHERE email='user@orga.test'");
+  const uid = rows[0].id;
+  // More than one page's worth, so a count taken from the returned rows would
+  // under-report — which is exactly what the badge used to do.
+  const values = Array.from({ length: 60 },
+    (_, i) => `(${uid}, 'Bulk ${i}', 'noise', 0)`).join(',');
+  await sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_a.notifications (user_id, title, message, is_read) VALUES ${values}`);
+
+  const listed = await api('GET', '/api/notifications', { token: AUSER });
+  assert.equal(listed.status, 200);
+  assert.ok(listed.data.unread_count >= 60,
+    `badge must count every unread, got ${listed.data.unread_count}`);
+  assert.ok(listed.data.total >= 60);
+  assert.ok(listed.data.notifications.length <= 50, 'the page itself stays capped');
+  assert.equal(listed.data.has_more, true);
+
+  // Marking ONE read must mark exactly one. The controller used to drop the
+  // ids it was sent and mark every notification the user had, so opening a
+  // single item silently cleared the lot.
+  const first = listed.data.notifications[0];
+  await api('POST', '/api/notifications/mark-read', { token: AUSER, body: { ids: [first.id] } });
+  const afterOne = await api('GET', '/api/notifications', { token: AUSER });
+  assert.equal(afterOne.data.unread_count, listed.data.unread_count - 1,
+    'marking one read must not clear the rest');
+
+  // No ids means all — including the ones beyond the page in hand.
+  const all = await api('POST', '/api/notifications/mark-read', { token: AUSER, body: {} });
+  assert.equal(all.status, 200);
+  const afterAll = await api('GET', '/api/notifications', { token: AUSER });
+  assert.equal(afterAll.data.unread_count, 0);
+});
+
+test('notifications: one user cannot mark another user\'s notification read', async () => {
+  const [other] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.users WHERE email='admin@orga.test'");
+  const ins = await sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_a.notifications (user_id, title, message, is_read)
+     VALUES (${other.id}, 'Private', 'not yours', 0)`);
+  const id = ins.insertId;
+
+  await api('POST', '/api/notifications/mark-read', { token: AUSER, body: { ids: [id] } });
+  const [row] = await sql('ifqm_test_a',
+    `SELECT is_read FROM ifqm_test_a.notifications WHERE id=${id}`);
+  assert.equal(Number(row.is_read), 0, 'the user_id clause is what stops this');
 });
 
 // ── Support-required attachment + single-idea PDF export ─────────────────────
@@ -468,16 +516,34 @@ test('billing: a plan is priced correctly, and a lapsed organisation is held', a
   assert.equal(res.data.subscription.days_left, 2);
   assert.equal(res.data.subscription.blocked, false);
 
+  /*
+   * One day past the due date. This is NOT a lockout — there is a grace window
+   * (two days by default), because a bank transfer arriving a day late is the
+   * normal case and cutting a whole company off for it is not a proportionate
+   * response. The organisation keeps working and its admins get chased.
+   */
   await sql('ifqm_test_master',
     `UPDATE ifqm_test_master.tenants
         SET trial_ends_at = DATE_SUB(NOW(), INTERVAL 1 DAY),
             period_end = DATE_SUB(NOW(), INTERVAL 1 DAY)
       WHERE id = ${orgb.id}`);
 
-  // Expiry is derived from the dates on every read, not from a flag some sweep
-  // has to set first.
+  res = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: PA });
+  assert.equal(res.data.subscription.state, 'past_due');
+  assert.equal(res.data.subscription.in_grace, true);
+  assert.equal(res.data.subscription.blocked, false, 'one day late must not lock anybody out');
+  assert.equal(res.data.subscription.grace_days_left, 1);
+
+  // Past the grace window, it really is over. Expiry is derived from the dates
+  // on every read, not from a flag some sweep has to set first.
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants
+        SET trial_ends_at = DATE_SUB(NOW(), INTERVAL 4 DAY),
+            period_end = DATE_SUB(NOW(), INTERVAL 4 DAY)
+      WHERE id = ${orgb.id}`);
   res = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: PA });
   assert.equal(res.data.subscription.state, 'expired');
+  assert.equal(res.data.subscription.in_grace, false);
   assert.equal(res.data.subscription.blocked, true);
 
   // With enforcement off — the default — the sweep reports and changes nothing
@@ -508,6 +574,126 @@ test('billing: a plan is priced correctly, and a lapsed organisation is held', a
   assert.equal(row.billing_status, 'active');
 
   // Put everything back so the rest of the suite is unaffected.
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '0' } });
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants SET billing_status='exempt', plan_id=NULL,
+            trial_ends_at=NULL, period_end=NULL, billing_note=NULL WHERE id=${orgb.id}`);
+});
+
+test('billing: an organisation on hold can still sign in and pay — and do nothing else', async () => {
+  /*
+   * The failure this guards against: an organisation put on hold for
+   * non-payment could not sign in at all (tenant resolution matched
+   * status='active' only), and even before the hold, the billing gate refused
+   * /settings/billing along with everything else. So the one thing we were
+   * asking the customer to do — pay — was the one thing they could not reach,
+   * and the only way back was a platform admin recording it by hand.
+   */
+  const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
+  const plans = (await api('GET', '/api/platform/plans', { token: PA })).data.plans;
+  const starter = plans.find((p) => p.code === 'STARTER');
+
+  // On a plan, because recording a payment for an organisation nobody has
+  // priced is refused — and this test ends by recording one.
+  await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: PA, body: { plan_id: starter.id, trial_days: 1 },
+  });
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '1' } });
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants
+        SET billing_status='trial', trial_ends_at=DATE_SUB(NOW(), INTERVAL 5 DAY),
+            period_end=DATE_SUB(NOW(), INTERVAL 5 DAY)
+      WHERE id=${orgb.id}`);
+  let res = await api('POST', '/api/platform/billing/sweep', { token: PA });
+  assert.ok(res.data.held >= 1, 'the sweep must put it on hold first');
+
+  const held = await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb');
+  assert.equal(held.status, 200, 'a held organisation must still be able to sign in');
+  const token = held.token;
+
+  // The bill, and the banner that explains the pause, are reachable.
+  assert.equal((await api('GET', '/api/settings/billing', { token })).status, 200);
+  assert.equal((await api('GET', '/api/settings/subscription', { token })).status, 200);
+
+  // Everything else is not.
+  res = await api('GET', '/api/ideas', { token });
+  assert.equal(res.status, 402, 'the product itself stays paused');
+  assert.equal(res.data.billing_blocked, true, 'and says why, so the UI can explain it');
+  assert.equal((await api('GET', '/api/users', { token })).status, 402);
+
+  // Paying is reached on its own terms — 503 here is "no gateway configured",
+  // which is a different answer from "your access is paused".
+  res = await api('POST', '/api/settings/billing/pay', { token, body: { periods: 1 } });
+  assert.notEqual(res.status, 402, 'the billing gate must not swallow the payment call');
+
+  // Opening the page to everyone signed in is deliberate — "we are days from
+  // being cut off" is not confidential from the people it will cut off — but
+  // spending the company's money is not. Checked on org A, which has an
+  // employee account and is not itself paused.
+  assert.equal((await api('GET', '/api/settings/billing', { token: AUSER })).status, 200,
+    'any signed-in employee may read where their organisation stands');
+  assert.ok([401, 403].includes(
+    (await api('POST', '/api/settings/billing/pay', { token: AUSER, body: { periods: 1 } })).status
+  ), 'but only an administrator can start a payment');
+
+  // Recording the payment lifts the hold, and the product comes back.
+  res = await api('POST', `/api/platform/tenants/${orgb.id}/mark-paid`, { token: PA, body: { periods: 1 } });
+  assert.equal(res.status, 200);
+  const back = await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb');
+  assert.equal((await api('GET', '/api/ideas', { token: back.token })).status, 200);
+
+  /*
+   * A suspension an operator applied by hand is a different thing, and stays a
+   * hard refusal — otherwise every organisation that had ever lapsed would keep
+   * the softer treatment forever, whatever it was later suspended for.
+   */
+  res = await api('PATCH', `/api/platform/tenants/${orgb.id}`, { token: PA, body: { status: 'suspended' } });
+  assert.equal(res.status, 200);
+  const [row] = await sql('ifqm_test_master',
+    `SELECT billing_note FROM ifqm_test_master.tenants WHERE id=${orgb.id}`);
+  assert.doesNotMatch(row.billing_note || '', /non-payment/i,
+    'an operator suspension must not inherit the automatic billing note');
+  assert.notEqual((await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb')).status, 200,
+    'an operator-suspended organisation is refused outright');
+
+  // Put everything back for the rest of the suite.
+  await api('PATCH', `/api/platform/tenants/${orgb.id}`, { token: PA, body: { status: 'active' } });
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '0' } });
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants SET billing_status='exempt', plan_id=NULL,
+            trial_ends_at=NULL, period_end=NULL, billing_note=NULL WHERE id=${orgb.id}`);
+});
+
+test('billing: the grace window the API enforces is the configured one', async () => {
+  /*
+   * The sweep, the overview and the organisation's own billing page all passed
+   * the configured window to billingState(); the per-request gate did not, so
+   * it used the built-in two days regardless. A week-long window meant the API
+   * started refusing on day two while every screen said five days were left.
+   */
+  const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
+  const setGrace = (n) => sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.platform_settings (key_name, value) VALUES ('billing_grace_days', '${n}')
+       ON DUPLICATE KEY UPDATE value = VALUES(value)`);
+
+  await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '1' } });
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants
+        SET billing_status='active', period_end=DATE_SUB(NOW(), INTERVAL 4 DAY),
+            trial_ends_at=NULL
+      WHERE id=${orgb.id}`);
+
+  await setGrace(7);
+  let token = (await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb')).token;
+  assert.equal((await api('GET', '/api/ideas', { token })).status, 200,
+    'four days overdue inside a seven-day window must not be blocked');
+
+  await setGrace(2);
+  token = (await login('admin@orgb.test', PASSWORDS.orgbAdmin, 'orgb')).token;
+  assert.equal((await api('GET', '/api/ideas', { token })).status, 402,
+    'the same organisation is blocked once the window is shorter than the delay');
+
+  await setGrace(2);
   await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '0' } });
   await sql('ifqm_test_master',
     `UPDATE ifqm_test_master.tenants SET billing_status='exempt', plan_id=NULL,
@@ -862,4 +1048,142 @@ test('a QCMS duplicate-key leak (HTTP 500) is treated as a duplicate, not a fail
   } finally {
     await new Promise((r) => server.close(r));
   }
+});
+
+/*
+ * ── Messaging: the SMS/DLT connector and the platform mail provider ────────
+ *
+ * These exist because the one-time-code feature shipped complete and
+ * unreachable: `otp_*` was seeded into platform_settings and appeared on no
+ * whitelist, so nothing in the product could ever set otp_enabled to 1. The
+ * tests below pin the two things that keep that from happening quietly again —
+ * the settings are writable, and turning the feature on is refused while it
+ * could not actually deliver.
+ */
+test('messaging: the gateway key and the mail token are never returned, and an empty field keeps them', async () => {
+  const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+
+  const saved = await api('PUT', '/api/platform/messaging', { token: pa, body: {
+    sms_dlt_enabled: true,
+    sms_dlt_entity_id: '1101234567890123456',
+    sms_dlt_sender_id: 'IFQMOT',
+    sms_dlt_template_id: '1107161234567890123',
+    sms_dlt_api_key: 'gateway-secret-value',
+    mail_zepto_enabled: true,
+    mail_zepto_from: 'noreply@ifqm.test',
+    mail_zepto_token: 'Zoho-enczapikey TESTTOKEN',
+  } });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.data.dlt.api_key_set, true);
+  assert.equal(saved.data.mail.token_set, true);
+
+  const read = await api('GET', '/api/platform/messaging', { token: pa });
+  const body = JSON.stringify(read.data);
+  assert.ok(!body.includes('gateway-secret-value'), 'the DLT key must never reach the client');
+  assert.ok(!body.includes('TESTTOKEN'), 'the ZeptoMail token must never reach the client');
+  assert.equal(read.data.dlt.api_key_set, true);
+  assert.equal(read.data.mail.token_set, true);
+
+  // The hazard this guards: saving an unrelated field used to blank the
+  // credential, because an untouched password input posts an empty string.
+  const other = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { otp_ttl_seconds: 240, sms_dlt_api_key: '', mail_zepto_token: '' },
+  });
+  assert.equal(other.data.otp.ttl_seconds, 240);
+  assert.equal(other.data.dlt.api_key_set, true, 'an empty key field must mean "keep it"');
+  assert.equal(other.data.mail.token_set, true, 'an empty token field must mean "keep it"');
+});
+
+test('messaging: code sign-in cannot be switched on while the gateway could not deliver', async () => {
+  const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+
+  // Connector off — enabling must be refused rather than putting a sign-in
+  // method on the login screen that silently never works.
+  await api('PUT', '/api/platform/messaging', { token: pa, body: { sms_dlt_enabled: false } });
+  const off = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { otp_enabled: true, otp_provider: 'jio_dlt' },
+  });
+  assert.equal(off.status, 400);
+  assert.match(off.data.error, /connector on before/i);
+
+  // Connector on but a field missing — also refused, and the message names it.
+  await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { sms_dlt_enabled: true, sms_dlt_template_id: '' },
+  });
+  const incomplete = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { otp_enabled: true, otp_provider: 'jio_dlt' },
+  });
+  assert.equal(incomplete.status, 400);
+  assert.match(incomplete.data.error, /Content Template ID/);
+
+  // A six-character header is the DLT rule; five is a transcription slip the
+  // gateway would reject with an opaque error.
+  const shortHeader = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { sms_dlt_sender_id: 'IFQM', sms_dlt_template_id: '1107161234567890123',
+      otp_enabled: true, otp_provider: 'jio_dlt' },
+  });
+  assert.equal(shortHeader.status, 400);
+  assert.match(shortHeader.data.error, /6 characters/);
+
+  // Everything present — now it may be enabled. The template ID has to be
+  // supplied again here: a refused save writes nothing at all, so the empty
+  // value set two steps above is still what is on file. That all-or-nothing
+  // behaviour is the point — a partly applied configuration is how you end up
+  // with a connector that looks configured and cannot send.
+  const ok = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: {
+      sms_dlt_sender_id: 'IFQMOT',
+      sms_dlt_template_id: '1107161234567890123',
+      otp_enabled: true,
+      otp_provider: 'jio_dlt',
+    },
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.data.otp.enabled, true);
+  assert.deepEqual(ok.data.dlt.missing, []);
+});
+
+test('messaging: an http endpoint is refused, and only IFQM staff may configure any of this', async () => {
+  const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+  const orgAdmin = (await login('admin@orga.test', PASSWORDS.orgaAdmin)).token;
+
+  // http would put the API key and the recipient's number on the wire in clear.
+  const insecure = await api('PUT', '/api/platform/messaging', {
+    token: pa,
+    body: { sms_dlt_endpoint: 'http://gateway.example/send' },
+  });
+  assert.equal(insecure.status, 400);
+  assert.match(insecure.data.error, /https/i);
+
+  for (const [method, path, body] of [
+    ['GET', '/api/platform/messaging', undefined],
+    ['PUT', '/api/platform/messaging', { otp_enabled: true }],
+    ['POST', '/api/platform/messaging/test', { phone: '+919876543210' }],
+    ['POST', '/api/platform/messaging/test-mail', { to: 'x@y.test' }],
+  ]) {
+    const r = await api(method, path, { token: orgAdmin, body });
+    assert.ok(r.status === 401 || r.status === 403,
+      `${method} ${path} must not be reachable by a tenant admin (got ${r.status})`);
+  }
+});
+
+test('messaging: the DLT template is filled from the registered wording, not from a literal', async () => {
+  const { fillTemplate, matchesTemplate } = await import('../src/services/smsService.js');
+
+  const registered = '{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.';
+  const built = fillTemplate(registered, ['482913', 5]);
+  assert.equal(built,
+    '482913 is your IFQM sign-in code. It expires in 5 minute(s). Do not share it with anyone.');
+
+  // The check that matters: a message built from the registered template
+  // matches it, and one whose wording has drifted does not. A carrier drops the
+  // second silently — no error, no delivery report, no symptom.
+  assert.equal(matchesTemplate(registered, built), true);
+  assert.equal(matchesTemplate(registered, '482913 is your code. Expires in 5 min.'), false);
 });

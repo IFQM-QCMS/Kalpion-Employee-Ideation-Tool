@@ -6,8 +6,10 @@ const NotifContext = createContext(null);
 
 export function NotifProvider({ children }) {
   const { user } = useAuth();
-  const [notifs, setNotifs]         = useState([]);
+  const [notifs, setNotifs] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [busy, setBusy] = useState(false);
 
   const loadNotifications = useCallback(async () => {
     // A platform administrator belongs to no organisation, so this endpoint
@@ -19,11 +21,12 @@ export function NotifProvider({ children }) {
       if (res.data.success) {
         setNotifs(res.data.notifications || []);
         setUnreadCount(res.data.unread_count || 0);
+        setTotal(res.data.total ?? (res.data.notifications || []).length);
       }
     } catch { /* ignore */ }
   }, [user]);
 
-  // Poll every 60 seconds
+  // Poll every two minutes
   useEffect(() => {
     if (!user || user.role === 'platform_admin') return;
     loadNotifications();
@@ -44,18 +47,49 @@ export function NotifProvider({ children }) {
     };
   }, [user, loadNotifications]);
 
+  /**
+   * Mark everything read.
+   *
+   * Two things went wrong here before. The optimistic update was applied and
+   * then the next poll — up to two minutes later — could overwrite it with
+   * whatever the server still believed, so the badge came back. And the whole
+   * thing was skipped when `ids` came out empty, which happens whenever the
+   * page in hand is all read but older unread ones exist beyond it, so the
+   * badge showed a number that no button could clear.
+   *
+   * Now: no ids are sent (the server marks all for this account, including the
+   * ones not on this page), and the server's own answer is re-read afterwards
+   * rather than assumed.
+   */
   const markAllRead = useCallback(async () => {
-    const ids = notifs.filter(n => !n.is_read).map(n => n.id);
-    if (!ids.length) return;
+    if (busy) return;
+    setBusy(true);
+    // Optimistic, so the panel responds to the click immediately.
+    setNotifs((prev) => prev.map((n) => ({ ...n, is_read: 1 })));
+    setUnreadCount(0);
     try {
-      await notifApi.markRead(ids);
-      setNotifs(prev => prev.map(n => ({ ...n, is_read: true })));
-      setUnreadCount(0);
-    } catch { /* ignore */ }
-  }, [notifs]);
+      await notifApi.markRead();       // no ids = all, including older ones
+      await loadNotifications();       // confirm against the server
+    } catch {
+      await loadNotifications();       // put the true state back on failure
+    }
+    setBusy(false);
+  }, [busy, loadNotifications]);
+
+  /** Mark one read — used when a notification is opened. */
+  const markOneRead = useCallback(async (id) => {
+    const n = notifs.find((x) => x.id === id);
+    if (!n || n.is_read) return;
+    setNotifs((prev) => prev.map((x) => (x.id === id ? { ...x, is_read: 1 } : x)));
+    setUnreadCount((c) => Math.max(0, c - 1));
+    try { await notifApi.markRead([id]); } catch { await loadNotifications(); }
+  }, [notifs, loadNotifications]);
 
   return (
-    <NotifContext.Provider value={{ notifs, unreadCount, loadNotifications, markAllRead }}>
+    <NotifContext.Provider value={{
+      notifs, unreadCount, total, busy,
+      loadNotifications, markAllRead, markOneRead,
+    }}>
       {children}
     </NotifContext.Provider>
   );

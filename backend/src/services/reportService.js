@@ -11,11 +11,11 @@ export async function analytics(db) {
             COUNT(*) AS total,
             SUM(CASE WHEN status='Implemented' THEN 1 ELSE 0 END) AS implemented,
             ROUND(AVG(ai_score), 1) AS avg_score
-     FROM ideas WHERE submitted_at IS NOT NULL
+     FROM ideas WHERE submitted_at IS NOT NULL AND status != 'Draft'
      GROUP BY month ORDER BY month DESC LIMIT 12`
   );
 
-  const [impactRaw] = await db.query('SELECT impact_areas FROM ideas WHERE impact_areas IS NOT NULL');
+  const [impactRaw] = await db.query("SELECT impact_areas FROM ideas WHERE impact_areas IS NOT NULL AND status != 'Draft'");
   const counts = {};
   for (const row of impactRaw) {
     for (const area of String(row.impact_areas).split(',')) {
@@ -28,7 +28,7 @@ export async function analytics(db) {
     Object.entries(counts).sort((a, b) => b[1] - a[1])
   );
 
-  const [statusSummary] = await db.query('SELECT status, COUNT(*) AS cnt FROM ideas GROUP BY status');
+  const [statusSummary] = await db.query("SELECT status, COUNT(*) AS cnt FROM ideas WHERE status != 'Draft' GROUP BY status");
 
   const [scoreRows] = await db.query(
     `SELECT

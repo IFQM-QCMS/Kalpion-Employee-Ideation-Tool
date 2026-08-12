@@ -4,7 +4,7 @@
 
 def build(doc, H, para, bullets, table, figure, fig):
     doc.add_page_break()
-    H(doc, "PART E - DECISIONS AND TRACEABILITY", 1)
+    H(doc, "PART E - DECISIONS, TRACEABILITY AND OUTSTANDING WORK", 1)
 
     # -- 24 -----------------------------------------------------------------
     H(doc, "24. Architecture Decision Records", 1)
@@ -169,15 +169,31 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["FR-31", "activityService", "A-6", "Scripted check", "Done"],
         ["FR-32", "qcmsService, integrationService", "A-7, D-11", "Integration tests", "Done"],
         ["FR-33", "settingsService, brandingService", "A-4", "Manual", "Done"],
-        ["FR-34", "Language files", "A-3", "Automated key check", "Done, English only for new text"],
+        ["FR-34", "Language files", "A-3", "Automated key check",
+         "Partial - 294 keys short in six languages"],
         ["FR-35", "supportService", "A-4", "Manual", "Done"],
+        ["FR-36", "planService (priceBreakdown, decoratePlan)", "D-4, D-6",
+         "Integration tests", "Done"],
+        ["FR-37", "registrationService.approveRegistration, subscriptionService.assignPlan",
+         "D-4, D-10", "Integration tests", "Done"],
+        ["FR-38", "subscriptionService.setTrialDays, defaultTrialDays", "D-4",
+         "Integration tests", "Done"],
+        ["FR-39", "subscriptionService (billingState, sweepLapsed)", "D-4",
+         "Integration tests", "Done"],
+        ["FR-40", "platformService.tenantDetail", "A-1, D-6", "Manual", "Done"],
+        ["FR-41", "tenantQuota middleware, migration 018", "A-6",
+         "Integration test incl. the lock-out guard", "Done"],
+        ["FR-42", "NotFoundPage, Breadcrumbs, PageMeta, HelpPage", "D-13", "Browser check",
+         "Done"],
     ]
+    H(doc, "25.1 Functional requirements", 2)
     table(doc, ["Req", "Implemented in", "Diagrams", "Verified by", "State"], rows,
           widths=[0.55, 1.9, 0.9, 1.85, 1.0], font_size=8,
-          caption="25.1  Functional requirements")
+          caption="Table 25.1  All 42 functional requirements, mapped to code, diagram and check")
 
     nrows = [
-        ["NFR-01", "tenant.js, auth middleware", "A-2, D-4, D-5", "Integration tests", "Done"],
+        ["NFR-01", "database/tenant.js, auth middleware", "A-2, D-4, D-5",
+         "Integration tests", "Done"],
         ["NFR-02", "ideaService redaction", "A-6", "Scripted, all modes and roles", "Done"],
         ["NFR-03", "auth middleware re-read", "A-6, D-7", "Integration tests", "Done"],
         ["NFR-04", "bcrypt in authService", "A-6", "Integration tests", "Done"],
@@ -190,38 +206,156 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["NFR-11", "idea_workflow, login activity", "D-5", "Integration tests", "Done"],
         ["NFR-12", "Information buttons, glossary", "D-14", "Browser check", "Done"],
         ["NFR-13", "Focus outlines, responsive layout", "D-14", "Manual", "Partial"],
-        ["NFR-14", "Seven language files", "A-3", "Automated key check", "Partial"],
+        ["NFR-14", "Seven language files", "A-3", "Automated key check",
+         "Partial - 294 keys short"],
         ["NFR-15", "Standard Node and MySQL", "A-3, A-5", "Runs on three hosts", "Done"],
         ["NFR-16", "Layered services, technical manual", "A-4", "Review", "Done"],
         ["NFR-17", "Registration and import field sets", "D-4", "Review", "Done"],
         ["NFR-18", "config.assertConfigOrExit", "D-15", "Integration tests", "Done"],
     ]
+    H(doc, "25.2 Non-functional requirements", 2)
     table(doc, ["Req", "Implemented in", "Diagrams", "Verified by", "State"], nrows,
           widths=[0.6, 2.0, 0.95, 1.75, 0.9], font_size=8,
-          caption="25.2  Non-functional requirements")
+          caption="Table 25.2  All 18 non-functional requirements")
 
-    H(doc, "25.3 Open items", 2)
-    table(doc, ["Item", "Status", "Blocked on"], [
-        ["Single sign-on across IFQM tools", "Not started",
-         "An Azure tenant, and agreement from QCMS, DWM and Skills"],
-        ["Microsoft Entra ID sign-in", "Not started", "The same Azure tenant"],
-        ["Billing and GST invoicing", "Not started", "Recorded as future scope in the minutes"],
-        ["Registration for businesses with no domain", "Blocked",
-         "A decision - it contradicts the rule to block free email. See ADR-012"],
-        ["Penetration test", "Not started", "Commissioning"],
-        ["User acceptance testing", "Not started", "Scheduling"],
-        ["Translation of new screens", "Partial",
-         "Six language files hold unrelated in-progress work. New text falls back to English"],
-        ["Object storage for attachments", "Proposed", "Nothing. It is the first production task"],
-    ], widths=[2.0, 1.0, 3.2], font_size=8.5)
+    H(doc, "25.3 Requirements not fully met", 2)
+    para(doc, "Two of the sixty rows above say Partial rather than Done. Both are listed again "
+              "in section 26 with what it would take to close them. Every other requirement in "
+              "this matrix has working code behind it and a way of checking it.")
+    table(doc, ["Req", "What is short", "What would close it"], [
+        ["FR-34 / NFR-14", "English carries 1,116 interface strings; each of the six other "
+                           "languages carries 822. The 294 newest strings fall back to English "
+                           "rather than breaking the screen.",
+         "A translation pass over the newer screens. The mechanism is finished - this is content"],
+        ["NFR-13", "Focus outlines, keyboard reach and reflow are in place and were checked by "
+                   "hand. No assistive technology has been used against the product and no "
+                   "standard has been claimed.",
+         "An accessibility review against a named standard, if one is going to be claimed"],
+    ], widths=[1.1, 3.2, 1.9], font_size=8.5)
+
+    # -- 26 -----------------------------------------------------------------
+    H(doc, "26. Work Not Yet Done", 1, page_break=True)
+    para(doc, "Everything above describes what exists. This section is the other half of an "
+              "honest handover: the things a reader might reasonably assume are in place and "
+              "which are not. Nothing here is a defect. They are pieces of work that have not "
+              "been started, or have been done but never exercised - and the difference between "
+              "those two matters, because an untested backup is more dangerous than an absent "
+              "one, since somebody is relying on it.")
+
+    H(doc, "26.1 Assurance not yet carried out", 2)
+    table(doc, ["Item", "Where it stands", "Risk of leaving it", "What closing it takes"], [
+        ["User acceptance testing",
+         "Not run. The live deployment exists for exactly this and is working.",
+         "The people who will use the product every day have not yet said whether it fits how "
+         "they actually work. That is the feedback most likely to change a screen.",
+         "Scheduling with a customer, and someone to sit with them. No engineering work"],
+        ["Penetration testing",
+         "Not commissioned. Requested in the minutes of 29 July 2026.",
+         "The security work in section 16 was designed and reviewed by the people who wrote it. "
+         "That is not the same as being tested by somebody trying to break it.",
+         "A budget and a firm. Should be done before the first paying customer"],
+        ["Backup restore rehearsal",
+         "Backups are being taken. No restore has ever been performed from them.",
+         "The single largest one here. The recovery targets in section 21.3 are estimates, not "
+         "measurements. A backup nobody has restored from is an assumption.",
+         "Half a day: restore a snapshot into a scratch database and confirm an organisation "
+         "comes back whole. Repeat quarterly"],
+        ["Automated screen tests",
+         "None. The 37 integration tests and the 229-case assurance run both work against the "
+         "API, not the interface.",
+         "A screen can break without anything failing.",
+         "A handful of browser tests over sign in, submit and approve"],
+        ["Load testing since the indexing work",
+         "Done once, before the indexes were added; not repeated since.",
+         "Performance could regress without anybody noticing.",
+         "A scripted run before each release"],
+    ], widths=[1.15, 1.7, 1.9, 1.55], font_size=8)
+
+    H(doc, "26.2 Operational gaps", 2)
+    table(doc, ["Item", "Where it stands", "Risk of leaving it", "What closing it takes"], [
+        ["Monitoring and alerting",
+         "Nothing. Logs are written and health checks answer, but nobody and nothing is watching "
+         "them.",
+         "The first person to know the site is down is a customer. Both health endpoints already "
+         "exist and are unused by any monitor.",
+         "An uptime service pointed at /api/ready with an email alert. An hour's work and a "
+         "small monthly cost"],
+        ["Error aggregation",
+         "Errors go to a flat log on the host.",
+         "A fault that happens forty times in an hour looks the same as one that happened once.",
+         "A hosted error tracker, or a scheduled digest of the log"],
+        ["A view of sign-in failures",
+         "The data is recorded in the registry; nothing displays it as a trend.",
+         "Repeated failed sign-ins are the clearest signal of abuse, and it is currently only "
+         "visible by reading rows.",
+         "One chart on the platform console over data that is already there"],
+        ["Object storage for attachments",
+         "Files are on the application server's own disk. On the current hosting that disk is "
+         "wiped on restart and is not backed up.",
+         "Attachments already disappear while their database records survive, so a file appears "
+         "in a list and fails to open. This is a live defect, not a future one.",
+         "Three modules write files, so the change is contained. It is the first task in the "
+         "production plan and must happen before a customer stores anything they would miss"],
+        ["SMTP in production",
+         "Not configured. The queue works; nothing delivers from it.",
+         "Password resets and notification emails are silently not sent.",
+         "Credentials for a mail service, set per organisation"],
+    ], widths=[1.15, 1.7, 1.9, 1.55], font_size=8)
+
+    H(doc, "26.3 Content and feature work", 2)
+    table(doc, ["Item", "Where it stands", "Risk of leaving it", "What closing it takes"], [
+        ["Translation completeness",
+         "English 1,116 strings; Hindi, Kannada, Malayalam, Marathi, Tamil and Telugu 822 each. "
+         "The gap is the 294 newest strings.",
+         "A shop-floor user on a Tamil interface meets English text on the newer screens. It "
+         "works, but it undercuts the claim that the product speaks seven languages.",
+         "A translation pass. The lookup mechanism, the fallback and the automated key check "
+         "are all finished - this is content, not code"],
+        ["Single sign-on with Entra ID",
+         "Not built. The sign-in path was deliberately shaped so a new method returns the same "
+         "session as any other, which the one-time-code route has already demonstrated.",
+         "Nothing breaks; it stays a separate password.",
+         "An Azure tenant, plus agreement from QCMS, DWM and Skills. An addition rather than a "
+         "rewrite - see ADR-011"],
+        ["Taking payment",
+         "Plans, pricing with GST, trials, holds and the billing history are all built. No "
+         "payment gateway is connected and no invoice is generated.",
+         "None operationally - money is collected outside the product today and a member of the "
+         "platform team records it. It is only a gap if self-service payment is wanted.",
+         "A gateway integration and invoice generation. The plan and period data it would need "
+         "is already recorded"],
+        ["Registration for a business with no domain",
+         "Blocked on a decision, not on work. Free email domains are refused, so a sole trader "
+         "cannot apply.",
+         "A segment of the intended market cannot register at all.",
+         "A decision. The minutes ask for both this and the domain rule, and both cannot be "
+         "true - see ADR-012. This is the one genuinely open question in this document"],
+    ], widths=[1.15, 1.7, 1.9, 1.55], font_size=8)
+
+    H(doc, "26.4 The order they should be done in", 2)
+    table(doc, ["#", "Item", "Why it goes here"], [
+        ["1", "Object storage for attachments",
+         "It is the only item on this list that is losing data right now"],
+        ["2", "Configure SMTP", "Password reset does not work without it"],
+        ["3", "Uptime alerting", "An hour of work, and it changes who finds out first"],
+        ["4", "Rehearse a restore", "Turns section 21.3 from estimates into measurements"],
+        ["5", "User acceptance testing", "Feedback is cheapest before more is built on top"],
+        ["6", "Penetration test", "Wants a stable target, so after the four above"],
+        ["7", "Translation pass", "Content work, and it can run alongside anything else"],
+        ["8", "Decide the free-email question", "Needs a person, not a sprint. See ADR-012"],
+    ], widths=[0.4, 2.2, 3.6], font_size=8.5)
 
     doc.add_page_break()
     H(doc, "Closing note", 1)
     para(doc, "This document describes the system as it actually stands, not as it was planned. "
               "Where something is incomplete it says so, and where a limitation exists - the "
               "disappearing attachments, the untested restore, the contradiction in the "
-              "registration rules - it is written down rather than left for somebody to find.")
-    para(doc, "The diagrams were drawn from the code. If the code changes and a diagram is not "
-              "updated with it, the diagram is wrong and should be treated as such.")
+              "registration rules - it is written down rather than left for somebody to find. "
+              "Section 26 collects all of it in one place.")
+    para(doc, "The diagrams and the tables were checked against the code for this version, not "
+              "written from memory. Endpoint counts come from the route files, table counts from "
+              "the schema, module names from the services folder, and test figures from the last "
+              "run. Where a figure in this document disagrees with the code, the code is right "
+              "and the figure should be treated as a defect in the document.")
     para(doc, "Comments on this version are welcome. The next version will fold in review "
               "feedback and record the decisions still outstanding.")

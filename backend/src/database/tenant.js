@@ -42,6 +42,38 @@ export function fallbackTenant(host = 'localhost') {
   };
 }
 
+/**
+ * Is this organisation suspended purely because it has not paid?
+ *
+ * The billing sweep writes a specific note when it puts an organisation on
+ * hold, and `markPaid` already reads that note to decide whether paying should
+ * reinstate them — "held for money" has to be distinguishable from "held by a
+ * person for something else". This is that same rule, named once so the two
+ * places cannot drift apart.
+ */
+export function heldForNonPayment(tenant) {
+  return tenant?.status === 'suspended' && /non-payment/i.test(tenant.billing_note || '');
+}
+
+/**
+ * May this organisation's users still open a session?
+ *
+ * Active organisations always. Organisations held for non-payment ALSO — and
+ * that is the point: an organisation that cannot sign in cannot reach its own
+ * billing page, and the only way back was a platform admin recording the
+ * payment by hand. Withdrawing the ability to pay from the people you are
+ * asking to pay is the wrong way round.
+ *
+ * They are not getting the product back by signing in. `enforceBilling` in the
+ * auth middleware answers 402 to everything except the handful of paths a
+ * paused organisation needs — billing, support, branding, notifications — so
+ * what a session buys them here is the bill and a way to settle it.
+ *
+ * An organisation suspended by an operator for any other reason stays hard
+ * blocked, exactly as before.
+ */
+const reachable = (row) => !!row && (row.status === 'active' || heldForNonPayment(row));
+
 /** Sanitise an org slug exactly like PHP: lowercase, [a-z0-9_-] only. */
 export function sanitizeSlug(raw) {
   return String(raw || '')
@@ -75,26 +107,32 @@ export async function resolveTenant({ slug = '', host = 'localhost' } = {}) {
     // to open. If it doesn't match, fail — never fall through to the domain or
     // default tenant, which would quietly authenticate the user against another
     // organisation's data.
+    // `status IN ('active','suspended')` rather than active-only, with the
+    // decision made by reachable() above — one rule, in one place, instead of
+    // the same condition spelled out three times in SQL.
     if (cleanSlug) {
       const [rows] = await master.execute(
-        "SELECT * FROM tenants WHERE slug = ? AND status = 'active' LIMIT 1",
+        "SELECT * FROM tenants WHERE slug = ? AND status IN ('active','suspended') LIMIT 1",
         [cleanSlug]
       );
-      if (rows.length) return rows[0];
+      const hit = rows.find(reachable);
+      if (hit) return hit;
       throw new ApiError(404, 'Unknown organization code.');
     }
 
     // No org code given: resolve by domain, then the default tenant.
     let [rows] = await master.execute(
-      "SELECT * FROM tenants WHERE domain = ? AND status = 'active' LIMIT 1",
+      "SELECT * FROM tenants WHERE domain = ? AND status IN ('active','suspended')",
       [cleanHost]
     );
-    if (rows.length) return rows[0];
+    let hit = rows.find(reachable);
+    if (hit) return hit;
 
     [rows] = await master.execute(
-      "SELECT * FROM tenants WHERE is_default = 1 AND status = 'active' LIMIT 1"
+      "SELECT * FROM tenants WHERE is_default = 1 AND status IN ('active','suspended')"
     );
-    if (rows.length) return rows[0];
+    hit = rows.find(reachable);
+    if (hit) return hit;
 
     throw new ApiError(404, 'Unknown organization code.');
   } catch (err) {
@@ -169,5 +207,6 @@ export async function closeAllPools() {
 }
 
 export default {
-  resolveTenant, resolveTenantBySlug, getTenantPool, fallbackTenant, sanitizeSlug, closeAllPools,
+  resolveTenant, resolveTenantBySlug, getTenantPool, fallbackTenant, sanitizeSlug,
+  heldForNonPayment, closeAllPools,
 };

@@ -7,7 +7,9 @@ import * as platform from '../controllers/platformController.js';
 import * as support from '../controllers/supportController.js';
 import * as registrations from '../controllers/registrationController.js';
 import * as billing from '../controllers/billingController.js';
+import * as messaging from '../controllers/messagingController.js';
 import { requirePlatformAuth } from '../middleware/auth.js';
+import { heavyLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -31,8 +33,16 @@ router.get('/tenants/:id/subscription', billing.subscription);
 router.post('/tenants/:id/plan', billing.assignPlan);
 router.post('/tenants/:id/trial', billing.setTrial);
 router.post('/tenants/:id/mark-paid', billing.markPaid);
+// Every organisation's billing state on one screen — the payments dashboard.
+router.get('/billing/overview', billing.overview);
+// The Razorpay merchant account. Platform-wide: IFQM holds one, every
+// organisation pays into it, and the key secret never leaves this server.
+router.get('/billing/gateway', billing.gatewayGet);
+router.put('/billing/gateway', billing.gatewayUpdate);
+router.post('/billing/gateway/test', heavyLimiter, billing.gatewayTest);
 // Sweep everyone whose period has ended. ?dry_run=1 reports without changing.
 router.post('/billing/sweep', billing.sweep);
+router.post('/billing/send-invoices', billing.sendMonthlyInvoices);
 
 router.get('/tenants', platform.tenants);                       // action=tenants
 router.get('/tenants/:id', platform.tenantDetail);              // action=tenant_detail
@@ -51,6 +61,21 @@ router.get('/settings/defaults', platform.getDefaults);
 router.put('/settings/defaults', platform.updateDefaults);
 router.get('/tenants/:id/settings', platform.getTenantSettings);
 router.put('/tenants/:id/settings', platform.updateTenantSettings);
+
+/*
+ * Messaging — the SMS/DLT connector, one-time-code policy, and email health.
+ *
+ * Held apart from /settings/defaults deliberately. That endpoint edits the
+ * settings a NEW ORGANISATION is seeded with; these are platform-wide delivery
+ * credentials that belong to IFQM and are copied to nobody.
+ *
+ * The test send is rate limited because it reaches a gateway that bills per
+ * message. Everything else here is a database write.
+ */
+router.get('/messaging', messaging.get);
+router.put('/messaging', messaging.update);
+router.post('/messaging/test', heavyLimiter, messaging.test);
+router.post('/messaging/test-mail', heavyLimiter, messaging.testMail);
 
 router.get('/admins', platform.listAdmins);
 router.post('/admins', platform.createAdmin);

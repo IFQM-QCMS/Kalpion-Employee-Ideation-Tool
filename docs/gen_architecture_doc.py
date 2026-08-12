@@ -8,19 +8,23 @@ document for the IFQM Employee Ideation Tool.
 
 House rules, because they were asked for explicitly and are easy to break:
 
-  * Everything is BLACK. Word's built-in Heading styles are blue by default, so
-    every style used here has its colour forced to black. No accent colours, no
-    shading beyond a light grey for table header rows.
-  * No emoji, no icons, no decorative characters.
-  * Diagrams are drawn with box characters in a monospace font. They print
-    cleanly in black and white, cannot fail to load, and survive being pasted
-    into email or another document - none of which is true of images.
+  * The TEXT is black. Word's built-in Heading styles are blue by default, so
+    every style used here has its colour forced to black, and blacken_all_styles
+    strips colour from the forty-odd styles nothing uses. Table shading stays a
+    light grey. Colour appears only inside the diagrams, where it carries
+    meaning - and every diagram also reads correctly without it.
+  * No emoji, no icons, no decorative characters in the prose.
+  * Diagrams are PNGs drawn by arch_drawings.py. Each figure still carries its
+    monospace fallback art, and figure() uses it if the drawing is missing, so
+    the document builds either way.
   * Plain English. Where a technical term is unavoidable it is explained in the
     sentence that introduces it.
 
-The content is generated from what the code actually does. Where a figure is
-quoted (table counts, endpoint counts, test counts) it was read from the
-repository, not estimated.
+Every quoted figure - tables, endpoints, modules, screens, tests, translation
+keys - was counted from the repository for this version, not estimated. The
+endpoint counts in section 10 come from docs/api_inventory.py, which reads the
+route files. If you change the code and not this document, the document is
+wrong; re-run the counts before issuing another version.
 """
 import io
 import os
@@ -30,7 +34,7 @@ from datetime import date
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_BREAK, WD_TAB_ALIGNMENT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
@@ -40,8 +44,8 @@ from docx.shared import Inches, Pt, RGBColor
 # ---------------------------------------------------------------------------
 DOC_TITLE = "Software Architecture and Design Document"
 PRODUCT = "IFQM Employee Ideation Tool (EIT)"
-VERSION = "1.0"
-STATUS = "First complete version - for review"
+VERSION = "1.1"
+STATUS = "Reviewed and verified against the code - for final review"
 ISSUE_DATE = date.today().strftime("%d %B %Y")
 # Writes alongside the other documents in docs/, not into the project root.
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Software Architecture.docx")
@@ -288,36 +292,54 @@ def table(doc, headers, rows, widths=None, font_size=9, caption=None):
     return t
 
 
-def add_page_numbers(doc):
-    """Page N in the footer of every section."""
-    for section in doc.sections:
-        p = section.footer.paragraphs[0]
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run = p.add_run()
-        run.font.name = BODY_FONT
-        run.font.size = Pt(8.5)
-        run.font.color.rgb = GREY
-        for txt in ("Page ", None, " of ", None):
-            if txt:
-                r = p.add_run(txt)
-                r.font.size = Pt(8.5)
-                r.font.color.rgb = GREY
-                r.font.name = BODY_FONT
-            else:
-                fld = OxmlElement("w:fldSimple")
-                fld.set(qn("w:instr"), "PAGE" if txt is None and " of " not in p.text else "NUMPAGES")
-                p._p.append(fld)
+def _small(p, text):
+    r = p.add_run(text)
+    r.font.name = BODY_FONT
+    r.font.size = Pt(8)
+    r.font.color.rgb = GREY
+    return r
+
+
+def _field(p, instr):
+    """
+    A Word field, so the number is computed when the document is opened.
+
+    The previous version of this built both PAGE and NUMPAGES from one loop and
+    decided which was which by inspecting the paragraph text, which had not been
+    written yet - so every field came out as PAGE and the footer read "Page 4 of
+    4" on every page. Passing the instruction in explicitly removes the guess.
+    """
+    fld = OxmlElement("w:fldSimple")
+    fld.set(qn("w:instr"), instr)
+    run = OxmlElement("w:r")
+    rpr = OxmlElement("w:rPr")
+    for tag, val in (("w:rFonts", BODY_FONT), ("w:sz", "16"), ("w:color", "595959")):
+        el = OxmlElement(tag)
+        el.set(qn("w:ascii") if tag == "w:rFonts" else qn("w:val"), val)
+        if tag == "w:rFonts":
+            el.set(qn("w:hAnsi"), val)
+        rpr.append(el)
+    run.append(rpr)
+    fld.append(run)
+    p._p.append(fld)
 
 
 def footer_text(doc, text):
+    """Document identity on the left, page N of M on the right."""
     for section in doc.sections:
         p = section.footer.paragraphs[0]
         p.text = ""
-        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = p.add_run(text)
-        r.font.name = BODY_FONT
-        r.font.size = Pt(8)
-        r.font.color.rgb = GREY
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        # One right-aligned tab stop at the text margin puts the page number on
+        # the right edge without a second paragraph or a table.
+        p.paragraph_format.tab_stops.add_tab_stop(
+            Inches(6.3), WD_TAB_ALIGNMENT.RIGHT)
+        _small(p, text)
+        _small(p, "\t")
+        _small(p, "Page ")
+        _field(p, "PAGE")
+        _small(p, " of ")
+        _field(p, "NUMPAGES")
 
 
 # ---------------------------------------------------------------------------
@@ -357,10 +379,19 @@ def front_matter(doc):
     doc.add_paragraph().paragraph_format.space_after = Pt(14)
 
     table(doc, ["Version", "Date", "Author", "Summary of change"], [
-        ["1.0", ISSUE_DATE, "Development team",
-         "First complete version. Covers all 25 requested deliverables and "
-         "describes the system as built."],
-    ], widths=[0.8, 1.2, 1.4, 3.0], font_size=9)
+        ["1.0", "02 August 2026", "Development team",
+         "First complete version. Covered all 25 requested deliverables and described the "
+         "system as built."],
+        ["1.1", ISSUE_DATE, "Development team",
+         "Review pass. Section 10 rewritten with per-endpoint request, response, "
+         "authentication and error detail. Section 13 restated as module structure rather than "
+         "a class diagram, since the codebase has no classes. New section 26 covering work not "
+         "yet done. Every diagram, count and traceability row checked against the code: "
+         "endpoint, table, module, screen and test figures corrected, and the requirements "
+         "matrix extended to cover subscriptions and billing, which the previous version listed "
+         "as out of scope after it had been built."],
+    ], widths=[0.7, 1.05, 1.15, 3.3], font_size=9,
+        caption="Revision history")
 
     doc.add_page_break()
 
@@ -379,24 +410,46 @@ def front_matter(doc):
          "Developers and testers"],
         ["D", "Running it (sections 15-23) - deployment, security, failure, monitoring, testing, release",
          "Operations and QA"],
-        ["E", "Decisions and traceability (sections 24-25)", "Reviewers and auditors"],
+        ["E", "Decisions, traceability and outstanding work (sections 24-26)",
+         "Reviewers and auditors"],
     ], widths=[0.5, 4.2, 1.6], font_size=9)
 
-    para(doc, "Parts B and C are kept apart deliberately, because they answer different "
-              "questions. An architecture diagram shows the pieces and how they are arranged. "
-              "A design diagram shows what actually happens when somebody presses a button. "
-              "Mixing the two is the usual reason architecture documents become unreadable.")
+    h(doc, "Architecture diagrams and design diagrams", 2)
+    para(doc, "The two are kept apart deliberately, because they answer different questions. An "
+              "architecture diagram shows the pieces and how they are arranged; it would still "
+              "be true if nobody ever pressed a button. A design diagram shows what actually "
+              "happens when somebody does. Mixing the two is the usual reason architecture "
+              "documents become unreadable.")
+    para(doc, "The separation is carried in the figure number itself, so it holds wherever a "
+              "figure appears:")
+    table(doc, ["Prefix", "Kind", "Answers", "Figures"], [
+        ["A-n", "Architecture - structure", "What is the system made of, and where does each "
+                                            "piece run?", "A-1 to A-7"],
+        ["D-n", "Detailed design - behaviour", "What happens, step by step, when somebody does "
+                                               "something?", "D-1 to D-15"],
+    ], widths=[0.6, 1.6, 2.6, 1.4], font_size=9)
+    para(doc, "Part B holds the architecture set and Part C the design set. Three architecture "
+              "figures (A-5 deployment, A-6 security, A-7 integrations) and one design figure "
+              "(D-15 failure handling) appear later, in Part D, because each belongs beside the "
+              "operational discussion that uses it - a deployment diagram is of little use "
+              "eleven pages away from the environment table. The prefix still says which kind "
+              "each one is, and the list of figures below names the kind and the part for every "
+              "figure in the document.")
 
     h(doc, "Conventions used in the diagrams", 2)
     bullets(doc, [
-        "Diagrams are drawn with text and lines rather than pictures. They print in black "
-        "and white, cannot fail to load, and can be pasted into an email without turning "
-        "into a broken image.",
+        "Every diagram is a drawing, generated from a script rather than placed by hand, so a "
+        "diagram and the thing it describes are changed in one action.",
+        "Colour carries meaning and is consistent across every figure: indigo for the system "
+        "and the path through it, teal for stored data, amber for a decision, green for a "
+        "wanted outcome, red for a refusal, slate for anything outside our control.",
+        "Colour is never the only signal. Every diagram reads correctly in black and white, and "
+        "each one carries a legend directly beneath it.",
         "A solid box is something that exists. A solid arrow is something that happens now.",
         "Anything marked optional works only if that organisation has configured it. The "
         "product runs without any of them.",
-        "Where a number is quoted - tables, endpoints, tests - it was counted from the code, "
-        "not estimated.",
+        "Where a number is quoted - tables, endpoints, modules, screens, tests - it was counted "
+        "from the code for this version, not estimated.",
     ])
 
     h(doc, "Assumptions this document rests on", 2)
@@ -420,12 +473,18 @@ def front_matter(doc):
 
     h(doc, "What this document does not cover", 2)
     bullets(doc, [
-        "Commercial terms, pricing and billing. Billing is recorded in the meeting minutes as "
-        "future scope and has not been designed.",
+        "Taking payment. Plans, GST pricing, trials and holds are all built and are described "
+        "in sections 2.1, 10.6.10 and 25. Connecting a payment gateway and issuing invoices is "
+        "not, and is not designed here. See section 26.3.",
+        "Commercial terms - what IFQM actually charges a given customer. The system records "
+        "whichever figure the platform team sets.",
         "Single sign-on with the QCMS, DWM and Skills tools. Agreed in principle, blocked on "
         "an Azure tenant that does not exist yet. See ADR-011.",
-        "The manual test case catalogue, which is a separate document.",
+        "The manual test case catalogue and the user guide, which are separate documents.",
     ])
+    para(doc, "Section 26 lists everything that is not yet done, including the items above. It "
+              "is deliberately the last section rather than a footnote, because it is the part "
+              "of a handover most likely to be needed.")
 
 
 # ---------------------------------------------------------------------------
@@ -454,7 +513,7 @@ def contents(doc):
         ["", "10", "API Architecture and Specification"],
         ["", "11", "Use Cases"],
         ["", "12", "Sequence Diagrams"],
-        ["", "13", "Class and Module Structure"],
+        ["", "13", "Module and Service Structure"],
         ["", "14", "User Interface and Screen Flow"],
         ["Part D", "Running the system", ""],
         ["", "15", "Deployment Architecture"],
@@ -466,38 +525,64 @@ def contents(doc):
         ["", "21", "Backup and Disaster Recovery"],
         ["", "22", "Testing Strategy"],
         ["", "23", "Deployment and Release Plan"],
-        ["Part E", "Decisions and traceability", ""],
+        ["Part E", "Decisions, traceability and outstanding work", ""],
         ["", "24", "Architecture Decision Records"],
         ["", "25", "Requirements Traceability Matrix"],
+        ["", "26", "Work Not Yet Done"],
     ]
-    table(doc, ["Part", "No.", "Section"], rows, widths=[0.8, 0.5, 4.9], font_size=9)
+    table(doc, ["Part", "No.", "Section"], rows, widths=[0.8, 0.5, 4.9], font_size=9,
+          caption="Contents")
 
     h(doc, "List of figures", 2)
-    para(doc, "Architecture figures are numbered A-n and describe structure. Design figures are "
-              "numbered D-n and describe behaviour.")
-    table(doc, ["Figure", "Title", "Section"], [
-        ["A-1", "System context", "3.1"],
-        ["A-2", "Containers - what runs where", "3.2"],
-        ["A-3", "Technology stack", "5"],
-        ["A-4", "Modules and their dependencies", "6"],
-        ["A-5", "Deployment", "15"],
-        ["A-6", "Security layers", "16"],
-        ["A-7", "Integrations", "17"],
-        ["D-1", "Idea lifecycle", "7"],
-        ["D-2", "Data flow, level 0", "8"],
-        ["D-3", "Data flow, level 1", "8"],
-        ["D-4", "Registry tables and relationships", "9.1"],
-        ["D-5", "Per-organisation tables and relationships", "9.2"],
-        ["D-6", "Use case overview", "11"],
-        ["D-7", "Sign in with a password", "12.1"],
-        ["D-8", "Submit an idea", "12.2"],
-        ["D-9", "A decision, and what happens when nobody decides", "12.3"],
-        ["D-10", "MSME registration and approval", "12.4"],
-        ["D-11", "Push an approved idea to QCMS", "12.5"],
-        ["D-12", "Service modules and their operations", "13"],
-        ["D-13", "Screen flow", "14"],
-        ["D-14", "Wireframes of the main screens", "14"],
-        ["D-15", "How a failure is handled", "18"],
+    para(doc, "Twenty-two figures. Architecture figures are numbered A-n and describe structure; "
+              "design figures are numbered D-n and describe behaviour. The kind column is the "
+              "same distinction, spelled out.")
+    table(doc, ["Figure", "Title", "Kind", "Part", "Section"], [
+        ["A-1", "System context", "Architecture", "B", "3.1"],
+        ["A-2", "Containers - what runs where", "Architecture", "B", "3.2"],
+        ["A-3", "Technology stack", "Architecture", "B", "5"],
+        ["A-4", "Modules and their dependencies", "Architecture", "B", "6"],
+        ["A-5", "Deployment", "Architecture", "D", "15"],
+        ["A-6", "Security layers", "Architecture", "D", "16"],
+        ["A-7", "Integrations", "Architecture", "D", "17"],
+        ["D-1", "Idea lifecycle", "Design - workflow", "C", "7"],
+        ["D-2", "Data flow, level 0 (context)", "Design - data flow", "C", "8"],
+        ["D-3", "Data flow, level 1 (inside the system)", "Design - data flow", "C", "8"],
+        ["D-4", "Registry tables and relationships", "Design - entity relationship", "C", "9.1"],
+        ["D-5", "Per-organisation tables and relationships", "Design - entity relationship",
+         "C", "9.2"],
+        ["D-6", "Use case overview", "Design - use case", "C", "11"],
+        ["D-7", "Sign in with a password", "Design - sequence", "C", "12.1"],
+        ["D-8", "Submit an idea", "Design - sequence", "C", "12.2"],
+        ["D-9", "A decision, and what happens when nobody decides", "Design - sequence",
+         "C", "12.3"],
+        ["D-10", "MSME registration and approval", "Design - sequence", "C", "12.4"],
+        ["D-11", "Push an approved idea to QCMS", "Design - sequence", "C", "12.5"],
+        ["D-12", "Module structure, taking the idea path as the example", "Design - module",
+         "C", "13"],
+        ["D-13", "Screen flow", "Design - UI flow", "C", "14"],
+        ["D-14", "Wireframes of the main screens", "Design - wireframe", "C", "14"],
+        ["D-15", "How a failure is handled", "Design - exception flow", "D", "18"],
+    ], widths=[0.55, 2.75, 1.45, 0.4, 0.65], font_size=8.5,
+        caption="List of figures")
+
+    para(doc, "Every diagram type asked for is present: architecture (A-1, A-2, A-3), module "
+              "(A-4, D-12), data flow (D-2, D-3), entity relationship (D-4, D-5), use case "
+              "(D-6), sequence (D-7 to D-11), deployment (A-5), security (A-6), integration "
+              "(A-7), and interface flow and wireframes (D-13, D-14). There is no class diagram, "
+              "and section 13 explains why rather than leaving a reader to wonder.", italic=True)
+
+    h(doc, "List of tables", 2)
+    para(doc, "Most tables in this document run inside the prose they belong to. These are the "
+              "ones worth finding on their own.")
+    table(doc, ["Table", "Title", "Section"], [
+        ["2.1", "Functional requirements", "2.1"],
+        ["2.2", "Non-functional requirements", "2.2"],
+        ["6.1", "All 28 screens, grouped by who reaches them", "6.2"],
+        ["10.1", "Every route group, with its endpoint count", "10.5"],
+        ["13.1", "All 35 service modules", "13.2"],
+        ["25.1", "Requirements traceability - functional", "25"],
+        ["25.2", "Requirements traceability - non-functional", "25"],
     ], widths=[0.7, 4.2, 0.8], font_size=9)
 
 
@@ -539,11 +624,13 @@ def main():
     out = os.path.abspath(OUT)
     doc.save(out)
 
-    paras = len(doc.paragraphs)
-    tables = len(doc.tables)
+    drawn = sum(1 for n in FIGURE_IMAGES.values()
+                if os.path.exists(os.path.join(DIAGRAM_DIR, n + ".png")))
     print("Written: %s" % out)
-    print("  paragraphs : %d" % paras)
-    print("  tables     : %d  (22 of these are diagrams)" % tables)
+    print("  paragraphs : %d" % len(doc.paragraphs))
+    print("  tables     : %d" % len(doc.tables))
+    print("  figures    : %d of %d drawn (the rest would fall back to monospace art)"
+          % (drawn, len(FIGURE_IMAGES)))
     print("  colour removed from %d unused style definitions" % stripped)
 
 

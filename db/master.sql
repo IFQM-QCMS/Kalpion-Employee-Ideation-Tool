@@ -421,3 +421,102 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('quota_enforce',        '1'),
   ('quota_grace_percent',  '20'),
   ('quota_warn_percent',   '80');
+
+-- ── SMS / DLT delivery (migration 019) ──────────────────────────────────────
+-- Migration 012 built one-time-code sign-in and seeded its policy, but nothing
+-- could write those rows: `otp_*` was on no whitelist, so the feature shipped
+-- switched off with no way to switch it on. These are the settings the console
+-- edits, plus what an Indian DLT gateway requires on every message.
+INSERT IGNORE INTO platform_settings (key_name, value) VALUES
+  ('sms_dlt_enabled',       '0'),
+  ('sms_dlt_entity_id',     ''),
+  ('sms_dlt_sender_id',     ''),
+  ('sms_dlt_template_id',   ''),
+  ('sms_dlt_template_text', '{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.'),
+  ('sms_dlt_endpoint',      'https://api.jiodlt.com/sms/v1/send'),
+  ('sms_dlt_api_key',       ''),
+  ('sms_dlt_last_test_at',  ''),
+  ('sms_dlt_last_test_ok',  ''),
+  ('sms_dlt_last_test_note', '');
+
+-- Every send attempt. Never the message body — it carries the code — and the
+-- recipient is masked to its last four digits before it is written, so this
+-- cannot become a phone directory either.
+CREATE TABLE IF NOT EXISTS sms_delivery_log (
+  id            INT AUTO_INCREMENT PRIMARY KEY,
+  provider      VARCHAR(32)  NOT NULL,
+  purpose       VARCHAR(32)  NOT NULL DEFAULT 'login',
+  recipient     VARCHAR(32)  NOT NULL,
+  tenant_slug   VARCHAR(64)  NULL,
+  template_id   VARCHAR(40)  NULL,
+  ok            TINYINT(1)   NOT NULL DEFAULT 0,
+  http_status   INT          NULL,
+  gateway_ref   VARCHAR(120) NULL,
+  detail        VARCHAR(255) NULL,
+  created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sms_log_time (created_at),
+  INDEX idx_sms_log_ok (ok, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Platform mail provider (migration 020) ──────────────────────────────────
+-- Per-tenant SMTP still wins where a customer has configured it. This covers
+-- what SMTP cannot: mail with no tenant behind it (a code sent to an email
+-- address, a registration acknowledgement) and hosts that block outbound SMTP.
+INSERT IGNORE INTO platform_settings (key_name, value) VALUES
+  ('mail_provider',             'smtp'),
+  ('mail_zepto_enabled',        '0'),
+  ('mail_zepto_token',          ''),
+  ('mail_zepto_endpoint',       'https://api.zeptomail.in/v1.1/email'),
+  ('mail_zepto_from',           ''),
+  ('mail_zepto_from_name',      'IFQM Ideation'),
+  ('mail_zepto_last_test_at',   ''),
+  ('mail_zepto_last_test_ok',   ''),
+  ('mail_zepto_last_test_note', ''),
+  ('otp_email_enabled',         '0');
+
+-- ── Payment grace, reminders and Razorpay (migration 021) ───────────────────
+-- period_end reached -> still working, admins reminded daily -> grace expires
+-- -> the organisation is put on hold and nobody in it can sign in.
+INSERT IGNORE INTO platform_settings (key_name, value) VALUES
+  ('billing_grace_days',      '2'),
+  ('billing_reminder_hours',  '20'),
+  ('razorpay_enabled',        '0'),
+  ('razorpay_key_id',         ''),
+  ('razorpay_key_secret',     ''),
+  ('razorpay_business_name',  'IFQM'),
+  ('razorpay_last_test_at',   ''),
+  ('razorpay_last_test_ok',   ''),
+  ('razorpay_last_test_note', '');
+
+-- `ADD COLUMN IF NOT EXISTS` is MariaDB-only and is a syntax error on MySQL 8,
+-- which is what the live registry runs on. Same guard the migrations use.
+SET @sql := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants'
+                   AND COLUMN_NAME = 'last_reminder_at') = 0,
+  'ALTER TABLE tenants ADD COLUMN last_reminder_at DATETIME NULL DEFAULT NULL', 'SELECT 1');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- Every order raised and every outcome. In the registry rather than a tenant
+-- database because it is IFQM's financial record — and because an organisation
+-- on hold still has to be able to pay, which means reading this while its own
+-- database is off limits.
+CREATE TABLE IF NOT EXISTS payment_attempts (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  tenant_id       INT          NOT NULL,
+  plan_id         INT          NULL,
+  order_ref       VARCHAR(64)  NULL,
+  payment_ref     VARCHAR(64)  NULL,
+  amount_paise    INT          NOT NULL DEFAULT 0,
+  gst_paise       INT          NOT NULL DEFAULT 0,
+  currency        VARCHAR(8)   NOT NULL DEFAULT 'INR',
+  periods         INT          NOT NULL DEFAULT 1,
+  status          ENUM('created','paid','failed','cancelled') NOT NULL DEFAULT 'created',
+  actor_email     VARCHAR(160) NULL,
+  actor_name      VARCHAR(120) NULL,
+  note            VARCHAR(500) NULL,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  paid_at         DATETIME     NULL,
+  UNIQUE KEY uq_order (order_ref),
+  INDEX idx_pay_tenant (tenant_id, created_at),
+  INDEX idx_pay_status (status, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

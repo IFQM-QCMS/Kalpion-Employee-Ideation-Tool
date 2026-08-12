@@ -545,10 +545,17 @@ export async function createTenant(body) {
 const TENANT_STATUSES = ['active', 'suspended', 'pending'];
 
 /**
- * Suspending a tenant is not cosmetic: resolveTenant() only ever matches
- * status='active', so a suspended org's users are refused at login and every
- * authenticated request fails tenant resolution. That is the intended kill
- * switch for non-payment or offboarding.
+ * Suspending a tenant is not cosmetic: resolveTenant() refuses a suspended
+ * organisation, so its users are turned away at login and every authenticated
+ * request fails tenant resolution. That is the intended kill switch.
+ *
+ * The one exception is an organisation the billing sweep put on hold for
+ * non-payment — it can still sign in, and reach nothing but its own bill, so
+ * that the people being asked to pay have a way to do it. An operator
+ * suspending an organisation HERE means something else entirely, so the
+ * automatic billing note is cleared on the way in: without that, an
+ * organisation that had once lapsed would keep the softer treatment forever
+ * after, whatever it was later suspended for.
  */
 export async function updateTenant(tenantId, body) {
   const t = await requireTenantRow(tenantId);
@@ -584,6 +591,15 @@ export async function updateTenant(tenantId, body) {
     }
     updates.push('status = ?');
     params.push(status);
+
+    // Only on the transition into suspension, never on a re-save of a row that
+    // is already suspended — the tenants screen sends `status` with the rest of
+    // the form, and clearing the note on an unrelated rename would silently
+    // convert a billing hold into a hard one.
+    if (status === 'suspended' && t.status !== 'suspended') {
+      updates.push('billing_note = ?');
+      params.push('Suspended by IFQM.');
+    }
   }
 
   if (!updates.length) throw badRequest('Nothing to update.');

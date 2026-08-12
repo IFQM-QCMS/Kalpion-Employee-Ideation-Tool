@@ -9,6 +9,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { respond } from '../utils/respond.js';
 import * as planService from '../services/planService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
+import * as razorpayService from '../services/razorpayService.js';
 
 // ── Plan catalogue ──────────────────────────────────────────────────
 export const listPlans = asyncHandler(async (req, res) =>
@@ -60,6 +61,96 @@ export const markPaid = asyncHandler(async (req, res) =>
 );
 
 /** Find everyone whose time is up. `?dry_run=1` reports without changing. */
+/**
+ * Every organisation's billing state, for the payments dashboard.
+ *
+ * One request rather than one per organisation: the screen shows a summary and
+ * a table that have to agree with each other, and totals computed in a browser
+ * from N separate responses drift the moment one of them fails.
+ */
+/*
+ * ── The organisation's own billing page ───────────────────────────────────
+ *
+ * Deliberately readable by any signed-in member of the organisation, and
+ * payable only by its administrators. An employee seeing "your company is three
+ * days from being cut off" is useful; an employee being able to spend the
+ * company's money is not.
+ */
+export const myBilling = asyncHandler(async (req, res) => {
+  const tenantId = req.tenant?.id;
+  if (!tenantId) return respond(res, { success: true, subscription: null, plan: null });
+
+  const [full, gateway, history] = await Promise.all([
+    subscriptionService.subscriptionFor(tenantId),
+    razorpayService.razorpayConfig(),
+    razorpayService.paymentHistory(tenantId),
+  ]);
+  const { history: events, quota, ...rest } = full;
+
+  return respond(res, {
+    ...rest,
+    events,
+    payments: history,
+    // Only what a browser legitimately needs: whether to show the Pay button,
+    // and the PUBLIC key id. The secret is never in this response.
+    gateway: {
+      enabled: gateway.enabled && !razorpayService.razorpayMissing(gateway).length,
+      mode: razorpayService.razorpayMode(gateway.key_id),
+      business_name: gateway.business_name,
+    },
+  });
+});
+
+/** Raise a Razorpay order for this organisation's own plan. */
+export const payStart = asyncHandler(async (req, res) => {
+  const full = await subscriptionService.subscriptionFor(req.tenant.id);
+  return respond(res, await razorpayService.createOrder({
+    tenant: req.tenant,
+    plan: full.plan,
+    periods: req.body?.periods,
+    actor: req.user,
+  }));
+});
+
+/** Verify the checkout result and extend the subscription. */
+export const payVerify = asyncHandler(async (req, res) =>
+  respond(res, await razorpayService.verifyPayment({
+    orderId: req.body?.razorpay_order_id,
+    paymentId: req.body?.razorpay_payment_id,
+    signature: req.body?.razorpay_signature,
+    tenant: req.tenant,
+    actor: req.user,
+  }))
+);
+
+// ── Platform: the gateway's own configuration ──
+export const gatewayGet = asyncHandler(async (_req, res) => {
+  const cfg = await razorpayService.razorpayConfig();
+  return respond(res, {
+    success: true,
+    enabled: cfg.enabled,
+    key_id: cfg.key_id,
+    business_name: cfg.business_name,
+    // Never the secret — only whether one is on file.
+    key_secret_set: !!cfg.key_secret,
+    mode: razorpayService.razorpayMode(cfg.key_id),
+    missing: razorpayService.razorpayMissing(cfg),
+    last_test: cfg.last_test,
+  });
+});
+
+export const gatewayUpdate = asyncHandler(async (req, res) =>
+  respond(res, await subscriptionService.updateGateway(req.body || {}, req.user))
+);
+
+export const gatewayTest = asyncHandler(async (_req, res) =>
+  respond(res, await razorpayService.testConnection())
+);
+
+export const overview = asyncHandler(async (req, res) =>
+  respond(res, await subscriptionService.billingOverview({ warnDays: req.query.warn_days }))
+);
+
 export const sweep = asyncHandler(async (req, res) =>
   respond(res, await subscriptionService.sweepLapsed({
     dryRun: String(req.query.dry_run ?? '') === '1',
@@ -89,7 +180,12 @@ export const mySubscription = asyncHandler(async (req, res) => {
   });
 });
 
+export const sendMonthlyInvoices = asyncHandler(async (req, res) =>
+  respond(res, await subscriptionService.sendMonthlyInvoices())
+);
+
 export default {
   listPlans, getPlan, createPlan, updatePlan, retirePlan,
-  subscription, assignPlan, setTrial, markPaid, sweep, mySubscription,
+  subscription, assignPlan, setTrial, markPaid, sweep, overview, mySubscription,
+  myBilling, payStart, payVerify, gatewayGet, gatewayUpdate, gatewayTest, sendMonthlyInvoices,
 };

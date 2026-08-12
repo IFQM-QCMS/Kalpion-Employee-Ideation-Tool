@@ -54,15 +54,31 @@ function assertRegistryTenant(tenant) {
 
 /** Read the tenant's logo off disk and inline it. Returns null when unset/missing. */
 async function readLogoDataUri(tenant) {
-  if (!tenant?.logo_url) return null;
+  let logoFile = tenant?.logo_url;
+  const dir = await tenantUploadDir(tenant?.slug);
+
+  if (!logoFile) {
+    try {
+      const files = await fs.readdir(dir);
+      const logos = files.filter((f) => /^logo_.*\.png$/i.test(f)).sort().reverse();
+      if (logos.length > 0) {
+        logoFile = logos[0];
+        if (tenant?.id) {
+          await masterDb().execute(
+            'UPDATE tenants SET logo_url = ?, logo_updated_at = NOW() WHERE id = ?',
+            [logoFile, tenant.id]
+          ).catch(() => {});
+        }
+      }
+    } catch { /* ignore fallback error */ }
+  }
+
+  if (!logoFile) return null;
   try {
-    const dir = await tenantUploadDir(tenant.slug);
-    const buffer = await fs.readFile(path.join(dir, tenant.logo_url));
+    const buffer = await fs.readFile(path.join(dir, logoFile));
     return `data:image/png;base64,${buffer.toString('base64')}`;
   } catch {
-    // The row points at a file that is gone (manual cleanup, restore, etc.).
-    // Branding is decorative — degrade to "no logo" rather than 500 every page.
-    logger.warn(`Branding logo missing on disk for tenant "${tenant.slug}": ${tenant.logo_url}`);
+    logger.warn(`Branding logo missing on disk for tenant "${tenant?.slug}": ${logoFile}`);
     return null;
   }
 }

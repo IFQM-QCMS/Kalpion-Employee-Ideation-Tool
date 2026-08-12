@@ -57,7 +57,7 @@ def a2_containers():
     """What runs where — and one database per customer."""
     fig, ax = canvas(9.0, 5.4)
 
-    box(ax, 18, 45, 54, 6.8, 'Browser  —  React single-page application (24 screens)',
+    box(ax, 18, 45, 54, 6.8, 'Browser  —  React single-page application (28 screens)',
         fill=FILL_MED, size=7.6, bold=True)
     note(ax, 2, 50, 'Runs on the\nvisitor’s machine')
 
@@ -84,7 +84,7 @@ def a2_containers():
         cylinder(ax, 52 + off, 5 + off, 26, 12,
                  '' if off < 4.4 else
                  'ifqm_<organisation>\n\nthat customer’s people,\nideas, votes, files\n'
-                 '(18 tables, once per customer)')
+                 '(17 tables, once per customer)')
 
     note(ax, 45, 3.5,
          'One database per customer. Another customer’s rows are not reachable from this\n'
@@ -99,7 +99,7 @@ def a3_stack():
         ('Screens', 'React 18  ·  Vite  ·  React Router  ·  plain CSS (no UI framework)', FILL_MED),
         ('Transport', 'HTTPS  ·  JSON  ·  signed session tokens', FILL_SOFT),
         ('Server', 'Node.js  ·  Express  ·  Helmet  ·  rate limiting', FILL_SOFT),
-        ('Rules', '33 services — every business rule, none of them aware of HTTP', FILL_MED),
+        ('Rules', '35 services — every business rule, none of them aware of HTTP', FILL_MED),
         ('Data', 'MySQL 8  ·  raw SQL, no ORM  ·  one schema per customer', FILL_SOFT),
         ('Files', 'Local disk, one folder per customer, served through a checked download', FILL_SOFT),
     ]
@@ -303,28 +303,31 @@ def d3_dfd1():
 
 def d4_er_master():
     """The registry, as a real ER diagram."""
-    fig, ax = canvas(10.0, 6.6)
-    ax.text(50, 64, 'ifqm_master  —  the registry',
+    # Tall enough for the three-entity right-hand column. The canvas used to be
+    # 6.6 high, which put support_tickets off the bottom edge and left the
+    # closing note printing straight through it.
+    fig, ax = canvas(10.0, 7.4)
+    ax.text(50, 70.5, 'ifqm_master  —  the registry  (13 tables; the 7 principal ones are shown)',
             ha='center', fontsize=9.0, fontweight='bold', family='DejaVu Sans')
 
     # Positions come from the heights the entities turn out to be. An entity's
     # height depends on how many columns it has, so anything hard-coded starts
     # colliding the moment a table gains a field.
-    left = stack(ax, 2, 60, 24, accent=GOOD, specs=[
+    left = stack(ax, 2, 66, 24, accent=GOOD, specs=[
         ('plans', [('PK', 'id'), ('', 'code  (unique)'), ('', 'name'),
                    ('', 'amount_paise'), ('', 'billing_cycle'),
                    ('', 'gst_percent  ·  gst_mode'), ('', 'max_users'),
                    ('', 'api_quota_monthly')]),
         ('platform_admins', [('PK', 'id'), ('', 'name  ·  email'), ('', 'password_hash')]),
     ])
-    middle = stack(ax, 34, 60, 26, accent=PRIMARY, specs=[
+    middle = stack(ax, 34, 66, 26, accent=PRIMARY, specs=[
         ('tenants', [('PK', 'id'), ('', 'name'), ('', 'slug  (unique)'),
                      ('', 'db_name'), ('', 'status'), ('FK', 'plan_id → plans'),
                      ('', 'billing_status'), ('', 'trial_ends_at'), ('', 'period_end')]),
         ('login_directory', [('PK', 'id'), ('', 'identifier  (unique)'),
                              ('FK', 'tenant_id → tenants'), ('', 'user_id')]),
     ])
-    right = stack(ax, 69, 60, 27, accent=DATA, specs=[
+    right = stack(ax, 69, 66, 27, accent=DATA, specs=[
         ('tenant_registrations', [('PK', 'id'), ('', 'company_name'),
                                   ('', 'udyam_number  ·  gstin'), ('', 'pan  ·  cin'),
                                   ('', 'status'), ('FK', 'tenant_id → tenants'),
@@ -345,19 +348,26 @@ def d4_er_master():
     elbow(ax, middle['tenants'], right['support_tickets'], label='raises', mid=62)
     elbow(ax, middle['tenants'], middle['login_directory'], label='indexes', mid=32)
 
-    note(ax, 50, 12,
+    # Below the longest column, computed rather than guessed — see d5_er_tenant.
+    floor = min(e['bottom'] for col in (left, middle, right) for e in col.values())
+    note(ax, 50, floor - 3.5,
          'PK identifies a row.  FK points at another table.  Three prongs mean “many”, a single bar means “one”.\n'
-         'The registry holds no employee and no idea — it is deliberately thin.', ha='center')
+         'Six standalone tables are left off: platform_settings, login_attempts, platform_login_activity,\n'
+         'login_otps, tenant_api_usage and support_ticket_messages.  The registry holds no employee and no idea.',
+         ha='center')
     return save(fig, 'D4_er_master')
 
 
 def d5_er_tenant():
     """One customer's schema, as a real ER diagram."""
-    fig, ax = canvas(10.2, 8.2)
-    ax.text(51, 80, 'ifqm_<organisation>  —  repeated once per customer  (18 tables)',
+    # The left column starts at x=6 rather than x=2, so the users self-reference
+    # has room to loop back without running off the page, while still leaving
+    # the 30-36 band clear for the relationship lines to route through.
+    fig, ax = canvas(10.2, 7.6)
+    ax.text(51, 74, 'ifqm_<organisation>  —  repeated once per customer  (17 tables)',
             ha='center', fontsize=9.0, fontweight='bold', family='DejaVu Sans')
 
-    left = stack(ax, 2, 76, 25, accent=GOOD, specs=[
+    left = stack(ax, 6, 70, 24, accent=GOOD, specs=[
         ('users', [('PK', 'id'), ('', 'employee_id  (unique)'), ('', 'name  ·  email'),
                    ('', 'role'), ('FK', 'manager_id → users.id'), ('', 'status'),
                    ('', 'points')]),
@@ -367,7 +377,7 @@ def d5_er_tenant():
                            ('FK', 'user_id → users'), ('', 'parent_id → self'),
                            ('', 'is_deleted')]),
     ])
-    middle = stack(ax, 36, 76, 27, accent=PRIMARY, specs=[
+    middle = stack(ax, 36, 70, 27, accent=PRIMARY, specs=[
         ('ideas', [('PK', 'id'), ('', 'idea_code  (unique)'),
                    ('FK', 'submitter_id → users'), ('', 'title'),
                    ('', 'present_situation'), ('', 'proposed_solution'),
@@ -378,32 +388,40 @@ def d5_er_tenant():
         ('idea_attachments', [('PK', 'id'), ('FK', 'idea_id → ideas'),
                               ('', 'section'), ('', 'filename  ·  filepath')]),
     ])
-    right = stack(ax, 73, 76, 26, accent=DATA, specs=[
-        ('categories', [('PK', 'id'), ('', 'name'), ('', 'sort_order')]),
+    right = stack(ax, 73, 70, 26, accent=DATA, specs=[
+        ('idea_categories', [('PK', 'id'), ('', 'name'), ('', 'sort_order')]),
         ('idea_workflow', [('PK', 'id'), ('FK', 'idea_id → ideas'),
                            ('FK', 'actor_id → users'), ('', 'action'),
                            ('', 'comment'), ('', 'created_at')]),
         ('org_settings', [('PK', 'id'), ('', 'key_name  (unique)'), ('', 'value')]),
     ])
 
+    # Every line routes through the clear band between the left column (which
+    # ends at x=30) and the middle one (which begins at x=36). Values inside a
+    # column would draw the relationship straight across a table's own rows.
     elbow(ax, left['users'], middle['ideas'], label='submits')
-    elbow(ax, middle['ideas'], middle['idea_reviewers'], label='assigned to', mid=34)
-    elbow(ax, middle['ideas'], middle['idea_attachments'], label='carries', mid=32)
-    elbow(ax, middle['ideas'], left['idea_votes'], label='voted on', mid=30)
-    elbow(ax, middle['ideas'], left['idea_comments'], label='discussed in', mid=28)
+    elbow(ax, middle['ideas'], middle['idea_reviewers'], label='assigned to', mid=34.6)
+    elbow(ax, middle['ideas'], middle['idea_attachments'], label='carries', mid=33.2)
+    elbow(ax, middle['ideas'], left['idea_votes'], label='voted on', mid=31.8)
+    elbow(ax, middle['ideas'], left['idea_comments'], label='discussed in', mid=30.4)
     elbow(ax, middle['ideas'], right['idea_workflow'], label='history', mid=70)
 
     # The self-reference is drawn rather than left as a footnote: it is the
     # reporting line an idea escalates along, which is the whole point of it.
     u = left['users']
-    ax.plot([u['left'] - 5, u['left'] - 5], [u['cy'] + 5, u['cy'] - 5], color=LINE, lw=1.0, zorder=3)
-    ax.plot([u['left'] - 5, u['left']], [u['cy'] + 5, u['cy'] + 5], color=LINE, lw=1.0, zorder=3)
-    ax.plot([u['left'] - 5, u['left']], [u['cy'] - 5, u['cy'] - 5], color=LINE, lw=1.0, zorder=3)
+    lx = u['left'] - 3.4
+    ax.plot([lx, lx], [u['cy'] + 5, u['cy'] - 5], color=LINE, lw=1.0, zorder=3)
+    ax.plot([lx, u['left']], [u['cy'] + 5, u['cy'] + 5], color=LINE, lw=1.0, zorder=3)
+    ax.plot([lx, u['left']], [u['cy'] - 5, u['cy'] - 5], color=LINE, lw=1.0, zorder=3)
     crow(ax, (u['left'], u['cy'] - 5), (-1, 0), many=True)
-    ax.text(u['left'] - 6.2, u['cy'], 'reports to', ha='center', va='center',
+    ax.text(lx - 1.4, u['cy'], 'reports to', ha='center', va='center',
             fontsize=6.2, family='DejaVu Sans', rotation=90)
 
-    note(ax, 51, 20,
+    # Placed under whichever column turns out to be the longest, rather than at
+    # a fixed height. Hard-coding it is what printed this note through
+    # idea_attachments when the ideas table gained a couple of rows.
+    floor = min(e['bottom'] for col in (left, middle, right) for e in col.values())
+    note(ax, 51, floor - 3.5,
          'users.manager_id points back at users. That self-reference IS the reporting line — the route an idea\n'
          'travels for approval. Every table here exists once per customer, in a database of its own.', ha='center')
     return save(fig, 'D5_er_tenant')
@@ -444,22 +462,54 @@ def d6_usecase():
 
 
 def d12_class():
-    """Which module calls which."""
-    fig, ax = canvas(8.8, 4.0)
-    box(ax, 33, 33, 22, 5.4, 'ideaController', fill=FILL_MED, size=7.0, bold=True)
-    arrow(ax, (44, 33), (44, 29.4))
-    box(ax, 30, 23, 28, 6, 'ideaService', fill=FILL_DARK, size=7.4, bold=True)
+    """
+    The module structure, in place of a class diagram.
 
-    for label, x in [('settingsService', 2), ('aiService', 24), ('coreHelpers', 46), ('mailerService', 68)]:
-        box(ax, x, 13, 20, 5.6, label, fill=FILL_SOFT, size=6.5)
-        arrow(ax, (44, 23), (x + 10, 18.6), rad=0.1, lw=0.9)
+    There is no class diagram in this document because there are no classes to
+    draw: the server is written as ES modules that export functions. Drawing
+    empty boxes labelled "IdeaService" with a stereotype on them would describe
+    a design nobody wrote. This shows the real unit of structure instead — the
+    module, its exported surface, and who it is allowed to call.
+    """
+    fig, ax = canvas(9.0, 5.2)
 
-    box(ax, 22, 3, 22, 5.6, 'ideaSections', fill=FILL_PLAIN, size=6.5)
-    box(ax, 50, 3, 22, 5.6, 'database layer', fill=FILL_PLAIN, size=6.5)
-    arrow(ax, (33, 13), (33, 8.6))
-    arrow(ax, (58, 13), (60, 8.6))
+    box(ax, 30, 45, 30, 5.2, 'ideaController.js  —  HTTP only', fill=FILL_MED, size=7.0, bold=True)
+    arrow(ax, (45, 45), (45, 41.6), label='calls once')
 
-    note(ax, 44, 1.4, 'Arrows point from caller to called. No service ever reaches back up.', ha='center')
+    # The exported surface, written out. This is what a class diagram would have
+    # shown as a compartment of public methods.
+    box(ax, 22, 27, 46, 14.2,
+        'ideaService.js\n\n'
+        '+ list(db, user, filters)          + get(db, user, id)\n'
+        '+ submitOrDraft(db, user, action, b)   + reviewAction(db, user, b)\n'
+        '+ setArchived(db, user, b)         + setPatentability(db, user, b)\n'
+        '+ canReadSolution(user, idea, mode)\n'
+        '−  redactSolution(user, idea, mode, previewChars)',
+        fill=FILL_DARK, size=6.4)
+
+    for label, x in [('settingsService', 2), ('aiService', 24), ('coreHelpers', 46),
+                     ('notificationService', 68)]:
+        box(ax, x, 15, 20, 5.4, label, fill=FILL_SOFT, size=6.4)
+        arrow(ax, (45, 27), (x + 10, 20.4), rad=0.1, lw=0.9)
+
+    # ideaSections.js is the shared vocabulary of section names. It is imported
+    # by ideaService, settingsService, commentService and votingService, and it
+    # imports nothing itself — which is precisely why it exists: without it,
+    # settingsService and ideaService would have to import each other.
+    box(ax, 8, 6.5, 26, 5.0, 'ideaSections.js  —  shared vocabulary', fill=FILL_PLAIN, size=6.2)
+    arrow(ax, (12, 15), (18, 11.9), rad=0.1, lw=0.9)
+    arrow(ax, (34, 27), (26, 11.9), rad=-0.15, lw=0.9)
+
+    box(ax, 46, 6.5, 34, 5.0, 'database layer  (database/tenant.js)', fill=FILL_PLAIN, size=6.2)
+    for x0 in (56, 78):
+        arrow(ax, (x0, 15), (63, 11.9), rad=0.05, lw=0.9)
+    arrow(ax, (58, 27), (63, 11.9), rad=0.1, lw=0.9)
+
+    note(ax, 45, 2.4,
+         'A plus sign is exported and may be called by another module; a minus sign is private to the file.\n'
+         'Arrows point from caller to called, and only ever downward — no service calls a controller.\n'
+         'Every exported function takes the database connection as its first argument and never sees the request.',
+         ha='center')
     return save(fig, 'D12_class')
 
 

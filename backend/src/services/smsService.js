@@ -12,29 +12,98 @@
  *             is what makes the mock test possible today. REFUSED in production
  *             — a provider that prints login codes into a live log file is a
  *             credential leak, not a fallback, so it fails closed there.
- *   msg91     an Indian transactional SMS gateway, widely used for OTP because
- *             it handles DLT registration.
- *   twilio    international.
+ *   jio_dlt   an Indian DLT gateway, configured from the platform console.
+ *             This is the one intended for real use.
+ *   msg91     an Indian transactional SMS gateway. Kept because it was already
+ *             here and costs nothing to keep; configured from env.
+ *   twilio    international. Also env-configured.
  *
  * "SMS tag" in the minutes is the DLT sender ID / template registration Indian
  * operators require: an unregistered template is silently dropped by the
- * carrier, which looks exactly like a bug in this application. Hence
- * SMS_SENDER_ID and SMS_TEMPLATE_ID below, and the warning in the docs.
+ * carrier, which looks exactly like a bug in this application.
+ *
+ * ── Why jio_dlt reads the database and the others read env ─────────────────
+ *
+ * env was the right home while no provider had been chosen — it kept an
+ * unconfigured feature from needing a schema. It is the wrong home now. The
+ * person holding the DLT registration is on the IFQM platform team, and a
+ * template ID that can only be corrected by editing a deployment is a template
+ * ID that stays wrong. The two older providers are left as they were rather
+ * than migrated speculatively; whichever is actually contracted can move.
  */
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { masterDb } from '../database/master.js';
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
+/** Every setting the DLT connector needs, read from the registry. */
+export async function dltConfig() {
+  const blank = {
+    enabled: false, entity_id: '', sender_id: '', template_id: '',
+    template_text: '', endpoint: '', api_key: '',
+  };
+  try {
+    const [rows] = await masterDb().query(
+      "SELECT key_name, value FROM platform_settings WHERE key_name LIKE 'sms\\_dlt\\_%'"
+    );
+    const m = Object.fromEntries(rows.map((r) => [r.key_name, r.value ?? '']));
+    return {
+      enabled: m.sms_dlt_enabled === '1',
+      entity_id: (m.sms_dlt_entity_id || '').trim(),
+      sender_id: (m.sms_dlt_sender_id || '').trim(),
+      template_id: (m.sms_dlt_template_id || '').trim(),
+      template_text: m.sms_dlt_template_text || '',
+      endpoint: (m.sms_dlt_endpoint || '').trim(),
+      api_key: m.sms_dlt_api_key || '',
+    };
+  } catch (e) {
+    logger.warn('sms: could not read DLT settings', e.message);
+    return blank;
+  }
+}
+
+/**
+ * What is missing before this connector could send anything.
+ *
+ * Returned as a list rather than a boolean so the console can name the empty
+ * field instead of showing "not configured" and leaving somebody to guess
+ * which of five values it meant.
+ */
+export function dltMissing(cfg) {
+  const need = [
+    ['entity_id', 'Principal Entity ID'],
+    ['sender_id', 'Header / Sender ID'],
+    ['template_id', 'Content Template ID'],
+    ['endpoint', 'Gateway endpoint URL'],
+    ['api_key', 'Gateway API key'],
+  ];
+  const missing = need.filter(([k]) => !String(cfg[k] || '').trim()).map(([, label]) => label);
+  // Operators register a 6-character header; a longer one is a transcription
+  // slip that the gateway would reject with an opaque error.
+  if (cfg.sender_id && cfg.sender_id.length !== 6) {
+    missing.push('Header / Sender ID must be exactly 6 characters');
+  }
+  return missing;
+}
+
 /**
  * Send one text message.
- * @returns {Promise<{ sent: boolean, provider: string, detail?: string }>}
+ * @returns {Promise<{ sent: boolean, provider: string, detail?: string, ref?: string, status?: number }>}
  */
-export async function sendSms(phone, message, { provider } = {}) {
+export async function sendSms(phone, message, { provider, purpose = 'login', tenantSlug = null } = {}) {
   const chosen = (provider || providerFromEnv() || 'log').toLowerCase();
   const to = String(phone || '').trim();
   if (!to) return { sent: false, provider: chosen, detail: 'no recipient' };
 
+  const result = await deliver(chosen, to, message);
+  // Logged for every provider including the mock, so the console's activity
+  // panel is not empty during a UAT run on the log provider.
+  await recordDelivery({ provider: result.provider, purpose, to, tenantSlug, result });
+  return result;
+}
+
+async function deliver(chosen, to, message) {
   if (chosen === 'log') {
     if (config.env === 'production') {
       // Fail closed. Returning "sent" here would mean users never receive a
@@ -47,11 +116,149 @@ export async function sendSms(phone, message, { provider } = {}) {
     return { sent: true, provider: 'log', detail: 'written to server log' };
   }
 
+  if (chosen === 'jio_dlt') return sendViaJioDlt(to, message);
   if (chosen === 'msg91') return sendViaMsg91(to, message);
   if (chosen === 'twilio') return sendViaTwilio(to, message);
 
   logger.warn(`Unknown SMS provider "${chosen}" — message not sent.`);
   return { sent: false, provider: chosen, detail: 'unknown provider' };
+}
+
+/**
+ * An Indian DLT gateway, configured from the console rather than from env.
+ *
+ * Per-deployment env variables were fine while no provider had been chosen.
+ * They are wrong now: the operator who holds the DLT registration is a member
+ * of the IFQM platform team, not somebody with shell access to the host, and
+ * asking them to raise a deployment to correct a template ID guarantees the
+ * template ID stays wrong.
+ */
+async function sendViaJioDlt(to, message) {
+  const cfg = await dltConfig();
+  const missing = dltMissing(cfg);
+  if (missing.length) {
+    logger.error(`DLT gateway selected but not configured: ${missing.join(', ')}`);
+    return { sent: false, provider: 'jio_dlt', detail: `not configured: ${missing.join(', ')}` };
+  }
+
+  try {
+    const res = await fetch(cfg.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.api_key}`,
+        // Gateways differ on which header they read the key from. Sending both
+        // is harmless and saves a support round trip on first setup.
+        'X-API-Key': cfg.api_key,
+      },
+      body: JSON.stringify({
+        // The three DLT identifiers. A message missing any of them is dropped
+        // by the carrier without a delivery report.
+        entityId: cfg.entity_id,
+        senderId: cfg.sender_id,
+        templateId: cfg.template_id,
+        to: normaliseIndian(to),
+        message,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const body = await res.text();
+    if (!res.ok) {
+      logger.error(`DLT gateway responded ${res.status}`);
+      return {
+        sent: false, provider: 'jio_dlt', status: res.status,
+        detail: gatewayMessage(body) || `http ${res.status}`,
+      };
+    }
+    return {
+      sent: true, provider: 'jio_dlt', status: res.status,
+      ref: gatewayRef(body),
+      // Accepted by the gateway is not the same as delivered to the handset,
+      // and saying so here stops the console overclaiming.
+      detail: 'accepted by gateway',
+    };
+  } catch (e) {
+    logger.error('DLT gateway send failed', e.message);
+    return { sent: false, provider: 'jio_dlt', detail: networkReason(e, cfg.endpoint) };
+  }
+}
+
+/**
+ * Turn a fetch failure into something an operator can act on.
+ *
+ * Node reports almost every network problem as the bare string "fetch failed",
+ * with the real cause one level down in `cause`. Passing that through means the
+ * console shows "fetch failed" for a hostname that does not exist, a refused
+ * connection and an expired certificate alike — three different problems with
+ * three different fixes.
+ */
+export function networkReason(e, endpoint = '') {
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') {
+    return 'The gateway did not respond within 15 seconds.';
+  }
+  const code = e.cause?.code || e.code || '';
+  const host = (() => { try { return new URL(endpoint).host; } catch { return 'the endpoint'; } })();
+  const map = {
+    ENOTFOUND: `${host} does not resolve. Check the endpoint URL with your gateway provider — `
+      + 'the default in this field is a placeholder and must be replaced with the real one.',
+    EAI_AGAIN: `Could not look up ${host}. This is usually a temporary DNS problem.`,
+    ECONNREFUSED: `${host} refused the connection.`,
+    ECONNRESET: `${host} closed the connection unexpectedly.`,
+    CERT_HAS_EXPIRED: `The TLS certificate for ${host} has expired.`,
+    UNABLE_TO_VERIFY_LEAF_SIGNATURE: `The TLS certificate for ${host} could not be verified.`,
+  };
+  return map[code] || (code ? `${code} talking to ${host}.` : e.message || 'Network error.');
+}
+
+/** Pull a request/message id out of whatever shape the gateway answered with. */
+function gatewayRef(body) {
+  try {
+    const j = JSON.parse(body);
+    const v = j.requestId || j.request_id || j.messageId || j.message_id || j.id || j.data?.id;
+    return v ? String(v).slice(0, 120) : null;
+  } catch { return null; }
+}
+
+/** The gateway's own explanation, if it gave one, for showing in the console. */
+function gatewayMessage(body) {
+  try {
+    const j = JSON.parse(body);
+    const v = j.message || j.error || j.description || j.errorMessage;
+    return v ? String(v).slice(0, 200) : null;
+  } catch {
+    return String(body || '').trim().slice(0, 200) || null;
+  }
+}
+
+/**
+ * Append one row to the delivery log.
+ *
+ * Never the message body — it carries the code. The recipient is masked before
+ * it is written, so the table cannot become a phone directory either.
+ */
+async function recordDelivery({ provider, purpose, to, tenantSlug, result }) {
+  try {
+    const cfg = provider === 'jio_dlt' ? await dltConfig() : null;
+    await masterDb().execute(
+      `INSERT INTO sms_delivery_log
+         (provider, purpose, recipient, tenant_slug, template_id, ok, http_status, gateway_ref, detail)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [provider, purpose, maskPhone(to), tenantSlug, cfg?.template_id || null,
+        result.sent ? 1 : 0, result.status ?? null,
+        result.ref ?? null, (result.detail || '').slice(0, 255) || null]
+    );
+  } catch (e) {
+    // A logging failure must never fail the send it describes.
+    logger.warn('sms: could not write delivery log', e.message);
+  }
+}
+
+/** 'YYYY-MM-DD HH:MM:SS' in local time, the same shape MySQL's NOW() writes. */
+export function localStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} `
+    + `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 /** Never log a full number. Enough digits to correlate, not enough to reuse. */
@@ -127,4 +334,101 @@ function normaliseIndian(v) {
 
 const extractCode = (message) => (String(message).match(/\b(\d{4,8})\b/) || [])[1] || '';
 
-export default { sendSms, maskPhone };
+/**
+ * Fill a DLT template's {#var#} placeholders, left to right.
+ *
+ * The wording must come from the registered template rather than from a string
+ * literal in this file. If the two ever drift — someone edits the sentence here
+ * to read better — every message starts being dropped by the carrier with no
+ * error anywhere, and the cause is invisible from inside the application.
+ */
+export function fillTemplate(template, vars = []) {
+  let i = 0;
+  return String(template || '').replace(/\{#var#\}/g, () => String(vars[i++] ?? ''));
+}
+
+/**
+ * Does this message still match the registered template?
+ *
+ * Compares the two with every placeholder's substitution allowed to be
+ * anything. A mismatch is the single most common cause of "the gateway says
+ * accepted and nothing arrives", so it is worth catching before the send
+ * rather than after a support call.
+ */
+export function matchesTemplate(template, message) {
+  const t = String(template || '').trim();
+  if (!t) return true;
+  const escaped = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = escaped.split(/\\\{#var#\\\}/).join('(.+?)');
+  return new RegExp(`^${pattern}$`, 's').test(String(message || '').trim());
+}
+
+/**
+ * Send a real message to one number, for the console's Test Connection button.
+ *
+ * Deliberately a real send. A test that only checks the credentials parse would
+ * pass on a template ID that the carrier has never approved, which is exactly
+ * the failure this button exists to catch — so it goes all the way to the
+ * gateway and reports what came back.
+ */
+export async function sendTestSms(phone, { provider } = {}) {
+  const chosen = (provider || 'jio_dlt').toLowerCase();
+  const cfg = await dltConfig();
+
+  if (chosen === 'jio_dlt') {
+    const missing = dltMissing(cfg);
+    if (missing.length) {
+      return { sent: false, provider: chosen, detail: `Not configured: ${missing.join(', ')}` };
+    }
+  }
+
+  // Built from the registered template so the test exercises the same path a
+  // real code takes, including the substitution.
+  const message = chosen === 'jio_dlt' && cfg.template_text
+    ? fillTemplate(cfg.template_text, ['000000', '5'])
+    : '000000 is your IFQM sign-in code. It expires in 5 minute(s). Do not share it with anyone.';
+
+  const result = await deliver(chosen, String(phone || '').trim(), message);
+  await recordDelivery({ provider: result.provider, purpose: 'test', to: phone, tenantSlug: null, result });
+
+  // Remember the outcome, so the console can show when the gateway was last
+  // proven to work rather than only that somebody filled the fields in.
+  try {
+    const stamp = [
+      // Local time, to match the NOW() used by every other timestamp in
+      // these tables. toISOString() is UTC, which showed the last test as
+      // five and a half hours before the log row it wrote.
+      ['sms_dlt_last_test_at', localStamp()],
+      ['sms_dlt_last_test_ok', result.sent ? '1' : '0'],
+      ['sms_dlt_last_test_note', (result.detail || '').slice(0, 255)],
+    ];
+    for (const [k, v] of stamp) {
+      await masterDb().execute(
+        `INSERT INTO platform_settings (key_name, value) VALUES (?, ?)
+           ON DUPLICATE KEY UPDATE value = VALUES(value)`, [k, v]
+      );
+    }
+  } catch (e) {
+    logger.warn('sms: could not record test result', e.message);
+  }
+
+  return result;
+}
+
+/** The most recent send attempts, for the console's activity panel. */
+export async function recentDeliveries(limit = 20) {
+  const n = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+  try {
+    const [rows] = await masterDb().query(
+      `SELECT id, provider, purpose, recipient, tenant_slug, ok, http_status,
+              gateway_ref, detail, created_at
+         FROM sms_delivery_log ORDER BY id DESC LIMIT ${n}`
+    );
+    return rows;
+  } catch { return []; }
+}
+
+export default {
+  sendSms, sendTestSms, maskPhone, dltConfig, dltMissing,
+  fillTemplate, matchesTemplate, recentDeliveries,
+};

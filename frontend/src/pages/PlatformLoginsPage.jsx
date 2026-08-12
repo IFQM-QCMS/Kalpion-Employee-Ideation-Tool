@@ -77,6 +77,7 @@ export default function PlatformLoginsPage() {
   const { t } = useLang();
 
   const [rows,    setRows]    = useState([]);
+  const [actorType, setActorType] = useState('all');
   const [last24,  setLast24]  = useState({ successes: 0, failures: 0, lockouts: 0 });
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -84,12 +85,12 @@ export default function PlatformLoginsPage() {
   const [limit,   setLimit]   = useState(100);
   const [search,  setSearch]  = useState('');
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [outcome, limit]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [actorType, outcome, limit]);
 
   async function load() {
     setLoading(true); setError('');
     try {
-      const res = await platformApi.activity({ outcome, limit });
+      const res = await platformApi.activity({ actor_type: actorType, outcome, limit });
       if (res.data.success) {
         setRows(res.data.activity || []);
         setLast24(res.data.last_24h || { successes: 0, failures: 0, lockouts: 0 });
@@ -103,12 +104,12 @@ export default function PlatformLoginsPage() {
   const filtered = rows.filter((r) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
-    return [r.actor_name, r.actor_email, r.ip, r.location]
+    return [r.actor_name, r.actor_email, r.ip, r.location, r.tenant_slug]
       .some((v) => String(v || '').toLowerCase().includes(q));
   });
 
   function exportCsv() {
-    const cols = ['created_at', 'actor_name', 'actor_email', 'outcome',
+    const cols = ['created_at', 'actor_name', 'actor_email', 'tenant_slug', 'outcome',
       'location', 'ip', 'network', 'user_agent'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const csv = [cols.join(','), ...filtered.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\r\n');
@@ -150,17 +151,23 @@ export default function PlatformLoginsPage() {
 
       <div className="card" style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
-          className="form-control" style={{ flex: '1 1 240px', minWidth: 200 }}
+          className="form-control" style={{ flex: '1 1 200px', minWidth: 180 }}
           placeholder={t('la.search_ph')} value={search}
           onChange={(e) => setSearch(e.target.value)} />
-        <select className="form-control" style={{ width: 170 }} value={outcome}
+        <select className="form-control" style={{ width: 170 }} value={actorType}
+          onChange={(e) => setActorType(e.target.value)}>
+          <option value="all">All Accounts</option>
+          <option value="platform_admin">Platform Admins Only</option>
+          <option value="tenant_user">Tenant Users Only</option>
+        </select>
+        <select className="form-control" style={{ width: 150 }} value={outcome}
           onChange={(e) => setOutcome(e.target.value)}>
           <option value="">{t('la.all_outcomes')}</option>
           <option value="success">{t('la.success')}</option>
           <option value="failure">{t('la.failure')}</option>
           <option value="lockout">{t('la.lockout')}</option>
         </select>
-        <select className="form-control" style={{ width: 140 }} value={limit}
+        <select className="form-control" style={{ width: 130 }} value={limit}
           onChange={(e) => setLimit(parseInt(e.target.value, 10))}>
           {[50, 100, 200].map((n) => <option key={n} value={n}>{t('la.last_n').replace('{n}', n)}</option>)}
         </select>

@@ -13,8 +13,9 @@
  * token) and attach its connection pool as `req.db` — the exact equivalent of
  * PHP `db()` resolving the tenant from `$_SESSION['org_slug']`.
  */
+import config from '../config/index.js';
 import { verifyToken } from '../utils/jwt.js';
-import { resolveTenantBySlug, getTenantPool } from '../database/tenant.js';
+import { resolveTenantBySlug, getTenantPool, heldForNonPayment } from '../database/tenant.js';
 import { masterDb } from '../database/master.js';
 import { ApiError, unauthorized, forbidden } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -29,6 +30,17 @@ function getBearer(req) {
 }
 
 /*
+ * How long the two billing settings below are held before being re-read.
+ *
+ * Zero in tests: a test that changes one and then makes a request would
+ * otherwise assert against whatever was cached up to a minute earlier, which
+ * either makes it flaky or makes it wait sixty seconds. The cache is a hot-path
+ * optimisation, not behaviour, so dropping it there costs nothing but a couple
+ * of extra reads.
+ */
+const SETTING_CACHE_MS = config.env === 'test' ? 0 : 60000;
+
+/*
  * Whether lapsed organisations are actually blocked.
  *
  * Cached: this is consulted on every single request and it changes about once a
@@ -38,7 +50,7 @@ function getBearer(req) {
  */
 let billingEnforceCache = { value: false, at: 0 };
 async function billingEnforced() {
-  if (Date.now() - billingEnforceCache.at < 60000) return billingEnforceCache.value;
+  if (Date.now() - billingEnforceCache.at < SETTING_CACHE_MS) return billingEnforceCache.value;
   try {
     const raw = await getPlatformSetting('billing_enforce');
     billingEnforceCache = { value: String(raw) === '1', at: Date.now() };
@@ -46,6 +58,32 @@ async function billingEnforced() {
     billingEnforceCache = { value: false, at: Date.now() };
   }
   return billingEnforceCache.value;
+}
+
+/*
+ * How many days past the due date before access is actually withdrawn.
+ *
+ * Cached on the same terms and for the same reason as the flag above. This has
+ * to be read rather than assumed: `sweepLapsed`, `billingOverview` and the
+ * organisation's own billing page all pass the configured value to
+ * billingState(), and this gate did not — so it used the built-in default of
+ * two days regardless. Setting the window to a week meant the API started
+ * refusing on day two while every screen said five days remained.
+ *
+ * Falls back to the same default billingState() uses, so a settings outage
+ * changes nothing about when anybody is blocked.
+ */
+const DEFAULT_GRACE_DAYS = 2;
+let graceDaysCache = { value: DEFAULT_GRACE_DAYS, at: 0 };
+async function billingGraceDays() {
+  if (Date.now() - graceDaysCache.at < SETTING_CACHE_MS) return graceDaysCache.value;
+  let value = DEFAULT_GRACE_DAYS;
+  try {
+    const n = parseInt(await getPlatformSetting('billing_grace_days'), 10);
+    if (Number.isFinite(n) && n >= 0 && n <= 30) value = n;
+  } catch { /* keep the default */ }
+  graceDaysCache = { value, at: Date.now() };
+  return value;
 }
 
 async function attachTenantDb(req, orgSlug) {
@@ -64,6 +102,7 @@ async function attachTenantDb(req, orgSlug) {
    */
   await meterTenantRequest(req);
   req.billingEnforced = await billingEnforced();
+  req.billingGraceDays = await billingGraceDays();
 }
 
 /**
@@ -190,12 +229,22 @@ function enforcePasswordChange(req) {
  * the people who need to talk to somebody. Branding and notifications are what
  * the shell fetches before it can draw anything at all — refusing them produces
  * a blank page instead of an explanation.
+ *
+ * And the bill itself has to be reachable, which it was not. Both the "access
+ * has paused" banner and the billing page read /settings/subscription and
+ * /settings/billing, and both were refused by this very gate — so a lapsed
+ * organisation saw a generic failure, could not read what it owed, and could
+ * not pay it. The prefix covers /settings/billing/pay and /billing/verify;
+ * those two are still admin-only, enforced by the route, because an ordinary
+ * employee should not be able to spend the company's money.
  */
 const BILLING_ALLOWED = [
   '/api/auth',
   '/api/support/tickets',
   '/api/branding',
   '/api/notifications',
+  '/api/settings/subscription',
+  '/api/settings/billing',
   '/api/health',
   '/api/ready',
 ];
@@ -224,9 +273,25 @@ function enforceBilling(req) {
 
   // An organisation admin keeps read access so they can see the state of their
   // own account and reach the people who can restore it.
-  const state = billingState(tenant);
-  if (!state.blocked) return;
-  if (!req.billingEnforced) return;
+  //
+  // The configured grace window, not the built-in default — this gate has to
+  // block on the same day the banner, the sweep and the reminder emails all say
+  // it will.
+  const state = billingState(tenant, { graceDays: req.billingGraceDays });
+
+  /*
+   * An organisation already ON HOLD is refused whatever the enforcement flag
+   * says. Being on hold is a decision that was taken, recorded and emailed
+   * about; re-deciding it from the dates on every request would mean switching
+   * enforcement off silently handed the product back to everyone it had been
+   * withdrawn from. Recording a payment is what lifts it — see markPaid.
+   *
+   * They still reach the allow-list above, which is how they pay.
+   */
+  if (!heldForNonPayment(tenant)) {
+    if (!state.blocked) return;
+    if (!req.billingEnforced) return;
+  }
 
   throw new ApiError(402, 'Your organisation\'s access is paused pending payment.', {
     billing_blocked: true,

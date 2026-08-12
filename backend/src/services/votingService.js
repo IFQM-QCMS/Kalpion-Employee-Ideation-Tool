@@ -152,7 +152,21 @@ export async function communityVote(db, user, b) {
 
   const [up] = await db.execute("SELECT COUNT(*) AS c FROM idea_community_votes WHERE idea_id=? AND vote_type='up'", [ideaId]);
   const [dn] = await db.execute("SELECT COUNT(*) AS c FROM idea_community_votes WHERE idea_id=? AND vote_type='down'", [ideaId]);
-  return { success: true, upvotes: num(up[0].c), downvotes: num(dn[0].c), user_vote: newVote };
+  const upvotes = num(up[0].c);
+  const downvotes = num(dn[0].c);
+
+  await db.execute('UPDATE ideas SET upvotes=?, downvotes=? WHERE id=?', [upvotes, downvotes, ideaId]);
+
+  const [aiRows] = await db.execute('SELECT ai_score FROM ideas WHERE id=?', [ideaId]);
+  const aiScore = num(aiRows[0]?.ai_score);
+
+  return {
+    success: true,
+    upvotes,
+    downvotes,
+    user_vote: newVote,
+    community_score: communityAdjustedScore(aiScore, upvotes, downvotes),
+  };
 }
 
 // ── community_stats (GET) ──────────────────────────────────────────

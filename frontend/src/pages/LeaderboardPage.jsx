@@ -212,7 +212,8 @@ export default function LeaderboardPage() {
     } catch { showToast(t('msg.error'), 'danger'); }
   }
 
-  const indivs = data?.individuals || [];
+  const activeIndivs = (data?.individuals || []).filter(u => Number(u.points) > 0 || Number(u.idea_count || u.ideas_count || 0) > 0);
+  const indivs = activeIndivs;
   const depts  = data?.departments || [];
   const top    = data?.top_ideas   || [];
   const maxPts = Math.max(...indivs.map(u => u.points), 1);
@@ -220,11 +221,7 @@ export default function LeaderboardPage() {
 
   return (
     <>
-      {/* Period chips + share.
-          Sharing produces an image: a personal card, or the organisation's top
-          five. Deliberately NOT a link — the leaderboard sits behind a tenant
-          login, so a URL would be a dead end for anybody outside the
-          organisation. Names and points only ever leave; no idea content. */}
+      {/* Period chips + share. */}
       <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:20 }}>
       <div className="chip-filter" style={{ marginBottom:0 }}>
         {PERIODS.map(p => (
@@ -266,53 +263,54 @@ export default function LeaderboardPage() {
           <div className="card" style={{ gridColumn:'1/3' }}>
             <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('lb.top_employees')}<InfoDot term="engagement_index" /></div>
 
-            {/* Top 3 on a podium, then the rest of the top 5 (and beyond) as rows.
-                The podium repeats ranks 1–3, so the list below starts at 4. */}
-            <Podium rows={indivs.slice(0, 3)} meId={user?.id} t={t} />
+            {!indivs.length ? (
+              <div className="empty-state">{t('msg.no_leaderboard')}</div>
+            ) : (
+              <>
+                <Podium rows={indivs.slice(0, 3)} meId={user?.id} t={t} />
 
-            <div id="lb-individuals">
-              {!indivs.length
-                ? <div className="empty-state">{t('msg.no_leaderboard')}</div>
-                : indivs.slice(3).map((u, iOffset) => {
-                  const i = iOffset + 3;
-                  const ei = engagementIndex(u.avg_score, u.avg_community_rating, u.total_votes_received);
-                  return (
-                    <div className="lb-row" key={u.id}>
-                      <div className={`lb-rank ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}`}>{i+1}</div>
-                      <div className="avatar">{u.avatar_initials||u.name?.[0]||'?'}</div>
-                      <div style={{ flex:1 }}>
-                        <div className="lb-name">
-                          {u.name}
-                          {u.id == user?.id && <span style={{ fontSize:11,color:'#f59e0b',marginLeft:4 }}>{t('lb.you')}</span>}
-                        </div>
-                        <div className="lb-dept">{u.department||'–'}</div>
-                        <div className="progress-bar" style={{ marginTop:8 }}>
-                          <div className="progress-fill" style={{ width:'0%' }} data-w={Math.round(u.points/maxPts*100)}></div>
-                        </div>
-                        {(u.avg_community_rating > 0 || u.total_votes_received > 0) && (
-                          <div style={{ marginTop:4,fontSize:11,color:'var(--subtle)',display:'flex',gap:6 }}>
-                            {u.avg_community_rating > 0 && <span>⭐ {parseFloat(u.avg_community_rating).toFixed(1)}</span>}
-                            {u.total_votes_received > 0 && <span>🗳 {u.total_votes_received}</span>}
+                <div id="lb-individuals">
+                  {indivs.slice(3).map((u, iOffset) => {
+                    const i = iOffset + 3;
+                    const ei = engagementIndex(u.avg_score, u.avg_community_rating, u.total_votes_received);
+                    return (
+                      <div className="lb-row" key={u.id}>
+                        <div className={`lb-rank ${i===0?'rank-1':i===1?'rank-2':i===2?'rank-3':'rank-n'}`}>{i+1}</div>
+                        <div className="avatar">{u.avatar_initials||u.name?.[0]||'?'}</div>
+                        <div style={{ flex:1 }}>
+                          <div className="lb-name">
+                            {u.name}
+                            {u.id == user?.id && <span style={{ fontSize:11,color:'#f59e0b',marginLeft:4 }}>{t('lb.you')}</span>}
                           </div>
-                        )}
-                      </div>
-                      <div style={{ textAlign:'right' }}>
-                        <div className="lb-points">{u.points} {t('unit.pts')}</div>
-                        <div className="lb-ideas">{u.idea_count||0} {t('unit.ideas')}</div>
-                        {u.avg_score > 0 && (
-                          <span className={`${scoreBadgeClass(u.avg_score)}`} style={{ marginTop:2,display:'inline-block' }}>
-                            {t('lb.avg_score')}: {u.avg_score}
-                          </span>
-                        )}
-                        <div style={{ marginTop:4 }}>
-                          <EngBadge aiScore={u.avg_score} avgRating={u.avg_community_rating} voteCount={u.total_votes_received} t={t} />
+                          <div className="lb-dept">{u.department||'–'}</div>
+                          <div className="progress-bar" style={{ marginTop:8 }}>
+                            <div className="progress-fill" style={{ width:'0%' }} data-w={Math.round(u.points/maxPts*100)}></div>
+                          </div>
+                          {(u.avg_community_rating > 0 || u.total_votes_received > 0) && (
+                            <div style={{ marginTop:4,fontSize:11,color:'var(--subtle)',display:'flex',gap:6 }}>
+                              {u.avg_community_rating > 0 && <span>⭐ {parseFloat(u.avg_community_rating).toFixed(1)}</span>}
+                              {u.total_votes_received > 0 && <span>🗳 {u.total_votes_received}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ textAlign:'right' }}>
+                          <div className="lb-points">{u.points} {t('unit.pts')}</div>
+                          <div className="lb-ideas">{u.idea_count||0} {t('unit.ideas')}</div>
+                          {u.avg_score > 0 && (
+                            <span className={`${scoreBadgeClass(u.avg_score)}`} style={{ marginTop:2,display:'inline-block' }}>
+                              {t('lb.avg_score')}: {u.avg_score}
+                            </span>
+                          )}
+                          <div style={{ marginTop:4 }}>
+                            <EngBadge aiScore={u.avg_score} avgRating={u.avg_community_rating} voteCount={u.total_votes_received} t={t} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })
-              }
-            </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Department bar chart */}

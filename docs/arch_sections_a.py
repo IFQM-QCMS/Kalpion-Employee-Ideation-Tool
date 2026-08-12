@@ -49,10 +49,15 @@ def build(doc, H, para, bullets, table, figure, fig):
     H(doc, "1.3 Scope", 2)
     para(doc, "In scope: capturing ideas, scoring them, routing them for approval, tracking "
               "implementation and savings, rewarding contributors, reporting, running many "
-              "customer organisations from one platform, and handing approved ideas to the QCMS "
-              "tool.")
-    para(doc, "Out of scope for this version: billing and invoicing; single sign-on with other "
-              "IFQM tools; a native mobile application, since the screens already work in a phone "
+              "customer organisations from one platform, handing approved ideas to the QCMS "
+              "tool, and the subscription side of the platform - plans, free trials, and putting "
+              "an organisation on hold when its period lapses.")
+    para(doc, "Out of scope for this version: taking payment. The system records which plan an "
+              "organisation is on, prices it including GST, runs the trial clock and holds the "
+              "account when the period ends, but no payment gateway is connected and no invoice "
+              "is issued - money changes hands outside the product and a member of the platform "
+              "team marks the account paid. Also out of scope: single sign-on with other IFQM "
+              "tools; a native mobile application, since the screens already work in a phone "
               "browser; and any automatic feed of ideas from another system.")
 
     H(doc, "1.4 Who uses it", 2)
@@ -117,7 +122,25 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["FR-33", "Each organisation sets its own branding, categories and approval chain.", "Must"],
         ["FR-34", "The interface is available in seven languages.", "Must"],
         ["FR-35", "Support tickets can be raised by a customer and answered by IFQM.", "Should"],
-    ], widths=[0.55, 5.0, 0.65], font_size=8.5)
+        ["FR-36", "IFQM holds a catalogue of subscription plans, priced in whole paise with GST "
+                  "either included or added.", "Must"],
+        ["FR-37", "The plan and the free-trial length are chosen by IFQM at the moment an "
+                  "application is approved, and either can be changed at any time afterwards.",
+         "Must"],
+        ["FR-38", "A new organisation gets a free trial, 14 days by default, adjustable per "
+                  "organisation.", "Must"],
+        ["FR-39", "When a trial or paid period lapses the organisation is put on hold and cannot "
+                  "use the platform until IFQM records payment.", "Must"],
+        ["FR-40", "IFQM sees one screen per organisation carrying its registration details, "
+                  "headcount, idea counts, implemented and pushed totals, and its billing state.",
+         "Should"],
+        ["FR-41", "The monthly request allowance follows the organisation's plan, and can never "
+                  "lock a workspace out of signing in or raising a ticket.", "Should"],
+        ["FR-42", "An unknown web address shows a helpful page with working links rather than a "
+                  "browser error, and the public pages carry breadcrumbs, FAQs and page "
+                  "descriptions.", "Could"],
+    ], widths=[0.55, 5.0, 0.65], font_size=8.5,
+        caption="Table 2.1  Functional requirements")
 
     H(doc, "2.2 Non-functional requirements - how well it has to do it", 2, page_break=True)
     table(doc, ["ID", "Area", "Requirement", "How it is met"], [
@@ -148,13 +171,14 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["NFR-11", "Auditability", "It must be possible to reconstruct what happened to an idea",
          "An append-only history on every idea, and a separate sign-in record"],
         ["NFR-12", "Usability", "Runnable by a business with no IT staff",
-         "Everything is a screen in the app. 60 plain-English explanations sit beside the "
+         "Everything is a screen in the app. 74 plain-English explanations sit beside the "
          "technical settings"],
         ["NFR-13", "Accessibility", "Usable by keyboard and readable on a phone",
          "Visible focus outlines, keyboard-reachable controls, layouts that reflow"],
         ["NFR-14", "Language", "Seven Indian languages",
-         "All interface text is looked up by key. A missing translation falls back to English "
-         "rather than breaking the screen"],
+         "All interface text is looked up by key. English carries 1,116 keys and each of the six "
+         "other languages 822, so 294 strings fall back to English rather than breaking the "
+         "screen. Partial - see section 26"],
         ["NFR-15", "Portability", "Not tied to one hosting company",
          "Standard Node and MySQL. Which host is used is configuration, not code"],
         ["NFR-16", "Maintainability", "A new team must be able to take it over",
@@ -165,4 +189,5 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["NFR-18", "Safe defaults", "An insecure configuration must not start",
          "The server refuses to boot with a weak signing key, a blank database password, or "
          "developer settings left in production"],
-    ], widths=[0.6, 0.85, 2.2, 2.65], font_size=8)
+    ], widths=[0.6, 0.85, 2.2, 2.65], font_size=8,
+        caption="Table 2.2  Non-functional requirements")

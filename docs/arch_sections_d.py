@@ -180,11 +180,14 @@ def build(doc, H, para, bullets, table, figure, fig):
     H(doc, "19.4 Gaps to close before production", 2)
     bullets(doc, [
         "No alerting. Somebody has to look at the logs. An uptime check with an email alert is "
-        "the cheapest first step.",
+        "the cheapest first step, and both health endpoints already exist for it to call.",
         "No error aggregation. A tool that groups repeated errors would make patterns visible "
         "that a flat log hides.",
-        "No dashboard for sign-in failures, which is the signal that matters most for abuse.",
+        "No dashboard for sign-in failures, which is the signal that matters most for abuse. "
+        "The data is already recorded; nothing displays it as a trend.",
     ])
+    para(doc, "These three are carried forward into section 26.2, which is the single "
+              "consolidated list of everything not yet done.", italic=True)
 
     # -- 20 -----------------------------------------------------------------
     H(doc, "20. Performance and Scalability", 1, page_break=True)
@@ -281,16 +284,24 @@ def build(doc, H, para, bullets, table, figure, fig):
     H(doc, "22.1 What exists today", 2)
     table(doc, ["Level", "What it covers", "How many", "How it runs"], [
         ["Integration tests", "The API end to end against a real database - sign-in, roles, "
-                              "tenant separation, lockout arithmetic, anonymity, approvals",
-         "33, all passing", "npm test"],
-        ["Manual test cases", "Screen-level scripts, kept as a separate document",
-         "285 or 288 - the figure needs confirming by its owner", "By hand"],
+                              "tenant separation, lockout arithmetic, anonymity, approvals, "
+                              "QCMS, billing",
+         "37, all passing", "npm test"],
+        ["Assurance suite", "One scripted case per requirement across 22 areas, from "
+                            "authentication to fault tolerance and scalability. Writes a "
+                            "results file and a printable test-case document",
+         "229 cases, 228 passing", "node test/tc_runner.mjs"],
         ["Migration checks", "Every schema file applied twice under strict database settings",
-         "All migrations", "Script"],
+         "All 20 migrations", "Script"],
         ["Targeted verification", "Written for each risky change - quotas, one-time codes, "
                                   "visibility rules, the hierarchy template",
          "As needed", "Scripts, run during development"],
     ], widths=[1.3, 2.6, 1.1, 1.2], font_size=8.5)
+    para(doc, "The one failing case is deliberate and is left failing rather than skipped: it "
+              "compares the interface strings across the seven languages and reports the 294 "
+              "that exist in English and not in the other six. It will pass when the translation "
+              "work in section 26.3 is done, and until then it is the thing that stops that gap "
+              "being forgotten.", italic=True)
 
     H(doc, "22.2 What the integration tests deliberately cover", 2)
     para(doc, "They are not there for coverage figures. Each one exists because the thing it "
@@ -317,6 +328,8 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["Tests need a real database", "Cannot run on a machine without MySQL",
          "Acceptable, and deliberate - the things being tested are database behaviour"],
     ], widths=[1.6, 2.1, 2.5], font_size=8.5)
+    para(doc, "All of these except the last are carried forward into section 26.1, with what "
+              "closing each one would actually take.", italic=True)
 
     # -- 23 -----------------------------------------------------------------
     H(doc, "23. Deployment and Release Plan", 1, page_break=True)
@@ -360,3 +373,5 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["6", "Commission a penetration test", "Requested in the minutes"],
         ["7", "Set up uptime alerting", "Nobody is currently told when something breaks"],
     ], widths=[0.4, 2.9, 2.9], font_size=8.5)
+    para(doc, "Section 26.4 puts these in the order they should actually be done, alongside the "
+              "items that do not block a first customer but still need doing.", italic=True)

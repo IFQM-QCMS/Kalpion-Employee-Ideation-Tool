@@ -31,8 +31,9 @@ import { masterDb } from '../database/master.js';
 import { signToken } from '../utils/jwt.js';
 import { resolveTenantByLogin, normalizePhone, isEmail } from './directoryService.js';
 import { getTenantPool } from '../database/tenant.js';
-import { sendSms, maskPhone } from './smsService.js';
+import { sendSms, maskPhone, dltConfig, dltMissing, fillTemplate } from './smsService.js';
 import { recordLogin } from './activityService.js';
+import { mailConfig, sendZeptoMail, zeptoMissing } from './zeptoMailService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
@@ -46,7 +47,7 @@ const DEFAULTS = {
 };
 
 /** Platform-wide OTP policy, with sane fallbacks if the rows are missing. */
-async function policy() {
+export async function policy() {
   try {
     const [rows] = await masterDb().query(
       "SELECT key_name, value FROM platform_settings WHERE key_name LIKE 'otp\\_%'"
@@ -92,6 +93,25 @@ const GENERIC = {
   success: true,
   message: 'If that number belongs to an account, a code has been sent to it.',
 };
+
+/**
+ * The code, in an email.
+ *
+ * Plain and short on purpose. A code email that looks like marketing gets
+ * filtered as marketing, and the one thing the reader needs is six digits they
+ * can read at a glance.
+ */
+function otpEmailHtml(name, code, minutes) {
+  const safe = String(name || '').replace(/[<>&]/g, '');
+  return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#111;line-height:1.6">
+  <p>Hello ${safe || 'there'},</p>
+  <p>Use this code to sign in to the IFQM Employee Ideation Tool:</p>
+  <p style="font-size:30px;font-weight:700;letter-spacing:7px;margin:22px 0">${code}</p>
+  <p>It expires in ${minutes} minute(s) and can be used once.</p>
+  <p style="color:#666;font-size:13px">If you did not ask to sign in, you can ignore this message —
+  nobody can use this code without your email account. Do not forward it to anyone.</p>
+</div>`;
+}
 
 /**
  * POST /api/auth/otp/request
@@ -170,9 +190,48 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
   );
 
   const minutes = Math.max(1, Math.round(ttl / 60));
-  const sent = await sendSms(user.phone || raw,
-    `${code} is your IFQM sign-in code. It expires in ${minutes} minute(s). Do not share it with anyone.`,
-    { provider: p.otp_provider });
+
+  /*
+   * On a DLT gateway the wording is not ours to choose — it has to be the
+   * template the carrier approved, or the message is dropped with no error and
+   * no delivery report. So the registered text is filled in rather than a
+   * literal written here, and the literal below is only the fallback for
+   * providers with no template registration.
+   */
+  let body = `${code} is your IFQM sign-in code. It expires in ${minutes} minute(s). Do not share it with anyone.`;
+  if (p.otp_provider === 'jio_dlt') {
+    const cfg = await dltConfig();
+    if (cfg.template_text) body = fillTemplate(cfg.template_text, [code, minutes]);
+  }
+
+  /*
+   * Somebody who typed an email address gets the code by email.
+   *
+   * This branch was missing: an email identifier resolved correctly, a code was
+   * issued and stored, and then it was handed to the SMS gateway addressed to
+   * `user.phone` — so a person signing in by email either got a text they were
+   * not expecting, or, with no number on file, nothing at all while the screen
+   * said a code had been sent.
+   */
+  let sent;
+  if (idType === 'email') {
+    const mail = await mailConfig();
+    if (!mail.otp_email_enabled) {
+      logger.warn('otp: code requested by email but email codes are switched off');
+      return GENERIC;
+    }
+    const r = await sendZeptoMail({
+      to: user.email || key,
+      toName: user.name,
+      subject: `${code} is your IFQM sign-in code`,
+      html: otpEmailHtml(user.name, code, minutes),
+      cfg: mail,
+    });
+    sent = { sent: r.sent, provider: 'zeptomail', detail: r.detail };
+  } else {
+    sent = await sendSms(user.phone || raw, body,
+      { provider: p.otp_provider, purpose, tenantSlug: tenant.slug });
+  }
 
   if (!sent.sent) logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
   logger.info(`otp: issued for ${maskPhone(key)} @ ${tenant.slug} (provider ${sent.provider})`);
@@ -297,18 +356,59 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   return { user: session, token };
 }
 
-/** Whether the sign-in screen should offer the OTP option at all. */
+/**
+ * Whether the sign-in screen should offer the OTP option at all.
+ *
+ * `enabled` means "switched on AND able to deliver", not merely switched on.
+ * Offering the option while the gateway is misconfigured is worse than not
+ * offering it: the user abandons a password that works for a code that never
+ * arrives, and the screen has no way to tell them why.
+ */
 export async function otpStatus() {
   const p = await policy();
+  const on = p.otp_enabled === '1';
+  const { deliverable } = await providerReadiness(p.otp_provider);
   return {
     success: true,
-    enabled: p.otp_enabled === '1',
+    enabled: on && deliverable,
     length: num(p.otp_length, 6),
     resend_in: num(p.otp_resend_seconds, 60),
     // Named so an operator can see at a glance that a live system is still on
     // the mock provider.
     provider: config.env === 'production' && p.otp_provider === 'log' ? 'unconfigured' : p.otp_provider,
   };
+}
+
+/**
+ * Can the chosen provider actually put a message on a handset right now?
+ * Returns the reason when it cannot, for the platform console to display.
+ */
+export async function providerReadiness(provider) {
+  const chosen = String(provider || 'log').toLowerCase();
+  if (chosen === 'log') {
+    return config.env === 'production'
+      ? { deliverable: false, reason: 'The mock provider is refused in production.' }
+      : { deliverable: true, reason: 'Codes are written to the server log, not sent.' };
+  }
+  if (chosen === 'jio_dlt') {
+    const cfg = await dltConfig();
+    if (!cfg.enabled) return { deliverable: false, reason: 'The DLT connector is switched off.' };
+    const missing = dltMissing(cfg);
+    return missing.length
+      ? { deliverable: false, reason: `Incomplete: ${missing.join(', ')}.` }
+      : { deliverable: true, reason: 'DLT gateway configured.' };
+  }
+  if (chosen === 'msg91') {
+    return process.env.SMS_API_KEY && process.env.SMS_SENDER_ID
+      ? { deliverable: true, reason: 'MSG91 configured from environment.' }
+      : { deliverable: false, reason: 'SMS_API_KEY / SMS_SENDER_ID are not set.' };
+  }
+  if (chosen === 'twilio') {
+    return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM
+      ? { deliverable: true, reason: 'Twilio configured from environment.' }
+      : { deliverable: false, reason: 'TWILIO_* variables are not set.' };
+  }
+  return { deliverable: false, reason: `Unknown provider "${chosen}".` };
 }
 
 /** Housekeeping: drop consumed and expired codes. Safe on any schedule. */
@@ -321,4 +421,4 @@ export async function pruneOtps() {
   } catch { return 0; }
 }
 
-export default { requestOtp, verifyOtp, otpStatus, pruneOtps };
+export default { requestOtp, verifyOtp, otpStatus, providerReadiness, pruneOtps, policy };
