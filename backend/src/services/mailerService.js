@@ -12,55 +12,120 @@
  * negotiation from the same org_settings values.
  */
 import nodemailer from 'nodemailer';
+import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { mailConfig, sendZeptoMail } from './zeptoMailService.js';
 
 /**
- * The platform-wide sender, used when no tenant SMTP applies.
+ * Is the platform's own sender configured?
+ *
+ * All four are required. A host with no credentials, or credentials with no
+ * From address, cannot deliver anything — and a half-configured sender that
+ * reports itself ready is how sign-in codes end up silently going nowhere.
+ */
+export function platformMailReady(cfg = config.platformMail) {
+  return !!(cfg.host && cfg.user && cfg.pass && cfg.from);
+}
+
+/**
+ * The platform transport, built once.
+ *
+ * Memoised because this is on the path of every code and every reset link;
+ * building a transport per message re-does the TLS handshake setup for no
+ * reason. Not pooled — a pool holds sockets open, and this process should be
+ * able to exit when told to.
+ */
+let platformTransport = null;
+function getPlatformTransport() {
+  if (platformTransport) return platformTransport;
+  const { host, port, user, pass } = config.platformMail;
+
+  platformTransport = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,          // implicit TLS
+    // On 587 STARTTLS is only offered, not required — without this nodemailer
+    // will happily continue in the clear if the server declines the upgrade,
+    // putting the SMTP password and the sign-in code on the wire.
+    requireTLS: port !== 465,
+    // Verified, deliberately. This was `rejectUnauthorized: false`, which
+    // accepts any certificate at all: it turns TLS into encryption without
+    // authentication, so anything able to answer for the host can read the
+    // credentials and every code that goes through it.
+    tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
+    auth: { user, pass },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+  });
+  return platformTransport;
+}
+
+/**
+ * Send one message as the platform, rather than as a customer.
+ *
+ * Used for everything with no tenant SMTP behind it — sign-in codes, password
+ * resets, registration mail, billing notices.
+ *
+ * Two routes, in this order:
+ *   1. the SMTP account in the environment (see config.platformMail);
+ *   2. the ZeptoMail HTTP API, if a platform admin configured one in the
+ *      console. Kept as a fallback so an existing deployment that set it up
+ *      that way keeps working; nothing new needs it.
  *
  * Throws rather than returning false on failure, because that is the contract
  * sendSmtpEmail already has with the queue processor: a thrown error marks the
  * row failed and leaves it visible, whereas a quiet false would mark it sent.
  */
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
+  const { host, port, from, fromName } = config.platformMail;
+
+  if (platformMailReady()) {
+    const safeTo = headerSafe(toEmail);
+    await getPlatformTransport().sendMail({
+      from: { name: headerSafe(fromName), address: headerSafe(from) },
+      to: toName ? { name: headerSafe(toName), address: safeTo } : safeTo,
+      subject: headerSafe(subject),
+      html: bodyHtml,
+    });
+    logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
+    return true;
+  }
+
+  // No SMTP account in the environment — fall back to a console-configured API.
   const cfg = await mailConfig();
   if (cfg.zepto_enabled && cfg.token && cfg.endpoint) {
     const r = await sendZeptoMail({ to: toEmail, toName, subject, html: bodyHtml, cfg });
     if (r.sent) return true;
-    logger.warn(`ZeptoMail HTTP API failed (${r.detail || 'unknown error'}). Falling back to direct ZeptoMail SMTP...`);
+    throw new Error(r.detail || 'The platform mail provider refused the message.');
   }
 
-  // Direct Nodemailer fallback to smtp.zeptomail.in:587
-  const host = cfg.smtp_host || 'smtp.zeptomail.in';
-  const port = cfg.smtp_port || 587;
-  const user = cfg.smtp_user || 'emailappsmtp.3c0dea98bc74b18e';
-  const pass = cfg.smtp_pass || 'CrSGv1Zhym0e';
-  const from = cfg.from || 'noreply@ifqm.org.in';
-  const fromName = cfg.from_name || 'IFQM Platform';
+  throw new Error(
+    'No SMTP host for this organisation and no platform mail sender configured. '
+    + 'Set PLATFORM_SMTP_HOST / PLATFORM_SMTP_USER / PLATFORM_SMTP_PASS / PLATFORM_MAIL_FROM.'
+  );
+}
 
-  const transport = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
-    requireTLS: port !== 465,
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 15000,
-  });
+/**
+ * Prove the account works, without needing a recipient.
+ *
+ * `verify()` opens the connection and authenticates, which is what actually
+ * goes wrong on first setup — a wrong password and an unverified sender domain
+ * both look identical from the outside until something is sent.
+ */
+export async function verifyPlatformMail() {
+  if (!platformMailReady()) return { ok: false, detail: 'not configured' };
+  try {
+    await getPlatformTransport().verify();
+    return { ok: true, detail: `${config.platformMail.host}:${config.platformMail.port}` };
+  } catch (e) {
+    return { ok: false, detail: e.message };
+  }
+}
 
-  const safeFrom = headerSafe(from);
-  const safeFromName = headerSafe(fromName);
-  const safeTo = headerSafe(toEmail);
-
-  await transport.sendMail({
-    from: safeFromName ? `"${safeFromName}" <${safeFrom}>` : safeFrom,
-    to: toName ? `"${headerSafe(toName)}" <${safeTo}>` : safeTo,
-    subject: headerSafe(subject),
-    html: bodyHtml,
-  });
-
-  logger.info(`email: delivered to ${toEmail} via ZeptoMail SMTP (${host}:${port})`);
-  return true;
+/** Enough of an address to correlate a log line, not enough to harvest one. */
+function maskEmail(v) {
+  const [name = '', domain = ''] = String(v).split('@');
+  return `${name.slice(0, 2)}***@${domain}`;
 }
 
 /** Fetch all org_settings as a key→value map (PHP getOrgSettings). */
@@ -161,11 +226,11 @@ export async function processEmailQueue(db) {
   // Only give up when neither route exists, and say which is missing — this
   // used to log "smtp_host is not configured" once a minute forever with no
   // hint that a platform-wide provider would solve it.
-  if (!String(settings.smtp_host || '').trim()) {
+  if (!String(settings.smtp_host || '').trim() && !platformMailReady()) {
     const cfg = await mailConfig();
     if (!cfg.zepto_enabled) {
       logger.warn('processEmailQueue: no SMTP host for this organisation and no platform '
-        + 'mail provider — queued mail cannot be delivered.');
+        + 'mail sender — queued mail cannot be delivered.');
       return;
     }
   }
@@ -204,4 +269,7 @@ export async function processEmailQueue(db) {
   }
 }
 
-export default { getOrgSettings, sendSmtpEmail, queueEmail, processEmailQueue };
+export default {
+  getOrgSettings, sendSmtpEmail, queueEmail, processEmailQueue,
+  sendViaPlatform, platformMailReady, verifyPlatformMail,
+};

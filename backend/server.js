@@ -5,6 +5,7 @@ import { createApp } from './src/app.js';
 import config, { assertConfigOrExit } from './src/config/index.js';
 import { closeAllPools } from './src/database/tenant.js';
 import { startScheduler, stopScheduler } from './src/workers/scheduler.js';
+import { platformMailReady, verifyPlatformMail } from './src/services/mailerService.js';
 import logger from './src/utils/logger.js';
 
 // Never boot a production server with a forgeable token secret or a
@@ -18,6 +19,25 @@ const server = app.listen(config.port, () => {
   // Started here rather than at import time, so a process that fails to bind
   // its port does not spend fifteen seconds sending email on the way out.
   startScheduler();
+
+  /*
+   * Say at boot whether the platform can send mail.
+   *
+   * Sign-in codes and password resets both depend on it, and both fail in the
+   * same quiet way: the screen says a code has been sent and nothing arrives.
+   * A line in the log at startup is the cheapest place to notice that the
+   * sender was never configured — or that the password is wrong, which
+   * verify() finds without sending anything to anybody.
+   */
+  if (!platformMailReady()) {
+    logger.warn('platform mail: not configured — sign-in codes and password-reset '
+      + 'links cannot be delivered. Set PLATFORM_SMTP_* in backend/.env.');
+  } else {
+    verifyPlatformMail().then((r) => {
+      if (r.ok) logger.info(`platform mail: ready — ${config.platformMail.from} via ${r.detail}`);
+      else logger.error(`platform mail: configured but NOT working — ${r.detail}`);
+    });
+  }
 });
 
 // A port clash is the single most common way starting this goes wrong (a stray

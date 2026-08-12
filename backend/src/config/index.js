@@ -129,6 +129,50 @@ const config = {
   // max_connections (151 by default — raise it in my.cnf for many tenants).
   dbPoolSize: int(process.env.DB_POOL_SIZE, 10),
 
+  /*
+   * ── The platform's own mail sender (ZeptoMail SMTP) ────────────────────────
+   *
+   * This is the account IFQM sends from when there is no customer SMTP to use:
+   * one-time sign-in codes, password-reset links, registration acknowledgements
+   * — everything addressed to somebody who is not yet inside a tenant, or whose
+   * organisation has never configured a mail server of its own.
+   *
+   * Deliberately env-only, with no screen anywhere in the product. It is one
+   * account belonging to IFQM, set once per deployment; putting it in the
+   * platform console would mean a live credential sitting in a database and a
+   * form that can break sign-in for every customer with one bad keystroke. The
+   * per-tenant SMTP settings screen is unaffected and still wins where a
+   * customer has filled it in.
+   *
+   * These four are all it takes to switch it on — see .env.example:
+   *   PLATFORM_SMTP_HOST=smtp.zeptomail.in
+   *   PLATFORM_SMTP_USER=emailappsmtp.xxxxxxxx
+   *   PLATFORM_SMTP_PASS=…
+   *   PLATFORM_MAIL_FROM=noreply@your-domain
+   */
+  platformMail: {
+    host: (process.env.PLATFORM_SMTP_HOST || '').trim(),
+    // 465 is implicit TLS, 587 is STARTTLS. ZeptoMail accepts both.
+    port: int(process.env.PLATFORM_SMTP_PORT, 587),
+    user: (process.env.PLATFORM_SMTP_USER || '').trim(),
+    pass: process.env.PLATFORM_SMTP_PASS || '',
+    // Must be on a domain verified in ZeptoMail, or every message is rejected.
+    from: (process.env.PLATFORM_MAIL_FROM || '').trim(),
+    fromName: process.env.PLATFORM_MAIL_FROM_NAME || 'IFQM',
+  },
+
+  /*
+   * Sign-in by one-time code, forced on or off from the environment.
+   *
+   * `undefined` means "leave it to the platform_settings row", which is the
+   * existing behaviour. Set OTP_ENABLED=true to switch the feature on for a
+   * deployment without anybody opening the console — the point of configuring
+   * delivery here rather than there.
+   */
+  otpEnabled: process.env.OTP_ENABLED === undefined || process.env.OTP_ENABLED === ''
+    ? undefined
+    : /^(1|true|yes|on)$/i.test(process.env.OTP_ENABLED),
+
   // ── AI providers (blank by default → heuristic fallback) ──
   ai: {
     provider: (process.env.AI_PROVIDER || '').trim().toLowerCase(),

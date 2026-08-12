@@ -31,48 +31,59 @@
  *   sender.        AND belong to the Mail Agent the token came from. This is
  *                  the most common first-run failure.
  */
+import config from '../config/index.js';
 import { masterDb } from '../database/master.js';
 import logger from '../utils/logger.js';
 import { networkReason } from './smsService.js';
 
-const DEFAULT_MAIL_CFG = {
-  provider: 'smtp',
-  zepto_enabled: true,
-  token: 'CrSGv1Zhym0e',
-  endpoint: 'https://api.zeptomail.in/v1.1/email',
-  from: 'noreply@ifqm.org.in',
-  from_name: 'IFQM Platform',
-  otp_email_enabled: true,
-  smtp_host: 'smtp.zeptomail.in',
-  smtp_port: 587,
-  smtp_user: 'emailappsmtp.3c0dea98bc74b18e',
-  smtp_pass: 'CrSGv1Zhym0e',
-};
+/*
+ * ── Where the credentials are NOT ──────────────────────────────────────────
+ *
+ * This file used to carry a live send token and the SMTP username and password
+ * as literal defaults. That put a working credential for the sender domain into
+ * every clone of the repository and into its history, where deleting it later
+ * does not take it back. Credentials now come from the environment
+ * (config.platformMail, delivered over SMTP by mailerService) or from the
+ * registry, where a platform admin put them deliberately.
+ *
+ * `zepto_enabled` therefore starts FALSE. It reflects whether an operator
+ * actually configured the HTTP API route in the console, so an unconfigured
+ * deployment stops trying to send through it with a token that does not exist —
+ * a 401 per message, reported to the caller as "mail is broken".
+ */
 
-/** Platform-wide mail settings from the registry. */
+/** Platform-wide mail settings from the registry, defaulted from the env sender. */
 export async function mailConfig() {
+  const env = config.platformMail;
+  const blank = {
+    provider: 'smtp',
+    zepto_enabled: false,
+    token: '',
+    endpoint: '',
+    from: env.from,
+    from_name: env.fromName,
+    otp_email_enabled: false,
+  };
   try {
     const [rows] = await masterDb().query(
       "SELECT key_name, value FROM platform_settings "
-      + "WHERE key_name LIKE 'mail\\_%' OR key_name LIKE 'smtp\\_%' OR key_name = 'otp_email_enabled'"
+      + "WHERE key_name LIKE 'mail\\_%' OR key_name = 'otp_email_enabled'"
     );
     const m = Object.fromEntries(rows.map((r) => [r.key_name, r.value ?? '']));
     return {
-      provider: m.mail_provider || DEFAULT_MAIL_CFG.provider,
-      zepto_enabled: m.mail_zepto_enabled !== '0',
-      token: m.mail_zepto_token || DEFAULT_MAIL_CFG.token,
-      endpoint: (m.mail_zepto_endpoint || DEFAULT_MAIL_CFG.endpoint).trim(),
-      from: (m.mail_zepto_from || DEFAULT_MAIL_CFG.from).trim(),
-      from_name: m.mail_zepto_from_name || DEFAULT_MAIL_CFG.from_name,
-      otp_email_enabled: m.otp_email_enabled !== '0',
-      smtp_host: m.smtp_host || DEFAULT_MAIL_CFG.smtp_host,
-      smtp_port: parseInt(m.smtp_port, 10) || DEFAULT_MAIL_CFG.smtp_port,
-      smtp_user: m.smtp_user || DEFAULT_MAIL_CFG.smtp_user,
-      smtp_pass: m.smtp_pass || DEFAULT_MAIL_CFG.smtp_pass,
+      provider: m.mail_provider || 'smtp',
+      zepto_enabled: m.mail_zepto_enabled === '1',
+      token: m.mail_zepto_token || '',
+      endpoint: (m.mail_zepto_endpoint || '').trim(),
+      // The From address falls back to the environment sender, so the console
+      // shows the address mail actually goes out as rather than an empty field.
+      from: (m.mail_zepto_from || env.from).trim(),
+      from_name: m.mail_zepto_from_name || env.fromName,
+      otp_email_enabled: m.otp_email_enabled === '1',
     };
   } catch (e) {
-    logger.warn('mail: could not read provider settings, using default platform credentials', e.message);
-    return DEFAULT_MAIL_CFG;
+    logger.warn('mail: could not read provider settings', e.message);
+    return blank;
   }
 }
 

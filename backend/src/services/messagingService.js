@@ -355,7 +355,11 @@ export async function emailHealth() {
       "SELECT id, slug, db_name FROM tenants WHERE status <> 'deleted'"
     );
     const { getTenantPool } = await import('../database/tenant.js');
-    const platformCanSend = (await mailConfig()).zepto_enabled;
+    // Either platform route counts. The SMTP account lives in the environment
+    // and has no screen here on purpose, but a panel that ignored it would
+    // report "cannot send" about a deployment that sends perfectly well.
+    const { platformMailReady } = await import('./mailerService.js');
+    const platformCanSend = platformMailReady() || (await mailConfig()).zepto_enabled;
 
     for (const t of tenants) {
       try {

@@ -34,6 +34,7 @@ import { getTenantPool } from '../database/tenant.js';
 import { sendSms, maskPhone, dltConfig, dltMissing, fillTemplate } from './smsService.js';
 import { recordLogin } from './activityService.js';
 import { mailConfig, sendZeptoMail, zeptoMissing } from './zeptoMailService.js';
+import { sendViaPlatform, platformMailReady } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
@@ -46,16 +47,26 @@ const DEFAULTS = {
   otp_provider: 'log',
 };
 
-/** Platform-wide OTP policy, with sane fallbacks if the rows are missing. */
+/**
+ * Platform-wide OTP policy, with sane fallbacks if the rows are missing.
+ *
+ * OTP_ENABLED in the environment overrides the stored row when it is set. The
+ * delivery account for email codes is configured in the environment too and has
+ * no screen anywhere; leaving the on/off switch stranded in the console would
+ * mean a deployment could be fully configured to send codes and still refuse to
+ * offer them, with the fix hidden behind a settings page nobody was told to
+ * open. An unset OTP_ENABLED changes nothing.
+ */
 export async function policy() {
+  const override = config.otpEnabled === undefined ? {} : { otp_enabled: config.otpEnabled ? '1' : '0' };
   try {
     const [rows] = await masterDb().query(
       "SELECT key_name, value FROM platform_settings WHERE key_name LIKE 'otp\\_%'"
     );
     const found = Object.fromEntries(rows.map((r) => [r.key_name, r.value]));
-    return { ...DEFAULTS, ...found };
+    return { ...DEFAULTS, ...found, ...override };
   } catch {
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, ...override };
   }
 }
 
@@ -215,18 +226,18 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
    */
   let sent = { sent: false, provider: 'none' };
   if (idType === 'email' || user.email) {
+    const route = platformMailReady() ? 'platform_smtp' : 'zeptomail_api';
     try {
-      const { sendViaPlatform } = await import('./mailerService.js');
       await sendViaPlatform(
         user.email || key,
         user.name,
         `${code} is your IFQM verification code`,
         otpEmailHtml(user.name, code, minutes)
       );
-      sent = { sent: true, provider: 'zeptomail_smtp' };
+      sent = { sent: true, provider: route };
     } catch (err) {
       logger.error('otp: email delivery failed', err.message);
-      sent = { sent: false, provider: 'zeptomail_smtp', detail: err.message };
+      sent = { sent: false, provider: route, detail: err.message };
     }
   } else {
     sent = await sendSms(user.phone || raw, body,
@@ -366,14 +377,32 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
  */
 export async function otpStatus() {
   const p = await policy();
-  const mail = await mailConfig();
-  const emailOtpReady = mail.otp_email_enabled !== false;
+
+  /*
+   * Codes go out by email, so "able to deliver" means the platform sender is
+   * configured — the SMTP account in the environment, or, for a deployment that
+   * was set up that way, the ZeptoMail API in the console.
+   *
+   * The console's own `otp_email_enabled` switch is only consulted on the API
+   * route. It defaults to off, so honouring it on the environment route would
+   * mean a correctly configured deployment still hid the option until somebody
+   * opened a settings page — and the whole point of configuring delivery in the
+   * environment is that nobody has to.
+   */
+  let emailReady = platformMailReady();
+  let route = 'platform_smtp';
+  if (!emailReady) {
+    const mail = await mailConfig();
+    emailReady = mail.zepto_enabled && mail.otp_email_enabled;
+    route = 'zeptomail_api';
+  }
+
   return {
     success: true,
-    enabled: p.otp_enabled !== '0' && emailOtpReady,
+    enabled: p.otp_enabled !== '0' && emailReady,
     length: num(p.otp_length, 6),
     resend_in: num(p.otp_resend_seconds, 60),
-    provider: 'zeptomail_smtp',
+    provider: emailReady ? route : 'none',
   };
 }
 
