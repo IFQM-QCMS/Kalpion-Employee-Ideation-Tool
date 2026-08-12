@@ -91,11 +91,60 @@ export default function SignupPage() {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
 
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpMsg, setOtpMsg] = useState('');
+
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm((f) => ({ ...f, [k]: v }));
     if (error) setError('');
   };
+
+  async function handleSendEmailOtp() {
+    const email = form.contact_email.trim();
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
+      setError('Please enter a valid work email address first.');
+      return;
+    }
+    setError(''); setOtpMsg(''); setSendingOtp(true);
+    try {
+      const res = await registrationsApi.sendOtp(email);
+      if (res.data?.success) {
+        setEmailOtpSent(true);
+        setOtpMsg('Verification OTP code sent to your email address.');
+      } else {
+        setError(res.data?.error || 'Failed to send OTP to your email.');
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Network error sending OTP.');
+    }
+    setSendingOtp(false);
+  }
+
+  async function handleVerifyEmailOtp() {
+    const email = form.contact_email.trim();
+    if (!otpCode || otpCode.length < 4) {
+      setError('Please enter the 6-digit verification code.');
+      return;
+    }
+    setError(''); setOtpMsg(''); setVerifyingOtp(true);
+    try {
+      const res = await registrationsApi.verifyOtp(email, otpCode.trim());
+      if (res.data?.success && res.data?.verified) {
+        setEmailVerified(true);
+        setOtpMsg('✓ Email address verified successfully!');
+      } else {
+        setError(res.data?.error || 'Incorrect or expired verification code.');
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Incorrect verification code.');
+    }
+    setVerifyingOtp(false);
+  }
 
   /* Check the work-email rule against the server as soon as the field loses
      focus, so "we don't accept gmail" arrives before step 2 rather than after
@@ -197,6 +246,9 @@ export default function SignupPage() {
   function next() {
     const problem = checkStep(step);
     if (problem) return setError(problem);
+    if (step === 0 && !emailVerified) {
+      return setError('Please verify your work email address with the OTP code before proceeding.');
+    }
     if (step === 0 && emailNote) return setError(emailNote);
     setError('');
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -204,11 +256,13 @@ export default function SignupPage() {
 
   async function submit(e) {
     e.preventDefault();
-    // Re-check every step: somebody can reach the last one, go back and clear a
-    // field, and the browser's own `required` never sees the earlier steps.
     for (let n = 0; n < STEP_FIELDS.length; n += 1) {
       const problem = checkStep(n);
       if (problem) { setStep(n); return setError(problem); }
+    }
+    if (!emailVerified) {
+      setStep(0);
+      return setError('Please verify your work email address with the OTP code before submitting your application.');
     }
     if (!form.accepted_terms) return setError('Please confirm you are authorised to register this organisation.');
     setBusy(true);
@@ -368,12 +422,101 @@ export default function SignupPage() {
                       </div>
                       <div className="full">
                         <label htmlFor="contact_email">Work email <span className="req">*</span></label>
-                        <input id="contact_email" type="email" value={form.contact_email}
-                          onChange={set('contact_email')} onBlur={validateEmail}
-                          placeholder="priya@acme.co.in" required />
-                        {emailNote
-                          ? <p className="warn">{emailNote}</p>
-                          : <p className="hint">Must be your company domain — personal mailboxes such as Gmail or Outlook cannot be verified as belonging to your organisation. You become the first administrator of the workspace.</p>}
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            id="contact_email"
+                            type="email"
+                            value={form.contact_email}
+                            onChange={(e) => {
+                              set('contact_email')(e);
+                              setEmailVerified(false);
+                              setEmailOtpSent(false);
+                              setOtpCode('');
+                              setOtpMsg('');
+                            }}
+                            onBlur={validateEmail}
+                            placeholder="priya@acme.co.in"
+                            disabled={emailVerified}
+                            required
+                            style={{ flex: 1 }}
+                          />
+                          {!emailVerified ? (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                whiteSpace: 'nowrap',
+                                padding: '10px 16px',
+                                fontSize: 13,
+                                fontWeight: 700,
+                                background: 'var(--primary)',
+                                color: '#fff',
+                                borderRadius: 8,
+                                border: 'none',
+                                cursor: 'pointer'
+                              }}
+                              onClick={handleSendEmailOtp}
+                              disabled={sendingOtp || !form.contact_email.trim()}
+                            >
+                              {sendingOtp ? 'Sending OTP...' : emailOtpSent ? 'Resend OTP' : 'Send OTP'}
+                            </button>
+                          ) : (
+                            <span style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: 'var(--success)',
+                              background: 'var(--success-light)',
+                              padding: '8px 14px',
+                              borderRadius: 8,
+                              border: '1px solid var(--success-dim)',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ✓ Email Verified
+                            </span>
+                          )}
+                        </div>
+
+                        {emailOtpSent && !emailVerified && (
+                          <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={8}
+                              placeholder="Enter 6-digit OTP code"
+                              value={otpCode}
+                              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                              style={{ width: 200, letterSpacing: '3px', fontWeight: 700, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
+                            />
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                padding: '10px 18px',
+                                fontSize: 13,
+                                fontWeight: 700,
+                                background: 'var(--success)',
+                                color: '#fff',
+                                borderRadius: 8,
+                                border: 'none',
+                                cursor: 'pointer'
+                              }}
+                              onClick={handleVerifyEmailOtp}
+                              disabled={verifyingOtp || otpCode.length < 4}
+                            >
+                              {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
+                            </button>
+                          </div>
+                        )}
+
+                        {otpMsg && (
+                          <p style={{ fontSize: 12.5, marginTop: 6, color: emailVerified ? 'var(--success)' : 'var(--primary)', fontWeight: 600 }}>
+                            {otpMsg}
+                          </p>
+                        )}
+                        {emailNote && !emailVerified && <p className="warn">{emailNote}</p>}
+                        {!emailNote && !otpMsg && !emailVerified && (
+                          <p className="hint">Must be your corporate domain. Click "Send OTP" to receive a verification code before proceeding.</p>
+                        )}
                       </div>
                       <div>
                         <label htmlFor="contact_phone">Phone <span className="req">*</span></label>

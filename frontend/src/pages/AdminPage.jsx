@@ -183,7 +183,7 @@ export default function AdminPage() {
     // This is an explicit allowlist, not Object.fromEntries — a new field on the
     // form is invisible to the save until it is named here. solution_visibility
     // (MOM §13.1) is one of them.
-    ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','max_file_mb','situation_preview_chars','smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','smtp_from_name'].forEach(k => { data[k] = fd.get(k)||''; });
+    ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','max_file_mb','situation_preview_chars'].forEach(k => { data[k] = fd.get(k)||''; });
     // Tick boxes, not a form field — and an empty list is a real answer meaning
     // "title only", so it is sent as an empty string rather than skipped.
     data.employee_visible_sections = empSections.join(',');
@@ -540,23 +540,8 @@ export default function AdminPage() {
               ))}
             </div>
 
-            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.smtp_heading')}<InfoDot term="smtp" /></div>
-            <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_host')}<InfoDot term="smtp_host" /></label><input className="form-control" name="smtp_host" defaultValue={settings.smtp_host||''} /></div>
-              <div className="form-group"><label>{t('admin.smtp_port')}<InfoDot term="smtp_port" /></label><input className="form-control" name="smtp_port" type="number" defaultValue={settings.smtp_port||587} /></div>
-            </div>
-            <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_user')}<InfoDot term="smtp_user" /></label><input className="form-control" name="smtp_user" defaultValue={settings.smtp_user||''} /></div>
-              <div className="form-group"><label>{t('admin.smtp_pass')}<InfoDot term="smtp_pass" /></label><input className="form-control" name="smtp_pass" type="password" placeholder={t('admin.smtp_pass_ph')} /></div>
-            </div>
-            <div className="form-row">
-              <div className="form-group"><label>{t('admin.smtp_from')}<InfoDot term="smtp_from" /></label><input className="form-control" name="smtp_from" type="email" defaultValue={settings.smtp_from||''} /></div>
-              <div className="form-group"><label>{t('admin.smtp_from_name')}</label><input className="form-control" name="smtp_from_name" defaultValue={settings.smtp_from_name||'IFQM Ideation'} /></div>
-            </div>
-
             <div style={{ display:'flex',gap:8,marginTop:16 }}>
               <button type="submit" className="btn btn-primary">{t('admin.save_settings')}</button>
-              <button type="button" className="btn btn-outline" onClick={handleTestEmail}>{t('admin.test_email')}</button>
             </div>
             {settingsMsg && <div style={{ marginTop:10,fontSize:13,color:settingsMsg===t('admin.settings_saved')?'#10b981':'#ef4444' }}>{settingsMsg}</div>}
           </form>

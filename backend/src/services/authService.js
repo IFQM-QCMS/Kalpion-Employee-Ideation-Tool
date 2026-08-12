@@ -345,26 +345,23 @@ export async function forgotPassword({ email, orgSlug, host }) {
     [user.id, selector, verifierHash, expiresAt]
   );
 
-  // Send the email if enabled/configured (best-effort; never leaks failure).
   try {
-    const settings = await getOrgSettings(db);
-    if (settings.email_enabled === '1' && String(settings.smtp_host || '').trim()) {
-      const base = config.frontendBaseUrl.replace(/\/+$/, '');
-      // Embed the resolved org slug so the reset link opens the right tenant even
-      // though the user no longer types an org code anywhere.
-      const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}&org=${encodeURIComponent(tenant.slug)}`;
-      const subject = 'Reset Your IFQM Password';
-      const htmlBody =
-        '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
-        '<body style="font-family:Arial,sans-serif;padding:20px;color:#1e293b">' +
-        '<h2 style="color:#4f46e5">IFQM – Password Reset Request</h2>' +
-        `<p>Hi ${escapeHtml(user.name)},</p>` +
-        '<p>We received a request to reset your IFQM account password. Click the button below to set a new password. This link expires in 1 hour.</p>' +
-        `<p><a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">Reset Password</a></p>` +
-        '<p style="color:#64748b;font-size:12px">If you did not request this, you can safely ignore this email. The link will expire automatically.</p>' +
-        '</body></html>';
-      await sendSmtpEmail(settings, email, user.name, subject, htmlBody);
-    }
+    const base = config.frontendBaseUrl.replace(/\/+$/, '');
+    const resetUrl = `${base}/reset-password?token=${encodeURIComponent(token)}&org=${encodeURIComponent(tenant.slug)}`;
+    const subject = 'Reset Your IFQM Password';
+    const htmlBody =
+      '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
+      '<body style="font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#1e293b;line-height:1.6">' +
+      '<h2 style="color:#4f46e5;margin-top:0">IFQM – Password Reset Request</h2>' +
+      `<p>Hi ${escapeHtml(user.name)},</p>` +
+      '<p>We received a request to reset your IFQM account password. Click the button below to set a new password. This link expires in 1 hour.</p>' +
+      `<p style="margin:24px 0"><a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px">Reset Password</a></p>` +
+      '<p style="color:#64748b;font-size:12px">If you did not request this, you can safely ignore this email. The link will expire automatically.</p>' +
+      '</body></html>';
+
+    const { sendViaPlatform } = await import('./mailerService.js');
+    await sendViaPlatform(email, user.name, subject, htmlBody);
+    logger.info(`auth: password reset email sent to ${email} @ ${tenant.slug}`);
   } catch (e) {
     logger.error('Password reset email error', e.message);
   }
