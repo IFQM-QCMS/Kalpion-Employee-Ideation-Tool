@@ -125,10 +125,10 @@ export default function SuperAdminPage() {
       {/* KPI Strip */}
       <div className="kpi-grid" id="sa-kpi-strip">
         {kpiStrip.map(([label, val, color, sub]) => (
-          <div key={label} className="kpi-card">
-            <div className="kpi-val" style={{ color }}>{val}</div>
-            <div className="kpi-label">{label}</div>
-            <div style={{ fontSize:10,color:'var(--subtle)',marginTop:3 }}>{sub}</div>
+          <div key={label} className="card kpi-card" style={{ '--kpi-accent': color, borderTop: `3px solid ${color}`, position: 'relative' }}>
+            <div className="kpi-val" style={{ color, fontSize: 26, fontWeight: 800, letterSpacing: '-.5px' }}>{val}</div>
+            <div className="kpi-label" style={{ fontWeight: 650, fontSize: 13 }}>{label}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--subtle)', marginTop: 4, fontWeight: 550 }}>{sub}</div>
           </div>
         ))}
       </div>

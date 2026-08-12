@@ -55,7 +55,7 @@ export default function MyIdeasPage() {
     const q  = search.toLowerCase();
     const st = status;
     setIdeas(all.filter(i =>
-      (i.title.toLowerCase().includes(q) || i.idea_code.toLowerCase().includes(q)) &&
+      (String(i.title || '').toLowerCase().includes(q) || String(i.idea_code || '').toLowerCase().includes(q)) &&
       (!st || i.status === st)
     ));
   }, [search, status, all]);

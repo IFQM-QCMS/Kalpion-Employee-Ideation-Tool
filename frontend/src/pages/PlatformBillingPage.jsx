@@ -52,15 +52,19 @@ function stateBadge(o, t) {
   return { label: b.label, cls: 'badge-draft' };
 }
 
-function Stat({ label, value, tone, hint }) {
-  const colour = tone === 'bad' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : 'var(--text)';
+function Stat({ label, value, tone, hint, accent = 'var(--primary)' }) {
+  const colour = tone === 'bad' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : 'var(--heading)';
   return (
-    <div style={{ minWidth: 120 }}>
-      <div style={{ fontSize: 24, fontWeight: 700, color: colour, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2 }}>
+    <div style={{
+      flex: '1 1 130px', minWidth: 125, padding: '12px 14px', borderRadius: 10,
+      background: 'var(--surface-2)', border: '1px solid var(--border)',
+      borderLeft: `4px solid ${tone === 'bad' ? 'var(--danger)' : tone === 'warn' ? 'var(--warning)' : accent}`
+    }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color: colour, fontVariantNumeric: 'tabular-nums', lineHeight: 1.2, letterSpacing: '-.4px' }}>
         {value}
       </div>
-      <div style={{ fontSize: 11.5, color: 'var(--subtle)', marginTop: 2 }}>{label}</div>
-      {hint ? <div style={{ fontSize: 10.5, color: 'var(--subtle)', marginTop: 2, opacity: .8 }}>{hint}</div> : null}
+      <div style={{ fontSize: 12, fontWeight: 650, color: 'var(--text)', marginTop: 4 }}>{label}</div>
+      {hint ? <div style={{ fontSize: 10.5, color: 'var(--subtle)', marginTop: 3 }}>{hint}</div> : null}
     </div>
   );
 }

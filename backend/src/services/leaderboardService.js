@@ -30,7 +30,7 @@ export async function leaderboard(db, period = 'all') {
             (SELECT ROUND(AVG(iv.rating),1) FROM idea_votes iv
              JOIN ideas i2 ON i2.id = iv.idea_id WHERE i2.submitter_id = u.id) AS avg_community_rating
      FROM users u
-     LEFT JOIN ideas i ON i.submitter_id = u.id ${dateFilter}
+     LEFT JOIN ideas i ON i.submitter_id = u.id AND i.status != 'Draft' ${dateFilter}
      WHERE u.role NOT IN ('admin','super_admin')
      GROUP BY u.id
      ORDER BY u.points DESC
@@ -44,7 +44,7 @@ export async function leaderboard(db, period = 'all') {
             COUNT(DISTINCT i.id)   AS idea_count,
             ROUND(AVG(CASE WHEN i.status != 'Draft' THEN i.ai_score ELSE NULL END), 1) AS avg_score
      FROM users u
-     LEFT JOIN ideas i ON i.submitter_id = u.id ${dateFilter}
+     LEFT JOIN ideas i ON i.submitter_id = u.id AND i.status != 'Draft' ${dateFilter}
      WHERE u.role NOT IN ('admin','super_admin')
      GROUP BY u.department
      ORDER BY dept_points DESC`

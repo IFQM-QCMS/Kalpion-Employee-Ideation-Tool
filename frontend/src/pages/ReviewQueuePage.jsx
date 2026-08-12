@@ -58,6 +58,7 @@ export default function ReviewQueuePage() {
   }
 
   function handleSelectAll(checked) {
+    if (user?.role === 'admin') return;
     setSelectAll(checked);
     if (checked) {
       const eligible = ideas.filter(i => {
@@ -70,6 +71,7 @@ export default function ReviewQueuePage() {
   }
 
   async function submitBulk(decision) {
+    if (user?.role === 'admin') return;
     if (!selected.size) return;
     const ids     = [...selected];
     const comment = decision === 'Rejected' ? (prompt(t('bulk.reject_reason')) || '') : '';
@@ -87,8 +89,13 @@ export default function ReviewQueuePage() {
 
   return (
     <ScreenGuard>
+      {user?.role === 'admin' && (
+        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
+          Org Admins are strictly prohibited from approving, rejecting, or acting on submitted ideas.
+        </div>
+      )}
       {/* Bulk action bar */}
-      {selected.size > 0 && (
+      {selected.size > 0 && user?.role !== 'admin' && (
         <div id="bulk-action-bar" style={{
           position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
           display:'flex',alignItems:'center',gap:12,
@@ -106,13 +113,15 @@ export default function ReviewQueuePage() {
       )}
 
       {/* Select all row */}
-      <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:14 }}>
-        <input type="checkbox" id="bulk-select-all" checked={selectAll} style={{ accentColor:'var(--primary)' }}
-          onChange={e => handleSelectAll(e.target.checked)} />
-        <label htmlFor="bulk-select-all" style={{ fontSize:13,color:'var(--subtle)',cursor:'pointer' }}>
-          {t('review.select_all')}
-        </label>
-      </div>
+      {user?.role !== 'admin' && (
+        <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:14 }}>
+          <input type="checkbox" id="bulk-select-all" checked={selectAll} style={{ accentColor:'var(--primary)' }}
+            onChange={e => handleSelectAll(e.target.checked)} />
+          <label htmlFor="bulk-select-all" style={{ fontSize:13,color:'var(--subtle)',cursor:'pointer' }}>
+            {t('review.select_all')}
+          </label>
+        </div>
+      )}
 
       {loading && <div className="empty-state"><div className="spinner"></div> {t('msg.loading')}</div>}
       {error   && <div className="alert alert-danger">{error}</div>}
@@ -126,7 +135,7 @@ export default function ReviewQueuePage() {
           const pending      = Math.max(0, (parseInt(i.reviewer_count)||0)-(parseInt(i.approved_count)||0)-(parseInt(i.rejected_count)||0));
           const dueDate      = i.review_due_date ? new Date(i.review_due_date) : null;
           const isOverdue    = dueDate && dueDate < new Date();
-          const showCheckbox = !isSelf && !isMultiRv;
+          const showCheckbox = !isSelf && !isMultiRv && user?.role !== 'admin';
 
           return (
             <div key={i.id} className="idea-card" data-status={i.status} data-id={i.id}>

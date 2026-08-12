@@ -132,24 +132,30 @@ export default function DashboardPage() {
 
       {/* Status Distribution Bar Chart */}
       <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:20 }}>
-        <div className="card">
-          <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('dash.status_dist')}</div>
+        <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.status_dist')}</div>
+            <span style={{ fontSize: 11, color: 'var(--subtle)', fontWeight: 600 }}>Total: {data.total || 0}</span>
+          </div>
           <div className="bar-chart" id="dash-status-chart">
             {Object.entries(counts).map(([s, c]) => (
-              <div className="bar-row" key={s}>
-                <span className="bar-label">{translateStatus(s, t)}</span>
-                <div className="bar-track">
-                  <div className="bar-fill" style={{ width:'0%',background:STATUS_COLORS[s]||'#ccc' }} data-w={Math.round(c/maxCount*100)}></div>
+              <div className="bar-row" key={s} style={{ marginBottom: 10 }}>
+                <span className="bar-label" style={{ fontWeight: 600 }}>{translateStatus(s, t)}</span>
+                <div className="bar-track" style={{ height: 8, borderRadius: 999 }}>
+                  <div className="bar-fill" style={{ width:'0%',height:'100%',borderRadius:999,background:STATUS_COLORS[s]||'#ccc' }} data-w={Math.round(c/maxCount*100)}></div>
                 </div>
-                <span className="bar-val">{c}</span>
+                <span className="bar-val" style={{ fontWeight: 700 }}>{c}</span>
               </div>
             ))}
           </div>
         </div>
 
         {/* Recent Activity Timeline */}
-        <div className="card">
-          <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('dash.recent_activity')}</div>
+        <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.recent_activity')}</div>
+            <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700 }}>Recent Updates</span>
+          </div>
           <div id="dash-activity">
             {!data.recent?.length
               ? <div className="empty-state">{t('msg.no_ideas')}</div>

@@ -190,55 +190,62 @@ export default function PlatformDashPage() {
           </h1>
           <div style={{ fontSize:13,color:'var(--subtle)',marginTop:4 }}>{t('pa.tenant_mgmt_sub')}</div>
         </div>
-        <div style={{ textAlign:'right',fontSize:11,color:'var(--subtle)' }}>
-          <div style={{ textTransform:'uppercase',letterSpacing:.8 }}>{t('pa.signed_in')}</div>
-          <div style={{ fontSize:13,fontWeight:700,color:'var(--heading)' }} id="pa-name">{user?.name || '—'}</div>
+        <div style={{ display:'flex',alignItems:'center',gap:10,flexWrap:'wrap' }}>
+          <span style={{ background:'var(--primary-light)',color:'var(--primary)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700 }}>
+            🏢 {counts.active} Active Tenants
+          </span>
+          <span style={{ background:'var(--success-light)',color:'var(--success)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700 }}>
+            💡 {totals.ideas} Platform Ideas
+          </span>
         </div>
       </div>
 
       {/* KPI strip */}
       <div className="kpi-grid" id="pa-kpi-strip">
         {kpis.map(([icon, label, val, color, bg]) => (
-          <div key={label} className="kpi-card" style={{ '--kpi-accent':color }}>
-            <div className="kpi-icon" style={{ background:bg, color }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="22" height="22">
-                {KPI_ICONS[icon]}
-              </svg>
+          <div key={label} className="card kpi-card" style={{ '--kpi-accent':color, borderTop: `3px solid ${color}`, position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <div className="kpi-icon" style={{ background:bg, color, borderRadius: 8, padding: 6 }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20">
+                  {KPI_ICONS[icon]}
+                </svg>
+              </div>
             </div>
             <div className="kpi-body">
-              <div className="kpi-val" style={{ color }}>{val}</div>
-              <div className="kpi-label">{label}</div>
+              <div className="kpi-val" style={{ color, fontSize: 26, fontWeight: 800, letterSpacing: '-.5px' }}>{val}</div>
+              <div className="kpi-label" style={{ fontWeight: 650, fontSize: 12.5 }}>{label}</div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* The MSME registration queue lives on its own screen (Platform →
-          Registrations). Approving one provisions a live tenant, and that
-          decision needs every submitted field in front of the operator — not a
-          summary strip wedged between a donut chart and a tenant table. */}
-
       {/* Analytics charts */}
       {!loading && !error && tenants.length > 0 && (
         <div style={{ display:'grid',gridTemplateColumns:'minmax(280px,360px) 1fr',gap:18,marginTop:18 }}>
-          <div className="card">
-            <div className="card-title" style={{ margin:'0 0 12px' }}>{t('pa.chart_status')}</div>
-            <div style={{ display:'flex',alignItems:'center',gap:18,flexWrap:'wrap' }}>
+          <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
+              <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('pa.chart_status')}</div>
+              <span style={{ fontSize:11,color:'var(--subtle)',fontWeight:600 }}>{counts.total} Tenants</span>
+            </div>
+            <div style={{ display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',padding:'10px 0' }}>
               <Donut size={150} thickness={24} data={statusDonut} centerValue={counts.total} centerLabel={t('pa.kpi_total_orgs')} />
               <div style={{ flex:1,minWidth:120 }}><Legend items={statusDonut} /></div>
             </div>
           </div>
-          <div className="card">
-            <div className="card-title" style={{ margin:'0 0 12px' }}>{t('pa.chart_ideas_by_org')}</div>
+          <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
+              <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('pa.chart_ideas_by_org')}</div>
+              <span style={{ fontSize:11,color:'var(--primary)',fontWeight:700 }}>Top Organizations by Volume</span>
+            </div>
             <div className="bar-chart">
               {topByIdeas.length
                 ? topByIdeas.map((o, i) => (
-                  <div className="bar-row" key={o.id}>
-                    <span className="bar-label" title={o.name}>{o.name}</span>
-                    <div className="bar-track">
-                      <div className="bar-fill" style={{ width:`${Math.round((o.idea_count||0)/maxIdeas*100)}%`,background:`linear-gradient(90deg,${colorAt(i)}cc,${colorAt(i)})` }}></div>
+                  <div className="bar-row" key={o.id} style={{ marginBottom: 10 }}>
+                    <span className="bar-label" title={o.name} style={{ fontWeight: 600 }}>{o.name}</span>
+                    <div className="bar-track" style={{ height: 8, borderRadius: 999 }}>
+                      <div className="bar-fill" style={{ width:`${Math.round((o.idea_count||0)/maxIdeas*100)}%`,height:'100%',borderRadius:999,background:`linear-gradient(90deg,${colorAt(i)}cc,${colorAt(i)})` }}></div>
                     </div>
-                    <span className="bar-val">{o.idea_count||0}</span>
+                    <span className="bar-val" style={{ fontWeight: 700 }}>{o.idea_count||0}</span>
                   </div>
                 ))
                 : <div className="empty-state">{t('pa.no_activity')}</div>
