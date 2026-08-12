@@ -77,20 +77,37 @@ export default function ChallengesPage() {
                   {t('challenges.by')} {c.creator_name||'—'} · {c.deadline ? `${t('challenges.deadline')} ${fmtDate(c.deadline)}` : t('challenges.no_deadline')} · {c.idea_count||0} {t('unit.ideas')}
                 </div>
               </div>
-              <span style={{
-                padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:600,
-                background:c.status==='active'?'#bbf7d0':'#f1f5f9',
-                color:c.status==='active'?'#10b981':'#64748b',
-                border:`1px solid ${c.status==='active'?'#bbf7d0':'#e2e8f0'}`
-              }}>{t(c.status==='active' ? 'challenges.status_active' : 'challenges.status_closed')}</span>
+              {(() => {
+                const expired = c.status === 'closed' || (c.deadline && new Date(c.deadline).getTime() < Date.now());
+                return (
+                  <span style={{
+                    padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:600,
+                    background:!expired ? '#bbf7d0' : '#fee2e2',
+                    color:!expired ? '#065f46' : '#991b1b',
+                    border:`1px solid ${!expired ? '#bbf7d0' : '#fecaca'}`
+                  }}>{!expired ? t('challenges.status_active') : t('challenges.status_closed')}</span>
+                );
+              })()}
             </div>
             {c.description && (
               <div style={{ marginTop:10,fontSize:13,color:'var(--text)' }}>{c.description}</div>
             )}
-            <div style={{ marginTop:12,display:'flex',gap:8 }}>
-              <button className="btn btn-primary btn-sm" onClick={() => navigate('/submit')}>
-                {t('challenges.submit_for')}
-              </button>
+            <div style={{ marginTop:12,display:'flex',gap:8,alignItems:'center',flexWrap:'wrap' }}>
+              {(() => {
+                const isExpired = c.status === 'closed' || (c.deadline && new Date(c.deadline).getTime() < Date.now());
+                if (!isExpired) {
+                  return (
+                    <button className="btn btn-primary btn-sm" onClick={() => navigate('/submit')}>
+                      {t('challenges.submit_for')}
+                    </button>
+                  );
+                }
+                return (
+                  <span style={{ padding:'4px 12px',borderRadius:20,fontSize:11.5,fontWeight:700,background:'var(--danger-light)',color:'var(--danger)',border:'1px solid var(--danger-light)' }}>
+                    ⏳ Deadline Passed (Closed)
+                  </span>
+                );
+              })()}
               {isPriv && c.status === 'active' && (
                 <button className="btn btn-outline btn-sm" onClick={() => handleClose(c.id)}>
                   {t('challenges.close')}

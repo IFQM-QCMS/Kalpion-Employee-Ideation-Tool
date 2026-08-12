@@ -644,12 +644,17 @@ export async function submitOrDraft(db, user, action, b) {
     throw badRequest('Title, present situation and proposed solution are required.');
   }
 
-  const ai = await computeAIScoreWithReason({
-    title, present_situation: sit, proposed_solution: sol,
-    impact_areas: impacts, impact_level: impLvl,
-    tangible_benefit: tangible, intangible_benefit: intang,
-    co_suggester_1_id: co1, co_suggester_2_id: co2,
-  });
+  let ai = { score: 50, reason: 'Evaluated by system.' };
+  try {
+    ai = await computeAIScoreWithReason({
+      title, present_situation: sit, proposed_solution: sol,
+      impact_areas: impacts, impact_level: impLvl,
+      tangible_benefit: tangible, intangible_benefit: intang,
+      co_suggester_1_id: co1, co_suggester_2_id: co2,
+    });
+  } catch {
+    ai = { score: 50, reason: 'Evaluated by system.' };
+  }
   const aiScore = ai.score;
   const aiReason = ai.reason;
 
@@ -706,10 +711,6 @@ export async function submitOrDraft(db, user, action, b) {
     );
     ideaId = editId;
   } else {
-    // Two people submitting at the same instant read the same "next" code, so
-    // one INSERT loses the UNIQUE race and used to surface as a 500 on a
-    // perfectly valid submission. Re-read the sequence and retry instead — the
-    // collision is rare, self-correcting, and must never reach the submitter.
     let result;
     for (let attempt = 1; ; attempt++) {
       const code = await generateIdeaCode(db);
@@ -743,27 +744,33 @@ export async function submitOrDraft(db, user, action, b) {
   }
 
   // Sync the co-suggester junction with the full list (idempotent per save).
-  await db.execute('DELETE FROM idea_co_suggesters WHERE idea_id=?', [ideaId]);
-  for (const uid of coIds) {
-    await db.execute('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) VALUES (?,?)', [ideaId, uid]);
-  }
+  try {
+    await db.execute('DELETE FROM idea_co_suggesters WHERE idea_id=?', [ideaId]);
+    for (const uid of coIds) {
+      await db.execute('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) VALUES (?,?)', [ideaId, uid]);
+    }
+  } catch {}
 
   if (action === 'submit' && !wasAlreadySubmitted) {
-    await addWorkflow(db, ideaId, user.id, 'Submitted');
-    await addPoints(db, user.id, POINTS.submit);
+    try { await addWorkflow(db, ideaId, user.id, 'Submitted'); } catch {}
+    try { await addPoints(db, user.id, POINTS.submit); } catch {}
 
     if (user.manager_id) {
-      await addNotification(
-        db, user.manager_id, 'New Idea Submitted',
-        `${user.name} submitted a new idea. Please review it in your queue.`, ideaId
-      );
-      const [mrows] = await db.execute('SELECT email, name FROM users WHERE id=?', [user.manager_id]);
-      const mgr = mrows[0];
-      if (mgr && mgr.email) {
-        await queueEmail(db, mgr.email, mgr.name,
-          'New Idea Requires Your Review',
-          `Dear ${mgr.name},\n\n${user.name} has submitted a new idea for your review.\n\nPlease log in to action it from your review queue.`);
-      }
+      try {
+        await addNotification(
+          db, user.manager_id, 'New Idea Submitted',
+          `${user.name} submitted a new idea. Please review it in your queue.`, ideaId
+        );
+      } catch {}
+      try {
+        const [mrows] = await db.execute('SELECT email, name FROM users WHERE id=?', [user.manager_id]);
+        const mgr = mrows[0];
+        if (mgr && mgr.email) {
+          await queueEmail(db, mgr.email, mgr.name,
+            'New Idea Requires Your Review',
+            `Dear ${mgr.name},\n\n${user.name} has submitted a new idea for your review.\n\nPlease log in to action it from your review queue.`);
+        }
+      } catch {}
     }
   }
 
@@ -1129,6 +1136,9 @@ export async function checkDuplicate(db, title) {
 
 // ── BULK REVIEW ─────────────────────────────────────────────────────
 export async function bulkReview(db, user, b) {
+  if (user.role === 'admin') {
+    throw forbidden('Org Admins are strictly prohibited from approving or reviewing ideas.');
+  }
   const ideaIds = (b.idea_ids ?? []).map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x));
   const decision = b.decision ?? '';
   const comment = String(b.comment ?? '').trim();

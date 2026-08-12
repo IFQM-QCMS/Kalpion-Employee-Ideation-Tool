@@ -12,6 +12,7 @@
  */
 
 const PERIOD_FILTERS = {
+  weekly: 'AND YEARWEEK(i.submitted_at, 1) = YEARWEEK(NOW(), 1)',
   monthly: 'AND MONTH(i.submitted_at)=MONTH(NOW()) AND YEAR(i.submitted_at)=YEAR(NOW())',
   quarterly: 'AND QUARTER(i.submitted_at)=QUARTER(NOW()) AND YEAR(i.submitted_at)=YEAR(NOW())',
   yearly: 'AND YEAR(i.submitted_at)=YEAR(NOW())',
@@ -56,7 +57,7 @@ export async function leaderboard(db, period = 'all') {
             u.name AS submitter_name, u.department
      FROM ideas i
      JOIN users u ON u.id = i.submitter_id
-     WHERE i.status != 'Draft' AND i.ai_score > 0
+     WHERE i.status != 'Draft' AND i.ai_score > 0 ${dateFilter}
      ORDER BY i.ai_score DESC
      LIMIT 5`
   );

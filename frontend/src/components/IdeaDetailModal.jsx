@@ -169,7 +169,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   // flag any idea. Nobody else can move the tick.
   const canFlagPatentable = isSelf || isPriv;
   const isMultiRv = idea?.workflow_type === 'multi_reviewer';
-  const isAssignedReviewer = isPriv && !isSelf && idea && (idea.reviewers||[]).some(
+  const isAssignedReviewer = isPriv && user?.role !== 'admin' && !isSelf && idea && (idea.reviewers||[]).some(
     rv => parseInt(rv.reviewer_id) === parseInt(user?.id) && rv.decision === 'pending'
   );
   const canDirectReview   = isPriv && user?.role !== 'admin' && !isSelf && !isMultiRv && idea && ['Submitted','Under Review'].includes(idea.status);

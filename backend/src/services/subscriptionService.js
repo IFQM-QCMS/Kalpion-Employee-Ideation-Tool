@@ -327,14 +327,20 @@ export async function subscriptionFor(tenantId) {
     const [[row]] = await masterDb().execute('SELECT * FROM plans WHERE id = ? LIMIT 1', [tenant.plan_id]);
     plan = decoratePlan(row);
   }
-  const [events] = await masterDb().execute(
-    `SELECT e.*, fp.name AS from_plan_name, tp.name AS to_plan_name
-       FROM tenant_billing_events e
-       LEFT JOIN plans fp ON fp.id = e.from_plan_id
-       LEFT JOIN plans tp ON tp.id = e.to_plan_id
-      WHERE e.tenant_id = ? ORDER BY e.created_at DESC LIMIT 50`,
-    [tenant.id]
-  );
+  let events = [];
+  try {
+    const [rows] = await masterDb().execute(
+      `SELECT e.*, fp.name AS from_plan_name, tp.name AS to_plan_name
+         FROM tenant_billing_events e
+         LEFT JOIN plans fp ON fp.id = e.from_plan_id
+         LEFT JOIN plans tp ON tp.id = e.to_plan_id
+        WHERE e.tenant_id = ? ORDER BY e.created_at DESC LIMIT 50`,
+      [tenant.id]
+    );
+    events = rows;
+  } catch {
+    events = [];
+  }
 
   // How much of the plan's request allowance this organisation has used. Shown
   // beside the plan so the platform team sees somebody approaching a limit

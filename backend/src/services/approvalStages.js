@@ -65,15 +65,13 @@ export const DEFAULT_STAGES = [
  * qualified to accept a shop-floor improvement. `admin` alone keeps the
  * dead-end guarantee.
  */
-const ALWAYS_FINAL = ['admin'];
+const ALWAYS_FINAL = [];
 
 /**
  * §13.12 — the built-in chain's final authority is the Plant Head, replacing
- * Executive. Organisations running the older role-based `approval_mode` inherit
- * this too, which is the point: the MOM is describing who signs off, not which
- * storage format an org happens to use.
+ * Executive. Org admins are strictly excluded from approval authority.
  */
-export const DEFAULT_FINAL_ROLES = ['plant_head', 'admin'];
+export const DEFAULT_FINAL_ROLES = ['plant_head'];
 export const DEFAULT_REVIEWER_ROLES = [
   'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
 ];
@@ -112,7 +110,7 @@ export function stagesToChain(stages) {
   const roles = [...new Set(approvers.map((a) => a.role))];
   const finalRole = roles[roles.length - 1];
   const reviewerRoles = roles.slice(0, -1);
-  const finalRoles = [...new Set([finalRole, ...ALWAYS_FINAL])];
+  const finalRoles = [...new Set([finalRole])];
 
   return { reviewer_roles: reviewerRoles, final_roles: finalRoles };
 }

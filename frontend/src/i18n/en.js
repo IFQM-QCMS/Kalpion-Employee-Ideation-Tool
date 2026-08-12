@@ -1479,6 +1479,7 @@ export default {
 
   'analytics.title':'Analytics Overview',
   'nav.billing':'Billing',
+  'lb.weekly':'Weekly',
   'analytics.status_dist':'Status Distribution',
   'analytics.impact_dist':'Impact Area Distribution',
   'analytics.monthly_trend':'Monthly Submission Trend',

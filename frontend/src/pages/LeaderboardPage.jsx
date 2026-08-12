@@ -9,6 +9,7 @@ import { drawPersonalCard, drawPodiumCard, canvasToBlob, shareImage } from '../u
 
 const PERIODS = [
   { val:'all',       label:'lb.all' },
+  { val:'weekly',    label:'lb.weekly' },
   { val:'monthly',   label:'lb.monthly' },
   { val:'quarterly', label:'lb.quarterly' },
   { val:'yearly',    label:'lb.yearly' },

@@ -203,14 +203,18 @@ export async function verifyPayment({ orderId, paymentId, signature, tenant, act
 
 /** Recent attempts for one organisation, for its own billing page. */
 export async function paymentHistory(tenantId, limit = 20) {
-  const n = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
-  const [rows] = await masterDb().execute(
-    `SELECT id, order_ref, payment_ref, amount_paise, gst_paise, periods, status,
-            actor_name, created_at, paid_at
-       FROM payment_attempts WHERE tenant_id = ?
-      ORDER BY id DESC LIMIT ${n}`, [Number(tenantId) || 0]
-  );
-  return rows;
+  try {
+    const n = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));
+    const [rows] = await masterDb().execute(
+      `SELECT id, order_ref, payment_ref, amount_paise, gst_paise, periods, status,
+              actor_name, created_at, paid_at
+         FROM payment_attempts WHERE tenant_id = ?
+        ORDER BY id DESC LIMIT ${n}`, [Number(tenantId) || 0]
+    );
+    return rows || [];
+  } catch {
+    return [];
+  }
 }
 
 /**

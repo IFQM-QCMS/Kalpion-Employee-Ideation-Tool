@@ -34,10 +34,22 @@ export async function addNotification(db, userId, title, msg, ideaId = null) {
 
 /** Insert a workflow/audit entry. Mirrors addWorkflow(). */
 export async function addWorkflow(db, ideaId, actorId, action, comment = null) {
-  await db.execute(
-    'INSERT INTO idea_workflow (idea_id,actor_id,action,comment) VALUES (?,?,?,?)',
-    [ideaId, actorId, action, comment]
-  );
+  const allowed = ['Submitted', 'Reviewed', 'Approved', 'Rejected', 'Implemented', 'Commented', 'Reopened'];
+  const safeAction = allowed.includes(action) ? action : 'Commented';
+  const fullComment = allowed.includes(action) ? comment : `${action}${comment ? `: ${comment}` : ''}`;
+  try {
+    await db.execute(
+      'INSERT INTO idea_workflow (idea_id,actor_id,action,comment) VALUES (?,?,?,?)',
+      [ideaId, actorId, safeAction, fullComment]
+    );
+  } catch {
+    try {
+      await db.execute(
+        'INSERT INTO idea_workflow (idea_id,actor_id,action,comment) VALUES (?,?,?,?)',
+        [ideaId, actorId, String(action).slice(0, 50), comment]
+      );
+    } catch {}
+  }
 }
 
 /** Increment a user's points. Mirrors addPoints(). */
