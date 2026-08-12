@@ -23,6 +23,14 @@ export const checkEmail = asyncHandler(async (req, res) => {
   });
 });
 
+export const sendOtp = asyncHandler(async (req, res) =>
+  respond(res, await registrations.sendRegistrationEmailOtp(req.body?.email))
+);
+
+export const verifyOtp = asyncHandler(async (req, res) =>
+  respond(res, await registrations.verifyRegistrationEmailOtp(req.body?.email, req.body?.code))
+);
+
 export const list = asyncHandler(async (req, res) =>
   respond(res, await registrations.listRegistrations({ status: req.query.status || '' }))
 );

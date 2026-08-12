@@ -19,6 +19,55 @@ import { ApiError, badRequest, notFound } from '../utils/respond.js';
 import { assignPlan, defaultTrialDays } from './subscriptionService.js';
 import logger from '../utils/logger.js';
 import { createTenant } from './platformService.js';
+import bcrypt from 'bcryptjs';
+
+export async function sendRegistrationEmailOtp(email) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    throw badRequest('Please enter a valid corporate email address.');
+  }
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const ttl = 600;
+  await masterDb().execute(
+    'UPDATE login_otps SET expires_at = NOW() WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()',
+    [email]
+  );
+  await masterDb().execute(
+    `INSERT INTO login_otps (identifier, id_type, code_hash, purpose, expires_at)
+     VALUES (?, 'email', ?, 'registration_verify', DATE_ADD(NOW(), INTERVAL ? SECOND))`,
+    [email, await bcrypt.hash(code, 10), ttl]
+  );
+
+  const { sendViaPlatform } = await import('./mailerService.js');
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#111;line-height:1.6">
+    <p>Hello,</p>
+    <p>Your email verification OTP code for organization registration is:</p>
+    <p style="font-size:32px;font-weight:800;letter-spacing:6px;color:#4f46e5;margin:20px 0">${code}</p>
+    <p>This code expires in 10 minutes. Do not share it with anyone.</p>
+  </div>`;
+  await sendViaPlatform(email, 'Registration Admin', `${code} is your IFQM Email Verification Code`, html);
+  return { success: true, message: 'Verification OTP sent to your email.' };
+}
+
+export async function verifyRegistrationEmailOtp(email, code) {
+  email = String(email || '').trim().toLowerCase();
+  code = String(code || '').trim();
+  if (!email || !code) throw badRequest('Email and OTP code are required.');
+
+  const [[row] = []] = await masterDb().execute(
+    `SELECT * FROM login_otps
+      WHERE identifier = ? AND purpose = 'registration_verify' AND consumed_at IS NULL AND expires_at > NOW()
+      ORDER BY id DESC LIMIT 1`,
+    [email]
+  );
+  if (!row) throw badRequest('Invalid or expired verification code.');
+
+  const match = await bcrypt.compare(code, row.code_hash);
+  if (!match) throw badRequest('Incorrect verification code.');
+
+  await masterDb().execute('UPDATE login_otps SET consumed_at = NOW() WHERE id = ?', [row.id]);
+  return { success: true, verified: true, message: 'Email verified successfully.' };
+}
 
 /* Consumer mailbox providers. A company applying from one of these is either a
    sole trader using personal email (ask them to use a domain) or noise. */

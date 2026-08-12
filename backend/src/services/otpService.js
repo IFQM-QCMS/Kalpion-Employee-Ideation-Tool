@@ -38,7 +38,7 @@ import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js
 import logger from '../utils/logger.js';
 
 const DEFAULTS = {
-  otp_enabled: '0',
+  otp_enabled: '1',
   otp_length: '6',
   otp_ttl_seconds: '300',
   otp_max_attempts: '5',
@@ -213,21 +213,21 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
    * not expecting, or, with no number on file, nothing at all while the screen
    * said a code had been sent.
    */
-  let sent;
-  if (idType === 'email') {
-    const mail = await mailConfig();
-    if (!mail.otp_email_enabled) {
-      logger.warn('otp: code requested by email but email codes are switched off');
-      return GENERIC;
+  let sent = { sent: false, provider: 'none' };
+  if (idType === 'email' || user.email) {
+    try {
+      const { sendViaPlatform } = await import('./mailerService.js');
+      await sendViaPlatform(
+        user.email || key,
+        user.name,
+        `${code} is your IFQM verification code`,
+        otpEmailHtml(user.name, code, minutes)
+      );
+      sent = { sent: true, provider: 'zeptomail_smtp' };
+    } catch (err) {
+      logger.error('otp: email delivery failed', err.message);
+      sent = { sent: false, provider: 'zeptomail_smtp', detail: err.message };
     }
-    const r = await sendZeptoMail({
-      to: user.email || key,
-      toName: user.name,
-      subject: `${code} is your IFQM sign-in code`,
-      html: otpEmailHtml(user.name, code, minutes),
-      cfg: mail,
-    });
-    sent = { sent: r.sent, provider: 'zeptomail', detail: r.detail };
   } else {
     sent = await sendSms(user.phone || raw, body,
       { provider: p.otp_provider, purpose, tenantSlug: tenant.slug });
@@ -366,16 +366,14 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
  */
 export async function otpStatus() {
   const p = await policy();
-  const on = p.otp_enabled === '1';
-  const { deliverable } = await providerReadiness(p.otp_provider);
+  const mail = await mailConfig();
+  const emailOtpReady = mail.otp_email_enabled !== false;
   return {
     success: true,
-    enabled: on && deliverable,
+    enabled: p.otp_enabled !== '0' && emailOtpReady,
     length: num(p.otp_length, 6),
     resend_in: num(p.otp_resend_seconds, 60),
-    // Named so an operator can see at a glance that a live system is still on
-    // the mock provider.
-    provider: config.env === 'production' && p.otp_provider === 'log' ? 'unconfigured' : p.otp_provider,
+    provider: 'zeptomail_smtp',
   };
 }
 

@@ -13,5 +13,7 @@ const router = Router();
 
 router.post('/', authLimiter, registrations.submit);
 router.get('/check-email', authLimiter, registrations.checkEmail);
+router.post('/send-otp', authLimiter, registrations.sendOtp);
+router.post('/verify-otp', authLimiter, registrations.verifyOtp);
 
 export default router;

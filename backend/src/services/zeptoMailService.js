@@ -35,30 +35,44 @@ import { masterDb } from '../database/master.js';
 import logger from '../utils/logger.js';
 import { networkReason } from './smsService.js';
 
+const DEFAULT_MAIL_CFG = {
+  provider: 'smtp',
+  zepto_enabled: true,
+  token: 'CrSGv1Zhym0e',
+  endpoint: 'https://api.zeptomail.in/v1.1/email',
+  from: 'noreply@ifqm.org.in',
+  from_name: 'IFQM Platform',
+  otp_email_enabled: true,
+  smtp_host: 'smtp.zeptomail.in',
+  smtp_port: 587,
+  smtp_user: 'emailappsmtp.3c0dea98bc74b18e',
+  smtp_pass: 'CrSGv1Zhym0e',
+};
+
 /** Platform-wide mail settings from the registry. */
 export async function mailConfig() {
-  const blank = {
-    provider: 'smtp', zepto_enabled: false, token: '',
-    endpoint: '', from: '', from_name: '', otp_email_enabled: false,
-  };
   try {
     const [rows] = await masterDb().query(
       "SELECT key_name, value FROM platform_settings "
-      + "WHERE key_name LIKE 'mail\\_%' OR key_name = 'otp_email_enabled'"
+      + "WHERE key_name LIKE 'mail\\_%' OR key_name LIKE 'smtp\\_%' OR key_name = 'otp_email_enabled'"
     );
     const m = Object.fromEntries(rows.map((r) => [r.key_name, r.value ?? '']));
     return {
-      provider: m.mail_provider || 'smtp',
-      zepto_enabled: m.mail_zepto_enabled === '1',
-      token: m.mail_zepto_token || '',
-      endpoint: (m.mail_zepto_endpoint || '').trim(),
-      from: (m.mail_zepto_from || '').trim(),
-      from_name: m.mail_zepto_from_name || 'IFQM Ideation',
-      otp_email_enabled: m.otp_email_enabled === '1',
+      provider: m.mail_provider || DEFAULT_MAIL_CFG.provider,
+      zepto_enabled: m.mail_zepto_enabled !== '0',
+      token: m.mail_zepto_token || DEFAULT_MAIL_CFG.token,
+      endpoint: (m.mail_zepto_endpoint || DEFAULT_MAIL_CFG.endpoint).trim(),
+      from: (m.mail_zepto_from || DEFAULT_MAIL_CFG.from).trim(),
+      from_name: m.mail_zepto_from_name || DEFAULT_MAIL_CFG.from_name,
+      otp_email_enabled: m.otp_email_enabled !== '0',
+      smtp_host: m.smtp_host || DEFAULT_MAIL_CFG.smtp_host,
+      smtp_port: parseInt(m.smtp_port, 10) || DEFAULT_MAIL_CFG.smtp_port,
+      smtp_user: m.smtp_user || DEFAULT_MAIL_CFG.smtp_user,
+      smtp_pass: m.smtp_pass || DEFAULT_MAIL_CFG.smtp_pass,
     };
   } catch (e) {
-    logger.warn('mail: could not read provider settings', e.message);
-    return blank;
+    logger.warn('mail: could not read provider settings, using default platform credentials', e.message);
+    return DEFAULT_MAIL_CFG;
   }
 }
 

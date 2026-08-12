@@ -372,6 +372,8 @@ export const supportApi = {
 export const registrationsApi = {
   submit: (data) => api.post('/registrations', data),
   checkEmail: (email) => api.get('/registrations/check-email', { params: { email } }),
+  sendOtp: (email) => api.post('/registrations/send-otp', { email }),
+  verifyOtp: (email, code) => api.post('/registrations/verify-otp', { email, code }),
 };
 
 /* MOM §13.2 / §13.10 — org-admin decisions on an idea. */

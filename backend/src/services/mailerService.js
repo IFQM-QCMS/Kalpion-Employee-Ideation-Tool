@@ -24,11 +24,42 @@ import { mailConfig, sendZeptoMail } from './zeptoMailService.js';
  */
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
   const cfg = await mailConfig();
-  if (!cfg.zepto_enabled) {
-    throw new Error('No SMTP host for this organisation, and the platform mail provider is switched off.');
+  if (cfg.zepto_enabled && cfg.token && cfg.endpoint) {
+    const r = await sendZeptoMail({ to: toEmail, toName, subject, html: bodyHtml, cfg });
+    if (r.sent) return true;
+    logger.warn(`ZeptoMail HTTP API failed (${r.detail || 'unknown error'}). Falling back to direct ZeptoMail SMTP...`);
   }
-  const r = await sendZeptoMail({ to: toEmail, toName, subject, html: bodyHtml, cfg });
-  if (!r.sent) throw new Error(r.detail || 'Platform mail provider refused the message.');
+
+  // Direct Nodemailer fallback to smtp.zeptomail.in:587
+  const host = cfg.smtp_host || 'smtp.zeptomail.in';
+  const port = cfg.smtp_port || 587;
+  const user = cfg.smtp_user || 'emailappsmtp.3c0dea98bc74b18e';
+  const pass = cfg.smtp_pass || 'CrSGv1Zhym0e';
+  const from = cfg.from || 'noreply@ifqm.org.in';
+  const fromName = cfg.from_name || 'IFQM Platform';
+
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    requireTLS: port !== 465,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 15000,
+  });
+
+  const safeFrom = headerSafe(from);
+  const safeFromName = headerSafe(fromName);
+  const safeTo = headerSafe(toEmail);
+
+  await transport.sendMail({
+    from: safeFromName ? `"${safeFromName}" <${safeFrom}>` : safeFrom,
+    to: toName ? `"${headerSafe(toName)}" <${safeTo}>` : safeTo,
+    subject: headerSafe(subject),
+    html: bodyHtml,
+  });
+
+  logger.info(`email: delivered to ${toEmail} via ZeptoMail SMTP (${host}:${port})`);
   return true;
 }
 
