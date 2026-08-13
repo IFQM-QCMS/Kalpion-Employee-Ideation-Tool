@@ -114,14 +114,22 @@ function coerce(key, spec, raw) {
 export async function getMessagingConfig() {
   const s = await readAll();
   const dlt = await sms.dltConfig();
-  const readiness = await otp.providerReadiness(s.otp_provider || 'log');
+  // The provider that would actually carry a code, not the stored preference.
+  // These differ whenever the gateway is configured from the environment, which
+  // is how every contracted deployment is set up — and the console was
+  // reporting readiness for `log` while real codes went over Kaleyra.
+  const provider = sms.effectiveProvider(s.otp_provider);
+  const readiness = await otp.providerReadiness(provider);
   const mail = await mailConfig();
 
   return {
     success: true,
     otp: {
       enabled: s.otp_enabled === '1',
-      provider: s.otp_provider || 'log',
+      provider,
+      // What the console has stored, kept alongside so the screen can show that
+      // the environment is overriding it rather than silently disagreeing.
+      stored_provider: s.otp_provider || 'log',
       length: parseInt(s.otp_length, 10) || 6,
       ttl_seconds: parseInt(s.otp_ttl_seconds, 10) || 300,
       max_attempts: parseInt(s.otp_max_attempts, 10) || 5,
@@ -268,7 +276,10 @@ export async function sendTest({ phone, provider } = {}) {
     throw badRequest('Enter a full mobile number to send the test to.');
   }
   const s = await readAll();
-  const chosen = provider || s.otp_provider || 'jio_dlt';
+  // Test what would really carry a code. Falling back to the stored provider
+  // here tested the connector the operator had typed into the form rather than
+  // the one the deployment sends over.
+  const chosen = provider || sms.effectiveProvider(s.otp_provider);
   const result = await sms.sendTestSms(to, { provider: chosen });
   return {
     success: true,

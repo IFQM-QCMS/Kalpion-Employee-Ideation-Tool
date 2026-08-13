@@ -31,7 +31,9 @@ import { masterDb } from '../database/master.js';
 import { signToken } from '../utils/jwt.js';
 import { resolveTenantByLogin, normalizePhone, isEmail } from './directoryService.js';
 import { getTenantPool } from '../database/tenant.js';
-import { sendSms, maskPhone, dltConfig, dltMissing, fillTemplate } from './smsService.js';
+import {
+  sendSms, maskPhone, dltConfig, dltMissing, fillTemplate, messageFor, smsReady, kaleyraMissing,
+} from './smsService.js';
 import { recordLogin } from './activityService.js';
 import { mailConfig, sendZeptoMail, zeptoMissing } from './zeptoMailService.js';
 import { sendViaPlatform, platformMailReady } from './mailerService.js';
@@ -208,12 +210,23 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   /*
    * On a DLT gateway the wording is not ours to choose — it has to be the
-   * template the carrier approved, or the message is dropped with no error and
-   * no delivery report. So the registered text is filled in rather than a
-   * literal written here, and the literal below is only the fallback for
-   * providers with no template registration.
+   * template the carrier approved against the id sent alongside it, or the
+   * message is accepted by the gateway and then dropped by the carrier, with no
+   * error and no delivery report at either end.
+   *
+   * So the text comes from the registered wording, the same way the
+   * registration and reset journeys already get it: messageFor() reads the
+   * configured SMS_TEXT_* for this purpose and fills its {#var#} placeholders
+   * left to right — the code, then the minutes — and hands back the template id
+   * that wording was approved under.
+   *
+   * This used to be a literal written here, which meant signing in — the one
+   * journey anybody actually uses — was the only journey sending wording the
+   * carrier had never seen, while carrying a template id claiming otherwise.
    */
-  let body = `${code} is your IFQM sign-in code. It expires in ${minutes} minute(s). Do not share it with anyone.`;
+  let body = messageFor(purpose, code, minutes).text;
+  // A deployment configured through the platform console rather than the
+  // environment keeps its approved wording there instead.
   if (p.otp_provider === 'jio_dlt') {
     const cfg = await dltConfig();
     if (cfg.template_text) body = fillTemplate(cfg.template_text, [code, minutes]);
@@ -245,20 +258,30 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
    */
   const emailAddr = idType === 'email' ? key : (user.email || '');
   const phoneNum = idType === 'phone' ? key : (user.phone || '');
-  const trySms = async () => sendSms(phoneNum, body, { purpose, tenantSlug: tenant.slug });
+  /*
+   * Each route reports the channel it *is*, rather than leaving it to be
+   * inferred from the provider name afterwards. The inference was a hard-coded
+   * list of three SMS providers, so a code sent over msg91 or twilio was
+   * recorded as having gone out by email — and the delivery log is the only
+   * place anybody can look to answer "where did that code actually go".
+   */
+  const trySms = async () => ({
+    ...(await sendSms(phoneNum, body, { purpose, tenantSlug: tenant.slug })),
+    channel: 'sms',
+  });
   const tryEmail = async () => {
     const route = platformMailReady() ? 'platform_smtp' : 'zeptomail_api';
     try {
       await sendViaPlatform(emailAddr, user.name,
         `${code} is your IFQM sign-in code`, otpEmailHtml(user.name, code, minutes));
-      return { sent: true, provider: route };
+      return { sent: true, provider: route, channel: 'email' };
     } catch (err) {
-      return { sent: false, provider: route, detail: err.message };
+      return { sent: false, provider: route, detail: err.message, channel: 'email' };
     }
   };
 
   const preferred = idType === 'phone' ? 'sms' : 'email';
-  let sent = { sent: false, provider: 'none', detail: 'no channel available' };
+  let sent = { sent: false, provider: 'none', detail: 'no channel available', channel: null };
 
   if (preferred === 'sms' && phoneNum) sent = await trySms();
   else if (preferred === 'email' && emailAddr) sent = await tryEmail();
@@ -274,11 +297,11 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
   }
 
   // Now it is known rather than assumed — including the case where the code
-  // went out by the channel the person did NOT ask for.
-  if (inserted?.insertId) {
+  // went out by the channel the person did NOT ask for. Left NULL when no route
+  // could be tried at all, which is honest: nothing carried it anywhere.
+  if (inserted?.insertId && sent.channel) {
     master.execute('UPDATE login_otps SET channel = ? WHERE id = ?',
-      [sent.provider === 'kaleyra' || sent.provider === 'log' || sent.provider === 'jio_dlt' ? 'sms' : 'email',
-        inserted.insertId]).catch(() => {});
+      [sent.channel, inserted.insertId]).catch(() => {});
   }
 
   if (!sent.sent) logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
@@ -434,12 +457,28 @@ export async function otpStatus() {
     route = 'zeptomail_api';
   }
 
+  /*
+   * SMS counts as "able to deliver" too.
+   *
+   * This asked about email and nothing else, from when email was the only route
+   * a code could take. It is not any more — a deployment whose codes go out over
+   * the DLT gateway is fully configured to send them, and this would still have
+   * reported the feature as unavailable and hidden the option on the sign-in
+   * screen, because no SMTP account happened to be set. The whole point of the
+   * gateway is that no SMTP account has to be.
+   */
+  const sms = smsReady('login');
+  const deliverable = emailReady || sms.ready;
+
   return {
     success: true,
-    enabled: p.otp_enabled !== '0' && emailReady,
+    enabled: p.otp_enabled !== '0' && deliverable,
     length: num(p.otp_length, 6),
     resend_in: num(p.otp_resend_seconds, 60),
-    provider: emailReady ? route : 'none',
+    // Named for what would actually carry a code. Somebody who types a number
+    // gets SMS and somebody who types an address gets email, so when both are
+    // up neither name alone is true.
+    provider: emailReady && sms.ready ? 'both' : (emailReady ? route : (sms.ready ? config.sms.provider : 'none')),
   };
 }
 
@@ -453,6 +492,18 @@ export async function providerReadiness(provider) {
     return config.env === 'production'
       ? { deliverable: false, reason: 'The mock provider is refused in production.' }
       : { deliverable: true, reason: 'Codes are written to the server log, not sent.' };
+  }
+  /*
+   * Kaleyra — the contracted gateway, and the one this deployment actually
+   * runs on. It was missing from this list entirely, so the platform console
+   * described the live provider as `Unknown provider "kaleyra"` and showed the
+   * feature as undeliverable while it was working perfectly well.
+   */
+  if (chosen === 'kaleyra') {
+    const missing = kaleyraMissing(config.sms, 'login');
+    return missing.length
+      ? { deliverable: false, reason: `Incomplete: ${missing.join(', ')}.` }
+      : { deliverable: true, reason: 'Kaleyra gateway configured from the environment.' };
   }
   if (chosen === 'jio_dlt') {
     const cfg = await dltConfig();

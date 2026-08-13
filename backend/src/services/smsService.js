@@ -37,6 +37,25 @@ import { masterDb } from '../database/master.js';
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
+/**
+ * Which provider would actually carry a message right now.
+ *
+ * The environment wins over the stored setting, because that is the rule the
+ * rest of this deployment already follows: the gateway account belongs to IFQM
+ * and is set once per deployment, and `config.sms` is where a real send reads
+ * it from. The console's stored `otp_provider` is only consulted when the
+ * environment says nothing.
+ *
+ * Without this the console answered a different question from the one the
+ * sender answers — it reported on, tested, and gated the feature against the
+ * stored provider (which defaults to `log`) while every real code went out over
+ * the env-configured gateway. A status panel disagreeing with the code path it
+ * describes is worse than no status panel.
+ */
+export function effectiveProvider(stored = '') {
+  return (config.sms.provider || providerFromEnv() || stored || 'log').toLowerCase();
+}
+
 /** Every setting the DLT connector needs, read from the registry. */
 export async function dltConfig() {
   const blank = {
@@ -475,7 +494,11 @@ export function matchesTemplate(template, message) {
  * gateway and reports what came back.
  */
 export async function sendTestSms(phone, { provider } = {}) {
-  const chosen = (provider || 'jio_dlt').toLowerCase();
+  // Defaulting to jio_dlt meant this button tested a connector the deployment
+  // was not using: on a Kaleyra deployment it reported the DLT connector's
+  // configuration state, so "Test Connection" could fail while sign-in codes
+  // were going out fine, or pass while they were not.
+  const chosen = (provider || effectiveProvider()).toLowerCase();
   const cfg = await dltConfig();
 
   if (chosen === 'jio_dlt') {
@@ -484,12 +507,28 @@ export async function sendTestSms(phone, { provider } = {}) {
       return { sent: false, provider: chosen, detail: `Not configured: ${missing.join(', ')}` };
     }
   }
+  if (chosen === 'kaleyra') {
+    const missing = kaleyraMissing(config.sms, 'login');
+    if (missing.length) {
+      return { sent: false, provider: chosen, detail: `Not configured: ${missing.join(', ')}` };
+    }
+  }
 
-  // Built from the registered template so the test exercises the same path a
-  // real code takes, including the substitution.
-  const message = chosen === 'jio_dlt' && cfg.template_text
-    ? fillTemplate(cfg.template_text, ['000000', '5'])
-    : '000000 is your IFQM sign-in code. It expires in 5 minute(s). Do not share it with anyone.';
+  /*
+   * Built from the registered wording so the test exercises the same path a
+   * real code takes, including the substitution — and, more importantly, so it
+   * carries the same text the carrier will check against the template id. A
+   * test that sent a literal would be accepted by the gateway and dropped by
+   * the carrier, reporting a pass for a configuration that cannot deliver.
+   */
+  let message;
+  if (chosen === 'jio_dlt' && cfg.template_text) {
+    message = fillTemplate(cfg.template_text, ['000000', '5']);
+  } else if (chosen === 'kaleyra') {
+    message = messageFor('login', '000000', 5).text;
+  } else {
+    message = '000000 is your IFQM sign-in code. It expires in 5 minute(s). Do not share it with anyone.';
+  }
 
   const result = await deliver(chosen, String(phone || '').trim(), message);
   await recordDelivery({ provider: result.provider, purpose: 'test', to: phone, tenantSlug: null, result });
