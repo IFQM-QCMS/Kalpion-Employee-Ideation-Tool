@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { registrationsApi } from '../services/api';
 import InfoDot from '../components/InfoDot';
@@ -98,6 +98,31 @@ export default function SignupPage() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [otpMsg, setOtpMsg] = useState('');
 
+  /*
+   * The mobile leg of the same exercise.
+   *
+   * Kept as its own state rather than folded into the email one because both
+   * run at once and either can be mid-flight: a shared "verifying" flag would
+   * grey out the wrong button.
+   *
+   * `smsAvailable` is null until the server has answered. Null is not false —
+   * drawing "SMS unavailable" for the half-second before the answer arrives
+   * would tell every applicant the feature is broken.
+   */
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const [phoneOtpCode, setPhoneOtpCode] = useState('');
+  const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
+  const [verifyingPhoneOtp, setVerifyingPhoneOtp] = useState(false);
+  const [phoneOtpMsg, setPhoneOtpMsg] = useState('');
+  const [smsAvailable, setSmsAvailable] = useState(null);
+
+  useEffect(() => {
+    registrationsApi.channels()
+      .then((r) => setSmsAvailable(!!r.data?.sms))
+      .catch(() => setSmsAvailable(null));
+  }, []);
+
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm((f) => ({ ...f, [k]: v }));
@@ -144,6 +169,47 @@ export default function SignupPage() {
       setError(err?.response?.data?.error || 'Incorrect verification code.');
     }
     setVerifyingOtp(false);
+  }
+
+  async function handleSendPhoneOtp() {
+    const phone = form.contact_phone.trim();
+    if (!/^(\+?91[-\s]?)?[6-9]\d{9}$/.test(phone.replace(/[\s-]/g, ''))) {
+      setError('Please enter a valid 10-digit Indian mobile number first.');
+      return;
+    }
+    setError(''); setPhoneOtpMsg(''); setSendingPhoneOtp(true);
+    try {
+      const res = await registrationsApi.sendPhoneOtp(phone);
+      if (res.data?.success) {
+        setPhoneOtpSent(true);
+        setPhoneOtpMsg('Verification code sent by SMS to your mobile number.');
+      } else {
+        setError(res.data?.error || 'Failed to send the code to your mobile.');
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Network error sending the code.');
+    }
+    setSendingPhoneOtp(false);
+  }
+
+  async function handleVerifyPhoneOtp() {
+    if (!phoneOtpCode || phoneOtpCode.length < 4) {
+      setError('Please enter the 6-digit code sent to your mobile.');
+      return;
+    }
+    setError(''); setPhoneOtpMsg(''); setVerifyingPhoneOtp(true);
+    try {
+      const res = await registrationsApi.verifyPhoneOtp(form.contact_phone.trim(), phoneOtpCode.trim());
+      if (res.data?.success && res.data?.verified) {
+        setPhoneVerified(true);
+        setPhoneOtpMsg('✓ Mobile number verified successfully!');
+      } else {
+        setError(res.data?.error || 'Incorrect or expired code.');
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || 'Incorrect code.');
+    }
+    setVerifyingPhoneOtp(false);
   }
 
   /* Check the work-email rule against the server as soon as the field loses
@@ -249,6 +315,9 @@ export default function SignupPage() {
     if (step === 0 && !emailVerified) {
       return setError('Please verify your work email address with the OTP code before proceeding.');
     }
+    if (step === 0 && !phoneVerified) {
+      return setError('Please verify your mobile number with the OTP code before proceeding.');
+    }
     if (step === 0 && emailNote) return setError(emailNote);
     setError('');
     setStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -263,6 +332,10 @@ export default function SignupPage() {
     if (!emailVerified) {
       setStep(0);
       return setError('Please verify your work email address with the OTP code before submitting your application.');
+    }
+    if (!phoneVerified) {
+      setStep(0);
+      return setError('Please verify your mobile number with the OTP code before submitting your application.');
     }
     if (!form.accepted_terms) return setError('Please confirm you are authorised to register this organisation.');
     setBusy(true);
@@ -518,10 +591,100 @@ export default function SignupPage() {
                           <p className="hint">Must be your corporate domain. Click "Send OTP" to receive a verification code before proceeding.</p>
                         )}
                       </div>
-                      <div>
-                        <label htmlFor="contact_phone">Phone <span className="req">*</span></label>
-                        <input id="contact_phone" value={form.contact_phone} onChange={set('contact_phone')}
-                          placeholder="+91 98765 43210" />
+                      <div className="full">
+                        <label htmlFor="contact_phone">Mobile number <span className="req">*</span></label>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <input
+                            id="contact_phone"
+                            type="tel"
+                            value={form.contact_phone}
+                            onChange={(e) => {
+                              // Changing the number invalidates the proof for the
+                              // old one — the server will refuse the application
+                              // otherwise, and finding that out at submit is worse
+                              // than finding it out here.
+                              set('contact_phone')(e);
+                              setPhoneVerified(false);
+                              setPhoneOtpSent(false);
+                              setPhoneOtpCode('');
+                              setPhoneOtpMsg('');
+                            }}
+                            placeholder="+91 98765 43210"
+                            disabled={phoneVerified}
+                            required
+                            style={{ flex: 1 }}
+                          />
+                          {!phoneVerified ? (
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                whiteSpace: 'nowrap', padding: '10px 16px', fontSize: 13, fontWeight: 700,
+                                background: 'var(--primary)', color: '#fff', borderRadius: 8,
+                                border: 'none', cursor: 'pointer',
+                              }}
+                              onClick={handleSendPhoneOtp}
+                              disabled={sendingPhoneOtp || !form.contact_phone.trim() || smsAvailable === false}
+                            >
+                              {sendingPhoneOtp ? 'Sending OTP...' : phoneOtpSent ? 'Resend OTP' : 'Send OTP'}
+                            </button>
+                          ) : (
+                            <span style={{
+                              fontSize: 13, fontWeight: 700, color: 'var(--success)',
+                              background: 'var(--success-light)', padding: '8px 14px', borderRadius: 8,
+                              border: '1px solid var(--success-dim)', whiteSpace: 'nowrap',
+                            }}>
+                              ✓ Mobile Verified
+                            </span>
+                          )}
+                        </div>
+
+                        {phoneOtpSent && !phoneVerified && (
+                          <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              maxLength={8}
+                              placeholder="Enter 6-digit OTP code"
+                              value={phoneOtpCode}
+                              onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, ''))}
+                              autoComplete="one-time-code"
+                              style={{ width: 200, letterSpacing: '3px', fontWeight: 700, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
+                            />
+                            <button
+                              type="button"
+                              className="btn"
+                              style={{
+                                padding: '10px 18px', fontSize: 13, fontWeight: 700,
+                                background: 'var(--success)', color: '#fff', borderRadius: 8,
+                                border: 'none', cursor: 'pointer',
+                              }}
+                              onClick={handleVerifyPhoneOtp}
+                              disabled={verifyingPhoneOtp || phoneOtpCode.length < 4}
+                            >
+                              {verifyingPhoneOtp ? 'Verifying...' : 'Verify OTP'}
+                            </button>
+                          </div>
+                        )}
+
+                        {phoneOtpMsg && (
+                          <p style={{ fontSize: 12.5, marginTop: 6, color: phoneVerified ? 'var(--success)' : 'var(--primary)', fontWeight: 600 }}>
+                            {phoneOtpMsg}
+                          </p>
+                        )}
+                        {/* Said plainly rather than leaving a button that cannot
+                            work: the applicant cannot fix a gateway, and needs to
+                            know the hold-up is not at their end. */}
+                        {smsAvailable === false && !phoneVerified && (
+                          <p className="warn">
+                            Codes by SMS are unavailable at the moment. Please contact IFQM to complete your registration.
+                          </p>
+                        )}
+                        {smsAvailable !== false && !phoneOtpMsg && !phoneVerified && (
+                          <p className="hint">
+                            We send a code to this number. Both your email and mobile must be verified before you can submit.
+                          </p>
+                        )}
                       </div>
                     </div>
                   </fieldset>

@@ -1311,6 +1311,16 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
 
   async function handleSubmit() {
     setError('');
+    /*
+     * A mobile number is required of every account, however it is created.
+     * It is what a sign-in code, a password reset and any later confirmation
+     * are sent to; an employee added without one is fine until the morning
+     * they cannot get in. Checked on the server too — this is only so the
+     * admin is told before a round trip.
+     */
+    const digits = phone.replace(/D/g, '');
+    if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
+    if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
     setSaving(true);
     const payload = { name, email, employee_id: empId, role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
     if (isEdit) { payload.id = editUser.id; payload.status = status; }
@@ -1346,7 +1356,7 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           </div>
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_email')} *</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
-            <div className="form-group"><label>{t('admin.uf_phone')}</label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} /></div>
+            <div className="form-group"><label>{t('admin.uf_phone')} <span style={{color:'var(--danger)'}}>*</span></label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} required /></div>
           </div>
           {!isEdit && (
             <div className="form-group" id="uf-dob-group">

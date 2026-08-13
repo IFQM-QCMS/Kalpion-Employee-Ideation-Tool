@@ -162,6 +162,60 @@ const config = {
   },
 
   /*
+   * ── SMS, for one-time codes ────────────────────────────────────────────────
+   *
+   * Env-only, for the same reasons as the mail sender above: one gateway
+   * account belonging to IFQM, set once per deployment, with no screen anywhere
+   * in the product. The platform console's older sms_dlt_* fields still work
+   * for a deployment that was set up that way, but anything here wins.
+   *
+   * ── What India's DLT rules require ─────────────────────────────────────────
+   *
+   * A transactional SMS carries three registrations, and a message missing any
+   * of them is dropped by the carrier silently — no error, no delivery report,
+   * nothing to see from inside this application:
+   *
+   *   pe_id       the business, registered once on the DLT portal
+   *   sender_id   the six-character header the recipient sees instead of a number
+   *   template_id the exact approved wording — a DIFFERENT id per purpose, which
+   *               is why sign-in, reset and activation are three settings and
+   *               not one
+   *
+   * The wording matters as much as the id: the text sent must match the text
+   * approved against that id, placeholder for placeholder. The templates below
+   * are therefore configurable too, so the registered wording can be pasted in
+   * rather than being a literal in this repository that quietly drifts from it.
+   */
+  sms: {
+    // 'kaleyra' | 'jio_dlt' | 'msg91' | 'twilio' | 'log' (dev only)
+    provider: (process.env.SMS_PROVIDER || '').trim().toLowerCase(),
+    apiKey: (process.env.SMS_API_KEY || '').trim(),
+    // Kaleyra's REST base. The account SID is a path segment, not a header.
+    endpoint: (process.env.SMS_ENDPOINT || 'https://api.kaleyra.io').replace(/\/+$/, ''),
+    sid: (process.env.SMS_SID || '').trim(),
+    senderId: (process.env.SMS_SENDER_ID || '').trim(),
+    peId: (process.env.SMS_PE_ID || '').trim(),
+    templates: {
+      login: (process.env.SMS_TEMPLATE_LOGIN || '').trim(),
+      password_reset: (process.env.SMS_TEMPLATE_RESET || '').trim(),
+      // Both new-account journeys use the activation registration.
+      registration_phone: (process.env.SMS_TEMPLATE_ACTIVATION || '').trim(),
+      phone_verify: (process.env.SMS_TEMPLATE_ACTIVATION || '').trim(),
+    },
+    // {#var#} is filled left to right: first the code, then the minutes.
+    text: {
+      login: process.env.SMS_TEXT_LOGIN
+        || '{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.',
+      password_reset: process.env.SMS_TEXT_RESET
+        || '{#var#} is your IFQM password reset code. It expires in {#var#} minute(s). Do not share it with anyone.',
+      registration_phone: process.env.SMS_TEXT_ACTIVATION
+        || '{#var#} is your IFQM verification code. It expires in {#var#} minute(s). Do not share it with anyone.',
+      phone_verify: process.env.SMS_TEXT_ACTIVATION
+        || '{#var#} is your IFQM verification code. It expires in {#var#} minute(s). Do not share it with anyone.',
+    },
+  },
+
+  /*
    * Sign-in by one-time code, forced on or off from the environment.
    *
    * `undefined` means "leave it to the platform_settings row", which is the

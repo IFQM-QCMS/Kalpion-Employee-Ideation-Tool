@@ -92,18 +92,49 @@ export function dltMissing(cfg) {
  * @returns {Promise<{ sent: boolean, provider: string, detail?: string, ref?: string, status?: number }>}
  */
 export async function sendSms(phone, message, { provider, purpose = 'login', tenantSlug = null } = {}) {
-  const chosen = (provider || providerFromEnv() || 'log').toLowerCase();
+  const chosen = (provider || config.sms.provider || providerFromEnv() || 'log').toLowerCase();
   const to = String(phone || '').trim();
   if (!to) return { sent: false, provider: chosen, detail: 'no recipient' };
 
-  const result = await deliver(chosen, to, message);
+  const result = await deliver(chosen, to, message, purpose);
   // Logged for every provider including the mock, so the console's activity
   // panel is not empty during a UAT run on the log provider.
   await recordDelivery({ provider: result.provider, purpose, to, tenantSlug, result });
   return result;
 }
 
-async function deliver(chosen, to, message) {
+/**
+ * The message to send for a purpose, built from the registered wording.
+ *
+ * Returns the template id alongside it because the two travel together: the
+ * carrier checks the text against the id, and a message whose wording has
+ * drifted from its registration is dropped without a delivery report.
+ */
+export function messageFor(purpose, code, minutes) {
+  const key = config.sms.templates[purpose] !== undefined ? purpose : 'login';
+  return {
+    templateId: config.sms.templates[key] || '',
+    text: fillTemplate(config.sms.text[key], [code, minutes]),
+  };
+}
+
+/** Everything the Kaleyra gateway needs before it can send anything. */
+export function kaleyraMissing(cfg = config.sms, purpose = 'login') {
+  const missing = [];
+  if (!cfg.apiKey) missing.push('SMS_API_KEY');
+  // Kaleyra puts the account SID in the path, not in a header: without it every
+  // request answers 401 "Incorrect SID or API key", which reads as a bad key.
+  if (!cfg.sid) missing.push('SMS_SID (the HX… account id from the Kaleyra console)');
+  if (!cfg.senderId) missing.push('SMS_SENDER_ID');
+  if (!cfg.peId) missing.push('SMS_PE_ID');
+  if (!cfg.templates[purpose]) missing.push(`template id for "${purpose}"`);
+  if (cfg.senderId && cfg.senderId.length !== 6) {
+    missing.push('SMS_SENDER_ID must be exactly 6 characters');
+  }
+  return missing;
+}
+
+async function deliver(chosen, to, message, purpose = 'login') {
   if (chosen === 'log') {
     if (config.env === 'production') {
       // Fail closed. Returning "sent" here would mean users never receive a
@@ -116,12 +147,84 @@ async function deliver(chosen, to, message) {
     return { sent: true, provider: 'log', detail: 'written to server log' };
   }
 
+  if (chosen === 'kaleyra') return sendViaKaleyra(to, message, purpose);
   if (chosen === 'jio_dlt') return sendViaJioDlt(to, message);
   if (chosen === 'msg91') return sendViaMsg91(to, message);
   if (chosen === 'twilio') return sendViaTwilio(to, message);
 
   logger.warn(`Unknown SMS provider "${chosen}" — message not sent.`);
   return { sent: false, provider: chosen, detail: 'unknown provider' };
+}
+
+/**
+ * Kaleyra — the contracted gateway, configured from the environment.
+ *
+ * ── The shape of the request ───────────────────────────────────────────────
+ *
+ *   POST {endpoint}/v1/{SID}/messages
+ *   api-key: <key>
+ *   to=+91…&sender=IFQMSK&body=…&type=OTP&template_id=…&pe_id=…
+ *
+ * The SID is a path segment. Sending the key with no SID, or with the wrong
+ * one, returns 401 "Incorrect SID or API key" — which reads as a bad key and
+ * sends people to regenerate a key that was fine all along, so it is called out
+ * by name in kaleyraMissing() above.
+ *
+ * `type=OTP` matters: Kaleyra routes OTP traffic separately, and a one-time
+ * code sent down the transactional route can be delayed past its own expiry.
+ */
+async function sendViaKaleyra(to, message, purpose) {
+  const cfg = config.sms;
+  const missing = kaleyraMissing(cfg, purpose);
+  if (missing.length) {
+    logger.error(`Kaleyra selected but not configured: ${missing.join(', ')}`);
+    return { sent: false, provider: 'kaleyra', detail: `not configured: ${missing.join(', ')}` };
+  }
+
+  const url = `${cfg.endpoint}/v1/${encodeURIComponent(cfg.sid)}/messages`;
+  const body = new URLSearchParams({
+    to: toE164(to),
+    sender: cfg.senderId,
+    body: message,
+    type: 'OTP',
+    template_id: cfg.templates[purpose] || cfg.templates.login,
+    pe_id: cfg.peId,
+  });
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'api-key': cfg.apiKey, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    const text = await res.text();
+    if (!res.ok) {
+      logger.error(`Kaleyra responded ${res.status}`);
+      return {
+        sent: false, provider: 'kaleyra', status: res.status,
+        detail: gatewayMessage(text) || `http ${res.status}`,
+      };
+    }
+    return {
+      sent: true, provider: 'kaleyra', status: res.status, ref: gatewayRef(text),
+      // Accepted by the gateway is not delivered to the handset. A template
+      // whose wording has drifted from its registration is accepted here and
+      // dropped by the carrier afterwards.
+      detail: 'accepted by gateway',
+    };
+  } catch (e) {
+    logger.error('Kaleyra send failed', e.message);
+    return { sent: false, provider: 'kaleyra', detail: networkReason(e, url) };
+  }
+}
+
+/** +91XXXXXXXXXX. Kaleyra wants the country code, and a leading plus. */
+function toE164(v, defaultCc = '91') {
+  const d = String(v).replace(/\D/g, '');
+  if (d.length === 10) return `+${defaultCc}${d}`;
+  if (d.length > 10) return `+${d}`;
+  return `+${d}`;
 }
 
 /**
@@ -431,4 +534,38 @@ export async function recentDeliveries(limit = 20) {
 export default {
   sendSms, sendTestSms, maskPhone, dltConfig, dltMissing,
   fillTemplate, matchesTemplate, recentDeliveries,
+  messageFor, kaleyraMissing, smsReady,
 };
+
+/**
+ * Can a code actually be sent by SMS right now?
+ *
+ * Asked before offering the option, and before telling somebody a code is on
+ * its way. Reported as a reason rather than a boolean so a failure names the
+ * setting that is missing instead of "SMS is unavailable".
+ */
+export function smsReady(purpose = 'login') {
+  const chosen = (config.sms.provider || providerFromEnv() || '').toLowerCase();
+  if (!chosen) return { ready: false, reason: 'SMS_PROVIDER is not set.' };
+  if (chosen === 'log') {
+    return config.env === 'production'
+      ? { ready: false, reason: 'The mock provider is refused in production.' }
+      : { ready: true, reason: 'Codes are written to the server log, not sent.' };
+  }
+  if (chosen === 'kaleyra') {
+    const missing = kaleyraMissing(config.sms, purpose);
+    return missing.length
+      ? { ready: false, reason: `Incomplete: ${missing.join(', ')}.` }
+      : { ready: true, reason: 'Kaleyra configured.' };
+  }
+  if (chosen === 'jio_dlt') return { ready: false, reason: 'Configured in the platform console, not here.' };
+  if (chosen === 'msg91') {
+    return process.env.SMS_API_KEY && process.env.SMS_SENDER_ID
+      ? { ready: true, reason: 'MSG91 configured.' } : { ready: false, reason: 'SMS_API_KEY / SMS_SENDER_ID unset.' };
+  }
+  if (chosen === 'twilio') {
+    return process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM
+      ? { ready: true, reason: 'Twilio configured.' } : { ready: false, reason: 'TWILIO_* unset.' };
+  }
+  return { ready: false, reason: `Unknown provider "${chosen}".` };
+}

@@ -20,53 +20,49 @@ import { assignPlan, defaultTrialDays } from './subscriptionService.js';
 import logger from '../utils/logger.js';
 import { createTenant } from './platformService.js';
 import bcrypt from 'bcryptjs';
+import * as verification from './verificationService.js';
 
-export async function sendRegistrationEmailOtp(email) {
-  email = String(email || '').trim().toLowerCase();
-  if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw badRequest('Please enter a valid corporate email address.');
-  }
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
-  const ttl = 600;
-  await masterDb().execute(
-    'UPDATE login_otps SET expires_at = NOW() WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()',
-    [email]
-  );
-  await masterDb().execute(
-    `INSERT INTO login_otps (identifier, id_type, code_hash, purpose, expires_at)
-     VALUES (?, 'email', ?, 'registration_verify', DATE_ADD(NOW(), INTERVAL ? SECOND))`,
-    [email, await bcrypt.hash(code, 10), ttl]
-  );
-
-  const { sendViaPlatform } = await import('./mailerService.js');
-  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#111;line-height:1.6">
-    <p>Hello,</p>
-    <p>Your email verification OTP code for organization registration is:</p>
-    <p style="font-size:32px;font-weight:800;letter-spacing:6px;color:#4f46e5;margin:20px 0">${code}</p>
-    <p>This code expires in 10 minutes. Do not share it with anyone.</p>
-  </div>`;
-  await sendViaPlatform(email, 'Registration Admin', `${code} is your IFQM Email Verification Code`, html);
-  return { success: true, message: 'Verification OTP sent to your email.' };
+/*
+ * ── Proving the applicant owns the address and the number ──────────────────
+ *
+ * Both are delegated to verificationService, the same machinery the rest of the
+ * product uses for one-time codes. What was here before did its own thing and
+ * got three parts of it wrong: the code came from Math.random(), which is
+ * predictable from previous output; wrong guesses were never counted, so six
+ * digits could be walked at network speed; and the row it wrote used a purpose
+ * value the column could not store, so every request answered 500 — email
+ * verification at sign-up had never once worked.
+ *
+ * announce: true — unlike sign-in, these report honestly whether the code went
+ * out. The applicant is typing their own address into a form they are filling
+ * in and already knows whether they own it, so there is nothing to disclose;
+ * and a form that cannot say "that did not send" leaves somebody waiting for a
+ * code that is never coming.
+ */
+export async function sendRegistrationEmailOtp(email, meta = {}) {
+  const check = checkCorporateEmail(String(email || '').trim().toLowerCase());
+  if (!check.ok) throw badRequest(check.reason);
+  return verification.sendCode({
+    identifier: email, purpose: 'registration_verify', ip: meta.ip, announce: true,
+  });
 }
 
 export async function verifyRegistrationEmailOtp(email, code) {
-  email = String(email || '').trim().toLowerCase();
-  code = String(code || '').trim();
-  if (!email || !code) throw badRequest('Email and OTP code are required.');
-
-  const [[row] = []] = await masterDb().execute(
-    `SELECT * FROM login_otps
-      WHERE identifier = ? AND purpose = 'registration_verify' AND consumed_at IS NULL AND expires_at > NOW()
-      ORDER BY id DESC LIMIT 1`,
-    [email]
-  );
-  if (!row) throw badRequest('Invalid or expired verification code.');
-
-  const match = await bcrypt.compare(code, row.code_hash);
-  if (!match) throw badRequest('Incorrect verification code.');
-
-  await masterDb().execute('UPDATE login_otps SET consumed_at = NOW() WHERE id = ?', [row.id]);
+  await verification.verifyCode({ identifier: email, code, purpose: 'registration_verify' });
   return { success: true, verified: true, message: 'Email verified successfully.' };
+}
+
+export async function sendRegistrationPhoneOtp(phone, meta = {}) {
+  const p = String(phone || '').trim();
+  if (!PHONE_RE.test(p)) throw badRequest('Enter a valid mobile number.');
+  return verification.sendCode({
+    identifier: p, purpose: 'registration_phone', ip: meta.ip, announce: true,
+  });
+}
+
+export async function verifyRegistrationPhoneOtp(phone, code) {
+  await verification.verifyCode({ identifier: phone, code, purpose: 'registration_phone' });
+  return { success: true, verified: true, message: 'Mobile number verified successfully.' };
 }
 
 /* Consumer mailbox providers. A company applying from one of these is either a
@@ -186,8 +182,20 @@ function validateApplication(body) {
     throw badRequest('Organisation code must be 2–30 characters (letters, numbers, - and _).');
   }
 
+  /*
+   * A mobile number is required, not optional.
+   *
+   * It is what the SMS code is sent to, at registration and at every later
+   * point where the account has to be proved — password reset above all. An
+   * account with no number on file cannot use any of it, and the gap only
+   * shows up on the day somebody is locked out.
+   */
   const phone = str(body.contact_phone);
-  if (phone && !PHONE_RE.test(phone)) throw badRequest('Enter a valid contact phone number.');
+  if (!phone) throw badRequest('Enter the contact mobile number.');
+  if (!PHONE_RE.test(phone)) throw badRequest('Enter a valid contact phone number.');
+  if (phone.replace(/\D/g, '').length < 10) {
+    throw badRequest('Enter a full mobile number, including the area or country code.');
+  }
 
   const gstin = upper(body.gstin);
   if (gstin && !GSTIN_RE.test(gstin)) {
@@ -313,7 +321,7 @@ function validateApplication(body) {
     contact_name: contactName,
     contact_designation: str(body.contact_designation).slice(0, 120) || null,
     contact_email: contactEmail,
-    contact_phone: phone || null,
+    contact_phone: phone,
     accepted_terms: 1,
   };
 }
@@ -328,6 +336,26 @@ function validateApplication(body) {
 export async function submitRegistration(body, meta = {}) {
   const row = validateApplication(body);
   const master = masterDb();
+
+  /*
+   * Both the address and the number must have been proved, in the last half
+   * hour, by a code this server issued and consumed.
+   *
+   * Checked HERE rather than trusted from the form. The browser knows it
+   * verified them, but the browser is not what we are asking — anyone can post
+   * this endpoint directly with verified: true in the body, and a claim about a
+   * check is not the check. The two lookups read the consumed code rows, which
+   * only exist if the codes actually came back.
+   */
+  const [emailOk, phoneOk] = await Promise.all([
+    verification.wasVerified(row.contact_email, 'registration_verify'),
+    verification.wasVerified(row.contact_phone, 'registration_phone'),
+  ]);
+  if (!emailOk || !phoneOk) {
+    const what = !emailOk && !phoneOk ? 'email address and mobile number'
+      : !emailOk ? 'email address' : 'mobile number';
+    throw badRequest(`Please verify your ${what} with the code we send before submitting.`);
+  }
 
   // Already a live tenant on this domain, or an application in flight? Answer
   // the applicant identically either way and let the reviewer see the clash.
@@ -350,8 +378,9 @@ export async function submitRegistration(body, meta = {}) {
        (company_name, proposed_slug, email_domain, website, udyam_number, gstin, pan, cin,
         entity_type, enterprise_category, sector, nic_code, employee_count,
         annual_turnover_band, year_established, address_line, city, state, pincode, country,
-        contact_name, contact_designation, contact_email, contact_phone, accepted_terms, submitted_ip)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        contact_name, contact_designation, contact_email, contact_phone, accepted_terms, submitted_ip,
+        contact_email_verified, contact_phone_verified)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,1)`,
     [
       row.company_name, row.proposed_slug, row.email_domain, row.website, row.udyam_number,
       row.gstin, row.pan, row.cin, row.entity_type, row.enterprise_category, row.sector,

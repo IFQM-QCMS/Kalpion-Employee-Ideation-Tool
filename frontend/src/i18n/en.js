@@ -1484,4 +1484,7 @@ export default {
   'analytics.impact_dist':'Impact Area Distribution',
   'analytics.monthly_trend':'Monthly Submission Trend',
   'analytics.score_dist':'AI Quality Score Distribution',
+  'login.otp_id_ph':'Registered email or mobile number',
+  'admin.uf_phone_required':'A mobile number is required for every user.',
+  'admin.uf_phone_invalid':'Enter a valid mobile number, including the country or area code.',
 };

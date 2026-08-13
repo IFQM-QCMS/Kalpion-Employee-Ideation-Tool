@@ -24,12 +24,34 @@ export const checkEmail = asyncHandler(async (req, res) => {
 });
 
 export const sendOtp = asyncHandler(async (req, res) =>
-  respond(res, await registrations.sendRegistrationEmailOtp(req.body?.email))
+  respond(res, await registrations.sendRegistrationEmailOtp(req.body?.email, { ip: req.ip }))
 );
 
 export const verifyOtp = asyncHandler(async (req, res) =>
   respond(res, await registrations.verifyRegistrationEmailOtp(req.body?.email, req.body?.code))
 );
+
+// The mobile leg of the same exercise. Both must be proved before an
+// application is accepted — see submitRegistration.
+export const sendPhoneOtp = asyncHandler(async (req, res) =>
+  respond(res, await registrations.sendRegistrationPhoneOtp(req.body?.phone, { ip: req.ip }))
+);
+
+export const verifyPhoneOtp = asyncHandler(async (req, res) =>
+  respond(res, await registrations.verifyRegistrationPhoneOtp(req.body?.phone, req.body?.code))
+);
+
+/**
+ * Which channels can actually carry a code right now.
+ *
+ * The sign-up form asks before it draws itself: a "verify by SMS" button that
+ * cannot send is worse than no button, because the applicant cannot finish and
+ * has no way to find out why.
+ */
+export const channels = asyncHandler(async (_req, res) => {
+  const { channelsAvailable } = await import('../services/verificationService.js');
+  return respond(res, { success: true, ...channelsAvailable() });
+});
 
 export const list = asyncHandler(async (req, res) =>
   respond(res, await registrations.listRegistrations({ status: req.query.status || '' }))

@@ -133,6 +133,11 @@ export const authApi = {
   otpStatus: () => api.get('/auth/otp/status'),
   otpRequest: (identifier, purpose = 'login') => api.post('/auth/otp/request', { identifier, purpose }),
   otpVerify: (identifier, code) => api.post('/auth/otp/verify', { identifier, code }),
+  // Reset by code — for somebody who cannot reach the mailbox a link would go
+  // to. `identifier` is an email address or a mobile number; the server works
+  // out which and sends by the matching channel.
+  resetCodeRequest: (identifier) => api.post('/auth/password-reset/request-code', { identifier }),
+  resetCodeVerify: (identifier, code) => api.post('/auth/password-reset/verify-code', { identifier, code }),
 };
 
 // ── Ideas ─────────────────────────────────────────────────────────
@@ -374,6 +379,13 @@ export const registrationsApi = {
   checkEmail: (email) => api.get('/registrations/check-email', { params: { email } }),
   sendOtp: (email) => api.post('/registrations/send-otp', { email }),
   verifyOtp: (email, code) => api.post('/registrations/verify-otp', { email, code }),
+  // The mobile leg. Both must be verified before an application is accepted —
+  // the server checks it too, from the consumed code rows.
+  sendPhoneOtp: (phone) => api.post('/registrations/send-phone-otp', { phone }),
+  verifyPhoneOtp: (phone, code) => api.post('/registrations/verify-phone-otp', { phone, code }),
+  // Which channels can actually carry a code, so the form does not offer a
+  // button that cannot work.
+  channels: () => api.get('/registrations/channels'),
 };
 
 /* MOM §13.2 / §13.10 — org-admin decisions on an idea. */

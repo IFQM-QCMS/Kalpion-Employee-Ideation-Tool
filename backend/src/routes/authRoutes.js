@@ -19,6 +19,10 @@ router.post('/otp/verify', authLimiter, auth.otpVerify);
 
 router.post('/logout', auth.logout);
 router.post('/forgot-password', authLimiter, auth.forgotPassword);
+// Reset by code rather than by emailed link — for somebody who cannot reach the
+// mailbox the link would land in. Ends at the same /reset-password below.
+router.post('/password-reset/request-code', authLimiter, auth.requestResetCode);
+router.post('/password-reset/verify-code', authLimiter, auth.verifyResetCode);
 router.post('/reset-password', authLimiter, auth.resetPassword);
 router.get('/check-reset-token', auth.checkResetToken);
 

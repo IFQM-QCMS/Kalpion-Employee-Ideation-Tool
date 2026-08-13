@@ -22,6 +22,7 @@ import { resolveTenant, getTenantPool, sanitizeSlug } from '../database/tenant.j
 import { resolveTenantByLogin, indexUser, isEmail, normalizePhone } from './directoryService.js';
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
+import * as verification from './verificationService.js';
 import logger from '../utils/logger.js';
 
 // ── Brute-force lockout ──────────────────────────────────────────────────────
@@ -370,6 +371,99 @@ export async function forgotPassword({ email, orgSlug, host }) {
 }
 
 /** Reset password given a valid, unexpired token. */
+/*
+ * ── Resetting a password with a code instead of a link ─────────────────────
+ *
+ * The emailed link still works and is unchanged. This exists because a link is
+ * useless to the people most likely to need it: somebody whose work address is
+ * the account they cannot get into, somebody on a phone with no access to that
+ * mailbox, somebody at a plant with a shared terminal. A code sent to their own
+ * mobile reaches them where they are.
+ *
+ * It deliberately ends in the SAME place the emailed link does — a row in
+ * password_reset_tokens, redeemed by the existing /auth/reset-password. One way
+ * to actually set a password, two ways to earn the right to.
+ */
+export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
+  const generic = {
+    success: true,
+    message: 'If that is registered with us, a code has been sent to it.',
+  };
+  const { key, channel } = verification.classify(identifier);
+  if (!key) throw badRequest('Enter your registered email address or mobile number.');
+
+  // Same anti-enumeration rule as forgotPassword: an unknown identifier gets
+  // the identical answer, so this cannot be used to test who has an account.
+  const tenant = await resolveTenantByLogin(key);
+  if (!tenant) return generic;
+
+  let user = null;
+  try {
+    const db = getTenantPool(tenant);
+    const [[u] = []] = channel === 'email'
+      ? await db.execute("SELECT id, name, email FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1", [key])
+      : await db.execute(
+        "SELECT id, name, email FROM users WHERE status = 'active' "
+        + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1", [`%${key}`]
+      );
+    user = u || null;
+  } catch (e) {
+    logger.warn('auth: reset-code lookup failed', e.message);
+  }
+  if (!user) return generic;
+
+  await verification.sendCode({
+    identifier: key,
+    purpose: 'password_reset',
+    name: user.name,
+    tenantSlug: tenant.slug,
+    userId: user.id,
+    ip: meta.ip,
+  });
+  return generic;
+}
+
+/**
+ * Exchange a correct code for a reset token.
+ *
+ * The token is short-lived and single-use exactly like the emailed one, and
+ * every other outstanding token for the account is burned first — so a reset
+ * begun by somebody who should not have started one cannot be finished later.
+ */
+export async function verifyPasswordResetCode({ identifier, code } = {}) {
+  const { row } = await verification.verifyCode({ identifier, code, purpose: 'password_reset' });
+  if (!row?.tenant_slug || !row?.user_id) {
+    throw badRequest('That code cannot be used to reset a password. Ask for a new one.');
+  }
+
+  const tenant = await resolveTenant({ slug: row.tenant_slug });
+  const db = getTenantPool(tenant);
+  const [[user] = []] = await db.execute(
+    "SELECT id, name FROM users WHERE id = ? AND status = 'active' LIMIT 1", [row.user_id]
+  );
+  if (!user) throw unauthorized('That account is no longer active.');
+
+  await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+  const { token, selector, verifierHash } = await makeResetToken();
+  const expiresAt = new Date(Date.now() + 900 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  await db.execute(
+    'INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)',
+    [user.id, selector, verifierHash, expiresAt]
+  );
+
+  logger.info(`auth: reset code accepted for user ${user.id} @ ${tenant.slug}`);
+  return {
+    success: true,
+    verified: true,
+    // Fifteen minutes, not the hour an emailed link gets: the person is holding
+    // the code and finishing now, so there is no reason to leave it lying open.
+    token,
+    org_slug: tenant.slug,
+    expires_in: 900,
+    message: 'Code accepted. Choose a new password.',
+  };
+}
+
 export async function resetPassword({ token, password, orgSlug, host }) {
   token = String(token || '');
   password = String(password || '');
@@ -551,4 +645,5 @@ function escapeHtml(s) {
 
 export default {
   login, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
+  requestPasswordResetCode, verifyPasswordResetCode,
 };

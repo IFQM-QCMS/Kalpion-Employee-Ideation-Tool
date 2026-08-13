@@ -68,7 +68,12 @@ export const COLUMNS = [
   { key: 'department',  header: 'department',  required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'business_unit', header: 'business_unit', required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'location',    header: 'location',    required: false, max: 100, width: 16, note: 'Optional.' },
-  { key: 'phone',       header: 'phone',       required: false, max: 20,  width: 16, note: 'Optional.' },
+  // Required, like every other route that creates a user. A mobile number is
+  // what a sign-in code, a password reset and any later confirmation are sent
+  // to, and an import is precisely where a few hundred accounts would otherwise
+  // arrive without one — invisibly, until somebody cannot get in.
+  { key: 'phone',       header: 'phone',       required: true,  max: 20,  width: 16,
+    note: 'Required. Mobile number — sign-in codes and password resets are sent to it.' },
   { key: 'manager_employee_id', header: 'manager_employee_id', required: false, max: 20, width: 20,
     note: "Optional. The employee_id of this person's manager — either an existing employee or another row in this sheet." },
 ];

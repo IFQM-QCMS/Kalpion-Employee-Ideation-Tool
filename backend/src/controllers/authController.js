@@ -94,6 +94,25 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
+/**
+ * POST /api/auth/password-reset/request-code
+ *
+ * The other way to start a reset: a code to the registered address or mobile,
+ * for somebody who cannot reach the mailbox the link would go to.
+ */
+export const requestResetCode = asyncHandler(async (req, res) =>
+  respond(res, await authService.requestPasswordResetCode({
+    identifier: req.body?.identifier, meta: { ip: req.ip },
+  }))
+);
+
+/** POST /api/auth/password-reset/verify-code — exchange a code for a reset token. */
+export const verifyResetCode = asyncHandler(async (req, res) =>
+  respond(res, await authService.verifyPasswordResetCode({
+    identifier: req.body?.identifier, code: req.body?.code,
+  }))
+);
+
 /** POST /api/auth/reset-password */
 export const resetPassword = asyncHandler(async (req, res) => {
   const { token, password, org_slug } = req.body || {};
@@ -133,4 +152,7 @@ export const changePassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
-export default { me, login, logout, forgotPassword, resetPassword, checkResetToken, changePassword };
+export default {
+  me, login, logout, forgotPassword, resetPassword, checkResetToken, changePassword,
+  requestResetCode, verifyResetCode,
+};

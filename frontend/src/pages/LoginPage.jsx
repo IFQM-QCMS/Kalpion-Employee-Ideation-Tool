@@ -361,10 +361,20 @@ export default function LoginPage() {
         {mode === 'otp' ? (
           otpStage === 'request' ? (
             <form onSubmit={sendCode}>
+              {/*
+                * Email address OR mobile number.
+                *
+                * This asked for a number only — type="tel", "Registered phone
+                * number" — while the server has always accepted either and, with
+                * no SMS gateway contracted, could only ever deliver by email. So
+                * the one channel that worked was the one the screen never
+                * invited anybody to use, and code sign-in looked completely
+                * broken. type="text" because a tel keypad cannot type an "@".
+                */}
               <div className="fld">
                 <span className="ic"><PhoneIcon /></span>
-                <input type="tel" value={otpPhone} onChange={e => setOtpPhone(e.target.value)}
-                  placeholder={t('login.otp_phone_ph')} autoComplete="tel" required autoFocus />
+                <input type="text" value={otpPhone} onChange={e => setOtpPhone(e.target.value)}
+                  placeholder={t('login.otp_id_ph')} autoComplete="username" required autoFocus />
               </div>
               <button type="submit" className="go" disabled={loading || !otpPhone.trim()}>
                 {loading ? t('msg.loading') : t('login.otp_send')}

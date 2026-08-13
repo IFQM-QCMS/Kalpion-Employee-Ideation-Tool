@@ -249,6 +249,20 @@ export async function createUser(db, actor, body, tenant = null) {
     throw badRequest('Name, email, and employee ID are required.');
   }
   if (!isValidEmail(email)) throw badRequest('Invalid email address.');
+  /*
+   * A mobile number is required of every account, however it is created.
+   *
+   * It is the second way in and the only one that works when the first fails:
+   * a sign-in code, a password reset, confirming a change on the account. An
+   * employee added without one is fine right up to the morning they cannot get
+   * in, at which point the fix needs an administrator who may be the person
+   * locked out. Enforced here rather than in the form, because the form is not
+   * the only caller.
+   */
+  if (!phone) throw badRequest('A mobile number is required for every user.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
   if (!birthYear && !explicitPassword) {
     throw badRequest('Date of birth is required — the first-login password is built from it.');
   }
@@ -313,6 +327,12 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   const status = (body.status || 'active') === 'inactive' ? 'inactive' : 'active';
 
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
+  // Same rule as creation, applied on the way out too: an edit must not be able
+  // to remove the only number the account can be recovered through.
+  if (!phone) throw badRequest('A mobile number is required for every user.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
 
   const initials = avatarInitials(name) || firstCharUpper(name);
 
@@ -488,6 +508,20 @@ export async function updateProfile(db, actor, body) {
 function isValidEmail(email) {
   // Mirrors PHP filter_var(..., FILTER_VALIDATE_EMAIL) closely enough for parity.
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+/**
+ * Loose on formatting, strict on substance.
+ *
+ * People type numbers with spaces, hyphens, brackets and a country code, and
+ * rejecting those is how a required field turns into a support ticket. What
+ * actually matters is that there are enough digits to be a real mobile number,
+ * because a code will be sent to it.
+ */
+function isValidPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  return /^[0-9+\-\s()]{7,20}$/.test(String(phone || '').trim())
+    && digits.length >= 10 && digits.length <= 15;
 }
 
 export default {
