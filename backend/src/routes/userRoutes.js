@@ -65,6 +65,10 @@ router.get('/managers', requireRole('admin', 'super_admin'), users.managers);   
 // tree, so org admins are allowed in too — it is their own org's data.
 router.get('/hierarchy', requireRole('admin', 'super_admin'), users.hierarchy);   // action=hierarchy
 router.post('/profile', requireAuth, users.updateProfile);      // action=profile
+// Changing your own number is verified by code — each request costs a real SMS,
+// so both legs sit behind the same limiter as the other code endpoints.
+router.post('/me/phone/request-code', requireAuth, heavyLimiter, users.requestPhoneChangeCode);
+router.post('/me/phone/confirm', requireAuth, heavyLimiter, users.confirmPhoneChange);
 
 router.post('/', requireRole('admin', 'super_admin'), users.createUser);          // action=create_user
 router.put('/:id/manager', requireRole('admin', 'super_admin'), users.updateManager); // hierarchy screen: reporting line only

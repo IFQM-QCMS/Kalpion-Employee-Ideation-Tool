@@ -1371,4 +1371,11 @@ export default {
   'login.otp_id_ph':'नोंदणीकृत ईमेल किंवा मोबाइल क्रमांक',
   'admin.uf_phone_required':'प्रत्येक वापरकर्त्यासाठी मोबाइल क्रमांक आवश्यक आहे.',
   'admin.uf_phone_invalid':'देश किंवा क्षेत्र कोडसह वैध मोबाइल क्रमांक टाका.',
+  'profile.phone_change':'बदला',
+  'profile.phone_send_code':'कोड पाठवा',
+  'profile.phone_confirm':'निश्चित करा',
+  'profile.phone_change_hint':'तो क्रमांक तुमचाच आहे याची खात्री करण्यासाठी आम्ही नव्या क्रमांकावर कोड पाठवतो.',
+  'profile.phone_code_sent':'नव्या क्रमांकावर कोड पाठवला.',
+  'profile.phone_changed':'तुमचा मोबाइल क्रमांक अद्ययावत झाला आहे.',
+  'profile.phone_code_to':'{phone} वर कोड पाठवला',
 };

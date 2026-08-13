@@ -15,6 +15,7 @@ import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
 import { tempPasswordFor } from './userImportService.js';
 import { indexUser, deindexUser } from './directoryService.js';
+import logger from '../utils/logger.js';
 
 // Role sets used across create/update/managers (mirrors the PHP literals).
 const ROLES_ADMIN_CAN_ASSIGN = [
@@ -496,13 +497,113 @@ export async function hierarchy(db) {
   };
 }
 
-/** POST action=profile — update own phone. */
+/**
+ * POST action=profile — update own phone.
+ *
+ * Kept for compatibility, but it can no longer set a number outright: changing
+ * it goes through requestPhoneChangeCode / confirmPhoneChange below, so the
+ * number on file is always one somebody proved they hold. Silently ignoring the
+ * field would be worse than refusing it — the screen would report success and
+ * the number would not change.
+ */
 export async function updateProfile(db, actor, body) {
   const phone = String(body.phone || '').trim();
-  await db.execute('UPDATE users SET phone=? WHERE id=?', [phone, actor.id]);
-  // NOTE: PHP also mutated $_SESSION['user']['phone']; with a stateless JWT the
-  // client updates its own copy. Response shape is unchanged.
+  const current = String(actor.phone || '').trim();
+  if (phone && digitsOf(phone) !== digitsOf(current)) {
+    throw badRequest('To change your mobile number, verify the new one with the code we send.');
+  }
   return { success: true };
+}
+
+const digitsOf = (v) => String(v || '').replace(/\D/g, '');
+
+/**
+ * Step one of changing your own number: send a code to the NEW one.
+ *
+ * The code goes to the number being claimed, not to the one on file, because
+ * the question being asked is "do you hold this number" — sending it to the old
+ * one would prove only that the person can read messages they could already
+ * read.
+ */
+export async function requestPhoneChangeCode(db, actor, body, tenant = null) {
+  const phone = String(body?.phone || '').trim();
+  if (!phone) throw badRequest('Enter the new mobile number.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
+  if (digitsOf(phone) === digitsOf(actor.phone)) {
+    throw badRequest('That is already your number.');
+  }
+
+  // One account per number, or two people can both claim it and the login
+  // directory has to guess which of them a code belongs to.
+  const [[clash] = []] = await db.execute(
+    "SELECT id FROM users WHERE id <> ? AND status = 'active' "
+    + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1",
+    [actor.id, `%${digitsOf(phone)}`]
+  );
+  if (clash) throw new ApiError(409, 'That number is already registered to another account.');
+
+  const verification = await import('./verificationService.js');
+  return verification.sendCode({
+    identifier: phone,
+    purpose: 'phone_verify',
+    name: actor.name,
+    tenantSlug: tenant?.slug || actor.org_slug || null,
+    userId: actor.id,
+    announce: true,
+  });
+}
+
+/**
+ * Step two: the code was right, so the number is theirs. Save it.
+ *
+ * A changed number is worth telling somebody about. Whoever holds the account
+ * can now receive sign-in codes and password resets on a new handset, so the
+ * OLD contact details get a notice — that is what makes a quietly stolen
+ * session visible to the person it was stolen from.
+ */
+export async function confirmPhoneChange(db, actor, body, tenant = null) {
+  const phone = String(body?.phone || '').trim();
+  const verification = await import('./verificationService.js');
+  await verification.verifyCode({ identifier: phone, code: body?.code, purpose: 'phone_verify' });
+
+  const previous = String(actor.phone || '').trim();
+  await db.execute('UPDATE users SET phone = ? WHERE id = ?', [phone, actor.id]);
+
+  // Keep the org-code-less login directory in step, or the new number cannot be
+  // used to sign in and the old one still can.
+  if (tenant) indexUser(tenant, { id: actor.id, email: actor.email, phone }).catch(() => {});
+
+  notifyPhoneChanged(actor, previous, phone).catch(() => {});
+  logger.info(`users: ${actor.id} changed their mobile number @ ${tenant?.slug || 'unknown'}`);
+  return { success: true, phone, message: 'Your mobile number has been updated.' };
+}
+
+/** Tell the old address and the old number that the number changed. */
+async function notifyPhoneChanged(actor, previous, next) {
+  const { sendViaPlatform } = await import('./mailerService.js');
+  const { sendSms } = await import('./smsService.js');
+  const tail = String(next).replace(/\D/g, '').slice(-4);
+
+  if (actor.email) {
+    await sendViaPlatform(
+      actor.email, actor.name, 'Your IFQM mobile number was changed',
+      `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
+  <p>Hello ${String(actor.name || '').replace(/[<>&]/g, '')},</p>
+  <p>The mobile number on your IFQM account was changed. Sign-in codes and
+  password resets will now go to the number ending <b>${tail}</b>.</p>
+  <p style="color:#b91c1c"><b>If this was not you</b>, contact your organisation's
+  administrator straight away — whoever made this change can receive your
+  sign-in codes.</p>
+</div>`
+    ).catch(() => {});
+  }
+  if (previous) {
+    await sendSms(previous,
+      `Your IFQM sign-in number was changed to one ending ${tail}. If this was not you, contact your administrator.`,
+      { purpose: 'phone_verify' }).catch(() => {});
+  }
 }
 
 function isValidEmail(email) {
@@ -526,4 +627,5 @@ function isValidPhone(phone) {
 
 export default {
   list, adminUsers, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile,
+  requestPhoneChangeCode, confirmPhoneChange,
 };

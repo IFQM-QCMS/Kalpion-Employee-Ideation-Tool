@@ -1487,4 +1487,11 @@ export default {
   'login.otp_id_ph':'Registered email or mobile number',
   'admin.uf_phone_required':'A mobile number is required for every user.',
   'admin.uf_phone_invalid':'Enter a valid mobile number, including the country or area code.',
+  'profile.phone_change':'Change',
+  'profile.phone_send_code':'Send code',
+  'profile.phone_confirm':'Confirm',
+  'profile.phone_change_hint':'We send a code to the new number to confirm it is yours.',
+  'profile.phone_code_sent':'Code sent to the new number.',
+  'profile.phone_changed':'Your mobile number has been updated.',
+  'profile.phone_code_to':'Code sent to {phone}',
 };

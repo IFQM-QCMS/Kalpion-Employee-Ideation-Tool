@@ -1371,4 +1371,11 @@ export default {
   'login.otp_id_ph':'பதிவு செய்யப்பட்ட மின்னஞ்சல் அல்லது கைபேசி எண்',
   'admin.uf_phone_required':'ஒவ்வொரு பயனருக்கும் கைபேசி எண் அவசியம்.',
   'admin.uf_phone_invalid':'நாடு அல்லது பகுதிக் குறியீடு உட்பட சரியான கைபேசி எண்ணை உள்ளிடவும்.',
+  'profile.phone_change':'மாற்று',
+  'profile.phone_send_code':'குறியீட்டை அனுப்பு',
+  'profile.phone_confirm':'உறுதிப்படுத்து',
+  'profile.phone_change_hint':'அந்த எண் உங்களுடையது என உறுதிப்படுத்த புதிய எண்ணுக்கு ஒரு குறியீட்டை அனுப்புகிறோம்.',
+  'profile.phone_code_sent':'புதிய எண்ணுக்குக் குறியீடு அனுப்பப்பட்டது.',
+  'profile.phone_changed':'உங்கள் கைபேசி எண் புதுப்பிக்கப்பட்டது.',
+  'profile.phone_code_to':'{phone} க்குக் குறியீடு அனுப்பப்பட்டது',
 };

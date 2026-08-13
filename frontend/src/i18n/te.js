@@ -1371,4 +1371,11 @@ export default {
   'login.otp_id_ph':'నమోదిత ఇమెయిల్ లేదా మొబైల్ నంబర్',
   'admin.uf_phone_required':'ప్రతి వినియోగదారుకు మొబైల్ నంబర్ తప్పనిసరి.',
   'admin.uf_phone_invalid':'దేశం లేదా ప్రాంత కోడ్‌తో సహా చెల్లుబాటు అయ్యే మొబైల్ నంబర్ నమోదు చేయండి.',
+  'profile.phone_change':'మార్చండి',
+  'profile.phone_send_code':'కోడ్ పంపండి',
+  'profile.phone_confirm':'నిర్ధారించండి',
+  'profile.phone_change_hint':'ఆ నంబర్ మీదేనని నిర్ధారించడానికి కొత్త నంబర్‌కు కోడ్ పంపుతాము.',
+  'profile.phone_code_sent':'కొత్త నంబర్‌కు కోడ్ పంపబడింది.',
+  'profile.phone_changed':'మీ మొబైల్ నంబర్ నవీకరించబడింది.',
+  'profile.phone_code_to':'{phone}కు కోడ్ పంపబడింది',
 };

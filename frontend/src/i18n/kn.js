@@ -1375,4 +1375,11 @@ export default {
   'login.otp_id_ph':'ನೋಂದಾಯಿತ ಇಮೇಲ್ ಅಥವಾ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ',
   'admin.uf_phone_required':'ಪ್ರತಿ ಬಳಕೆದಾರರಿಗೂ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ಅಗತ್ಯ.',
   'admin.uf_phone_invalid':'ದೇಶ ಅಥವಾ ಪ್ರದೇಶ ಕೋಡ್ ಸಹಿತ ಮಾನ್ಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ.',
+  'profile.phone_change':'ಬದಲಿಸಿ',
+  'profile.phone_send_code':'ಕೋಡ್ ಕಳುಹಿಸಿ',
+  'profile.phone_confirm':'ಖಚಿತಪಡಿಸಿ',
+  'profile.phone_change_hint':'ಆ ಸಂಖ್ಯೆ ನಿಮ್ಮದೇ ಎಂದು ಖಚಿತಪಡಿಸಲು ಹೊಸ ಸಂಖ್ಯೆಗೆ ಕೋಡ್ ಕಳುಹಿಸುತ್ತೇವೆ.',
+  'profile.phone_code_sent':'ಹೊಸ ಸಂಖ್ಯೆಗೆ ಕೋಡ್ ಕಳುಹಿಸಲಾಗಿದೆ.',
+  'profile.phone_changed':'ನಿಮ್ಮ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ ನವೀಕರಿಸಲಾಗಿದೆ.',
+  'profile.phone_code_to':'{phone} ಗೆ ಕೋಡ್ ಕಳುಹಿಸಲಾಗಿದೆ',
 };

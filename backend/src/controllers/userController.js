@@ -78,9 +78,23 @@ export const hierarchy = asyncHandler(async (req, res) =>
   respond(res, await userService.hierarchy(req.db))
 );
 
+/*
+ * Changing your own mobile number, in two steps: a code to the NEW number, then
+ * the code back. The number on file is therefore always one somebody proved
+ * they hold — which matters because sign-in codes and password resets go to it.
+ */
+export const requestPhoneChangeCode = asyncHandler(async (req, res) =>
+  respond(res, await userService.requestPhoneChangeCode(req.db, req.user, req.body || {}, req.tenant))
+);
+
+export const confirmPhoneChange = asyncHandler(async (req, res) =>
+  respond(res, await userService.confirmPhoneChange(req.db, req.user, req.body || {}, req.tenant))
+);
+
 export const updateProfile = asyncHandler(async (req, res) =>
   respond(res, await userService.updateProfile(req.db, req.user, req.body || {}))
 );
 
 export default { list, adminUsers, reportingChain,
-  hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile };
+  hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile,
+  requestPhoneChangeCode, confirmPhoneChange };

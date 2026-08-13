@@ -1375,4 +1375,11 @@ export default {
   'login.otp_id_ph':'पंजीकृत ईमेल या मोबाइल नंबर',
   'admin.uf_phone_required':'हर उपयोगकर्ता के लिए मोबाइल नंबर आवश्यक है।',
   'admin.uf_phone_invalid':'देश या क्षेत्र कोड सहित एक वैध मोबाइल नंबर दर्ज करें।',
+  'profile.phone_change':'बदलें',
+  'profile.phone_send_code':'कोड भेजें',
+  'profile.phone_confirm':'पुष्टि करें',
+  'profile.phone_change_hint':'हम नए नंबर पर एक कोड भेजते हैं ताकि पुष्टि हो कि वह आपका है।',
+  'profile.phone_code_sent':'नए नंबर पर कोड भेजा गया।',
+  'profile.phone_changed':'आपका मोबाइल नंबर अपडेट हो गया है।',
+  'profile.phone_code_to':'{phone} पर कोड भेजा गया',
 };

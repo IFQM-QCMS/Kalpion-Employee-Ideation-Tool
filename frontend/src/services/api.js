@@ -191,6 +191,11 @@ export const notifApi = {
 
 // ── Users ─────────────────────────────────────────────────────────
 export const usersApi = {
+  // Changing your own mobile number, verified by a code to the NEW number —
+  // it is where sign-in codes and password resets go, so it is not a field
+  // anybody should be able to change unchallenged.
+  requestPhoneCode: (phone) => api.post('/users/me/phone/request-code', { phone }),
+  confirmPhoneChange: (phone, code) => api.post('/users/me/phone/confirm', { phone, code }),
   // §13.8 — a user's full reporting line, in one call.
   chain: (id) => api.get(`/users/${id}/chain`),
   list: (params) => api.get('/users', { params }),

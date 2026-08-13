@@ -1371,4 +1371,11 @@ export default {
   'login.otp_id_ph':'രജിസ്റ്റർ ചെയ്ത ഇമെയിൽ അല്ലെങ്കിൽ മൊബൈൽ നമ്പർ',
   'admin.uf_phone_required':'ഓരോ ഉപയോക്താവിനും മൊബൈൽ നമ്പർ നിർബന്ധമാണ്.',
   'admin.uf_phone_invalid':'രാജ്യ അല്ലെങ്കിൽ പ്രദേശ കോഡ് ഉൾപ്പെടെ സാധുവായ മൊബൈൽ നമ്പർ നൽകുക.',
+  'profile.phone_change':'മാറ്റുക',
+  'profile.phone_send_code':'കോഡ് അയയ്ക്കുക',
+  'profile.phone_confirm':'സ്ഥിരീകരിക്കുക',
+  'profile.phone_change_hint':'ആ നമ്പർ നിങ്ങളുടേതാണെന്ന് ഉറപ്പാക്കാൻ പുതിയ നമ്പറിലേക്ക് ഒരു കോഡ് അയയ്ക്കുന്നു.',
+  'profile.phone_code_sent':'പുതിയ നമ്പറിലേക്ക് കോഡ് അയച്ചു.',
+  'profile.phone_changed':'നിങ്ങളുടെ മൊബൈൽ നമ്പർ പുതുക്കി.',
+  'profile.phone_code_to':'{phone} ലേക്ക് കോഡ് അയച്ചു',
 };

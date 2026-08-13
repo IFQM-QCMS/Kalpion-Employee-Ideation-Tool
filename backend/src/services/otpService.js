@@ -224,24 +224,49 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
    * not expecting, or, with no number on file, nothing at all while the screen
    * said a code had been sent.
    */
-  let sent = { sent: false, provider: 'none' };
-  if (idType === 'email' || user.email) {
+  /*
+   * The code goes where the person asked for it.
+   *
+   * This used to read `if (idType === 'email' || user.email)`, so anybody with
+   * an address on file got an EMAIL even when they had carefully typed their
+   * mobile number — and were then told a code had been sent to that number.
+   * With most seeded accounts carrying a fictional address, the message went
+   * nowhere and the whole feature looked dead.
+   *
+   * Typed an address, get an email; typed a number, get a text. The other
+   * channel is only used when the first cannot deliver at all — a code that
+   * arrives by the wrong route still lets somebody in, whereas silence does
+   * not — and the fallback is logged, because "it sent, just not where you
+   * expected" is the kind of thing that has to be findable afterwards.
+   */
+  const emailAddr = idType === 'email' ? key : (user.email || '');
+  const phoneNum = idType === 'phone' ? key : (user.phone || '');
+  const trySms = async () => sendSms(phoneNum, body, { purpose, tenantSlug: tenant.slug });
+  const tryEmail = async () => {
     const route = platformMailReady() ? 'platform_smtp' : 'zeptomail_api';
     try {
-      await sendViaPlatform(
-        user.email || key,
-        user.name,
-        `${code} is your IFQM verification code`,
-        otpEmailHtml(user.name, code, minutes)
-      );
-      sent = { sent: true, provider: route };
+      await sendViaPlatform(emailAddr, user.name,
+        `${code} is your IFQM sign-in code`, otpEmailHtml(user.name, code, minutes));
+      return { sent: true, provider: route };
     } catch (err) {
-      logger.error('otp: email delivery failed', err.message);
-      sent = { sent: false, provider: route, detail: err.message };
+      return { sent: false, provider: route, detail: err.message };
     }
-  } else {
-    sent = await sendSms(user.phone || raw, body,
-      { provider: p.otp_provider, purpose, tenantSlug: tenant.slug });
+  };
+
+  const preferred = idType === 'phone' ? 'sms' : 'email';
+  let sent = { sent: false, provider: 'none', detail: 'no channel available' };
+
+  if (preferred === 'sms' && phoneNum) sent = await trySms();
+  else if (preferred === 'email' && emailAddr) sent = await tryEmail();
+
+  if (!sent.sent) {
+    if (preferred === 'sms' && emailAddr) {
+      logger.warn(`otp: SMS unavailable (${sent.detail || 'no route'}) — falling back to email`);
+      sent = await tryEmail();
+    } else if (preferred === 'email' && phoneNum) {
+      logger.warn(`otp: email failed (${sent.detail || 'no route'}) — falling back to SMS`);
+      sent = await trySms();
+    }
   }
 
   if (!sent.sent) logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
