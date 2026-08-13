@@ -132,21 +132,24 @@ export default function SignupPage() {
   async function handleSendEmailOtp(e) {
     e?.preventDefault();
     const email = form.contact_email.trim();
-    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
-      setError('Please enter a valid email address first.');
+    if (!email || !email.includes('@')) {
+      const msg = 'Please enter a valid email address first.';
+      setError(msg); setOtpMsg(msg);
       return;
     }
-    setError(''); setOtpMsg(''); setSendingOtp(true);
+    setError(''); setOtpMsg('Sending verification code...'); setSendingOtp(true);
     try {
       const res = await registrationsApi.sendOtp(email);
       if (res.data?.success || res.data?.expires_in) {
         setEmailOtpSent(true);
         setOtpMsg(res.data?.message || 'Verification OTP code sent to your email address.');
       } else {
-        setError(res.data?.error || 'Failed to send OTP to your email.');
+        const msg = res.data?.error || 'Failed to send OTP to your email.';
+        setError(msg); setOtpMsg(msg);
       }
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || 'Network error sending OTP.');
+      const msg = err?.response?.data?.error || err?.message || 'Network error sending OTP.';
+      setError(msg); setOtpMsg(msg);
     }
     setSendingOtp(false);
   }
@@ -155,20 +158,23 @@ export default function SignupPage() {
     e?.preventDefault();
     const email = form.contact_email.trim();
     if (!otpCode || otpCode.length < 4) {
-      setError('Please enter the 6-digit verification code.');
+      const msg = 'Please enter the 6-digit verification code.';
+      setError(msg); setOtpMsg(msg);
       return;
     }
-    setError(''); setOtpMsg(''); setVerifyingOtp(true);
+    setError(''); setOtpMsg('Verifying code...'); setVerifyingOtp(true);
     try {
       const res = await registrationsApi.verifyOtp(email, otpCode.trim());
       if (res.data?.success && res.data?.verified) {
         setEmailVerified(true);
         setOtpMsg('✓ Email address verified successfully!');
       } else {
-        setError(res.data?.error || 'Incorrect or expired verification code.');
+        const msg = res.data?.error || 'Incorrect or expired verification code.';
+        setError(msg); setOtpMsg(msg);
       }
     } catch (err) {
-      setError(err?.response?.data?.error || 'Incorrect verification code.');
+      const msg = err?.response?.data?.error || 'Incorrect verification code.';
+      setError(msg); setOtpMsg(msg);
     }
     setVerifyingOtp(false);
   }
@@ -551,7 +557,7 @@ export default function SignupPage() {
                           )}
                         </div>
 
-                        {emailOtpSent && !emailVerified && (
+                        {!emailVerified && form.contact_email.trim().length > 0 && (
                           <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input
                               type="text"
