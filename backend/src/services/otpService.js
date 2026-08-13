@@ -192,7 +192,11 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     'UPDATE login_otps SET expires_at = NOW() WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()',
     [key]
   );
-  await master.execute(
+  // `channel` records how the code actually travelled, which is not the same
+  // question as what the identifier looks like — somebody who typed a number can
+  // still be sent an email when the gateway is down. So it is stamped after the
+  // send, from the row id this INSERT returns; until then it would be a guess.
+  const [inserted] = await master.execute(
     `INSERT INTO login_otps
        (identifier, id_type, code_hash, tenant_id, tenant_slug, user_id, purpose, expires_at, requested_ip)
      VALUES (?,?,?,?,?,?,?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?)`,
@@ -267,6 +271,14 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
       logger.warn(`otp: email failed (${sent.detail || 'no route'}) — falling back to SMS`);
       sent = await trySms();
     }
+  }
+
+  // Now it is known rather than assumed — including the case where the code
+  // went out by the channel the person did NOT ask for.
+  if (inserted?.insertId) {
+    master.execute('UPDATE login_otps SET channel = ? WHERE id = ?',
+      [sent.provider === 'kaleyra' || sent.provider === 'log' || sent.provider === 'jio_dlt' ? 'sms' : 'email',
+        inserted.insertId]).catch(() => {});
   }
 
   if (!sent.sent) logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
