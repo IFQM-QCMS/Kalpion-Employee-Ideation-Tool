@@ -126,17 +126,10 @@ export function checkCorporateEmail(email) {
   if (!domain || !domain.includes('.')) {
     return { ok: false, reason: 'Enter a valid email address.' };
   }
-  if (FREE_EMAIL_DOMAINS.has(domain)) {
-    return {
-      ok: false,
-      reason: 'Use your work email address. Applications from personal mailboxes '
-        + `(${domain}) cannot be verified as belonging to your organisation.`,
-    };
-  }
   if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
     return { ok: false, reason: 'Temporary email addresses are not accepted.' };
   }
-  // A bare TLD or a single-label host is not a company domain.
+  // A bare TLD or a single-label host is not a valid email domain.
   const labels = domain.split('.');
   if (labels.length < 2 || labels.some((l) => !l)) {
     return { ok: false, reason: 'Enter a valid work email address.' };

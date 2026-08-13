@@ -129,28 +129,30 @@ export default function SignupPage() {
     if (error) setError('');
   };
 
-  async function handleSendEmailOtp() {
+  async function handleSendEmailOtp(e) {
+    e?.preventDefault();
     const email = form.contact_email.trim();
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) {
-      setError('Please enter a valid work email address first.');
+      setError('Please enter a valid email address first.');
       return;
     }
     setError(''); setOtpMsg(''); setSendingOtp(true);
     try {
       const res = await registrationsApi.sendOtp(email);
-      if (res.data?.success) {
+      if (res.data?.success || res.data?.expires_in) {
         setEmailOtpSent(true);
-        setOtpMsg('Verification OTP code sent to your email address.');
+        setOtpMsg(res.data?.message || 'Verification OTP code sent to your email address.');
       } else {
         setError(res.data?.error || 'Failed to send OTP to your email.');
       }
     } catch (err) {
-      setError(err?.response?.data?.error || 'Network error sending OTP.');
+      setError(err?.response?.data?.error || err?.message || 'Network error sending OTP.');
     }
     setSendingOtp(false);
   }
 
-  async function handleVerifyEmailOtp() {
+  async function handleVerifyEmailOtp(e) {
+    e?.preventDefault();
     const email = form.contact_email.trim();
     if (!otpCode || otpCode.length < 4) {
       setError('Please enter the 6-digit verification code.');

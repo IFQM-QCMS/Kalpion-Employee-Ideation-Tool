@@ -1,7 +1,6 @@
 # IFQM Employee Ideation Tool — Flows and Timeline
 
-**How an idea travels, how an organisation joins, who can see what, and when
-each part was built.**
+**How an idea travels, how an organisation joins, who can see what, and when each part was built.**
 
 <table>
 <tr>
@@ -10,17 +9,31 @@ each part was built.**
 </tr>
 <tr>
 <td><b>How to read it</b></td>
-<td>Each flow is a picture. The Mermaid source that describes it is folded away underneath, for the next person who has to change it.</td>
+<td>Each flow is visually illustrated below with diagrams and structured execution paths.</td>
 </tr>
 <tr>
 <td><b>Source</b></td>
-<td>MOM 29 July 2026, §2.1. Diagrams are drawn by <code>docs/flow_drawings.py</code>.</td>
+<td>MOM 29 July 2026, §2.1. System Workflow and Process Specifications.</td>
 </tr>
 </table>
 
 ---
 
-![How these flows fit together](diagrams/F0_overview.png)
+## System Overview Diagram
+
+![System Overview Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F0_overview.png)
+
+```mermaid
+flowchart TD
+    subgraph Overview["IFQM Employee Ideation Tool — System Overview"]
+        A[1. Employee / Submitter] -->|Submits Idea| B[Idea Lifecycle & AI Scoring]
+        B -->|Workflow Routing| C[Line Manager / Plant Head Approval]
+        C -->|Approved| D[Implementation & ROI Tracking]
+        D -->|Integration| E[QCMS Enterprise Push]
+        F[2. MSME Organisation] -->|Registers Workspace| G[Platform Admin Approval & Tenant Provisioning]
+        H[3. Authentication] -->|OTP / Password| I[Role-Based Authorization & Session Hardening]
+    end
+```
 
 ### Contents
 
@@ -36,32 +49,9 @@ each part was built.**
 
 ## 1. Idea lifecycle
 
-The core loop. Everything else in the product exists to keep an idea moving
-along this path.
+The core loop. Everything else in the product exists to keep an idea moving along this path.
 
-![The idea lifecycle](diagrams/F1_idea_lifecycle.png)
-
-| | |
-|---|---|
-| **Starts when** | An employee opens Submit |
-| **Ends in** | Implemented and measured, rejected with a reason, or archived |
-| **Points** | +10 submitted · +25 approved · +65 implemented, each awarded once |
-| **Who decides** | The line manager, or a committee where the organisation routes it that way |
-| **Settings that bite** | `review_sla_days`, `escalation_days`, `approval_threshold` |
-
-> [!IMPORTANT]
-> **An overdue idea and an escalated idea are different things.**
-> `review_sla_days` marks an idea as late so somebody chases it — nothing moves
-> and nobody is reassigned. `escalation_days` is what actually moves it up the
-> chain. Both are per organisation, and confusing the two is why those fields
-> carry information buttons in the admin panel.
-
-> [!NOTE]
-> A draft is private to its author, has not entered the process, and can be
-> resumed at any time. Nothing happens to it until it is submitted.
-
-<details>
-<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
+![The Idea Lifecycle Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F1_idea_lifecycle.png)
 
 ```mermaid
 flowchart TD
@@ -94,34 +84,30 @@ flowchart TD
     O --> W[Visible in Rejected Ideas<br/>with its reason]
 ```
 
-</details>
+| | |
+|---|---|
+| **Starts when** | An employee opens Submit |
+| **Ends in** | Implemented and measured, rejected with a reason, or archived |
+| **Points** | +10 submitted · +25 approved · +65 implemented, each awarded once |
+| **Who decides** | The line manager, or a committee where the organisation routes it that way |
+| **Settings that bite** | `review_sla_days`, `escalation_days`, `approval_threshold` |
+
+> [!IMPORTANT]
+> **An overdue idea and an escalated idea are different things.**
+> `review_sla_days` marks an idea as late so somebody chases it — nothing moves
+> and nobody is reassigned. `escalation_days` is what actually moves it up the
+> chain. Both are per organisation, and confusing the two is why those fields
+> carry information buttons in the admin panel.
+
+> [!NOTE]
+> A draft is private to its author, has not entered the process, and can be
+> resumed at any time. Nothing happens to it until it is submitted.
 
 ---
 
 ## 2. MSME registration and approval
 
-![MSME registration and approval](diagrams/F2_registration.png)
-
-| | |
-|---|---|
-| **Starts when** | A business fills in the form on the landing page |
-| **Ends in** | A provisioned workspace with a first administrator, or a rejection with a reason |
-| **Decided by** | IFQM platform staff, who also set the plan and the trial length |
-| **Checked** | Corporate email domain, then Udyam, GSTIN, PAN, CIN, NIC and PIN formats |
-
-> [!WARNING]
-> **Nothing an anonymous caller does provisions anything.**
-> The worst a flood of junk applications achieves is a full review queue. No
-> database is created, no account exists, and no email is sent to anybody but
-> the applicant until a human approves it.
-
-> [!TIP]
-> A duplicate application returns exactly the same response as a new one.
-> Telling an anonymous caller "this company already has an account" would be a
-> free customer-list lookup for anybody who wanted one.
-
-<details>
-<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
+![MSME Registration and Approval Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F2_registration.png)
 
 ```mermaid
 flowchart TD
@@ -145,34 +131,29 @@ flowchart TD
     Q --> R[Organisation live]
 ```
 
-</details>
+| | |
+|---|---|
+| **Starts when** | A business fills in the form on the landing page |
+| **Ends in** | A provisioned workspace with a first administrator, or a rejection with a reason |
+| **Decided by** | IFQM platform staff, who also set the plan and the trial length |
+| **Checked** | Corporate email domain, then Udyam, GSTIN, PAN, CIN, NIC and PIN formats |
+
+> [!WARNING]
+> **Nothing an anonymous caller does provisions anything.**
+> The worst a flood of junk applications achieves is a full review queue. No
+> database is created, no account exists, and no email is sent to anybody but
+> the applicant until a human approves it.
+
+> [!TIP]
+> A duplicate application returns exactly the same response as a new one.
+> Telling an anonymous caller "this company already has an account" would be a
+> free customer-list lookup for anybody who wanted one.
 
 ---
 
 ## 3. Authentication
 
-![Signing in](diagrams/F3_authentication.png)
-
-| | |
-|---|---|
-| **Sign in with** | Email, registered phone number, or employee number |
-| **Organisation code** | Optional — the sign-in directory resolves it when it is left out |
-| **Wrong passwords** | Five, then a 15-minute lock. The right password does not open it early |
-| **Session** | A signed token that carries the account's password-change stamp |
-
-> [!IMPORTANT]
-> **The token is a claim, not a source of truth.**
-> Every request re-reads the user from the database, so deactivating somebody,
-> changing their role, or resetting their password takes effect on their very
-> next request rather than whenever the token happens to expire.
-
-> [!NOTE]
-> Every failure — unknown account, wrong password, deactivated account — answers
-> the same way and takes the same time. A response that differs is a way to test
-> which addresses are registered.
-
-<details>
-<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
+![Authentication Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F3_authentication.png)
 
 ```mermaid
 flowchart TD
@@ -192,34 +173,29 @@ flowchart TD
     K -- no --> M[Dashboard for their role]
 ```
 
-</details>
+| | |
+|---|---|
+| **Sign in with** | Email, registered phone number, or employee number |
+| **Organisation code** | Optional — the sign-in directory resolves it when it is left out |
+| **Wrong passwords** | Five, then a 15-minute lock. The right password does not open it early |
+| **Session** | A signed token that carries the account's password-change stamp |
+
+> [!IMPORTANT]
+> **The token is a claim, not a source of truth.**
+> Every request re-reads the user from the database, so deactivating somebody,
+> changing their role, or resetting their password takes effect on their very
+> next request rather than whenever the token happens to expire.
+
+> [!NOTE]
+> Every failure — unknown account, wrong password, deactivated account — answers
+> the same way and takes the same time. A response that differs is a way to test
+> which addresses are registered.
 
 ---
 
 ## 4. Who sees what
 
-![Who sees what](diagrams/F4_visibility.png)
-
-| Who | Sees |
-|---|---|
-| **Employee** | Their own ideas in full. For everybody else's: the title, the status, and whatever their organisation has opened up |
-| **Manager** | The ideas of the people who report to them |
-| **Plant head / executive** | Every idea in the organisation |
-| **Organisation admin** | Everything in their organisation, plus the settings that govern it |
-| **IFQM platform staff** | Which organisations exist, how many people and ideas each has, the registration queue, support tickets and sign-in activity |
-
-> [!CAUTION]
-> **IFQM staff never see the content of an idea, an employee record, or a file.**
-> The platform console provisions organisations and counts them. It does not read
-> them, and there is no screen anywhere in it that could.
-
-> [!NOTE]
-> On top of the role scoping above, each organisation chooses how much of a
-> proposal a colleague outside an idea may read — the one-line gist by default.
-> Authors and reviewers are never restricted by that setting.
-
-<details>
-<summary><b>Mermaid source</b> — open to edit this flow, then rebuild with <code>python docs/flow_drawings.py</code></summary>
+![Who Sees What Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F4_visibility.png)
 
 ```mermaid
 flowchart LR
@@ -239,13 +215,40 @@ flowchart LR
     Platform -.->|provisions, never reads| Org
 ```
 
-</details>
+| Who | Sees |
+|---|---|
+| **Employee** | Their own ideas in full. For everybody else's: the title, the status, and whatever their organisation has opened up |
+| **Manager** | The ideas of the people who report to them |
+| **Plant head / executive** | Every idea in the organisation |
+| **Organisation admin** | Everything in their organisation, plus the settings that govern it |
+| **IFQM platform staff** | Which organisations exist, how many people and ideas each has, the registration queue, support tickets and sign-in activity |
+
+> [!CAUTION]
+> **IFQM staff never see the content of an idea, an employee record, or a file.**
+> The platform console provisions organisations and counts them. It does not read
+> them, and there is no screen anywhere in it that could.
+
+> [!NOTE]
+> On top of the role scoping above, each organisation chooses how much of a
+> proposal a colleague outside an idea may read — the one-line gist by default.
+> Authors and reviewers are never restricted by that setting.
 
 ---
 
 ## 5. Timeline
 
-![How the product was built](diagrams/F5_timeline.png)
+![Timeline Diagram](file:///c:/xampp/htdocs/ifqm/docs/diagrams/F5_timeline.png)
+
+```mermaid
+flowchart TD
+    T1[Prototype Phase<br/>Basic Idea Submission & Review] --> T2[Multi-Tenancy Architecture<br/>Schema Per Organisation & Master Registry]
+    T2 --> T3[React + Express Re-architecture<br/>Stateless JWT Authentication & Security Hardening]
+    T3 --> T4[Hierarchical Approval Chains<br/>Plant Head Final Reviewer & SLA Clock]
+    T4 --> T5[Gamification & Analytics<br/>Points, Leaderboard, Challenges & Audit Logs]
+    T5 --> T6[Security & Compliance Hardening<br/>Lockout Guards, Privacy Contracts & Activity Logs]
+    T6 --> T7[Multi-language & Integrations<br/>7-Language i18n, Bulk User Import & QCMS Integration]
+    T7 --> T8[MSME Self-Registration & OTP Verification<br/>ZeptoMail Email OTP, Subscription Plans & Dedicated Reset Flow]
+```
 
 | When | Milestone |
 |---|---|
@@ -271,9 +274,4 @@ flowchart LR
 
 ---
 
-<sub>Diagrams are drawn, not hand-placed: run <code>python docs/flow_drawings.py</code>
-after changing any Mermaid block above, or the picture and the source will
-disagree. Colour is consistent across every diagram in this project — indigo for
-the path through the system, teal for stored data, amber for a decision, green
-for an outcome somebody wanted, red for a refusal, slate for anything outside
-our control.</sub>
+<sub>Colour coding is consistent across every diagram in this project — indigo for the path through the system, teal for stored data, amber for a decision, green for an outcome somebody wanted, red for a refusal, slate for anything outside our control.</sub>
