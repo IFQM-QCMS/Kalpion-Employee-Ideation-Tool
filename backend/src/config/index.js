@@ -159,6 +159,22 @@ const config = {
     // Must be on a domain verified in ZeptoMail, or every message is rejected.
     from: (process.env.PLATFORM_MAIL_FROM || '').trim(),
     fromName: process.env.PLATFORM_MAIL_FROM_NAME || 'IFQM',
+    /*
+     * The ZeptoMail HTTP API token — a DIFFERENT credential from the SMTP
+     * password above, and the one that matters wherever SMTP is unavailable.
+     *
+     * ZeptoMail issues two sets: "weaker credentials" (emailappsmtp… + a
+     * password) for SMTP, and "more secure credentials" (emailapikey + a
+     * `Zoho-enczapikey …` token) for the REST API. The HTTPS fallback in
+     * mailerService was sending the SMTP password as the API token, so on a
+     * host that blocks SMTP it failed twice: once on the blocked port, then
+     * again on a 401 that looked like a mail problem rather than a wrong-key
+     * problem.
+     *
+     * Set this on any deployment whose provider blocks outbound SMTP — Render's
+     * free instances do, which is why mail works locally and not there.
+     */
+    apiKey: (process.env.PLATFORM_MAIL_API_KEY || '').trim(),
   },
 
   /*

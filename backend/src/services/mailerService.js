@@ -97,8 +97,106 @@ function getPlatformTransport() {
  * sendSmtpEmail already has with the queue processor: a thrown error marks the
  * row failed and leaves it visible, whereas a quiet false would mark it sent.
  */
+/*
+ * ── Why SMTP gets skipped after it fails ───────────────────────────────────
+ *
+ * Some hosts block outbound SMTP outright — Render's free instances do. There
+ * the connection does not refuse, it HANGS, so every send sat for the full
+ * connectionTimeout before falling through to the HTTPS route. A person
+ * registering an account clicked Submit and waited sixteen seconds for a form
+ * to respond, on every attempt.
+ *
+ * So a connection-level failure is remembered, and for the next few minutes
+ * sends go straight to the API. Only the first attempt in each window pays the
+ * timeout. Deliberately NOT permanent: a blocked port and a brief network fault
+ * look identical from here, and the second heals.
+ *
+ * Authentication failures are excluded — a wrong password is not a reason to
+ * stop trying the transport, and it would come back the moment it is corrected.
+ */
+const SMTP_COOLDOWN_MS = 5 * 60 * 1000;
+let smtpDeadUntil = 0;
+
+const isConnectionFailure = (err) => {
+  const code = String(err?.code || '').trim();
+  // ECONNECTION and EDNS are nodemailer's own wrappings; the rest come from the
+  // socket. A blocked port shows up as ETIMEDOUT — the case this exists for.
+  return [
+    'ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ESOCKET', 'ECONNECTION',
+    'EDNS', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH',
+  ].includes(code) || /timeout|timed out/i.test(err?.message || '');
+};
+
+/**
+ * Send over ZeptoMail's REST API, on 443.
+ *
+ * Extracted so both routes into it share one implementation: the catch below
+ * when SMTP has just failed, and the skip above it once SMTP is known to be
+ * unreachable. Returns false rather than throwing — every caller has its own
+ * idea of what to do next.
+ */
+async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
+  const { user, pass, from, fromName, apiKey: configured } = config.platformMail;
+  /*
+   * The API token, NOT the SMTP password. This used to be `pass || user`, which
+   * sends the SMTP password as a `Zoho-enczapikey` and earns a 401 every time —
+   * so on a host that blocks outbound SMTP the fallback could never have
+   * worked, and the failure reported itself as a mail problem rather than a
+   * wrong-credential one. ZeptoMail issues the two separately: emailappsmtp…
+   * for SMTP, emailapikey for this.
+   */
+  const apiKey = configured || pass || user;
+  if (!apiKey) return false;
+  const safeTo = headerSafe(to);
+  try {
+    const res = await fetch('https://api.zeptomail.in/v1.1/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: /^zoho-enczapikey\s/i.test(apiKey) ? apiKey : `Zoho-enczapikey ${apiKey}`,
+      },
+      body: JSON.stringify({
+        from: { address: from, name: headerSafe(fromName) },
+        to: [{ email_address: { address: safeTo, ...(toName ? { name: headerSafe(toName) } : {}) } }],
+        subject: headerSafe(subject),
+        htmlbody: bodyHtml,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const text = await res.text();
+    if (res.ok) {
+      logger.info(`email: delivered to ${maskEmail(to)} via ZeptoMail HTTPS API`);
+      return true;
+    }
+    // 401 here almost always means PLATFORM_MAIL_API_KEY is unset and the SMTP
+    // password was used instead, so say that rather than only the status.
+    logger.error(
+      `ZeptoMail HTTPS API responded ${res.status}: ${text.slice(0, 150)}`
+      + (res.status === 401 && !configured
+        ? ' — no PLATFORM_MAIL_API_KEY is set, so the SMTP password was sent as the API token.'
+        : '')
+    );
+    return false;
+  } catch (e) {
+    logger.error(`ZeptoMail HTTPS API failed (${e.message})`);
+    return false;
+  }
+}
+
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
-  const { host, port, user, pass, from, fromName } = config.platformMail;
+  const { host, port, from, fromName } = config.platformMail;
+
+  // SMTP is known unreachable — go straight over HTTPS rather than making the
+  // caller wait out the connection timeout again.
+  if (platformMailReady() && Date.now() < smtpDeadUntil) {
+    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
+    throw new Error(
+      'Platform mail could not be sent: SMTP is unreachable from this host and the '
+      + 'HTTPS API was refused. Set PLATFORM_MAIL_API_KEY to the ZeptoMail '
+      + '"emailapikey" token (not the SMTP password).'
+    );
+  }
 
   if (platformMailReady()) {
     const safeTo = headerSafe(toEmail);
@@ -110,35 +208,19 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
         html: bodyHtml,
       });
       logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
+      smtpDeadUntil = 0; // it works after all — stop skipping it
       return true;
     } catch (err) {
-      logger.warn(`platform SMTP failed (${err.message}) — attempting ZeptoMail HTTP REST API fallback on port 443...`);
-      try {
-        const apiKey = pass || user;
-        const httpRes = await fetch('https://api.zeptomail.in/v1.1/email', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': /^zoho-enczapikey\s/i.test(apiKey) ? apiKey : `Zoho-enczapikey ${apiKey}`,
-          },
-          body: JSON.stringify({
-            from: { address: from, name: headerSafe(fromName) },
-            to: [{ email_address: { address: safeTo, ...(toName ? { name: headerSafe(toName) } : {}) } }],
-            subject: headerSafe(subject),
-            htmlbody: bodyHtml,
-          }),
-          signal: AbortSignal.timeout(15000),
-        });
-        const resText = await httpRes.text();
-        if (httpRes.ok) {
-          logger.info(`email: delivered to ${maskEmail(toEmail)} via ZeptoMail HTTPS API`);
-          return true;
-        }
-        logger.error(`ZeptoMail HTTPS API responded ${httpRes.status}: ${resText.slice(0, 150)}`);
-      } catch (httpErr) {
-        logger.error(`ZeptoMail HTTPS API fallback failed (${httpErr.message})`);
+      if (isConnectionFailure(err)) {
+        smtpDeadUntil = Date.now() + SMTP_COOLDOWN_MS;
+        logger.warn(
+          `platform SMTP could not be reached (${err.message}) — skipping it for `
+          + `${SMTP_COOLDOWN_MS / 60000} minutes so sends stop waiting on a blocked port. `
+          + 'If this host blocks outbound SMTP, set PLATFORM_MAIL_API_KEY and mail will go over HTTPS instead.'
+        );
       }
+      logger.warn(`platform SMTP failed (${err.message}) — attempting ZeptoMail HTTP REST API fallback on port 443...`);
+      if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
       throw err;
     }
   }
