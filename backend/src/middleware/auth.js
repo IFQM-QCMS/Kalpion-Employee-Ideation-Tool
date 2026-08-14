@@ -22,6 +22,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { meterTenantRequest } from './tenantQuota.js';
 import { billingState } from '../services/subscriptionService.js';
 import { getPlatformSetting } from '../services/platformSettingsService.js';
+import { maintenanceStatus, maintenanceError } from '../services/maintenanceService.js';
 
 function getBearer(req) {
   const h = req.headers.authorization || '';
@@ -408,6 +409,24 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
       ));
     }
   } else {
+    /*
+     * Maintenance mode, for sessions that already exist.
+     *
+     * Checked before the tenant database is opened, because during maintenance
+     * there may be nothing safe to open — a migration could be running against
+     * it right now, which is the usual reason for switching this on.
+     *
+     * Logging out stays available. A tenant whose session is being refused
+     * should be able to clear it and land on the sign-in screen, which is where
+     * the maintenance notice is; leaving them holding a token that every other
+     * endpoint rejects is a worse dead end than the one being prevented.
+     */
+    const p = String(req.originalUrl || req.url || '').split('?')[0];
+    if (p !== '/api/auth/logout') {
+      const m = await maintenanceStatus();
+      if (m.enabled) return next(maintenanceError(m.message));
+    }
+
     await attachTenantDb(req, payload.org_slug);
     // Authoritative role/status come from the DB, not the 8-hour-old token.
     req.user = await loadLiveUser(req, payload);

@@ -23,6 +23,7 @@ import { resolveTenantByLogin, indexUser, isEmail, normalizePhone } from './dire
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import * as verification from './verificationService.js';
+import { assertNotInMaintenance } from './maintenanceService.js';
 import logger from '../utils/logger.js';
 
 // ── Brute-force lockout ──────────────────────────────────────────────────────
@@ -176,6 +177,19 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     if (e instanceof ApiError) throw e;
     logger.warn('platform_admins lookup skipped', e.message);
   }
+
+  /*
+   * ── Maintenance mode ──────────────────────────────────────────────────────
+   *
+   * Everything above this line is the platform-admin path, and it RETURNS on a
+   * successful login. So placing the gate here — rather than checking a role —
+   * exempts IFQM staff by the shape of the function: the only way to reach this
+   * line is to not be a platform admin.
+   *
+   * That matters more than it looks. A role check could be got wrong later, and
+   * getting it wrong means nobody can sign in to turn maintenance back off.
+   */
+  await assertNotInMaintenance();
 
   // ── Tenant user auth ──
   // The organisation code is optional now. With one, we open exactly that

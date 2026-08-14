@@ -5,6 +5,7 @@
  */
 import * as authService from '../services/authService.js';
 import * as otpService from '../services/otpService.js';
+import { maintenanceStatus } from '../services/maintenanceService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
@@ -125,6 +126,19 @@ export const resetPassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
+/**
+ * GET /api/auth/maintenance — public.
+ *
+ * Answers with { enabled, message } so the sign-in screen can show the notice
+ * before anybody authenticates. `since` and `default_message` are dropped here:
+ * they exist for the console, and how long IFQM has been mid-update is not a
+ * tenant's business.
+ */
+export const maintenance = asyncHandler(async (_req, res) => {
+  const s = await maintenanceStatus();
+  return respond(res, { success: true, enabled: s.enabled, message: s.message });
+});
+
 /** GET /api/auth/check-reset-token */
 export const checkResetToken = asyncHandler(async (req, res) => {
   const result = await authService.checkResetToken({
@@ -154,5 +168,5 @@ export const changePassword = asyncHandler(async (req, res) => {
 
 export default {
   me, login, logout, forgotPassword, resetPassword, checkResetToken, changePassword,
-  requestResetCode, verifyResetCode,
+  requestResetCode, verifyResetCode, maintenance,
 };

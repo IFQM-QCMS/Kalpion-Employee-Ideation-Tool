@@ -25,7 +25,8 @@ import MessagingConnector from '../components/MessagingConnector';
  * it back, so there is nothing to prefill; leaving it blank means "keep the
  * stored one". See platformSettingsService for why this is not a mask.
  */
-const TABS = ['ps.tab_defaults', 'ps.tab_org', 'ps.tab_messaging', 'ps.tab_admins', 'ps.tab_health'];
+const TABS = ['ps.tab_defaults', 'ps.tab_org', 'ps.tab_messaging',
+  'ps.tab_maintenance', 'ps.tab_admins', 'ps.tab_health'];
 const FLAGS = ['anonymous_allowed', 'public_board_enabled', 'challenges_enabled'];
 
 const fmtBytes = (b) => {
@@ -57,8 +58,9 @@ export default function PlatformSettingsPage() {
       {tab === 0 && <DefaultsTab />}
       {tab === 1 && <OrgSettingsTab />}
       {tab === 2 && <MessagingConnector />}
-      {tab === 3 && <AdminsTab />}
-      {tab === 4 && <HealthTab />}
+      {tab === 3 && <MaintenanceTab />}
+      {tab === 4 && <AdminsTab />}
+      {tab === 5 && <HealthTab />}
     </>
   );
 }
@@ -248,6 +250,113 @@ function OrgSettingsTab() {
 }
 
 // ── Platform admin accounts ────────────────────────────────────────
+/*
+ * Maintenance mode — the whole platform on hold.
+ *
+ * Turning it ON locks every organisation out: nobody can sign in, and sessions
+ * already open stop working on their next request. IFQM staff are unaffected,
+ * which is what makes it safe to switch on from here — this screen keeps
+ * working, so the switch can always be reached to turn it back off.
+ *
+ * Switching ON asks for confirmation and switching OFF does not. The two are
+ * not symmetrical: one interrupts every customer at once, the other restores
+ * service, and only the first is worth a speed bump.
+ */
+function MaintenanceTab() {
+  const { t } = useLang();
+  const { showToast } = useToast();
+  const [enabled, setEnabled] = useState(false);
+  const [message, setMessage] = useState('');
+  const [since, setSince] = useState(null);
+  const [placeholder, setPlaceholder] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => { load(); }, []);
+  async function load() {
+    try {
+      const r = await platformApi.getMaintenance();
+      setEnabled(!!r.data.enabled);
+      setSince(r.data.since || null);
+      setPlaceholder(r.data.default_message || '');
+      // Only prefill when the operator actually wrote something. Echoing the
+      // default back into the box would turn it into text they now own and
+      // have to maintain.
+      setMessage(r.data.message && r.data.message !== r.data.default_message ? r.data.message : '');
+    } catch { showToast(t('msg.fail_load'), 'danger'); }
+    setLoaded(true);
+  }
+
+  async function save(next) {
+    if (next && !window.confirm(t('ps.maint_confirm'))) return;
+    setBusy(true);
+    try {
+      const res = await platformApi.setMaintenance({ enabled: next, message });
+      if (res.data.success) {
+        setEnabled(!!res.data.enabled);
+        setSince(res.data.since || null);
+        showToast(next ? t('ps.maint_on_ok') : t('ps.maint_off_ok'), next ? 'warning' : 'success');
+      } else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
+    setBusy(false);
+  }
+
+  if (!loaded) return null;
+
+  return (
+    <div className="card" style={{ marginTop:16,maxWidth:720 }}>
+      <div className="card-title">{t('ps.maint_title')}</div>
+      <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14,lineHeight:1.6 }}>
+        {t('ps.maint_hint')}
+      </div>
+
+      <div style={{
+        display:'flex',alignItems:'center',gap:12,padding:'13px 15px',borderRadius:10,marginBottom:16,
+        background: enabled ? 'var(--warning-light,#fef3c7)' : 'var(--surface)',
+        border:`1px solid ${enabled ? 'var(--warning,#f59e0b)' : 'var(--border)'}`,
+      }}>
+        <span style={{
+          width:9,height:9,borderRadius:'50%',flex:'none',
+          background: enabled ? 'var(--warning,#f59e0b)' : 'var(--success,#16a34a)',
+        }} />
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:700,fontSize:13.5 }}>
+            {enabled ? t('ps.maint_state_on') : t('ps.maint_state_off')}
+          </div>
+          {enabled && since && (
+            <div style={{ fontSize:11.5,color:'var(--subtext)',marginTop:2 }}>
+              {t('ps.maint_since').replace('{when}', fmtDate(since))}
+            </div>
+          )}
+        </div>
+        <button
+          className={`btn btn-sm ${enabled ? 'btn-primary' : 'btn-outline'}`}
+          disabled={busy}
+          onClick={() => save(!enabled)}
+        >
+          {enabled ? t('ps.maint_turn_off') : t('ps.maint_turn_on')}
+        </button>
+      </div>
+
+      <div className="form-group">
+        <label>{t('ps.maint_message')}</label>
+        <textarea
+          className="form-control" rows={3} maxLength={500} value={message}
+          placeholder={placeholder}
+          onChange={(e) => setMessage(e.target.value)}
+        />
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('ps.maint_message_hint')}</div>
+      </div>
+
+      {/* Saving the wording without changing the switch, so the notice can be
+          corrected mid-window without a stop/start. */}
+      <button className="btn btn-outline" disabled={busy} onClick={() => save(enabled)}>
+        {t('ps.maint_save_message')}
+      </button>
+    </div>
+  );
+}
+
 function AdminsTab() {
   const { user } = useAuth();
   const { t } = useLang();

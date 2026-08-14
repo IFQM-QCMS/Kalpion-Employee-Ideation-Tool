@@ -1187,3 +1187,109 @@ test('messaging: the DLT template is filled from the registered wording, not fro
   assert.equal(matchesTemplate(registered, built), true);
   assert.equal(matchesTemplate(registered, '482913 is your code. Expires in 5 min.'), false);
 });
+
+/*
+ * ── Maintenance mode ────────────────────────────────────────────────────────
+ *
+ * The whole platform on hold while developers work on an update. The property
+ * that matters is asymmetry: every organisation is shut out, IFQM staff are
+ * not. Get that backwards and the switch cannot be reached to turn it off.
+ */
+test('maintenance: tenants are locked out, IFQM staff are not, and it reverses cleanly', async () => {
+  const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+
+  // A tenant session taken out BEFORE the switch, to prove existing sessions
+  // stop working rather than merely new logins being refused.
+  const before = await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga');
+  assert.ok(before.token, 'tenant should be able to sign in before maintenance');
+
+  // Off by default: nothing here should be on until somebody turns it on.
+  const initial = await api('GET', '/api/auth/maintenance');
+  assert.equal(initial.status, 200);
+  assert.equal(initial.data.enabled, false);
+
+  const on = await api('PUT', '/api/platform/maintenance', {
+    token: pa,
+    body: { enabled: true, message: 'Upgrading the ideation engine. Back shortly.' },
+  });
+  assert.equal(on.status, 200);
+  assert.equal(on.data.enabled, true);
+  assert.ok(on.data.since, 'switching on stamps when it started');
+
+  // 1. The sign-in screen can say why, before anybody authenticates.
+  const pub = await api('GET', '/api/auth/maintenance');
+  assert.equal(pub.data.enabled, true);
+  assert.match(pub.data.message, /Upgrading the ideation engine/);
+
+  // 2. A tenant cannot obtain a new session, by password...
+  const pwLogin = await api('POST', '/api/auth/login', {
+    body: { email: 'admin@orga.test', password: PASSWORDS.orgaAdmin, org_slug: 'orga' },
+  });
+  assert.equal(pwLogin.status, 503);
+  assert.equal(pwLogin.data.maintenance, true);
+  assert.match(pwLogin.data.error, /Upgrading the ideation engine/);
+
+  // ...nor by one-time code, which is the same door and would otherwise be
+  // left wide open.
+  const otpReq = await api('POST', '/api/auth/otp/request', {
+    body: { identifier: 'admin@orga.test' },
+  });
+  assert.equal(otpReq.status, 503);
+  assert.equal(otpReq.data.maintenance, true);
+
+  // 3. The session issued before the switch stops working.
+  const stale = await api('GET', '/api/ideas', { token: before.token });
+  assert.equal(stale.status, 503);
+  assert.equal(stale.data.maintenance, true);
+
+  // ...but that user can still log out, rather than being stuck holding a
+  // token every endpoint refuses.
+  const out = await api('POST', '/api/auth/logout', { token: before.token });
+  assert.equal(out.status, 200);
+
+  // 4. IFQM staff are unaffected — they can still sign in and still reach the
+  // console, which is what makes the switch reversible.
+  const staffLogin = await api('POST', '/api/auth/login', {
+    body: { email: 'platform@ifqm.io', password: PASSWORDS.platform },
+  });
+  assert.equal(staffLogin.status, 200, 'platform admin must be able to sign in during maintenance');
+  const console_ = await api('GET', '/api/platform/tenants', { token: staffLogin.data.token });
+  assert.equal(console_.status, 200, 'platform console must stay reachable during maintenance');
+
+  /*
+   * 5. A tenant cannot switch it off.
+   *
+   * The refusal is a 503 rather than a 403: requirePlatformAuth runs requireAuth
+   * first, and the maintenance gate on the tenant branch fires before the
+   * staff-only check is ever reached. Denied either way, and asserting on the
+   * denial rather than the code keeps this test about the property that
+   * matters — a locked-out tenant cannot unlock themselves.
+   */
+  const byTenant = await api('PUT', '/api/platform/maintenance', {
+    token: before.token, body: { enabled: false },
+  });
+  assert.notEqual(byTenant.status, 200,
+    `a tenant must not be able to switch maintenance off (got ${byTenant.status})`);
+  const stillOn = await api('GET', '/api/auth/maintenance');
+  assert.equal(stillOn.data.enabled, true, 'a tenant request must not have changed the switch');
+
+  // 6. Turning it off restores service.
+  const off = await api('PUT', '/api/platform/maintenance', {
+    token: pa, body: { enabled: false },
+  });
+  assert.equal(off.status, 200);
+  assert.equal(off.data.enabled, false);
+
+  const after = await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga');
+  assert.ok(after.token, 'tenants must be able to sign in again once maintenance is off');
+
+  // 7. And with maintenance OFF, the switch is still staff-only — the ordinary
+  // authorisation check, no longer masked by the 503 above.
+  const tenantWhenLive = await api('PUT', '/api/platform/maintenance', {
+    token: after.token, body: { enabled: true },
+  });
+  assert.ok(tenantWhenLive.status === 401 || tenantWhenLive.status === 403,
+    `maintenance must be staff-only even when live (got ${tenantWhenLive.status})`);
+  const stillOff = await api('GET', '/api/auth/maintenance');
+  assert.equal(stillOff.data.enabled, false, 'a tenant must not be able to switch it on either');
+});

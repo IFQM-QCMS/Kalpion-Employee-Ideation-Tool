@@ -20,6 +20,13 @@ import { authApi } from '../services/api';
    • Theme-aware: it reads the app's CSS variables, so it follows light/dark.
 */
 
+const WrenchIcon = () => (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+  </svg>
+);
+
 const MailIcon = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -156,6 +163,47 @@ export default function LoginPage() {
   useParticles(canvasRef);
 
   /*
+   * Forgot-password, as a dialog rather than window.prompt().
+   *
+   * The native prompt could not be styled, could not show a validation message
+   * next to the field, and on several browsers is suppressed outright — which
+   * is what "it does not work at all" turned out to mean: no dialog appeared,
+   * so no request was ever sent.
+   *
+   * `forgotDone` deliberately keeps the panel open on success. The reply is
+   * intentionally the same whether or not the address is registered (the
+   * backend answers generically so this page cannot be used to discover who
+   * holds an account), so the user needs to read that sentence rather than
+   * have it flash past in a toast.
+   */
+  /*
+   * Maintenance mode.
+   *
+   * The notice is shown, but the form is deliberately LEFT ENABLED. This screen
+   * cannot know whether the person typing is a tenant user or an IFQM platform
+   * admin until credentials are submitted, and staff must be able to sign in
+   * precisely while this is on — they are the ones turning it off. So the
+   * banner sets the expectation and the server makes the decision.
+   */
+  const [maint, setMaint] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    authApi.maintenance()
+      .then((r) => { if (alive && r.data?.enabled) setMaint(r.data.message || ''); })
+      // A failure here must never block sign-in: not knowing whether the
+      // platform is on hold is not a reason to refuse a login attempt.
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotErr, setForgotErr] = useState('');
+  const [forgotDone, setForgotDone] = useState(false);
+
+  /*
    * MOM §4.1 / §4.2 — sign in with a one-time code.
    *
    * The option is only shown when the platform has it switched on AND a
@@ -220,11 +268,23 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
-    // The reset email links to /reset-password?token=…&org=… (authService), while
-    // older links used ?reset_token=. Accept both so neither generation of email
-    // dead-ends.
+    /*
+     * The reset email links to /reset-password?token=…&org=… (authService),
+     * while older links used ?reset_token= and landed here instead.
+     *
+     * A token arriving on THIS page used to be collected through three
+     * window.prompt() calls — new password, confirm it, hope they matched —
+     * with no strength hint, no reveal toggle and no way back from a typo.
+     * /reset-password is a real form that does all of that, so an old link is
+     * handed to it rather than served a worse copy of it.
+     */
     const rt = params.get('token') || params.get('reset_token');
-    if (rt) handleResetPassword(rt);
+    if (!rt) return;
+    const org = params.get('org') || params.get('org_slug') || orgSlug || '';
+    navigate(
+      `/reset-password?token=${encodeURIComponent(rt)}${org ? `&org=${encodeURIComponent(org)}` : ''}`,
+      { replace: true }
+    );
   }, []);
 
   async function handleLogin(e) {
@@ -247,27 +307,36 @@ export default function LoginPage() {
     setLoading(false);
   }
 
-  async function handleForgotPassword(e) {
+  function handleForgotPassword(e) {
     e?.preventDefault();
-    const emailPrompt = prompt(t('login.prompt_email'));
-    if (!emailPrompt?.trim()) return;
-    try {
-      const res = await authApi.forgotPassword({ email: emailPrompt.trim(), org_slug: orgSlug });
-      if (res.data.success) showToast(t('login.reset_sent'), 'success');
-      else showToast(res.data.error || t('login.request_failed'), 'danger');
-    } catch { showToast(t('msg.network_error'), 'danger'); }
+    setForgotErr('');
+    setForgotDone(false);
+    // Seed it with whatever was already typed above, when that looks like an
+    // address — the common case is somebody who typed their email, then found
+    // they could not remember the password.
+    setForgotEmail(email.includes('@') ? email.trim() : '');
+    setForgotOpen(true);
   }
 
-  async function handleResetPassword(token) {
-    const pw1 = prompt(t('login.prompt_new_pw'));
-    if (!pw1 || pw1.length < 8) { showToast(t('login.pw_too_short'), 'warning'); return; }
-    const pw2 = prompt(t('login.prompt_confirm_pw'));
-    if (pw1 !== pw2) { showToast(t('login.pw_mismatch'), 'warning'); return; }
+  async function submitForgot(e) {
+    e?.preventDefault();
+    const addr = forgotEmail.trim();
+    // Checked here as well as by the browser, because the field is inside a
+    // dialog that can be submitted by Enter before validation has run.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
+      setForgotErr(t('login.forgot_invalid'));
+      return;
+    }
+    setForgotErr('');
+    setForgotBusy(true);
     try {
-      const res = await authApi.resetPassword({ token, password: pw1, org_slug: params.get('org') || '' });
-      if (res.data.success) { showToast(t('login.pw_updated'), 'success'); navigate('/login'); }
-      else showToast(res.data.error || t('login.reset_failed'), 'danger');
-    } catch { showToast(t('msg.network_error'), 'danger'); }
+      const res = await authApi.forgotPassword({ email: addr, org_slug: orgSlug });
+      if (res.data?.success) setForgotDone(true);
+      else setForgotErr(res.data?.error || t('login.request_failed'));
+    } catch (err) {
+      setForgotErr(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setForgotBusy(false);
   }
 
   return (
@@ -338,6 +407,55 @@ export default function LoginPage() {
           border-radius:10px;padding:9px 13px;font-size:12.5px}
         .ifqm-particles .alt-cta{margin-top:2px;font-size:12.5px;color:var(--text-muted);text-align:center}
         .ifqm-particles .foot{margin-top:12px;font-size:11px;color:var(--subtle)}
+
+        /* ── Maintenance notice ─────────────────────────────────────────
+           Warning colours rather than danger: the platform is not broken and
+           the reader has done nothing wrong — it is deliberately closed. */
+        .ifqm-particles .maint{
+          display:flex;gap:11px;align-items:flex-start;margin-bottom:16px;
+          background:var(--warning-light,var(--info-light));
+          color:var(--warning-dark,var(--warning,var(--info)));
+          border:1px solid var(--warning,var(--info));
+          border-radius:12px;padding:12px 14px;
+        }
+        .ifqm-particles .maint svg{flex:none;margin-top:1px}
+        .ifqm-particles .maint b{display:block;font-size:13px;font-weight:700;margin-bottom:3px}
+        .ifqm-particles .maint span{font-size:12.5px;line-height:1.55;opacity:.92}
+
+        /* ── Forgot-password dialog ──────────────────────────────────────
+           Replaces window.prompt(). Sits above the particle canvas and the
+           two glows, all of which are z-index 0. */
+        .ifqm-particles .modal-veil{
+          position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;
+          padding:20px;background:rgba(15,23,42,.55);backdrop-filter:blur(3px);
+          animation:veil-in .16s ease-out;
+        }
+        @keyframes veil-in{from{opacity:0}to{opacity:1}}
+        .ifqm-particles .modal{
+          width:100%;max-width:400px;background:var(--card,var(--surface));
+          border:1px solid var(--border);border-radius:16px;padding:22px;
+          box-shadow:0 24px 60px -12px rgba(0,0,0,.45);
+          animation:modal-in .18s cubic-bezier(.2,.8,.3,1);
+        }
+        @keyframes modal-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
+        .ifqm-particles .modal h2{
+          margin:0 0 4px;font-size:17px;font-weight:800;letter-spacing:-.01em;color:var(--heading);
+        }
+        .ifqm-particles .modal p{margin:0 0 16px;font-size:13px;line-height:1.55;color:var(--text-muted)}
+        .ifqm-particles .modal form{margin-top:0}
+        .ifqm-particles .modal .acts{display:flex;gap:9px;margin-top:4px}
+        .ifqm-particles .modal .acts .go{margin-top:0;flex:1}
+        .ifqm-particles .modal .ghost{
+          padding:13px 18px;border-radius:12px;cursor:pointer;font-size:14px;font-weight:600;
+          background:transparent;border:1px solid var(--border);color:var(--text-muted);
+          font-family:inherit;transition:border-color .16s,color .16s;
+        }
+        .ifqm-particles .modal .ghost:hover{border-color:var(--text-muted);color:var(--text)}
+        .ifqm-particles .modal .ok{
+          background:var(--success-light,var(--info-light));color:var(--success,var(--info));
+          border:1px solid var(--success,var(--info));
+          border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.55;
+        }
       `}</style>
 
       <canvas ref={canvasRef} className="particles" aria-hidden="true" />
@@ -354,6 +472,16 @@ export default function LoginPage() {
           <h1>{t('login.btn')}</h1>
           <p className="sub">{t('login.subtitle')}</p>
         </div>
+
+        {maint !== null && (
+          <div className="maint" role="status">
+            <WrenchIcon />
+            <div>
+              <b>{t('login.maint_title')}</b>
+              <span>{maint || t('login.maint_body')}</span>
+            </div>
+          </div>
+        )}
 
         {error && <div className="err">{error}</div>}
         {mode === 'otp' && otpNote && <div className="note">{otpNote}</div>}
@@ -454,6 +582,55 @@ export default function LoginPage() {
 
         <p className="foot">{t('login.powered_by')}</p>
       </div>
+
+      {forgotOpen && (
+        // Clicking the backdrop closes; clicking the panel must not, hence the
+        // stopPropagation. Escape closes too, for a keyboard user who opened it
+        // by accident.
+        <div className="modal-veil" onClick={() => !forgotBusy && setForgotOpen(false)}
+          onKeyDown={(ev) => { if (ev.key === 'Escape' && !forgotBusy) setForgotOpen(false); }}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="forgot-title"
+            onClick={(ev) => ev.stopPropagation()}>
+            <h2 id="forgot-title">{t('login.forgot')}</h2>
+
+            {forgotDone ? (
+              <>
+                <div className="ok">{t('login.reset_sent')}</div>
+                <div className="acts" style={{ marginTop: 16 }}>
+                  <button type="button" className="go" onClick={() => setForgotOpen(false)}>
+                    {t('btn.close')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p>{t('login.forgot_body')}</p>
+                <form onSubmit={submitForgot}>
+                  <div className="fld">
+                    <span className="ic"><MailIcon /></span>
+                    <input
+                      type="email" value={forgotEmail} autoFocus autoComplete="email"
+                      placeholder={t('login.email_ph')} disabled={forgotBusy}
+                      onChange={(ev) => { setForgotEmail(ev.target.value); setForgotErr(''); }}
+                      aria-label={t('login.prompt_email')}
+                    />
+                  </div>
+                  {forgotErr && <div className="err">{forgotErr}</div>}
+                  <div className="acts">
+                    <button type="button" className="ghost" disabled={forgotBusy}
+                      onClick={() => setForgotOpen(false)}>
+                      {t('btn.cancel')}
+                    </button>
+                    <button type="submit" className="go" disabled={forgotBusy}>
+                      {forgotBusy ? t('login.forgot_sending') : t('login.forgot_send')}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

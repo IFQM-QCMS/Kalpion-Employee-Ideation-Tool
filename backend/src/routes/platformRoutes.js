@@ -77,6 +77,17 @@ router.put('/messaging', messaging.update);
 router.post('/messaging/test', heavyLimiter, messaging.test);
 router.post('/messaging/test-mail', heavyLimiter, messaging.testMail);
 
+/*
+ * Maintenance mode — the whole platform on hold.
+ *
+ * Behind requirePlatformAuth like everything else in this router, which is also
+ * what makes it reachable while maintenance is ON: the tenant-facing gate lives
+ * on the tenant branch of requireAuth, and staff never touch it. The switch can
+ * always be reached by the people who need to throw it back.
+ */
+router.get('/maintenance', platform.getMaintenance);
+router.put('/maintenance', platform.updateMaintenance);
+
 router.get('/admins', platform.listAdmins);
 router.post('/admins', platform.createAdmin);
 router.delete('/admins/:id', platform.deleteAdmin);

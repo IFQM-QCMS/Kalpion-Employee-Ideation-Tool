@@ -5,6 +5,7 @@
 import * as platformService from '../services/platformService.js';
 import * as settings from '../services/platformSettingsService.js';
 import * as activity from '../services/activityService.js';
+import * as maintenance from '../services/maintenanceService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
@@ -84,6 +85,19 @@ export const changeOwnPassword = asyncHandler(async (req, res) =>
   respond(res, await settings.changeOwnPassword(req.user, req.body || {}))
 );
 
+// ── Maintenance mode ──
+export const getMaintenance = asyncHandler(async (_req, res) =>
+  respond(res, await maintenance.getMaintenance())
+);
+
+export const updateMaintenance = asyncHandler(async (req, res) =>
+  respond(res, await maintenance.setMaintenance({
+    enabled: req.body?.enabled,
+    message: req.body?.message,
+    actor: req.user,
+  }))
+);
+
 // ── Health ──
 export const health = asyncHandler(async (_req, res) =>
   respond(res, await settings.health())
@@ -93,4 +107,5 @@ export default {
   tenants, tenantDetail, createTenant, updateTenant, resetTenantAdminPassword, deleteTenant,
   getDefaults, updateDefaults, getTenantSettings, updateTenantSettings,
   listAdmins, createAdmin, deleteAdmin, changeOwnPassword, health,
+  getMaintenance, updateMaintenance,
 };

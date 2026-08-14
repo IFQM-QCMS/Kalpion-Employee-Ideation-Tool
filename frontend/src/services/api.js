@@ -122,6 +122,9 @@ export const authApi = {
   me: () => api.get('/auth/me'),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),
   resetPassword: (data) => api.post('/auth/reset-password', data),
+  // Public. Asked by the sign-in screen before anyone has a session, so it can
+  // explain why sign-in is refused instead of showing a bare error.
+  maintenance: () => api.get('/auth/maintenance'),
   // Signed-in change; also the way out of the forced change a bulk-imported
   // employee faces on first login. Returns a NEW token — the old one is revoked
   // by the password change itself.
@@ -416,6 +419,11 @@ export const platformApi = {
     api.post(`/platform/tenants/${id}/reset-admin-password`, { admin_email }),
   // confirm_slug must echo the org code; drop_database is opt-in.
   deleteTenant: (id, data) => api.delete(`/platform/tenants/${id}`, { data }),
+
+  // Maintenance mode — the whole platform on hold. Staff-only, and reachable
+  // while it is ON, which is what makes it possible to turn back off.
+  getMaintenance: () => api.get('/platform/maintenance'),
+  setMaintenance: (data) => api.put('/platform/maintenance', data),
 
   // Settings. Note there is no smtp_pass on the way in or out: the server never
   // returns it (only smtp_pass_set), and only writes it when a non-empty value

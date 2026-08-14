@@ -10,6 +10,11 @@ import { authLimiter } from '../middleware/rateLimiter.js';
 const router = Router();
 
 router.get('/me', optionalAuth, auth.me);
+// Public on purpose: the sign-in screen has to be able to say why nobody can
+// sign in, and it asks this before anyone has a session. It exposes only
+// whether the platform is on hold and the notice to show — nothing about any
+// organisation, account or credential.
+router.get('/maintenance', auth.maintenance);
 router.post('/login', authLimiter, auth.login);
 // §4.1 / §4.2 — sign in with a one-time code. Rate limited on the same footing
 // as password login: both are unauthenticated ways to reach an account.

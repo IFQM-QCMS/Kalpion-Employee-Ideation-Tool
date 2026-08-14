@@ -38,6 +38,7 @@ import { recordLogin } from './activityService.js';
 import { mailConfig, sendZeptoMail, zeptoMissing } from './zeptoMailService.js';
 import { sendViaPlatform, platformMailReady } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
+import { assertNotInMaintenance } from './maintenanceService.js';
 import logger from '../utils/logger.js';
 
 const DEFAULTS = {
@@ -134,6 +135,11 @@ function otpEmailHtml(name, code, minutes) {
 export async function requestOtp({ identifier, purpose = 'login', meta = {} } = {}) {
   const raw = String(identifier || '').trim();
   if (!raw) throw badRequest('Enter your registered phone number.');
+
+  // The login screen offers a code as an alternative to a password, so the two
+  // are the same door and both have to be shut. Only tenant users ever reach
+  // this service — a platform admin has no organisation to sign in to.
+  await assertNotInMaintenance();
 
   const p = await policy();
   if (p.otp_enabled !== '1') {
@@ -324,6 +330,10 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   const raw = String(identifier || '').trim();
   const supplied = String(code || '').trim();
   if (!raw || !supplied) throw badRequest('Enter the code that was sent to you.');
+
+  // Also on redemption, not only on request: a code issued a minute before the
+  // switch was thrown must not still buy a session after it.
+  await assertNotInMaintenance();
 
   const p = await policy();
   if (p.otp_enabled !== '1') {
