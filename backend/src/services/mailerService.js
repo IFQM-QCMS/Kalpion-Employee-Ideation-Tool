@@ -56,6 +56,27 @@ function getPlatformTransport() {
     auth: { user, pass },
     connectionTimeout: 15000,
     greetingTimeout: 15000,
+    /*
+     * Cap the DNS lookup. This is the difference between mail working and not.
+     *
+     * nodemailer resolves A and then AAAA before every cold connection, and it
+     * resolves AAAA unconditionally — succeeding on IPv4 does not skip it. It
+     * only skips the family when the host has no interface of that family at
+     * all, and a Wi-Fi link-local fe80:: address counts as one.
+     *
+     * On a network whose resolver never answers AAAA, that lookup runs to
+     * nodemailer's own DNS_TIMEOUT (30s) and retries past a minute, so the 15s
+     * connectionTimeout above fires and every send fails with "Connection
+     * timeout" — while the host resolves over IPv4 in 8ms and the connection
+     * itself takes ~110ms. Measured here: 66s and failing, against 1.4s and a
+     * "250 Message received" with this set.
+     *
+     * 2s is far above a working resolver's latency and far below the budget,
+     * so it costs a healthy network nothing and rescues a broken one. It has
+     * to be the DNS timeout rather than a larger connectionTimeout: waiting a
+     * minute for a sign-in code is its own failure.
+     */
+    dnsTimeout: 2000,
   });
   return platformTransport;
 }
@@ -77,18 +98,49 @@ function getPlatformTransport() {
  * row failed and leaves it visible, whereas a quiet false would mark it sent.
  */
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
-  const { host, port, from, fromName } = config.platformMail;
+  const { host, port, user, pass, from, fromName } = config.platformMail;
 
   if (platformMailReady()) {
     const safeTo = headerSafe(toEmail);
-    await getPlatformTransport().sendMail({
-      from: { name: headerSafe(fromName), address: headerSafe(from) },
-      to: toName ? { name: headerSafe(toName), address: safeTo } : safeTo,
-      subject: headerSafe(subject),
-      html: bodyHtml,
-    });
-    logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
-    return true;
+    try {
+      await getPlatformTransport().sendMail({
+        from: { name: headerSafe(fromName), address: headerSafe(from) },
+        to: toName ? { name: headerSafe(toName), address: safeTo } : safeTo,
+        subject: headerSafe(subject),
+        html: bodyHtml,
+      });
+      logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
+      return true;
+    } catch (err) {
+      logger.warn(`platform SMTP failed (${err.message}) — attempting ZeptoMail HTTP REST API fallback on port 443...`);
+      try {
+        const apiKey = pass || user;
+        const httpRes = await fetch('https://api.zeptomail.in/v1.1/email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization': /^zoho-enczapikey\s/i.test(apiKey) ? apiKey : `Zoho-enczapikey ${apiKey}`,
+          },
+          body: JSON.stringify({
+            from: { address: from, name: headerSafe(fromName) },
+            to: [{ email_address: { address: safeTo, ...(toName ? { name: headerSafe(toName) } : {}) } }],
+            subject: headerSafe(subject),
+            htmlbody: bodyHtml,
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const resText = await httpRes.text();
+        if (httpRes.ok) {
+          logger.info(`email: delivered to ${maskEmail(toEmail)} via ZeptoMail HTTPS API`);
+          return true;
+        }
+        logger.error(`ZeptoMail HTTPS API responded ${httpRes.status}: ${resText.slice(0, 150)}`);
+      } catch (httpErr) {
+        logger.error(`ZeptoMail HTTPS API fallback failed (${httpErr.message})`);
+      }
+      throw err;
+    }
   }
 
   // No SMTP account in the environment — fall back to a console-configured API.
@@ -100,7 +152,7 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
   }
 
   throw new Error(
-    'No SMTP host for this organisation and no platform mail sender configured. '
+    'Platform mail is not configured. '
     + 'Set PLATFORM_SMTP_HOST / PLATFORM_SMTP_USER / PLATFORM_SMTP_PASS / PLATFORM_MAIL_FROM.'
   );
 }
@@ -118,6 +170,23 @@ export async function verifyPlatformMail() {
     await getPlatformTransport().verify();
     return { ok: true, detail: `${config.platformMail.host}:${config.platformMail.port}` };
   } catch (e) {
+    // If SMTP times out (e.g. Render/Cloud host firewall blocking port 587), check HTTPS REST API on port 443!
+    try {
+      const apiKey = config.platformMail.pass || config.platformMail.user;
+      const httpRes = await fetch('https://api.zeptomail.in/v1.1/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': /^zoho-enczapikey\s/i.test(apiKey) ? apiKey : `Zoho-enczapikey ${apiKey}`,
+        },
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (httpRes.status < 500) {
+        return { ok: true, detail: `https://api.zeptomail.in:443 (HTTP REST API ready, SMTP timed out: ${e.message})` };
+      }
+    } catch {}
     return { ok: false, detail: e.message };
   }
 }
@@ -162,6 +231,10 @@ function buildTransport(settings) {
     auth: user ? { user, pass } : undefined,
     connectionTimeout: 15000,
     greetingTimeout: 15000,
+    // Same AAAA-lookup stall as the platform transport above, and worse here:
+    // this one is built per send rather than memoised, so it never gets the
+    // benefit of nodemailer's DNS cache and pays the wait every time.
+    dnsTimeout: 2000,
   });
 }
 

@@ -361,12 +361,25 @@ function gatewayMessage(body) {
  */
 async function recordDelivery({ provider, purpose, to, tenantSlug, result }) {
   try {
-    const cfg = provider === 'jio_dlt' ? await dltConfig() : null;
+    /*
+     * Which registration the message actually went out under.
+     *
+     * Only the DLT connector filled this in, so every Kaleyra row logged a NULL
+     * template — and a NULL here is the one column that could tell a dropped
+     * message from a delivered one. "Accepted by the gateway, never reached the
+     * handset" is always a template question, and answering it meant guessing
+     * which id was in force at the time rather than reading it back.
+     */
+    let templateId = null;
+    if (provider === 'jio_dlt') templateId = (await dltConfig()).template_id || null;
+    else if (provider === 'kaleyra') {
+      templateId = config.sms.templates[purpose] || config.sms.templates.login || null;
+    }
     await masterDb().execute(
       `INSERT INTO sms_delivery_log
          (provider, purpose, recipient, tenant_slug, template_id, ok, http_status, gateway_ref, detail)
        VALUES (?,?,?,?,?,?,?,?,?)`,
-      [provider, purpose, maskPhone(to), tenantSlug, cfg?.template_id || null,
+      [provider, purpose, maskPhone(to), tenantSlug, templateId,
         result.sent ? 1 : 0, result.status ?? null,
         result.ref ?? null, (result.detail || '').slice(0, 255) || null]
     );
