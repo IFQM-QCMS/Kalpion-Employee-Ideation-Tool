@@ -88,6 +88,22 @@ async function main() {
   const AUSER  = (await login('user@orga.test',  PASSWORDS.orgaUser)).token;
   const BADMIN = (await login('admin@orgb.test', PASSWORDS.orgbAdmin)).token;
 
+  /*
+   * A manager, because an organisation admin may no longer decide on an idea.
+   *
+   * The rule changed under this runner: administration and adjudication were
+   * separated, so the org admin now gets a 403 from review-action and every
+   * approval case that used AADMIN was failing on the product working as
+   * intended. Approvals are driven by this account instead.
+   */
+  const REVIEWER_PW = 'AReviewerPass123';
+  await sql('ifqm_test_a', `INSERT INTO __DB__.users
+      (employee_id, name, email, phone, password_hash, role, status, password_changed_at)
+    VALUES ('A-RVW', 'Orga Reviewer', 'reviewer@orga.test', '9812345601',
+            '${bcrypt.hashSync(REVIEWER_PW, 4)}', 'manager', 'active', NOW())
+    ON DUPLICATE KEY UPDATE role = 'manager', status = 'active'`);
+  const AREVIEWER = (await login('reviewer@orga.test', REVIEWER_PW)).token;
+
   // Seed a couple of ideas we can vote/comment/review against.
   const mkIdea = async (token, title) => {
     const r = await api('POST', '/api/ideas/submit', { token, body: {
@@ -174,6 +190,226 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}: ${r.data?.error || 'ok'}`);
     });
 
+  // ═══════════════════════ ONE-TIME CODES (SMS & EMAIL) ═══════════════════
+  /*
+   * Sign-in by code, and the codes that prove an applicant holds the address
+   * and the number they typed. The SMS provider is the mock one (see
+   * helpers.js) so the whole path runs — row written, delivery recorded — with
+   * nothing reaching a handset and nothing billed.
+   *
+   * The properties under test are the ones that make a six-digit secret safe:
+   * it is stored hashed, it says nothing about who is registered, it survives
+   * only minutes, it dies after a few wrong guesses, and it works exactly once.
+   */
+  const O = 'OTP', On = 'One-Time Codes (SMS & Email)';
+  const OTP_PHONE = '9812345670';
+  await sql('ifqm_test_a', `UPDATE __DB__.users SET phone = '${OTP_PHONE}' WHERE email = 'user@orga.test'`);
+  await sql('ifqm_test_master',
+    `INSERT INTO __DB__.platform_settings (key_name, value) VALUES ('otp_enabled','1')
+       ON DUPLICATE KEY UPDATE value = '1'`);
+  const latestOtp = async (identifier, purpose = 'login') => {
+    const rows = await sql('ifqm_test_master',
+      `SELECT * FROM __DB__.login_otps WHERE identifier = ? AND purpose = ? ORDER BY id DESC LIMIT 1`,
+      [identifier, purpose]);
+    return rows[0] || null;
+  };
+  /*
+   * The issued code is bcrypt-hashed and never returned by the API — which is
+   * the property under test, and equally the reason a case cannot simply read
+   * one back. Recovering it by brute force would mean up to a million bcrypt
+   * comparisons per case: exactly why the storage is safe, and exactly why it
+   * is no way to run a test.
+   *
+   * So the stored hash is replaced with the hash of a code chosen here.
+   * Everything downstream of issuance is then exercised as a real code would
+   * exercise it — the comparison, single use, the attempt counter, expiry and
+   * supersession. What this deliberately does not prove is that the digits the
+   * recipient received match the row; the storage side is covered separately by
+   * the hashing case above.
+   */
+  const KNOWN_CODE = '424242';
+  const plantCode = async (identifier, purpose = 'login') => {
+    await sql('ifqm_test_master',
+      `UPDATE __DB__.login_otps SET code_hash = ? WHERE identifier = ? AND purpose = ?
+        ORDER BY id DESC LIMIT 1`,
+      [bcrypt.hashSync(KNOWN_CODE, 4), identifier, purpose]);
+    return KNOWN_CODE;
+  };
+
+  await tc(O, On, 'Request a sign-in code for a registered mobile number',
+    'Generic success; a hashed code row is created', async () => {
+      const r = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const row = await latestOtp(OTP_PHONE);
+      return ok(r.status === 200 && !!row, `Status ${r.status}, row ${row ? 'created' : 'MISSING'}`);
+    });
+  await tc(O, On, 'Code is stored hashed, never in clear text',
+    'A bcrypt hash is stored and no column anywhere holds the digits', async () => {
+      const row = await latestOtp(OTP_PHONE);
+      const isHash = !!row && /^\$2[aby]\$/.test(row.code_hash) && row.code_hash.length >= 55;
+      // Read access to this table must not be enough to sign in as anybody, so
+      // no column may hold the code itself — the hash is the only copy.
+      const cols = await sql('ifqm_test_master',
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '__DB__'
+           AND TABLE_NAME = 'login_otps' AND COLUMN_NAME IN ('code','otp','code_plain','plain_code')`);
+      const anyDigits = !!row && /^\d{4,8}$/.test(String(row.code_hash));
+      return ok(isHash && !cols.length && !anyDigits,
+        isHash ? `bcrypt hash stored (${String(row.code_hash).slice(0, 7)}…), no clear-code column` : 'Code not hashed (CRITICAL)');
+    });
+  await tc(O, On, 'Request a code for a number that belongs to nobody',
+    'Reply is identical to the registered case — no membership oracle', async () => {
+      // Age the existing row first, or the resend throttle answers the known
+      // number with a 429 and the two replies differ for an unrelated reason.
+      await sql('ifqm_test_master',
+        `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      const known = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const ghost = await api('POST', '/api/auth/otp/request', { body: { identifier: '9800000001' } });
+      const same = known.status === ghost.status && known.data?.message === ghost.data?.message;
+      return ok(same, same ? `Identical reply (${ghost.status}): ${ghost.data?.message}` : `Differs: [${known.status}] ${known.data?.message} vs [${ghost.status}] ${ghost.data?.message}`);
+    });
+  await tc(O, On, 'Unknown identifier writes no code row',
+    'Nothing is stored for a number with no account', async () => {
+      const row = await latestOtp('9800000001');
+      return ok(!row, row ? 'Row created for unknown identifier (LEAK)' : 'No row written');
+    });
+  await tc(O, On, 'Sign in with a correct one-time code',
+    'Session issued, identical in shape to a password login', async () => {
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const code = await plantCode(OTP_PHONE);
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code } });
+      return ok(r.status === 200 && !!r.data?.token && !!r.data?.user?.role,
+        r.data?.token ? `Signed in, role=${r.data.user.role}` : `No token (${r.status}: ${r.data?.error})`);
+    });
+  await tc(O, On, 'Re-use a code that has already been redeemed',
+    'Refused — a code works exactly once', async () => {
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: KNOWN_CODE } });
+      return ok(r.status === 401 && !r.data?.token, `Status ${r.status}: ${r.data?.error}`);
+    });
+  await tc(O, On, 'Enter a wrong code',
+    'Refused, the attempt is counted against that code', async () => {
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const before = await latestOtp(OTP_PHONE);
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: '000000' } });
+      const after = await latestOtp(OTP_PHONE);
+      const counted = Number(after?.attempts) > Number(before?.attempts);
+      return ok(r.status === 401 && counted, `Status ${r.status}, attempts ${before?.attempts}→${after?.attempts}`);
+    });
+  await tc(O, On, 'Exhaust the wrong-guess limit on one code',
+    'The code is destroyed rather than left alive with a pinned counter', async () => {
+      for (let i = 0; i < 5; i++) {
+        await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: String(100000 + i) } });
+      }
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: KNOWN_CODE } });
+      return ok(r.status === 401 && !r.data?.token, `Correct code after limit: ${r.status} ${r.data?.error}`);
+    });
+  await tc(O, On, 'Request a second code while one is still live',
+    'The earlier code stops working — resending does not widen the target', async () => {
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const first = await plantCode(OTP_PHONE);
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: first } });
+      return ok(r.status === 401 && !r.data?.token, `Superseded code: ${r.status} ${r.data?.error}`);
+    });
+  await tc(O, On, 'Present an expired code',
+    'Refused once the validity window has passed', async () => {
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      const code = await plantCode(OTP_PHONE);
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET expires_at = DATE_SUB(NOW(), INTERVAL 1 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
+      const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code } });
+      return ok(r.status === 401 && !r.data?.token, `Status ${r.status}: ${r.data?.error}`);
+    });
+  await tc(O, On, 'Ask for another code immediately after one was sent',
+    'Throttled with a stated wait, so the gateway cannot be pumped', async () => {
+      await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = NOW() WHERE identifier = ?`, [OTP_PHONE]);
+      const r = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      return ok(r.status === 429, `Status ${r.status}: ${r.data?.error || ''}`);
+    });
+  await tc(O, On, 'Registration: an email code is accepted and then spent',
+    'Applicant proves they hold the address; the code works once', async () => {
+      /*
+       * The row is created directly rather than through send-otp. The suite
+       * deliberately has no mail account configured (helpers.js) so that a test
+       * run cannot post to the internet, which makes the SEND half unavailable
+       * here — it is covered by the case below. What matters for security is
+       * the redemption half, and that is exercised in full.
+       */
+      const addr = 'applicant@registration.test';
+      await sql('ifqm_test_master',
+        `INSERT INTO __DB__.login_otps (identifier, id_type, channel, code_hash, purpose, expires_at)
+         VALUES (?, 'email', 'email', ?, 'registration_verify', DATE_ADD(NOW(), INTERVAL 5 MINUTE))`,
+        [addr, bcrypt.hashSync(KNOWN_CODE, 4)]);
+      const v = await api('POST', '/api/registrations/verify-otp', { body: { email: addr, code: KNOWN_CODE } });
+      const again = await api('POST', '/api/registrations/verify-otp', { body: { email: addr, code: KNOWN_CODE } });
+      return ok(v.status === 200 && v.data?.success && again.status === 401,
+        `verify ${v.status}, re-use ${again.status}: ${again.data?.error || ''}`);
+    });
+  await tc(O, On, 'Registration: email code requested with no mail sender configured',
+    'Refused with a clear reason, never a 500 or a false "sent"', async () => {
+      const r = await api('POST', '/api/registrations/send-otp', { body: { email: 'nomail@registration.test' } });
+      const honest = r.status === 503 || r.status === 502;
+      return ok(honest && r.status !== 500 && !r.data?.success,
+        `Status ${r.status}: ${r.data?.error || ''}`);
+    });
+  await tc(O, On, 'Registration: send and verify a mobile verification code',
+    'Applicant proves they hold the number they typed', async () => {
+      const num = '9812345699';
+      const s = await api('POST', '/api/registrations/send-phone-otp', { body: { phone: num } });
+      const code = await plantCode(num, 'registration_phone');
+      const v = await api('POST', '/api/registrations/verify-phone-otp', { body: { phone: num, code } });
+      return ok(v.status === 200 && v.data?.success, `send ${s.status}, verify ${v.status}: ${v.data?.error || 'verified'}`);
+    });
+  await tc(O, On, 'Registration: a wrong verification code is refused',
+    'Rejected without consuming the real code', async () => {
+      const num = '9812345698';
+      await api('POST', '/api/registrations/send-phone-otp', { body: { phone: num } });
+      const bad = await api('POST', '/api/registrations/verify-phone-otp', { body: { phone: num, code: '000000' } });
+      const code = await plantCode(num, 'registration_phone');
+      const good = await api('POST', '/api/registrations/verify-phone-otp', { body: { phone: num, code } });
+      return ok(bad.status === 401 && good.status === 200, `wrong ${bad.status}, correct ${good.status}`);
+    });
+  await tc(O, On, 'Delivery log never stores the message body, and masks the number',
+    'The log can be read without learning any code or full number', async () => {
+      const rows = await sql('ifqm_test_master',
+        `SELECT recipient, detail FROM __DB__.sms_delivery_log ORDER BY id DESC LIMIT 20`);
+      const masked = rows.every((r) => !r.recipient || r.recipient.includes('*'));
+      const noBody = rows.every((r) => !/\b\d{6}\b/.test(String(r.detail || '')));
+      const noColumn = !(await sql('ifqm_test_master',
+        `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '__DB__'
+           AND TABLE_NAME = 'sms_delivery_log' AND COLUMN_NAME IN ('message','body','text')`)).length;
+      return ok(masked && noBody && noColumn,
+        `${rows.length} rows: recipients ${masked ? 'masked' : 'IN CLEAR'}, no code in detail ${noBody}, no body column ${noColumn}`);
+    });
+  await tc(O, On, 'Outgoing text matches the wording registered with the operator',
+    'Message is built from the registered template, not a literal', async () => {
+      const { messageFor, matchesTemplate } = await import('../src/services/smsService.js');
+      const { default: cfg } = await import('../src/config/index.js');
+      const built = messageFor('login', '482913', 5);
+      const matches = matchesTemplate(cfg.sms.text.login, built.text);
+      const drifted = matchesTemplate(cfg.sms.text.login, '482913 is your code. Expires in 5 min.');
+      return ok(matches && !drifted && !!built.text,
+        matches ? `Built from registration; drifted wording correctly rejected` : 'Message does not match its template (carrier would drop it)');
+    });
+  await tc(O, On, 'Gateway readiness names the missing setting',
+    'An incomplete gateway reports which field is empty, not "unavailable"', async () => {
+      const { kaleyraMissing } = await import('../src/services/smsService.js');
+      const missing = kaleyraMissing({ apiKey: '', sid: '', senderId: 'ABC', peId: '', templates: {} }, 'login');
+      const named = missing.some((m) => /SMS_API_KEY/i.test(m)) && missing.some((m) => /SID/i.test(m))
+        && missing.some((m) => /6 characters/i.test(m));
+      return ok(named, named ? `Names each gap: ${missing.length} reported` : `Unhelpful: ${missing.join(', ')}`);
+    });
+  await tc(O, On, 'Code sign-in while the platform is in maintenance',
+    'Refused — the code route is shut with the password route', async () => {
+      const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+      await api('PUT', '/api/platform/maintenance', { token: pa, body: { enabled: true } });
+      const r = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
+      await api('PUT', '/api/platform/maintenance', { token: pa, body: { enabled: false } });
+      return ok(r.status === 503 && r.data?.maintenance === true, `Status ${r.status}: ${r.data?.error || ''}`);
+    });
+
   // ══════════════════════════════ PLATFORM ADMIN ══════════════════════════
   const P = 'PLAT', Pn = 'Platform Admin';
   let newTenantId = null;
@@ -254,7 +490,7 @@ async function main() {
     'User created with a derived temporary password', async () => {
       const r = await api('POST', '/api/users', { token: AADMIN, body: {
         name: 'Neha Rao', email: 'neha@orga.test', employee_id: 'A-100', department: 'Quality',
-        role: 'employee', date_of_birth: '1994-05-01',
+        role: 'employee', date_of_birth: '1994-05-01', phone: '9812345602',
       }});
       return ok(r.data?.success || r.status === 200 || r.status === 201, `Status ${r.status}: ${r.data?.error || 'created'}`);
     });
@@ -408,7 +644,7 @@ async function main() {
   const R = 'RVW', Rn = 'Review & Approval';
   await tc(R, Rn, 'Reviewer approves an idea',
     'Idea moves to Approved with a workflow entry', async () => {
-      const r = await api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: IDEA2, decision: 'Approved', comment: 'Clear ROI.' } });
+      const r = await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: IDEA2, decision: 'Approved', comment: 'Clear ROI.' } });
       return ok(r.status === 200 && (r.data?.success ?? true), `Status ${r.status}: ${r.data?.error || 'approved'}`);
     });
   await tc(R, Rn, 'Submitter tries to approve their own idea',
@@ -428,7 +664,7 @@ async function main() {
     });
   await tc(R, Rn, 'Duplicate identical approval within 10 seconds',
     'Idempotency guard — no duplicate workflow entry', async () => {
-      await api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: IDEA2, decision: 'Approved', comment: 'again' } });
+      await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: IDEA2, decision: 'Approved', comment: 'again' } });
       const rows = await sql('ifqm_test_a', `SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id=? AND action='Approved'`, [IDEA2]);
       return ok(Number(rows[0].c) <= 1, `Approved workflow rows: ${rows[0].c}`);
     });
@@ -1038,7 +1274,7 @@ async function main() {
   await tc(RL, RLn, 'Five simultaneous approvals of the same idea',
     'Exactly one approval recorded — the guard holds under a race', async () => {
       const target = await mkIdea(AUSER, 'Concurrency probe: double approval');
-      await Promise.all(Array.from({ length: 5 }, () => api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: target, decision: 'Approved', comment: 'Race probe' } })));
+      await Promise.all(Array.from({ length: 5 }, () => api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: target, decision: 'Approved', comment: 'Race probe' } })));
       const rows = await sql('ifqm_test_a', "SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id = ? AND action = 'Approved'", [target]);
       return ok(Number(rows[0].c) === 1, `Approved workflow rows: ${rows[0].c}`);
     });
@@ -1047,8 +1283,8 @@ async function main() {
       const email = 'racecreate@orga.test';
       await sql('ifqm_test_a', 'DELETE FROM __DB__.users WHERE email = ?', [email]);
       await Promise.all([
-        api('POST', '/api/users', { token: AADMIN, body: { name: 'Race One', email, employee_id: 'A-RACE1', role: 'employee', date_of_birth: '1990-01-01' } }),
-        api('POST', '/api/users', { token: AADMIN, body: { name: 'Race Two', email, employee_id: 'A-RACE2', role: 'employee', date_of_birth: '1990-01-01' } }),
+        api('POST', '/api/users', { token: AADMIN, body: { name: 'Race One', email, employee_id: 'A-RACE1', role: 'employee', date_of_birth: '1990-01-01', phone: '9812345603' } }),
+        api('POST', '/api/users', { token: AADMIN, body: { name: 'Race Two', email, employee_id: 'A-RACE2', role: 'employee', date_of_birth: '1990-01-01', phone: '9812345604' } }),
       ]);
       const rows = await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.users WHERE email = ?', [email]);
       return ok(Number(rows[0].c) === 1, `Accounts with that email: ${rows[0].c}`);
@@ -1085,7 +1321,7 @@ async function main() {
   await tc(RL, RLn, 'Approval recorded while the mail server is unreachable',
     'Decision persists even though the e-mail cannot be sent', async () => {
       const target = await mkIdea(AUSER, 'Approve while mail is down');
-      const r = await api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: target, decision: 'Approved', comment: 'Mail-down probe' } });
+      const r = await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: target, decision: 'Approved', comment: 'Mail-down probe' } });
       const row = (await sql('ifqm_test_a', 'SELECT status FROM __DB__.ideas WHERE id = ?', [target]))[0];
       return ok(r.status === 200 && row.status === 'Approved', `Status ${r.status}, stored status=${row.status}`);
     });
@@ -1553,7 +1789,7 @@ async function main() {
   await tc(DT, DTn, 'Approval writes the status and the audit entry together',
     'Both present — a decision is never half-recorded', async () => {
       const id = await mkIdea(AUSER, 'Atomicity probe idea');
-      await api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: id, decision: 'Approved', comment: 'Atomicity probe' } });
+      await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: id, decision: 'Approved', comment: 'Atomicity probe' } });
       const idea = (await sql('ifqm_test_a', 'SELECT status FROM __DB__.ideas WHERE id = ?', [id]))[0];
       const wf = (await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id = ?', [id]))[0].c;
       return ok(idea.status !== 'Submitted' && Number(wf) >= 1, `status=${idea.status}, workflow rows=${wf}`);

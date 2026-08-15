@@ -23,6 +23,32 @@ process.env.AUTH_RATE_LIMIT = '10000';        // per-IP limiter must not throttl
 // concurrency and throughput cases and mask what they are actually measuring.
 process.env.GLOBAL_RATE_LIMIT = '1000000';
 
+/*
+ * ── Nothing may leave this machine during a test run ───────────────────────
+ *
+ * config/index.js calls dotenv.config() on the real backend/.env, and dotenv
+ * does not override variables already set — which is what makes the lines above
+ * work. But nothing was overriding the DELIVERY settings, so a suite run
+ * inherited the live SMS gateway and the live mail account. Any case that
+ * caused a code to be issued would have sent a real text through the contracted
+ * gateway (which bills per message) or a real email through the platform
+ * sender, to whatever address the fixture happened to carry.
+ *
+ * The mock SMS provider writes the message to the log instead of sending it,
+ * which is exactly what the one-time-code cases need: the whole path runs, the
+ * row is written, the delivery is recorded, and no handset is involved. It is
+ * refused in production by smsService, so this cannot mask a real deployment.
+ *
+ * The mail account is blanked rather than pointed somewhere, so platformMailReady()
+ * is false and an email send fails locally and instantly instead of opening a
+ * connection to the internet from a test.
+ */
+process.env.SMS_PROVIDER = 'log';
+process.env.PLATFORM_SMTP_HOST = '';
+process.env.PLATFORM_SMTP_USER = '';
+process.env.PLATFORM_SMTP_PASS = '';
+process.env.PLATFORM_MAIL_API_KEY = '';
+
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
