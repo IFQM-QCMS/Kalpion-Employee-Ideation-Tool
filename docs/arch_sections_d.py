@@ -85,7 +85,52 @@ def build(doc, H, para, bullets, table, figure, fig):
          "It blocks right-click, selection and copying, and stamps the reader's name across the "
          "text. It cannot stop a screenshot or a phone camera and the help text says so. Its "
          "real value is that a leaked screenshot carries a name."],
+        ["One-time codes are bcrypt-hashed like passwords",
+         "A six-digit code in a plain column would let anyone with read access to the registry "
+         "sign in as any user with a code outstanding - an easier secret to use than a password "
+         "hash, and outstanding for exactly as long as somebody is trying to sign in."],
+        ["Codes are drawn from a cryptographic random source",
+         "Math.random() is predictable from previous output, so an attacker who had seen one code "
+         "could compute the next. The digits are rejection-sampled so the modulo does not bias "
+         "the low ones."],
+        ["The code option is hidden unless a code can actually be delivered",
+         "Offering it while the gateway is misconfigured is worse than not offering it: the user "
+         "abandons a password that works for a code that never arrives, and the sign-in screen "
+         "has no way to explain itself."],
+        ["The mock SMS provider is refused under NODE_ENV=production",
+         "It writes the code to the server log instead of sending it, which is what makes testing "
+         "possible before a gateway contract exists. In a live system that is a credential leak "
+         "and a silent failure at once, so it fails closed rather than pretending."],
+        ["Maintenance mode is enforced after the platform-admin branch, not by a role check",
+         "The gate sits at a point in the sign-in path that IFQM staff never reach, so they are "
+         "exempt by the shape of the function. A role check could be got wrong later, and getting "
+         "it wrong means nobody can sign in to switch maintenance back off."],
+        ["Maintenance mode fails open if the registry cannot be read",
+         "The console used to switch it off reads the same database. A blip that was treated as "
+         "'assume on' would be a platform-wide lockout that nobody could clear."],
     ], widths=[1.9, 4.3], font_size=8.5)
+
+    H(doc, "16.3 Putting the platform on hold", 2)
+    para(doc, "Maintenance mode stops every organisation using the system while an update is "
+              "carried out, and leaves IFQM's own staff able to work. That asymmetry is the whole "
+              "feature: somebody has to be able to see the platform in order to decide it is safe "
+              "to turn back on.")
+    para(doc, "It is enforced in three places, because any one of them alone leaves a door open:")
+    bullets(doc, [
+        "At password sign-in, so no new session can be obtained.",
+        "At the one-time-code routes, on both request and redemption - the login screen offers a "
+        "code as an alternative to a password, so the two are the same door and both have to be "
+        "shut. A code issued a minute before the switch must not still buy a session after it.",
+        "On every authenticated request, so a session opened before the switch stops working. "
+        "Without this, 'on hold' would mean nothing to anybody already signed in, which is most "
+        "people during a working day.",
+    ])
+    para(doc, "Signing out is deliberately still allowed. A tenant whose session is being refused "
+              "should be able to clear it and land on the sign-in screen, which is where the "
+              "notice is; leaving them holding a token that every other endpoint rejects is a "
+              "worse dead end than the one being prevented. The flag is cached for a few seconds "
+              "and dropped on write, because it is read on every authenticated request and "
+              "changes roughly never.")
 
     # -- 17 -----------------------------------------------------------------
     H(doc, "17. Integration Architecture", 1, page_break=True)
@@ -97,10 +142,14 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["QCMS", "Out", "An administrator pushes an approved idea",
          "The failure is recorded against the idea and it can be retried. A duplicate is "
          "treated as success, because the idea has arrived and retrying would create a second"],
-        ["Email (SMTP)", "Out", "Password reset, notifications",
-         "Queued and retried. Nothing else is affected"],
-        ["SMS", "Out", "A one-time sign-in code",
-         "The user is told the code could not be sent. Password sign-in still works"],
+        ["Email (SMTP)", "Out", "Password reset, notifications, one-time codes",
+         "Queued and retried. Where the host blocks outbound SMTP the sender falls through to "
+         "the provider's HTTPS API instead, then stops attempting SMTP for a few minutes"],
+        ["Email (HTTPS API)", "Out", "Same messages, when SMTP cannot be reached",
+         "The caller is told the code could not be sent. Nothing is queued behind it"],
+        ["SMS gateway", "Out", "A one-time code, by text",
+         "The code is sent by email instead where an address is on file, and the fallback is "
+         "logged. Password sign-in is unaffected"],
         ["AI scoring", "Out", "An idea is submitted, only if a provider is configured",
          "Falls back to the built-in scorer. The submission still succeeds"],
     ], widths=[1.0, 0.7, 2.0, 2.5], font_size=8.5)
@@ -108,6 +157,74 @@ def build(doc, H, para, bullets, table, figure, fig):
     para(doc, "Worth stating plainly for customer conversations: with no AI provider configured, "
               "which is the default, no idea text leaves the system at all. Scoring runs inside "
               "the application.")
+
+    # -- 17.1 ---------------------------------------------------------------
+    H(doc, "17.1 One-time codes, by text and by email", 2)
+    para(doc, "A one-time code is a six-digit secret sent to something the person already holds - "
+              "a mobile number or an email address - and exchanged for the same session a "
+              "password would have produced. It is used in five places, and the same service "
+              "issues and checks the code in all of them.")
+
+    table(doc, ["Purpose", "Where it is used", "Channel"], [
+        ["login", "Signing in with a code instead of a password", "Text, or email if the person typed an address"],
+        ["registration_verify", "An organisation applying to join proves it holds the address", "Email"],
+        ["registration_phone", "The same application proves it holds the mobile number", "Text"],
+        ["password_reset", "Resetting a password without reaching the emailed link", "Either"],
+        ["phone_verify", "Confirming a number somebody has just added or changed", "Text"],
+    ], widths=[1.3, 3.0, 1.9], font_size=8.5)
+
+    para(doc, "Codes are stored bcrypt-hashed, never in clear. A plain six-digit column would let "
+              "anyone with read access to the registry sign in as any user with a code "
+              "outstanding - the same mistake as storing passwords in clear, and a far easier "
+              "secret to use than a password hash. The digits exist in memory for the length of "
+              "one request and are never written down, which is also why the delivery log records "
+              "that a message was sent and never what it said.")
+
+    para(doc, "Four rules bound what a code can do, and each exists because of a specific attack:")
+    bullets(doc, [
+        "It expires in five minutes and can be redeemed exactly once. Marking it consumed happens "
+        "before the session is minted, so two requests arriving together cannot both succeed.",
+        "Wrong guesses are counted per code, and the fifth destroys it. Six digits is a million "
+        "possibilities, which sounds like a lot until you notice an attacker has the whole "
+        "validity window and can guess as fast as the network allows.",
+        "Issuing a new code expires the previous one. Otherwise every resend adds another live "
+        "code and the guessing space shrinks with each click.",
+        "Requesting a code says nothing about whether the identifier is registered. The reply is "
+        "identical either way, and no row is written for an unknown one - otherwise the endpoint "
+        "becomes a way to type numbers and learn who works there.",
+    ])
+
+    para(doc, "The registration form is the deliberate exception to that last rule: it reports "
+              "honestly whether the code was sent. The applicant is typing their own details into "
+              "a form they are filling in, so there is nothing to give away, and a form that "
+              "cannot say \"that did not send\" leaves somebody waiting for a code that is never "
+              "coming.")
+
+    H(doc, "17.2 What the mobile operator requires", 2)
+    para(doc, "Indian operators will not carry commercial text unless it is registered in advance, "
+              "and an unregistered message is dropped by the carrier with no error and no delivery "
+              "report - which looks exactly like a bug in this application. Three registrations "
+              "travel with every message:")
+    table(doc, ["Registration", "What it is", "Consequence if wrong"], [
+        ["Principal Entity ID", "The business, registered once on the operator's portal",
+         "Message rejected at the gateway"],
+        ["Header / Sender ID", "The six-character name the recipient sees instead of a number",
+         "Rejected; a header of any other length is a transcription slip"],
+        ["Content Template ID", "The exact approved wording, one per purpose",
+         "Accepted by the gateway and then dropped by the carrier, silently"],
+    ], widths=[1.4, 3.0, 1.8], font_size=8.5)
+
+    para(doc, "The last row is the one that costs time. The carrier compares the text against the "
+              "template the id claims, placeholder for placeholder, so the wording is configuration "
+              "rather than a string in the source: if the two ever drift - because somebody edited "
+              "the sentence to read better - every message starts being dropped and the cause is "
+              "invisible from inside the application. The gateway answering \"accepted\" is not "
+              "evidence of delivery, and the console says so rather than reporting success.")
+
+    para(doc, "Where only one template registration is available, every purpose is sent under that "
+              "one - its id and its wording together, because the carrier checks the two against "
+              "each other. Sending approved wording under a different purpose's id fails just as "
+              "surely as sending unregistered text.")
 
     # -- 18 -----------------------------------------------------------------
     H(doc, "18. Error Handling and Exception Flow", 1, page_break=True)

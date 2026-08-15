@@ -360,6 +360,17 @@ s.append(P(
     'of the whole department. You cannot register yourself. If you have no account, open the sign-in page and use '
     '<b>Request access</b>: fill in your name, your email and your organisation, and the request is passed to the '
     'people who can create your account.'))
+s.append(P(
+    'An <b>organisation</b> that wants to join the platform applies on the registration form instead. That form asks '
+    'you to prove two things before it will accept the application: that you hold the email address you gave, and '
+    'that you hold the mobile number. Each has a <b>Send OTP</b> button beside it that sends a six-digit code, and a '
+    '<b>Verify OTP</b> button to enter it. Both must show as verified before the form can be submitted.'))
+s.extend(callout('Why an application asks for two codes',
+                 'The address and the number become the contact route for the organisation&apos;s first administrator '
+                 'account, so an application with a mistyped address would be approved and then be unreachable. '
+                 'Unlike the sign-in page, this form tells you honestly whether the code was sent - you are typing '
+                 'your own details into a form you are filling in, so there is nothing to give away, and a form that '
+                 'cannot say "that did not send" leaves you waiting for a code that is never coming.'))
 
 s.append(H2('4.2 Signing in'))
 s.append(P('The sign-in page asks for three things, and one of them is often optional:'))
@@ -380,6 +391,25 @@ s.extend(callout('Wrong password five times locks the account for 15 minutes',
                  'your password. The error message never reveals whether an email address exists on the platform - '
                  'that is deliberate.'))
 
+s.append(P(
+    '<b>Signing in with a one-time code instead of a password.</b> If the option is offered, the sign-in page carries '
+    'a link reading <b>Sign in with a code instead</b>. Type the email address or the mobile number your organisation '
+    'registered for you, and a six-digit code is sent to it - by text if you typed a number, by email if you typed an '
+    'address. Enter the code and you are signed in exactly as a password would have signed you in; nothing afterwards '
+    'behaves differently.'))
+s.append(P(
+    'The code is valid for five minutes and can be used once. Five wrong attempts destroy it, and asking for a new '
+    'one cancels the previous one - so if two codes arrive, only the newer will work. There is a short wait before '
+    'the tool will send another, and the screen counts it down for you.'))
+s.append(P(
+    'The link only appears when the platform can actually deliver a code. That is deliberate: offering a sign-in '
+    'route where nothing ever arrives is worse than not offering it, because you would abandon a password that works '
+    'for a code that never comes.'))
+s.extend(callout('The reply is the same whether or not the number is registered',
+                 'Asking for a code always answers "if that number belongs to an account, a code has been sent to '
+                 'it", and it says so just as readily for a number nobody has ever used. Anything else would turn '
+                 'the sign-in page into a way of discovering who works at your organisation.'))
+
 s.append(H2('4.3 Your first sign-in and the temporary password'))
 s.append(P(
     'If your account was created for you, your first password is temporary and predictable: <b>the first four '
@@ -394,13 +424,22 @@ s.append(P(
 
 s.append(H2('4.4 If you forget your password'))
 s.extend(steps([
-    'On the sign-in page, click <b>Forgot your password?</b>',
-    'Enter your registered email address. For your safety the reply is always the same whether or not that address '
-    'has an account - it never confirms who is registered.',
-    'Open the emailed link and choose a new password. The link expires, and it can only be used once.',
-    'If no email arrives, check junk mail, then ask your administrator: email delivery is configured per organisation '
-    'and may not be switched on yet. An administrator can reset your password directly.',
+    'On the sign-in page, click <b>Forgot your password?</b> A small panel opens on the page itself.',
+    'Enter your registered email address and click <b>Send reset link</b>. For your safety the reply is always the '
+    'same whether or not that address has an account - it never confirms who is registered.',
+    'Open the emailed link. It takes you to a page where you type the new password twice, with an eye icon to check '
+    'what you typed. The link is valid for one hour and can be used once.',
+    'Choose the new password and you are returned to the sign-in page. Setting a new password immediately ends every '
+    'session that was opened with the old one, on every device.',
+    'If no email arrives, check junk mail, then ask your administrator. An administrator can reset your password '
+    'directly.',
 ]))
+s.append(P(
+    'There is a second route for anyone who cannot reach the mailbox the link would go to - somebody whose work '
+    'address is the very account they are locked out of, or who is on a phone away from their desk. Ask for a '
+    '<b>reset code</b> instead: a six-digit code is sent to the registered email address or mobile number, and once '
+    'you have entered it you set a new password on the spot. The code follows the same rules as a sign-in code - '
+    'five minutes, one use, five wrong attempts and it is destroyed.'))
 
 s.append(H2('4.5 Finding your way around'))
 s.append(table([
@@ -1053,11 +1092,39 @@ s.append(table([
         'organisation&apos;s code to confirm, because it takes the data with it.'),
     trb('Support Tickets', 'Every ticket from every organisation, with internal notes that the customer never sees.'),
     trb('Settings', 'Platform-wide defaults for new organisations, and the platform administrator accounts. An '
-        'administrator cannot delete their own account.'),
+        'administrator cannot delete their own account. Also holds the Messaging and Maintenance tabs below.'),
+    trb('Settings &gt; Messaging', 'The text-message gateway and the one-time-code policy: how long a code lasts, '
+        'how many wrong attempts are allowed, how long before another may be requested, and the registered sender '
+        'and template details the mobile operator requires. It shows the last twenty delivery attempts, and a Test '
+        'Connection button that sends a real message so the settings are proved before anybody depends on them. '
+        'Code sign-in cannot be switched on while the gateway could not actually deliver.'),
+    trb('Settings &gt; Maintenance', 'Puts the whole platform on hold while an update is carried out. See below.'),
 ], [4.6 * cm, 12.4 * cm], header=False))
 s.extend(callout('Suspending an organisation blocks sign-in, it does not delete anything',
                  'Everybody in that organisation is refused at the sign-in page until it is reactivated, and all of '
                  'its data is exactly as it was when it comes back.'))
+
+s.append(H2('12.1 Maintenance mode'))
+s.append(P(
+    'Maintenance mode puts the entire platform on hold so that developers can work on an update without anybody '
+    'using the tool underneath them. Switch it on from <b>Settings &gt; Maintenance</b>. While it is on:'))
+s.extend(bl([
+    'Nobody from any organisation can sign in - by password or by one-time code.',
+    'Sessions that were already open stop working on their next action, so a person part-way through a screen is '
+    'stopped rather than left to save into a system being changed.',
+    'The sign-in page shows a notice explaining that the platform is under maintenance and to check with the '
+    'platform administrator. You can write your own wording; leave it blank for the standard sentence.',
+    'IFQM platform administrators are unaffected. They can still sign in and use the whole console.',
+]))
+s.append(P(
+    'That last point is the reason the feature is safe to use: the screen you would need in order to turn it off '
+    'keeps working. Turning it on asks you to confirm, because it interrupts every customer at once; turning it off '
+    'does not, because it restores service. The panel shows how long the platform has been on hold, so a window '
+    'somebody forgot to close is visible rather than something to remember.'))
+s.extend(callout('Signing out still works during maintenance',
+                 'Somebody whose session is being refused can still sign out cleanly and land on the sign-in screen, '
+                 'where the notice is. Leaving them holding a session that every other screen rejects would be a '
+                 'worse dead end than the one being prevented.'))
 
 # ══════════════════════════ 13. SECURITY ═══════════════════════════════════
 s.append(PageBreak())
@@ -1108,6 +1175,23 @@ faq = [
     ('It says my account has been deactivated.',
      'Your administrator has switched the account off, usually because of a role change or an exit process. Only they '
      'can switch it back on.'),
+    ('The sign-in page says the platform is under maintenance.',
+     'IFQM is working on an update and has put the platform on hold deliberately. Nobody in any organisation can '
+     'sign in until it is finished. Nothing has been lost and nothing is broken - wait, or check with the platform '
+     'administrator for how long it is expected to last.'),
+    ('My one-time code has not arrived.',
+     'Give it a minute; a text can take longer than an email. Check that the number or address you typed is the one '
+     'your organisation registered - a code goes only to what is on file. If you asked twice, only the newest code '
+     'works, because requesting a new one cancels the previous one. If nothing arrives at all, sign in with your '
+     'password instead and tell your administrator, who can ask IFQM to check the gateway.'),
+    ('My code is refused even though I typed it correctly.',
+     'Codes last five minutes and can be used once. If you have requested another since, the earlier one stopped '
+     'working the moment the new one was issued - use the most recent message. After five wrong attempts the code is '
+     'destroyed and you need a fresh one.'),
+    ('The registration form will not let me submit.',
+     'Both the email address and the mobile number have to be verified first: use Send OTP beside each, then Verify '
+     'OTP with the code. The form tells you honestly if a code could not be sent, so if it says so, check the '
+     'address or number for a typo and try again.'),
     ('It keeps sending me to the change-password screen.',
      'You are still on the temporary password. Nothing else will open until you set a new one of at least twelve '
      'characters.'),
