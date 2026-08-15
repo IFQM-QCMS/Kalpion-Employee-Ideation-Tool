@@ -78,7 +78,23 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && !isAuthEndpoint(err.config?.url)) {
+    /*
+     * A 401 means "your session went away" ONLY if there was a session.
+     *
+     * On a public page there is no token to expire, so a 401 is the endpoint
+     * answering the question it was asked — "that code is wrong" — and throwing
+     * the visitor back to the landing page is the wrong response to it. The
+     * registration form was doing exactly that: verifyCode() answers a bad or
+     * not-yet-sent OTP with 401, so mistyping a digit navigated away and
+     * destroyed every field the applicant had filled in, with no explanation.
+     *
+     * Checking for a token first is what makes this robust. An endpoint list
+     * has to be remembered every time a public route is added, and forgetting
+     * costs a user their half-finished form; the presence of a session is the
+     * thing actually being asserted.
+     */
+    const hadSession = !!localStorage.getItem('ifqm_token');
+    if (err.response?.status === 401 && hadSession && !isPublicEndpoint(err.config?.url)) {
       localStorage.removeItem('ifqm_token');
       localStorage.removeItem('ifqm_org');
       if (!window.location.pathname.startsWith('/login') && window.location.pathname !== '/') {
@@ -89,11 +105,20 @@ api.interceptors.response.use(
   }
 );
 
-// The login call itself returns 401 on bad credentials — that must surface as a
-// form error, not a redirect loop.
-function isAuthEndpoint(url = '') {
-  return url.includes('/auth/login') || url.includes('/auth/reset-password') ||
-         url.includes('/auth/forgot-password');
+/*
+ * Endpoints whose 401 is an answer, not an expiry — they must surface as a form
+ * error rather than a redirect, even for somebody who happens to be signed in.
+ *
+ * Login returns 401 on bad credentials. The one-time-code and verification
+ * routes return it on a wrong, expired or unrequested code, which is the normal
+ * way those forms are used and not a reason to sign anybody out.
+ */
+function isPublicEndpoint(url = '') {
+  return [
+    '/auth/login', '/auth/reset-password', '/auth/forgot-password',
+    '/auth/otp/', '/auth/password-reset/', '/auth/check-reset-token',
+    '/registrations/',
+  ].some((p) => url.includes(p));
 }
 
 export default api;

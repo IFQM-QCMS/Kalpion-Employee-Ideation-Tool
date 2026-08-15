@@ -231,6 +231,13 @@ CREATE TABLE IF NOT EXISTS tenant_registrations (
   contact_designation   VARCHAR(120) NULL,
   contact_email         VARCHAR(255) NOT NULL,
   contact_phone         VARCHAR(20)  NULL,
+  -- Whether the applicant proved they hold the address and the number they gave
+  -- (migration 022, folded in here so a new registry starts complete). Recorded
+  -- on the application rather than inferred later: the codes expire and are
+  -- pruned, so an approver reading the queue next week would otherwise have no
+  -- way to tell a verified application from an unverified one.
+  contact_email_verified TINYINT(1)  NOT NULL DEFAULT 0,
+  contact_phone_verified TINYINT(1)  NOT NULL DEFAULT 0,
   accepted_terms        TINYINT(1)   NOT NULL DEFAULT 0,
   status                ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
   review_note           TEXT         NULL,
@@ -293,11 +300,29 @@ CREATE TABLE IF NOT EXISTS login_otps (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   identifier    VARCHAR(255) NOT NULL,
   id_type       ENUM('phone','email') NOT NULL DEFAULT 'phone',
+  -- How the code actually travelled, which is a different question from what
+  -- the identifier looks like: somebody who typed a number can still be sent an
+  -- email when the gateway is down. Stamped after the send, so it records what
+  -- happened rather than what was intended.
+  channel       VARCHAR(16)  NULL DEFAULT NULL,
   code_hash     VARCHAR(255) NOT NULL,
   tenant_id     INT          NULL,
   tenant_slug   VARCHAR(50)  NULL,
   user_id       INT          NULL,
-  purpose       ENUM('login','dev_access') NOT NULL DEFAULT 'login',
+  /*
+   * VARCHAR rather than an ENUM (migration 022, folded in here so a new
+   * registry starts complete).
+   *
+   * This was ENUM('login','dev_access'). Every later use of a one-time code —
+   * registration_verify, registration_phone, password_reset, phone_verify —
+   * then failed at the database with "Data truncated for column 'purpose'" and
+   * answered 500, at the far end of a feature that looked finished. A fresh
+   * install built from this file alone reproduced that bug even after the
+   * migration existed, because the migration only ever ran on registries that
+   * predated it. The accepted set is enforced in verificationService, where it
+   * can name the values it allows.
+   */
+  purpose       VARCHAR(32)  NOT NULL DEFAULT 'login',
   -- Wrong guesses against THIS code. Without a per-code counter a six-digit
   -- code is a million guesses and an attacker has the whole window to try them.
   attempts      TINYINT      NOT NULL DEFAULT 0,
@@ -306,7 +331,10 @@ CREATE TABLE IF NOT EXISTS login_otps (
   requested_ip  VARCHAR(45)  NULL,
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_otp_identifier (identifier, expires_at),
-  INDEX idx_otp_expiry (expires_at)
+  INDEX idx_otp_expiry (expires_at),
+  -- Registration asks "was this address verified in the last half hour", which
+  -- is a lookup by identifier + purpose over consumed rows.
+  INDEX idx_otp_purpose (identifier, purpose, consumed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- One-time-code policy. Settings rather than constants so the validity window

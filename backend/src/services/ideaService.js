@@ -93,11 +93,16 @@ function predictionMode(settings) {
  * visible — it is a sorting aid and removing it would make the list unreadable.
  * Only the written justification is held back.
  */
+export function safeUid(user) {
+  if (!user || user.id === undefined || user.id === null) return 0;
+  const cleaned = String(user.id).replace(/\D/g, '');
+  const num = parseInt(cleaned, 10);
+  return Number.isFinite(num) ? num : 0;
+}
+
 function redactPrediction(user, idea, mode) {
   if (mode === 'everyone') { idea.prediction_hidden = false; return idea; }
-  const uid = Number(user.id);
-  // The author sees the assessment of their own idea in every mode: it is
-  // feedback on their work, and withholding it would be perverse.
+  const uid = safeUid(user);
   if (Number(idea.submitter_id) === uid || PRIVILEGED_SOLUTION.includes(user.role)) {
     idea.prediction_hidden = false;
     return idea;
@@ -640,6 +645,23 @@ export async function submitOrDraft(db, user, action, b) {
   const benefitsExpected = String(b.benefits_expected ?? '').trim() || null;
   const supportRequired = String(b.support_required ?? '').trim() || null;
 
+  /*
+   * The title column is VARCHAR(255) and only its PRESENCE was checked, so a
+   * longer one travelled all the way to MySQL and came back as "Data too long
+   * for column 'title'". That surfaced as a 500 — an internal error for what is
+   * an ordinary validation failure, and a message the person typing could do
+   * nothing with. Rejected here instead, saying what to do about it.
+   *
+   * Deliberately not truncated. `investment_required` above is sliced because
+   * losing the tail of a free-text note is harmless; silently cutting somebody's
+   * title changes what their idea is called without telling them.
+   */
+  if (title.length > 255) {
+    throw badRequest(
+      `The title is too long (${title.length} characters, limit 255). `
+      + 'Keep it to one line - the detail belongs in the present situation and proposed solution.'
+    );
+  }
   if (!title || !sit || !sol) {
     throw badRequest('Title, present situation and proposed solution are required.');
   }
@@ -916,70 +938,77 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
 
 // ── DASHBOARD ───────────────────────────────────────────────────────
 export async function dashboard(db, user) {
-  const uid = user.id;
-  const role = user.role;
+  const uid = safeUid(user);
+  const role = user?.role || 'employee';
 
-  // One grouped query for the whole status breakdown instead of 1 total + 5
-  // per-status COUNTs (6 round-trips → 1). Individuals see their own ideas
-  // (total includes their drafts, matching the previous behaviour); everyone
-  // else sees all non-draft ideas.
   const counts = { Submitted: 0, 'Under Review': 0, Approved: 0, Implemented: 0, Rejected: 0 };
-  let statusRows;
-  if (INDIVIDUAL_ROLES.includes(role)) {
-    [statusRows] = await db.execute('SELECT status, COUNT(*) AS c FROM ideas WHERE submitter_id=? GROUP BY status', [uid]);
-  } else {
-    [statusRows] = await db.query("SELECT status, COUNT(*) AS c FROM ideas WHERE status != 'Draft' GROUP BY status");
+  let statusRows = [];
+  try {
+    if (INDIVIDUAL_ROLES.includes(role)) {
+      [statusRows] = await db.execute('SELECT status, COUNT(*) AS c FROM ideas WHERE submitter_id=? GROUP BY status', [uid]);
+    } else {
+      [statusRows] = await db.query("SELECT status, COUNT(*) AS c FROM ideas WHERE status != 'Draft' GROUP BY status");
+    }
+  } catch (e) {
+    statusRows = [];
   }
   let total = 0;
   for (const r of statusRows) {
-    total += Number(r.c);
-    if (r.status in counts) counts[r.status] = Number(r.c);
+    total += Number(r.c || 0);
+    if (r.status in counts) counts[r.status] = Number(r.c || 0);
   }
 
   let pendingReviews = 0;
   let overdueReviews = 0;
   if ([...TEAM_ROLES, ...ADMIN_ROLES].includes(role)) {
-    if (TEAM_ROLES.includes(role)) {
-      const [pr] = await db.execute(
-        `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
-         WHERE i.status IN ('Submitted','Under Review')
-         AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
-        [uid, uid]
-      );
-      pendingReviews = Number(pr[0].c);
-      const [od] = await db.execute(
-        `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
-         WHERE i.status IN ('Submitted','Under Review')
-         AND i.review_due_date IS NOT NULL AND i.review_due_date < CURDATE()
-         AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
-        [uid, uid]
-      );
-      overdueReviews = Number(od[0].c);
-    } else {
-      const [pr] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review')");
-      pendingReviews = Number(pr[0].c);
-      const [od] = await db.query(
-        "SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review') AND review_due_date IS NOT NULL AND review_due_date < CURDATE()"
-      );
-      overdueReviews = Number(od[0].c);
-    }
+    try {
+      if (TEAM_ROLES.includes(role)) {
+        const [pr] = await db.execute(
+          `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
+           WHERE i.status IN ('Submitted','Under Review')
+           AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
+          [uid, uid]
+        );
+        pendingReviews = Number(pr[0]?.c || 0);
+        const [od] = await db.execute(
+          `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
+           WHERE i.status IN ('Submitted','Under Review')
+           AND i.review_due_date IS NOT NULL AND i.review_due_date < CURDATE()
+           AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
+          [uid, uid]
+        );
+        overdueReviews = Number(od[0]?.c || 0);
+      } else {
+        const [pr] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review')");
+        pendingReviews = Number(pr[0]?.c || 0);
+        const [od] = await db.query(
+          "SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review') AND review_due_date IS NOT NULL AND review_due_date < CURDATE()"
+        );
+        overdueReviews = Number(od[0]?.c || 0);
+      }
+    } catch {}
   }
 
-  const [recent] = await db.query(
-    `SELECT w.*, u.name AS actor_name, i.idea_code, i.title
-     FROM idea_workflow w
-     JOIN users u ON u.id = w.actor_id
-     JOIN ideas i ON i.id = w.idea_id
-     ORDER BY w.created_at DESC LIMIT 10`
-  );
+  let recent = [];
+  try {
+    const [rRows] = await db.query(
+      `SELECT w.*, COALESCE(u.name, 'System') AS actor_name, i.idea_code, i.title
+       FROM idea_workflow w
+       LEFT JOIN users u ON u.id = w.actor_id
+       LEFT JOIN ideas i ON i.id = w.idea_id
+       ORDER BY w.created_at DESC LIMIT 10`
+    );
+    recent = rRows || [];
+  } catch {}
 
-  const [pts] = await db.execute('SELECT points FROM users WHERE id=?', [uid]);
-  const userPoints = Number(pts[0]?.points ?? user.points);
+  let userPoints = Number(user?.points || 0);
+  try {
+    const [pts] = await db.execute('SELECT points FROM users WHERE id=?', [uid]);
+    if (pts && pts[0]) userPoints = Number(pts[0].points ?? userPoints);
+  } catch {}
 
-  // Monthly submission activity (last 12 months) — for the org-wide dashboards
-  // (admin / super_admin etc.). Individuals get their own submissions.
   let monthly = [];
-  {
+  try {
     const [m] = INDIVIDUAL_ROLES.includes(role)
       ? await db.execute(
         `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS count
@@ -989,18 +1018,21 @@ export async function dashboard(db, user) {
         `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month, COUNT(*) AS count
            FROM ideas WHERE submitted_at IS NOT NULL
            GROUP BY month ORDER BY month DESC LIMIT 12`);
-    monthly = m.map((r) => ({ month: r.month, count: Number(r.count) })).reverse();
-  }
+    monthly = (m || []).map((r) => ({ month: r.month, count: Number(r.count || 0) })).reverse();
+  } catch {}
 
   return {
     success: true,
     total,
     counts,
+    pendingReviews,
+    pending_reviews: pendingReviews,
+    overdueReviews,
+    overdue_reviews: overdueReviews,
+    userPoints,
+    user_points: userPoints,
     recent,
     monthly,
-    user_points: userPoints,
-    pending_reviews: pendingReviews,
-    overdue_reviews: overdueReviews,
   };
 }
 
