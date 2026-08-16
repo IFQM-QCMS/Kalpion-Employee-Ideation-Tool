@@ -1399,3 +1399,54 @@ test('profile: a user may fix their own details but cannot promote themselves', 
   assert.equal(phone.status, 400);
   assert.match(phone.data.error, /verify the new one/i);
 });
+
+/*
+ * The organisation logo has to outlive a restart.
+ *
+ * It did not: the PNG was written to uploads/<slug>/ and only its FILENAME was
+ * kept in the registry. This deployment's disk is ephemeral and its instances
+ * sleep when idle, so every wake was a fresh container with an empty uploads
+ * folder — the row still pointed confidently at a file that no longer existed,
+ * and the sidebar quietly fell back to the default mark.
+ *
+ * It also explains why an admin kept seeing their logo while employees did not:
+ * the upload response carries the image back, so the person who uploaded it was
+ * looking at the bytes they had just sent, not at anything stored.
+ */
+test('branding: an uploaded logo survives the uploads folder being wiped', async () => {
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+
+  await sql('ifqm_test_master',
+    'ALTER TABLE ifqm_test_master.tenants ADD COLUMN logo_blob MEDIUMBLOB NULL DEFAULT NULL')
+    .catch(() => { /* already there on a re-run */ });
+
+  const admin = await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga');
+  const employee = await login('user@orga.test', PASSWORDS.orgaUser, 'orga');
+
+  const fd = new FormData();
+  fd.append('logo', new Blob([tinyPng()], { type: 'image/png' }), 'logo.png');
+  const up = await api('POST', '/api/branding/logo', { token: admin.token, raw: fd });
+  assert.equal(up.status, 200);
+
+  // An employee must see it at all — this is the sidebar for everybody, not
+  // just for whoever uploaded it.
+  let seen = await api('GET', '/api/branding', { token: employee.token });
+  assert.ok(seen.data?.branding?.logo, 'an employee must see the organisation logo');
+
+  // The restart, simulated exactly: the folder goes away, the registry stays.
+  await fs.rm(path.resolve('uploads'), { recursive: true, force: true }).catch(() => {});
+
+  seen = await api('GET', '/api/branding', { token: employee.token });
+  assert.ok(seen.data?.branding?.logo,
+    'the logo must survive the uploads folder being wiped — it lives in the registry');
+
+  const asAdmin = await api('GET', '/api/branding', { token: admin.token });
+  assert.ok(asAdmin.data?.branding?.logo, 'and it must still be there for the admin on a fresh read');
+
+  // Removing it must clear the bytes, not just the filename, or it comes back.
+  const del = await api('DELETE', '/api/branding/logo', { token: admin.token });
+  assert.equal(del.status, 200);
+  const gone = await api('GET', '/api/branding', { token: employee.token });
+  assert.ok(!gone.data?.branding?.logo, 'a removed logo must not reappear from the stored bytes');
+});

@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS tenants (
   status        ENUM('active','suspended','pending') NOT NULL DEFAULT 'active',
   is_default    TINYINT(1) NOT NULL DEFAULT 0,
   logo_url      VARCHAR(500) NULL,
+  -- The logo BYTES, not just its filename (migration 023, folded in so a new
+  -- registry starts complete). The file on disk is a cache: this deployment's
+  -- disk is ephemeral, so a logo that lived only there reverted to the default
+  -- mark on every restart while its row sat there looking correct. Capped at
+  -- 1MB on upload, against a 16MB column.
+  logo_blob     MEDIUMBLOB   NULL DEFAULT NULL,
   primary_color VARCHAR(7)   NOT NULL DEFAULT '#4f46e5',
   -- When anybody from this organisation last signed in. Reported, never
   -- enforced: the platform console shows which organisations have gone quiet

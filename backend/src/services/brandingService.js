@@ -52,8 +52,44 @@ function assertRegistryTenant(tenant) {
   }
 }
 
-/** Read the tenant's logo off disk and inline it. Returns null when unset/missing. */
+/**
+ * The tenant's logo, inlined as a data: URI. Null when unset.
+ *
+ * The registry is the source of truth and the disk is a cache — the other way
+ * round from how this started, and the reason an uploaded logo used to revert
+ * to the default mark. The bytes lived only under uploads/, this deployment's
+ * disk does not survive a restart, and the row kept pointing confidently at a
+ * file that was no longer there.
+ *
+ * Disk is still tried, for two cases: a registry that has not run migration 023
+ * yet, and a logo uploaded before it did. Anything found that way is written
+ * back into the registry, so the next restart is the last one that can lose it.
+ */
 async function readLogoDataUri(tenant) {
+  /*
+   * Fetched here by id, deliberately NOT taken off the resolved tenant row.
+   *
+   * resolveTenant does `SELECT * FROM tenants` on every authenticated request
+   * and nothing caches it, so leaving the blob in that row would put up to a
+   * megabyte on the wire for every page load, every poll and every save — to
+   * render a logo that only the branding call actually wants. One extra query
+   * on the branding path is the cheaper side of that trade by a wide margin.
+   */
+  if (tenant?.id) {
+    try {
+      const [[row]] = await masterDb().execute(
+        'SELECT logo_blob FROM tenants WHERE id = ? LIMIT 1', [tenant.id]
+      );
+      if (row?.logo_blob?.length) {
+        return `data:image/png;base64,${Buffer.from(row.logo_blob).toString('base64')}`;
+      }
+    } catch (e) {
+      // A registry that predates migration 023 has no such column. Fall through
+      // to disk rather than failing the whole branding read.
+      logger.warn(`branding: logo_blob unavailable (${e.code || e.message}) — falling back to disk`);
+    }
+  }
+
   let logoFile = tenant?.logo_url;
   const dir = await tenantUploadDir(tenant?.slug);
 
@@ -76,6 +112,13 @@ async function readLogoDataUri(tenant) {
   if (!logoFile) return null;
   try {
     const buffer = await fs.readFile(path.join(dir, logoFile));
+    // Found on disk but not in the registry: put it somewhere durable now,
+    // rather than rediscovering the same file until the day it is gone.
+    if (tenant?.id) {
+      await masterDb().execute(
+        'UPDATE tenants SET logo_blob = ? WHERE id = ?', [buffer, tenant.id]
+      ).catch((e) => logger.warn(`branding: could not cache logo into the registry — ${e.message}`));
+    }
     return `data:image/png;base64,${buffer.toString('base64')}`;
   } catch {
     logger.warn(`Branding logo missing on disk for tenant "${tenant?.slug}": ${logoFile}`);
@@ -131,18 +174,23 @@ export async function updateLogo(tenant, file) {
   const dir = await tenantUploadDir(tenant.slug);
   const safeName = `logo_${Date.now().toString(16)}${crypto.randomBytes(7).toString('hex')}.png`;
 
+  // The registry write is the one that must succeed: it is the only storage
+  // here that survives a restart. The file is a cache, so a disk that refuses
+  // the write is logged and shrugged off rather than failing the upload — the
+  // logo is saved either way.
+  const previous = tenant.logo_url;
   try {
-    await fs.writeFile(path.join(dir, safeName), file.buffer);
+    await masterDb().execute(
+      'UPDATE tenants SET logo_url = ?, logo_blob = ?, logo_updated_at = NOW() WHERE id = ?',
+      [safeName, file.buffer, tenant.id]
+    );
   } catch (err) {
-    logger.error(`Failed to write branding logo for tenant "${tenant.slug}"`, err);
+    logger.error(`Failed to save branding logo for tenant "${tenant.slug}"`, err);
     throw new ApiError(500, 'Failed to save logo.');
   }
 
-  const previous = tenant.logo_url;
-  await masterDb().execute(
-    'UPDATE tenants SET logo_url = ?, logo_updated_at = NOW() WHERE id = ?',
-    [safeName, tenant.id]
-  );
+  await fs.writeFile(path.join(dir, safeName), file.buffer)
+    .catch((err) => logger.warn(`branding: logo cached to disk failed for "${tenant.slug}" — ${err.message}`));
 
   // Best-effort: the registry is already updated, so an orphaned old file is
   // clutter, not a failure the admin needs to see.
@@ -159,7 +207,9 @@ export async function removeLogo(tenant) {
 
   const previous = tenant.logo_url;
   await masterDb().execute(
-    'UPDATE tenants SET logo_url = NULL, logo_updated_at = NOW() WHERE id = ?',
+    // logo_blob too — clearing only the filename would leave the bytes behind
+    // and the logo would reappear on the next read.
+    'UPDATE tenants SET logo_url = NULL, logo_blob = NULL, logo_updated_at = NOW() WHERE id = ?',
     [tenant.id]
   );
 
