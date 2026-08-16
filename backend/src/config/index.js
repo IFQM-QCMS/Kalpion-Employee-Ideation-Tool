@@ -175,6 +175,27 @@ const config = {
      * free instances do, which is why mail works locally and not there.
      */
     apiKey: (process.env.PLATFORM_MAIL_API_KEY || '').trim(),
+    /*
+     * Which route to send by: 'auto' | 'api' | 'smtp'.
+     *
+     * 'auto' (the default) tries SMTP and falls through to the HTTPS API when
+     * SMTP cannot be reached. That is right where SMTP usually works, because
+     * SMTP is the cheaper path and the fallback is only a rescue.
+     *
+     * 'api' skips SMTP altogether. On a host that BLOCKS outbound SMTP the port
+     * does not refuse, it hangs, so 'auto' pays the full connection timeout on
+     * the first send in every cooldown window - sixteen seconds of somebody
+     * waiting on a registration form for a route that was never going to work.
+     * Where the block is known rather than suspected, saying so is better than
+     * rediscovering it on a timer.
+     *
+     * 'smtp' refuses to fall back, for a deployment that must not have mail
+     * leaving by a second route.
+     */
+    transport: ['auto', 'api', 'smtp']
+      .includes((process.env.PLATFORM_MAIL_TRANSPORT || '').trim().toLowerCase())
+      ? process.env.PLATFORM_MAIL_TRANSPORT.trim().toLowerCase()
+      : 'auto',
   },
 
   /*

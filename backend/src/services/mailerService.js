@@ -24,6 +24,15 @@ import { mailConfig, sendZeptoMail } from './zeptoMailService.js';
  * reports itself ready is how sign-in codes end up silently going nowhere.
  */
 export function platformMailReady(cfg = config.platformMail) {
+  /*
+   * "Can this deployment send mail at all?"
+   *
+   * On PLATFORM_MAIL_TRANSPORT=api there may be no SMTP account configured at
+   * all, and requiring one would report a perfectly working deployment as
+   * unable to send - which hides the code option on the sign-in screen and
+   * refuses registration codes. What is needed there is a token and a sender.
+   */
+  if (cfg.transport === 'api') return !!(cfg.apiKey && cfg.from);
   return !!(cfg.host && cfg.user && cfg.pass && cfg.from);
 }
 
@@ -185,7 +194,25 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
 }
 
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
-  const { host, port, from, fromName } = config.platformMail;
+  const { host, port, from, fromName, transport } = config.platformMail;
+
+  /*
+   * HTTPS only, because this host is known to block SMTP.
+   *
+   * Distinct from the cooldown below, which DISCOVERS the block by waiting out
+   * a connection timeout and then remembering. Discovery costs sixteen seconds
+   * of somebody watching a registration form, once per cooldown window and
+   * again after every idle period — on a host where the answer is already
+   * known. Being told is better than being made to find out on a timer.
+   */
+  if (transport === 'api') {
+    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
+    throw new Error(
+      'Platform mail could not be sent. PLATFORM_MAIL_TRANSPORT is "api", so SMTP '
+      + 'was not attempted - check PLATFORM_MAIL_API_KEY holds the provider\'s API '
+      + 'token (not the SMTP password) and that the sender domain is still verified.'
+    );
+  }
 
   // SMTP is known unreachable — go straight over HTTPS rather than making the
   // caller wait out the connection timeout again.
@@ -248,13 +275,22 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
  */
 export async function verifyPlatformMail() {
   if (!platformMailReady()) return { ok: false, detail: 'not configured' };
+  /*
+   * On the API transport there is nothing to verify by opening a socket, and
+   * probing SMTP would report "NOT working" at every boot for a deployment
+   * that sends perfectly well over 443. A send is not attempted here either -
+   * a health check that emails somebody is not a health check.
+   */
+  if (config.platformMail.transport === 'api') {
+    return { ok: true, detail: 'HTTPS API (SMTP not attempted)' };
+  }
   try {
     await getPlatformTransport().verify();
     return { ok: true, detail: `${config.platformMail.host}:${config.platformMail.port}` };
   } catch (e) {
     // If SMTP times out (e.g. Render/Cloud host firewall blocking port 587), check HTTPS REST API on port 443!
     try {
-      const apiKey = config.platformMail.pass || config.platformMail.user;
+      const apiKey = config.platformMail.apiKey || config.platformMail.pass || config.platformMail.user;
       const httpRes = await fetch('https://api.zeptomail.in/v1.1/email', {
         method: 'POST',
         headers: {
