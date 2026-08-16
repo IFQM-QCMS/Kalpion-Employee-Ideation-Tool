@@ -164,7 +164,7 @@ export default function BoardPage() {
                   {i.solution_summary && (
                     <div style={{ fontSize:12.5,color:'var(--text-muted)',marginTop:4 }}>
                       {i.solution_summary}
-                      {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">🔒</span>}
+                      {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">Protected</span>}
                     </div>
                   )}
                   <div style={{ display:'flex',gap:8,marginTop:8,alignItems:'center',flexWrap:'wrap' }}>

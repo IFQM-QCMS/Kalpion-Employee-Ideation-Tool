@@ -47,17 +47,44 @@ function classifyNetwork(ip) {
  * machine's own setting, so this is a signal ("someone signed in on a European
  * clock at 3am") and not evidence of where anybody was.
  */
+/*
+ * The country a time zone belongs to, for the zones this platform actually
+ * sees. Not exhaustive and not meant to be — anything unlisted falls back to
+ * the city, which is still a place.
+ *
+ * Calcutta and Kolkata are the same zone under two names; browsers disagree
+ * about which they report, and showing both made one person look like two.
+ */
+const ZONE_COUNTRY = {
+  'Asia/Kolkata': 'India', 'Asia/Calcutta': 'India',
+  'Asia/Colombo': 'Sri Lanka', 'Asia/Kathmandu': 'Nepal', 'Asia/Dhaka': 'Bangladesh',
+  'Asia/Karachi': 'Pakistan', 'Asia/Dubai': 'UAE', 'Asia/Singapore': 'Singapore',
+  'Europe/London': 'United Kingdom', 'America/New_York': 'United States',
+  'America/Los_Angeles': 'United States', 'America/Chicago': 'United States',
+  'Australia/Sydney': 'Australia', 'Asia/Tokyo': 'Japan', 'Asia/Shanghai': 'China',
+};
+
+/**
+ * A readable place from the browser's time zone.
+ *
+ * This used to store the zone itself with its offset - "Asia/Calcutta
+ * (GMT+5:30)" - under a column headed Location. That is a time zone, not a
+ * location: it names an offset rule, it reads as machine output, and every
+ * Indian user looked identical to every other. The city inside the zone is a
+ * real place and is what the column claims to show, so that is what is stored.
+ *
+ * Still approximate, and deliberately so. It comes from a setting the browser
+ * volunteers, not from tracing the address, so no third-party geolocation
+ * service is ever asked where anybody is.
+ */
 function describeLocation(timeZone) {
   const tz = String(timeZone || '').trim().slice(0, 60);
   if (!tz || !/^[A-Za-z_+\-0-9/]+$/.test(tz)) return null;
-  try {
-    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, timeZoneName: 'shortOffset' })
-      .formatToParts(new Date());
-    const offset = parts.find((x) => x.type === 'timeZoneName')?.value;
-    return offset ? `${tz.replace(/_/g, ' ')} (${offset})` : tz.replace(/_/g, ' ');
-  } catch {
-    return null;                 // an unknown zone name is simply not recorded
-  }
+  const canonical = tz === 'Asia/Calcutta' ? 'Asia/Kolkata' : tz;
+  const city = canonical.split('/').pop().replace(/_/g, ' ');
+  if (!city) return null;
+  const country = ZONE_COUNTRY[tz] || ZONE_COUNTRY[canonical];
+  return country ? `${city}, ${country}` : city;
 }
 
 /**

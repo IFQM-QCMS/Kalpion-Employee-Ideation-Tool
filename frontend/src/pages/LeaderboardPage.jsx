@@ -28,9 +28,10 @@ function EngBadge({ aiScore, avgRating, voteCount, t }) {
   );
 }
 
-/* Medals for the top three. Rank 1 gets the trophy; 4th and beyond get a plain
-   number, because a medal on everyone is a medal on no one. */
-const MEDAL = ['🏆', '🥈', '🥉'];
+/* Rank numerals for the top three. Emoji medals were removed from every
+   dashboard: they render differently on each platform, carry no meaning to a
+   screen reader, and read as decoration on a screen about people's work. */
+const MEDAL = ['1st', '2nd', '3rd'];
 
 /**
  * Podium for the top three, ordered 2 – 1 – 3 so the winner stands centre and
@@ -289,8 +290,8 @@ export default function LeaderboardPage() {
                           </div>
                           {(u.avg_community_rating > 0 || u.total_votes_received > 0) && (
                             <div style={{ marginTop:4,fontSize:11,color:'var(--subtle)',display:'flex',gap:6 }}>
-                              {u.avg_community_rating > 0 && <span>⭐ {parseFloat(u.avg_community_rating).toFixed(1)}</span>}
-                              {u.total_votes_received > 0 && <span>🗳 {u.total_votes_received}</span>}
+                              {u.avg_community_rating > 0 && <span>{parseFloat(u.avg_community_rating).toFixed(1)} avg rating</span>}
+                              {u.total_votes_received > 0 && <span>{u.total_votes_received} votes</span>}
                             </div>
                           )}
                         </div>

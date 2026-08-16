@@ -63,6 +63,26 @@ function suggestQuota(maxUsers) {
    in it and one long form makes people miss the ones that matter. */
 const STEPS = ['Info', 'Pricing', 'Limits', 'Review'];
 
+/*
+ * Defined at module scope, NOT inside PlanConfigurator.
+ *
+ * It used to live inside the component, which meant every keystroke produced a
+ * brand-new function identity for `Field`. React compares element types by
+ * identity, so a new type is a different component: it unmounted the old
+ * subtree and mounted a fresh one, and the <input> inside lost focus on every
+ * character. The form could only be filled one letter at a time, clicking back
+ * into the box between each.
+ *
+ * Anything that renders inputs has to keep a stable identity across renders.
+ */
+const Field = ({ label, children, hint, required }) => (
+  <div className="form-group">
+    <label>{label}{required && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>*</span>}</label>
+    {children}
+    {hint && <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>{hint}</div>}
+  </div>
+);
+
 function PlanConfigurator({ plan, onClose, onSaved }) {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -93,6 +113,27 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
   const set = (k) => (e) => {
     const v = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
     setForm((f) => ({ ...f, [k]: v }));
+    setError('');
+  };
+
+  /*
+   * Numeric fields accept digits only, filtered as they are typed.
+   *
+   * inputMode="numeric" is a hint to a phone's keyboard and nothing more: on a
+   * desktop it does not stop a single letter. The amount field accepted text,
+   * which was then stripped to 0 on save - so a plan could be created for free
+   * because somebody typed the price with the currency name in it and nothing
+   * said otherwise. Filtering on the way in means what is on screen is always
+   * what will be stored.
+   */
+  const setNum = (k, { decimal = false } = {}) => (e) => {
+    const raw = String(e.target.value);
+    const cleaned = decimal
+      // One decimal point at most; later ones are dropped rather than rejected,
+      // so a stray keypress does not wipe what was already typed.
+      ? raw.replace(/[^0-9.]/g, '').replace(/(\.[0-9]*)\./g, '$1')
+      : raw.replace(/[^0-9]/g, '');
+    setForm((f) => ({ ...f, [k]: cleaned }));
     setError('');
   };
 
@@ -145,16 +186,8 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
     setBusy(false);
   }
 
-  const Field = ({ label, children, hint, required }) => (
-    <div className="form-group">
-      <label>{label}{required && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>*</span>}</label>
-      {children}
-      {hint && <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>{hint}</div>}
-    </div>
-  );
-
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 720 }}>
         <div className="modal-header">
           <h3 style={{ margin: 0 }}>{editing ? `Edit ${plan.name}` : 'New Plan'}</h3>
@@ -209,7 +242,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 <Field label="Status">
                   <select className="form-control" value={form.status} onChange={set('status')}>
                     <option value="active">Active</option>
-                    <option value="inactive">Retired</option>
+                    <option value="inactive">Deleted</option>
                   </select>
                 </Field>
               </div>
@@ -228,7 +261,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
             <>
               <div className="form-row">
                 <Field label="Plan amount (₹)" required>
-                  <input className="form-control" value={form.amount_rupees} onChange={set('amount_rupees')}
+                  <input className="form-control" value={form.amount_rupees} onChange={setNum('amount_rupees', { decimal: true })}
                     placeholder="0" inputMode="decimal" />
                 </Field>
                 <Field label="Billing cycle" required>
@@ -238,7 +271,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 </Field>
               </div>
               <Field label="GST percentage (%)"><InfoDot term="gst_mode" />
-                <input className="form-control" value={form.gst_percent} onChange={set('gst_percent')}
+                <input className="form-control" value={form.gst_percent} onChange={setNum('gst_percent', { decimal: true })}
                   style={{ maxWidth: 160 }} inputMode="decimal" />
               </Field>
 
@@ -293,11 +326,11 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
               </div>
               <div className="form-row">
                 <Field label="Maximum users" hint="Empty = unlimited">
-                  <input className="form-control" value={form.max_users} onChange={set('max_users')}
+                  <input className="form-control" value={form.max_users} onChange={setNum('max_users')}
                     placeholder="Unlimited" inputMode="numeric" />
                 </Field>
                 <Field label="Storage limit (GB)" hint="Empty = unlimited">
-                  <input className="form-control" value={form.storage_gb} onChange={set('storage_gb')}
+                  <input className="form-control" value={form.storage_gb} onChange={setNum('storage_gb')}
                     placeholder="Unlimited" inputMode="numeric" />
                 </Field>
               </div>
@@ -309,7 +342,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 <label>Monthly request allowance<InfoDot term="request_allowance" /></label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input className="form-control" style={{ width: 190 }} inputMode="numeric"
-                    value={form.api_quota_monthly} onChange={set('api_quota_monthly')}
+                    value={form.api_quota_monthly} onChange={setNum('api_quota_monthly')}
                     placeholder="Unlimited" />
                   {suggestQuota(form.max_users) && (
                     <button type="button" className="btn btn-outline btn-sm"
@@ -324,14 +357,13 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                   {suggestQuota(form.max_users)
                     ? `About 15,000 requests per permitted user per month — roughly thirty times what `
                       + `ordinary use costs, so a busy month never reaches it.`
-                    : 'Empty = unlimited. With no user cap there is nothing to size an allowance from, '
-                      + 'so leaving it empty is the right answer.'}
+                    : ''}
                 </div>
               </div>
 
               <div className="form-row">
                 <Field label="Maximum departments" hint="Empty = unlimited">
-                  <input className="form-control" value={form.max_departments} onChange={set('max_departments')}
+                  <input className="form-control" value={form.max_departments} onChange={setNum('max_departments')}
                     placeholder="Unlimited" inputMode="numeric" />
                 </Field>
                 <Field label="Support level">
@@ -361,7 +393,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                     ? 'Unlimited'
                     : `${Number(form.api_quota_monthly).toLocaleString('en-IN')} / month`],
                   ['Support', SUPPORT.find(([v]) => v === form.support_level)?.[1]],
-                  ['Status', form.status === 'active' ? 'Active' : 'Retired'],
+                  ['Status', form.status === 'active' ? 'Active' : 'Deleted'],
                 ].map(([label, value]) => (
                   <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
                     <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>{label}</span>
@@ -427,8 +459,9 @@ export default function PlatformPlansPage() {
 
   async function retire(plan) {
     if (!window.confirm(
-      `Retire "${plan.name}"?\n\nIt disappears from the list an approver picks from. `
-      + `Organisations already on it stay on it, and nothing about their billing changes.`
+      `Delete "${plan.name}"?\n\nIt disappears from the list an approver picks from. `
+      + `Organisations already on it stay on it, and nothing about their billing changes - `
+      + `their price does not move and nobody is cut off.`
     )) return;
     try {
       const res = await platformApi.retirePlan(plan.id);
@@ -455,9 +488,9 @@ export default function PlatformPlansPage() {
 
   const kpis = [
     ['Total plans', counts.total, 'var(--primary)', 'var(--primary-light)'],
-    ['Active', counts.active, 'var(--success)', 'var(--success-light)'],
-    ['Retired', counts.inactive, 'var(--warning)', 'var(--warning-light)'],
-    ['Custom', counts.custom, 'var(--info)', 'var(--info-light)'],
+    ['Active plans', counts.active, 'var(--success)', 'var(--success-light)'],
+    ['Deleted plans', counts.inactive, 'var(--warning)', 'var(--warning-light)'],
+    ['Custom plans', counts.custom, 'var(--info)', 'var(--info-light)'],
   ];
 
   return (
@@ -506,7 +539,7 @@ export default function PlatformPlansPage() {
           onChange={(e) => setStatus(e.target.value)}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
-          <option value="inactive">Retired</option>
+          <option value="inactive">Deleted</option>
         </select>
         <select className="form-control" style={{ width: 170 }} value={cycle}
           onChange={(e) => setCycle(e.target.value)}>
@@ -577,14 +610,14 @@ export default function PlatformPlansPage() {
                 </td>
                 <td>
                   <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
-                    {p.status === 'active' ? 'Active' : 'Retired'}
+                    {p.status === 'active' ? 'Active' : 'Deleted'}
                   </span>
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button className="btn btn-outline btn-sm" onClick={() => setEditing(p)}>Edit</button>
                   {p.status === 'active' && (
                     <button className="btn btn-outline btn-sm" style={{ marginLeft: 6 }}
-                      onClick={() => retire(p)}>Retire</button>
+                      onClick={() => retire(p)}>Delete</button>
                   )}
                 </td>
               </tr>

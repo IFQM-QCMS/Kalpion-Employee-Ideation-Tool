@@ -23,12 +23,12 @@ export function ToastProvider({ children }) {
 
 function ToastContainer({ toasts }) {
   const colors  = { success: '#10b981', danger: '#ef4444', warning: '#f59e0b', info: '#3b82f6' };
-  const icons   = { success: '✓', danger: '✕', warning: '⚠', info: 'ℹ' };
+  const icons   = { success: 'OK', danger: '!', warning: '!', info: 'i' };
 
   if (!toasts.length) return null;
   return (
     <div style={{
-      position: 'fixed', bottom: 22, right: 22, zIndex: 9999,
+      position: 'fixed', top: 22, right: 22, zIndex: 9999,
       display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none',
     }}>
       {toasts.map(t => {

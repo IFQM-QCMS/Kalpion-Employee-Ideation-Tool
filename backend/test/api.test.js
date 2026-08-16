@@ -508,9 +508,22 @@ test('billing: a plan is priced correctly, and a lapsed organisation is held', a
   // Put org B on it with a two-day trial, then wind the clock past it.
   const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
   res = await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
-    token: PA, body: { plan_id: planId, trial_days: 2 },
+    token: PA, body: { plan_id: planId, trial_days: 0 },
   });
   assert.equal(res.status, 200);
+
+  /*
+   * A paid plan cannot carry a trial period any more: an evaluation runs on the
+   * Trial plan, and a paid plan starts paying. The dates are therefore written
+   * straight onto the row so that the grace and expiry arithmetic below is
+   * exercised exactly as before.
+   */
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenants
+        SET billing_status = 'trial', trial_days = 2,
+            trial_ends_at = DATE_ADD(NOW(), INTERVAL 2 DAY),
+            period_end = DATE_ADD(NOW(), INTERVAL 2 DAY)
+      WHERE id = ${orgb.id}`);
 
   res = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: PA });
   assert.equal(res.data.subscription.days_left, 2);
@@ -596,7 +609,7 @@ test('billing: an organisation on hold can still sign in and pay — and do noth
   // On a plan, because recording a payment for an organisation nobody has
   // priced is refused — and this test ends by recording one.
   await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
-    token: PA, body: { plan_id: starter.id, trial_days: 1 },
+    token: PA, body: { plan_id: starter.id, trial_days: 0 },
   });
   await api('PUT', '/api/platform/settings/defaults', { token: PA, body: { billing_enforce: '1' } });
   await sql('ifqm_test_master',
@@ -747,7 +760,7 @@ test('the request allowance comes from the plan, and can never lock a workspace 
 
   const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
   await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
-    token: PA, body: { plan_id: planId, trial_days: 30 },
+    token: PA, body: { plan_id: planId, trial_days: 0 },
   });
 
   const setUsage = async (n) => {
@@ -759,7 +772,7 @@ test('the request allowance comes from the plan, and can never lock a workspace 
     // re-reads it. Without that a plan change takes up to a minute to be
     // believed — which is the minute the customer is watching.
     await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
-      token: PA, body: { plan_id: planId, trial_days: 30 },
+      token: PA, body: { plan_id: planId, trial_days: 0 },
     });
   };
 
@@ -1292,4 +1305,53 @@ test('maintenance: tenants are locked out, IFQM staff are not, and it reverses c
     `maintenance must be staff-only even when live (got ${tenantWhenLive.status})`);
   const stillOff = await api('GET', '/api/auth/maintenance');
   assert.equal(stillOff.data.enabled, false, 'a tenant must not be able to switch it on either');
+});
+
+/*
+ * ── The trial plan ──────────────────────────────────────────────────────────
+ *
+ * Two rules, both asked for after organisations turned up priced at Rs.50,000
+ * while showing "Trial - 14 days left": a trial runs on the Trial plan and
+ * nothing else, and the Trial plan itself cannot be deleted because every newly
+ * approved organisation is put on it.
+ */
+test('billing: a trial runs on the Trial plan, and that plan cannot be deleted', async () => {
+  const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
+  const plans = (await api('GET', '/api/platform/plans', { token: pa })).data.plans;
+  const trial = plans.find((p) => String(p.code).toUpperCase() === 'TRIAL');
+  const paid = plans.find((p) => p.tier !== 'trial' && Number(p.amount_paise) > 0);
+  assert.ok(trial, 'a Trial plan must exist for new organisations to start on');
+  assert.ok(paid, 'the fixture needs at least one priced plan');
+
+  const [orgb] = await sql('ifqm_test_master', "SELECT id FROM ifqm_test_master.tenants WHERE slug='orgb'");
+
+  // A priced plan cannot be handed a trial period.
+  const refused = await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: pa, body: { plan_id: paid.id, trial_days: 14 },
+  });
+  assert.equal(refused.status, 400);
+  assert.match(refused.data.error, /paid plan/i);
+
+  // The Trial plan can.
+  const allowed = await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: pa, body: { plan_id: trial.id, trial_days: 14 },
+  });
+  assert.equal(allowed.status, 200);
+  const sub = await api('GET', `/api/platform/tenants/${orgb.id}/subscription`, { token: pa });
+  assert.equal(sub.data.subscription.state, 'trial');
+
+  // And the same paid plan is fine the moment the trial length is zero, which
+  // is what converting a customer looks like.
+  const converted = await api('POST', `/api/platform/tenants/${orgb.id}/plan`, {
+    token: pa, body: { plan_id: paid.id, trial_days: 0 },
+  });
+  assert.equal(converted.status, 200);
+
+  // Deleting the Trial plan is refused, and it is still there afterwards.
+  const del = await api('DELETE', `/api/platform/plans/${trial.id}`, { token: pa });
+  assert.equal(del.status, 400);
+  assert.match(del.data.error, /cannot be deleted/i);
+  const after = (await api('GET', '/api/platform/plans', { token: pa })).data.plans;
+  assert.ok(after.some((p) => p.id === trial.id && p.status === 'active'),
+    'the Trial plan must survive a delete attempt, and stay active');
 });

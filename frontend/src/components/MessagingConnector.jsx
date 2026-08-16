@@ -243,7 +243,7 @@ export default function MessagingConnector() {
                 onChange={(e) => setApiKey(e.target.value)} />
               <button type="button" className="btn" onClick={() => setShowKey((s) => !s)}
                 title={showKey ? t('msgg.hide') : t('msgg.show')} style={{ flex: '0 0 auto' }}>
-                {showKey ? '🙈' : '👁'}
+                {showKey ? 'Hide' : 'Show'}
               </button>
             </div>
             {dlt.api_key_set && (
@@ -382,7 +382,6 @@ export default function MessagingConnector() {
       <MailProvider data={data} form={form} set={set} busy={busy} onSave={save} onReload={load} />
 
       {/* ── Email queue ───────────────────────────────────────────── */}
-      <EmailHealth health={data.email} />
 
       {/* ── Recent sends ──────────────────────────────────────────── */}
       <div className="card">
@@ -534,7 +533,7 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
               onChange={(e) => setToken(e.target.value)} />
             <button type="button" className="btn" onClick={() => setShowToken((v) => !v)}
               title={showToken ? t('msgg.hide') : t('msgg.show')} style={{ flex: '0 0 auto' }}>
-              {showToken ? '🙈' : '👁'}
+              {showToken ? 'Hide' : 'Show'}
             </button>
           </div>
           {mail.token_set && (
@@ -610,58 +609,3 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
  * A backlog with a stale oldest-pending timestamp is the symptom, so it is what
  * this panel leads with.
  */
-function EmailHealth({ health }) {
-  const { t } = useLang();
-  if (!health) return null;
-
-  // Only a backlog that ought to be moving counts as stuck. Mail queued for an
-  // organisation with email switched off is not a fault, and colouring it red
-  // permanently is how a status panel teaches people to ignore it.
-  const stuck = health.pending_deliverable > 0 && health.oldest_pending_at
-    && (Date.now() - new Date(health.oldest_pending_at).getTime()) > 30 * 60 * 1000;
-
-  return (
-    <div className="card">
-      <div className="card-title">{t('msgg.email_title')}</div>
-      <div style={{ fontSize: 12, color: 'var(--subtle)', marginBottom: 14, lineHeight: 1.6 }}>
-        {t('msgg.email_hint')}
-      </div>
-
-      <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', marginBottom: 14 }}>
-        {[
-          [t('msgg.email_pending'), health.pending_deliverable, stuck ? 'var(--danger)' : 'var(--text)'],
-          [t('msgg.email_sent24'), health.sent_24h, 'var(--text)'],
-          [t('msgg.email_failed'), health.failed, health.failed ? 'var(--danger)' : 'var(--text)'],
-          [t('msgg.email_orgs_on'), `${health.orgs_email_on}/${health.orgs_total}`, 'var(--text)'],
-        ].map(([label, value, colour]) => (
-          <div key={label}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: colour, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
-            <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>{label}</div>
-          </div>
-        ))}
-      </div>
-
-      {stuck && (
-        <div style={{
-          background: 'var(--danger-light)', color: 'var(--danger)',
-          border: '1px solid var(--danger)', borderRadius: 8,
-          padding: '10px 12px', fontSize: 12, lineHeight: 1.6, marginBottom: 10,
-        }}>
-          <b>{t('msgg.email_stuck')}</b> {t('msgg.email_stuck_hint', { since: fmtDateTime(health.oldest_pending_at) })}
-        </div>
-      )}
-      {!stuck && health.pending_deliverable === 0 && (
-        <div style={{ fontSize: 12, color: 'var(--subtle)', marginBottom: 10 }}>{t('msgg.email_clear')}</div>
-      )}
-
-      {health.pending_email_off > 0 && (
-        <div style={{
-          background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8,
-          padding: '10px 12px', fontSize: 12, lineHeight: 1.6, color: 'var(--text-muted)',
-        }}>
-          {t('msgg.email_off_backlog', { n: health.pending_email_off })}
-        </div>
-      )}
-    </div>
-  );
-}

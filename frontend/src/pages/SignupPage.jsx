@@ -252,7 +252,7 @@ export default function SignupPage() {
    */
   const FIELD_RULES = {
     company_name:  { label: 'registered company name', min: 3 },
-    proposed_slug: { label: 'preferred org code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
+    proposed_slug: { label: 'preferred organization code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
                      hint: 'Lower-case letters, numbers, hyphen or underscore.' },
     website:       { label: 'website', re: /^https?:\/\/[^\s.]+\.[^\s]{2,}$/i,
                      hint: 'Include http:// or https://.' },
@@ -475,7 +475,7 @@ export default function SignupPage() {
                           placeholder="Acme Precision Components Pvt Ltd" required />
                       </div>
                       <div>
-                        <label htmlFor="proposed_slug">Preferred org code <span className="req">*</span><InfoDot term="org_code" /></label>
+                        <label htmlFor="proposed_slug">Preferred organization code <span className="req">*</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="acme" />
                         <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
@@ -566,6 +566,13 @@ export default function SignupPage() {
                               placeholder="Enter 6-digit OTP code"
                               value={otpCode}
                               onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleVerifyEmailOtp(e);
+                                }
+                              }}
                               style={{ width: 200, letterSpacing: '3px', fontWeight: 700, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
                             />
                             <button
@@ -581,7 +588,11 @@ export default function SignupPage() {
                                 border: 'none',
                                 cursor: 'pointer'
                               }}
-                              onClick={handleVerifyEmailOtp}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleVerifyEmailOtp(e);
+                              }}
                               disabled={verifyingOtp || otpCode.length < 4}
                             >
                               {verifyingOtp ? 'Verifying...' : 'Verify OTP'}
@@ -647,7 +658,7 @@ export default function SignupPage() {
                           )}
                         </div>
 
-                        {phoneOtpSent && !phoneVerified && (
+                        {!phoneVerified && form.contact_phone.trim().length > 0 && (
                           <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input
                               type="text"
@@ -656,6 +667,13 @@ export default function SignupPage() {
                               placeholder="Enter 6-digit OTP code"
                               value={phoneOtpCode}
                               onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, ''))}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleVerifyPhoneOtp(e);
+                                }
+                              }}
                               autoComplete="one-time-code"
                               style={{ width: 200, letterSpacing: '3px', fontWeight: 700, padding: '10px 12px', borderRadius: 8, border: '1px solid var(--border)' }}
                             />
@@ -667,7 +685,11 @@ export default function SignupPage() {
                                 background: 'var(--success)', color: '#fff', borderRadius: 8,
                                 border: 'none', cursor: 'pointer',
                               }}
-                              onClick={handleVerifyPhoneOtp}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleVerifyPhoneOtp(e);
+                              }}
                               disabled={verifyingPhoneOtp || phoneOtpCode.length < 4}
                             >
                               {verifyingPhoneOtp ? 'Verifying...' : 'Verify OTP'}
@@ -823,7 +845,7 @@ export default function SignupPage() {
                       <div><b>{form.company_name || '—'}</b>{form.sector ? ` · ${form.sector}` : ''}</div>
                       <div>{form.contact_name || '—'}{form.contact_designation ? `, ${form.contact_designation}` : ''} · {form.contact_email || '—'}</div>
                       <div>
-                        Org code: <b>{form.proposed_slug || 'derived from your email'}</b>
+                        Organization code: <b>{form.proposed_slug || 'derived from your email'}</b>
                         {form.employee_count ? ` · ${form.employee_count} employees` : ''}
                         {form.enterprise_category ? ` · ${form.enterprise_category}` : ''}
                       </div>

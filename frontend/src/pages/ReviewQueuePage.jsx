@@ -199,8 +199,8 @@ export default function ReviewQueuePage() {
 
               {(i.avg_rating > 0 || i.vote_count > 0) && (
                 <div style={{ marginTop:4,fontSize:11,color:'var(--subtle)',display:'flex',gap:6 }}>
-                  {i.avg_rating > 0 && <span>⭐ {parseFloat(i.avg_rating).toFixed(1)}</span>}
-                  {i.vote_count > 0 && <span>🗳 {i.vote_count}</span>}
+                  {i.avg_rating > 0 && <span>Rating {parseFloat(i.avg_rating).toFixed(1)}</span>}
+                  {i.vote_count > 0 && <span>Votes {i.vote_count}</span>}
                 </div>
               )}
 

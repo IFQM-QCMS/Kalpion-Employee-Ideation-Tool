@@ -17,6 +17,7 @@
 import { masterDb } from '../database/master.js';
 import { ApiError, badRequest, notFound } from '../utils/respond.js';
 import { assignPlan, defaultTrialDays } from './subscriptionService.js';
+import { defaultTrialPlan } from './planService.js';
 import logger from '../utils/logger.js';
 import { createTenant } from './platformService.js';
 import bcrypt from 'bcryptjs';
@@ -493,10 +494,38 @@ export async function approveRegistration(id, {
     ? await defaultTrialDays()
     : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0));
 
-  if (planId) {
+  /*
+   * Every approved organisation starts on the trial plan.
+   *
+   * The approver may still pick one, but leaving the box alone no longer leaves
+   * the organisation unpriced. That was the previous behaviour and it produced
+   * workspaces with no plan at all - which meant no trial end date, so they
+   * never lapsed, were never billed, and stayed free until somebody happened to
+   * notice. The billing screen showed them as "None set".
+   *
+   * A paid plan cannot carry a trial (see assignPlan), so a chosen paid plan is
+   * applied with no trial and starts its period immediately; that is a
+   * deliberate approval of a paying customer, not an evaluation.
+   */
+  let effectivePlanId = planId;
+  if (!effectivePlanId) {
+    const trialPlan = await defaultTrialPlan();
+    effectivePlanId = trialPlan?.id || null;
+    if (!trialPlan) {
+      logger.warn(`registration ${reg.id}: no trial plan on file — organisation starts unpriced`);
+    }
+  }
+
+  if (effectivePlanId) {
     try {
+      const [[chosen]] = await master.execute(
+        'SELECT tier FROM plans WHERE id = ? LIMIT 1', [effectivePlanId]
+      );
       await assignPlan(created.tenant_id, {
-        planId, trialDays: days, note: billingNote,
+        planId: effectivePlanId,
+        // A paid plan starts paying; only the trial plan carries trial days.
+        trialDays: chosen && chosen.tier !== 'trial' ? 0 : days,
+        note: billingNote,
       }, { id: adminId, name: adminName });
     } catch (e) {
       // A billing mishap must not undo a workspace that has just been created.

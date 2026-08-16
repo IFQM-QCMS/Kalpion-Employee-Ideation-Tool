@@ -252,7 +252,7 @@ export default function AllIdeasPage() {
                       ? <div className="cell-clamp" style={{ maxWidth:260 }}
                              title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
                           {i.solution_summary}
-                          {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">🔒</span>}
+                          {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">Protected</span>}
                         </div>
                       : <span style={{ color:'var(--subtle)' }}>—</span>}
                   </td>

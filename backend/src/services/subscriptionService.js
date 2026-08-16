@@ -395,6 +395,27 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
     ? await defaultTrialDays()
     : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0));
 
+  /*
+   * A trial runs on the trial plan, never on a paid one.
+   *
+   * Both could be set at once, which produced organisations listed as
+   * "Professional - Trial, 14 days left" at Rs.50,000: a price against a period
+   * nobody is being charged for. It is ambiguous on the billing screen and
+   * worse on an invoice, and it made the trial figures count money that was
+   * never going to arrive on those dates.
+   *
+   * So the two are separated. Evaluate on the trial plan; assign the paid plan
+   * with a trial length of zero at the moment the organisation converts, which
+   * is also the moment its paid period should start.
+   */
+  if (days > 0 && plan.tier !== 'trial') {
+    throw badRequest(
+      `"${plan.name}" is a paid plan, so it cannot run as a trial. `
+      + 'Leave the organisation on the Trial plan while it evaluates, then assign '
+      + `"${plan.name}" with a trial length of 0 when it converts - the paid period starts then.`
+    );
+  }
+
   const now = new Date();
   const cycleDays = CYCLE_DAYS[plan.billing_cycle] || 365;
 

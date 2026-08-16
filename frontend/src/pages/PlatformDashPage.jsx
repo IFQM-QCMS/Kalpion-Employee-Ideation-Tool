@@ -190,14 +190,6 @@ export default function PlatformDashPage() {
           </h1>
           <div style={{ fontSize:13,color:'var(--subtle)',marginTop:4 }}>{t('pa.tenant_mgmt_sub')}</div>
         </div>
-        <div style={{ display:'flex',alignItems:'center',gap:10,flexWrap:'wrap' }}>
-          <span style={{ background:'var(--primary-light)',color:'var(--primary)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700 }}>
-            🏢 {counts.active} Active Tenants
-          </span>
-          <span style={{ background:'var(--success-light)',color:'var(--success)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700 }}>
-            💡 {totals.ideas} Platform Ideas
-          </span>
-        </div>
       </div>
 
       {/* KPI strip */}

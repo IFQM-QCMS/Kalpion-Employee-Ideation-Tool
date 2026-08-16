@@ -3,6 +3,7 @@ import { useLang } from '../context/LangContext';
 import { platformApi, saveBlob } from '../services/api';
 import { fmtDateTime } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
+import Pager, { usePager } from '../components/Pager';
 
 /*
  * Sign-in activity for the IFQM platform console.
@@ -77,7 +78,17 @@ export default function PlatformLoginsPage() {
   const { t } = useLang();
 
   const [rows,    setRows]    = useState([]);
-  const [actorType, setActorType] = useState('all');
+  /*
+   * Platform console sign-ins only.
+   *
+   * This defaulted to 'all', so the page listed every employee sign-in across
+   * every customer. That buries the question it exists to answer - who has been
+   * in the IFQM console - and a customer's staff movements are their business,
+   * not something to browse from here. The backend already defaulted to staff;
+   * the screen was overriding it. The filter that offered tenant users is gone
+   * with it, so the choice cannot be made again by accident.
+   */
+  const [actorType] = useState('platform_admin');
   const [last24,  setLast24]  = useState({ successes: 0, failures: 0, lockouts: 0 });
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -86,6 +97,21 @@ export default function PlatformLoginsPage() {
   const [search,  setSearch]  = useState('');
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [actorType, outcome, limit]);
+
+  /*
+   * Poll, so a sign-in that happens while this screen is open appears without
+   * anybody pressing Refresh. The record is written fire-and-forget on the
+   * login path, so it lands within a moment of the event; the page simply was
+   * not looking again. Paused while the tab is hidden - polling a screen
+   * nobody is reading is load for nothing.
+   */
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) load(); };
+    const id = setInterval(tick, 15000);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+    /* eslint-disable-next-line */
+  }, [actorType, outcome, limit]);
 
   async function load() {
     setLoading(true); setError('');
@@ -107,6 +133,11 @@ export default function PlatformLoginsPage() {
     return [r.actor_name, r.actor_email, r.ip, r.location, r.tenant_slug]
       .some((v) => String(v || '').toLowerCase().includes(q));
   });
+
+  // Twenty to a page. The export below still writes every filtered row, so
+  // paging changes what is drawn and never what is taken away.
+  const pager = usePager(filtered);
+  useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [search, outcome, limit]);
 
   function exportCsv() {
     const cols = ['created_at', 'actor_name', 'actor_email', 'tenant_slug', 'outcome',
@@ -154,12 +185,6 @@ export default function PlatformLoginsPage() {
           className="form-control" style={{ flex: '1 1 200px', minWidth: 180 }}
           placeholder={t('la.search_ph')} value={search}
           onChange={(e) => setSearch(e.target.value)} />
-        <select className="form-control" style={{ width: 170 }} value={actorType}
-          onChange={(e) => setActorType(e.target.value)}>
-          <option value="all">All Accounts</option>
-          <option value="platform_admin">Platform Admins Only</option>
-          <option value="tenant_user">Tenant Users Only</option>
-        </select>
         <select className="form-control" style={{ width: 150 }} value={outcome}
           onChange={(e) => setOutcome(e.target.value)}>
           <option value="">{t('la.all_outcomes')}</option>
@@ -196,7 +221,7 @@ export default function PlatformLoginsPage() {
             {!loading && !filtered.length && (
               <tr><td colSpan="6" className="text-center">{t('la.none')}</td></tr>
             )}
-            {!loading && filtered.map((r) => (
+            {!loading && pager.slice.map((r) => (
               <tr key={r.id}>
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(r.created_at)}</td>
                 <td>
@@ -224,6 +249,7 @@ export default function PlatformLoginsPage() {
             ))}
           </tbody>
         </table>
+        <Pager {...pager} noun="sign-ins" />
       </div>
 
       <div style={{ fontSize: 11.5, color: 'var(--subtle)', marginTop: 10 }}>{t('la.retention_note')}</div>

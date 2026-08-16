@@ -364,7 +364,7 @@ function ApprovalDialog({ reg, busy, onClose, onSubmit }) {
   const chosen = plans.find((p) => String(p.id) === String(planId));
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth: 560 }}>
         <div className="modal-header">
           <h3 style={{ margin: 0 }}>Approve {reg.company_name}</h3>

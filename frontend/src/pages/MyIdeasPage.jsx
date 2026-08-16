@@ -21,8 +21,8 @@ function EngMiniStats({ avgRating, voteCount }) {
   if (!avgRating && !voteCount) return null;
   return (
     <span style={{ fontSize:11,color:'var(--subtle)',display:'flex',alignItems:'center',gap:6 }}>
-      {avgRating > 0 && <span>⭐ {parseFloat(avgRating).toFixed(1)}</span>}
-      {voteCount > 0 && <span>🗳 {voteCount}</span>}
+      {avgRating > 0 && <span>Rating {parseFloat(avgRating).toFixed(1)}</span>}
+      {voteCount > 0 && <span>Votes {voteCount}</span>}
     </span>
   );
 }

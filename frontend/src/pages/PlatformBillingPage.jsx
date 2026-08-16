@@ -312,7 +312,18 @@ function GatewayPanel() {
       setKeyId(r.data.key_id || '');
       setName(r.data.business_name || '');
       setSecret('');
+      /*
+       * An incomplete gateway is announced as a notice in the corner rather
+       * than as a red block wedged into the card. It named the missing fields
+       * in the middle of the form used to fill them in, which read as an error
+       * about something the operator had just done rather than a reminder of
+       * what was still to do.
+       */
+      if (Array.isArray(r.data?.missing) && r.data.missing.length) {
+        showToast(`${t('msgb.incomplete')} ${r.data.missing.join(' · ')}`, 'warning');
+      }
     } catch { /* the page still works without it */ }
+    /* eslint-disable-next-line */
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -381,7 +392,7 @@ function GatewayPanel() {
                   placeholder={g.key_secret_set ? '••••••••••••' : t('msgb.g_secret_ph')}
                   onChange={(e) => setSecret(e.target.value)} />
                 <button type="button" className="btn" style={{ flex: '0 0 auto' }}
-                  onClick={() => setShowSecret((v) => !v)}>{showSecret ? '🙈' : '👁'}</button>
+                  onClick={() => setShowSecret((v) => !v)}>{showSecret ? 'Hide' : 'Show'}</button>
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--subtle)', marginTop: 5, lineHeight: 1.5 }}>
                 {g.key_secret_set ? t('msgb.g_secret_stored') : t('msgb.g_secret_none')}
@@ -398,14 +409,6 @@ function GatewayPanel() {
             </div>
           </div>
 
-          {g.missing.length > 0 && (
-            <div style={{
-              background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)',
-              borderRadius: 8, padding: '10px 12px', fontSize: 12, marginBottom: 14, lineHeight: 1.6,
-            }}>
-              <b>{t('msgb.incomplete')}</b> {g.missing.join(' · ')}
-            </div>
-          )}
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button className="btn btn-primary" disabled={busy} onClick={() => save(g.enabled)}>
@@ -462,7 +465,7 @@ function TermsModal({ org, plans, onClose, onSaved }) {
   const chosen = plans.find((p) => String(p.id) === planId);
 
   return (
-    <div className="modal-backdrop" onClick={onClose}
+    <div className="modal-overlay" onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 200,
         display: 'grid', placeItems: 'center', padding: 16,

@@ -265,10 +265,51 @@ export async function updatePlan(id, body) {
  * would erase what they were charged and why. Retired plans stop appearing on
  * the list an approver picks from; everything else is untouched.
  */
+/**
+ * The plan a brand-new organisation starts on.
+ *
+ * Every approved organisation is put on this automatically, so that none of
+ * them exists unpriced: an organisation with no plan has no trial end date, so
+ * it never lapses, is never billed, and quietly stays free forever because
+ * nobody remembered to go back to it.
+ *
+ * Found by code first and by tier second, so renaming the plan in the console
+ * does not break the lookup.
+ */
+export async function defaultTrialPlan() {
+  const [[byCode]] = await masterDb().execute(
+    "SELECT * FROM plans WHERE code = 'TRIAL' LIMIT 1"
+  );
+  if (byCode) return byCode;
+  const [[byTier]] = await masterDb().execute(
+    "SELECT * FROM plans WHERE tier = 'trial' AND status = 'active' ORDER BY id LIMIT 1"
+  );
+  return byTier || null;
+}
+
+/** Is this the plan every new organisation depends on? */
+const isDefaultTrial = (plan) => String(plan?.code || '').toUpperCase() === 'TRIAL';
+
 export async function retirePlan(id) {
   const planId = Number(id) || 0;
   const [[plan]] = await masterDb().execute('SELECT * FROM plans WHERE id = ? LIMIT 1', [planId]);
   if (!plan) throw notFound('Plan not found.');
+
+  /*
+   * The trial plan cannot be deleted, only edited.
+   *
+   * Every newly approved organisation is put on it, so removing it would break
+   * approval itself - and it would break it later, quietly, for whoever next
+   * approves an application rather than for the person who deleted the plan.
+   * Its price, limits and trial length are all editable; only its existence is
+   * fixed.
+   */
+  if (isDefaultTrial(plan)) {
+    throw badRequest(
+      'The Trial plan cannot be deleted - every newly approved organisation starts on it. '
+      + 'You can edit its price, limits and description.'
+    );
+  }
 
   const [[used]] = await masterDb().execute(
     'SELECT COUNT(*) AS n FROM tenants WHERE plan_id = ?', [planId]

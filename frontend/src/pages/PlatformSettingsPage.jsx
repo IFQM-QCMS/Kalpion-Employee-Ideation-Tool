@@ -26,7 +26,7 @@ import MessagingConnector from '../components/MessagingConnector';
  * stored one". See platformSettingsService for why this is not a mask.
  */
 const TABS = ['ps.tab_defaults', 'ps.tab_org', 'ps.tab_messaging',
-  'ps.tab_maintenance', 'ps.tab_admins', 'ps.tab_health'];
+  'ps.tab_maintenance', 'ps.tab_admins'];
 const FLAGS = ['anonymous_allowed', 'public_board_enabled', 'challenges_enabled'];
 
 const fmtBytes = (b) => {
@@ -60,7 +60,6 @@ export default function PlatformSettingsPage() {
       {tab === 2 && <MessagingConnector />}
       {tab === 3 && <MaintenanceTab />}
       {tab === 4 && <AdminsTab />}
-      {tab === 5 && <HealthTab />}
     </>
   );
 }
@@ -445,6 +444,27 @@ function AdminsTab() {
 
       <div className="card" style={{ marginTop:16,maxWidth:620 }}>
         <div className="card-title">{t('ps.change_own_pw')}</div>
+        {/* Whose password this is. The panel sits directly beneath the table of
+            every platform admin, so "Change my password" read as though it might
+            act on whichever row was last looked at. It only ever changes the
+            signed-in account, and now says so with the name and address on it. */}
+        <div style={{
+          display:'flex',alignItems:'center',gap:10,margin:'2px 0 14px',
+          padding:'10px 13px',borderRadius:10,
+          background:'var(--surface-2,var(--chip-bg))',border:'1px solid var(--border)',
+        }}>
+          <div style={{
+            width:30,height:30,borderRadius:'50%',flex:'none',display:'flex',
+            alignItems:'center',justifyContent:'center',fontSize:12,fontWeight:800,
+            background:'var(--primary)',color:'var(--on-primary,#fff)',
+          }}>{(user?.name || '?').charAt(0).toUpperCase()}</div>
+          <div style={{ lineHeight:1.45 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:'var(--heading)' }}>
+              {t('ps.changing_for').replace('{name}', user?.name || '')}
+            </div>
+            <div style={{ fontSize:11.5,color:'var(--subtle)' }}>{user?.email || ''}</div>
+          </div>
+        </div>
         <div className="form-row">
           <div className="form-group"><label>{t('ps.current_pw')}</label>
             <input className="form-control" type="password" value={pw.current_password} onChange={(e) => setPw({ ...pw, current_password:e.target.value })} /></div>
@@ -460,68 +480,3 @@ function AdminsTab() {
 }
 
 // ── Health ─────────────────────────────────────────────────────────
-function HealthTab() {
-  const { t } = useLang();
-  const [h, setH] = useState(null);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    platformApi.health().then((r) => setH(r.data)).catch((e) => setErr(e?.response?.data?.error || t('msg.fail_load')));
-  }, []);
-
-  if (err) return <div className="alert alert-danger">{err}</div>;
-  if (!h) return <div className="empty-state"><div className="spinner"></div></div>;
-
-  const ok = h.master_db === 'ok';
-  return (
-    <>
-      <div className="kpi-grid" style={{ marginTop:16 }}>
-        <div className="kpi-card" style={{ borderLeftColor: ok ? 'var(--success)' : 'var(--danger)' }}>
-          <div className="kpi-body">
-            <div className="kpi-val" style={{ fontSize:18,color: ok ? 'var(--success)' : 'var(--danger)' }}>
-              {ok ? t('ps.db_ok') : t('ps.db_down')}
-            </div>
-            <div className="kpi-label">{t('ps.master_db')}</div>
-          </div>
-        </div>
-        <div className="kpi-card" style={{ borderLeftColor:'var(--info)' }}>
-          <div className="kpi-body">
-            <div className="kpi-val" style={{ color:'var(--info)' }}>{h.tenants.length}</div>
-            <div className="kpi-label">{t('pa.kpi_total_orgs')}</div>
-          </div>
-        </div>
-        <div className="kpi-card" style={{ borderLeftColor:'var(--warning)' }}>
-          <div className="kpi-body">
-            <div className="kpi-val" style={{ fontSize:20,color:'var(--warning)' }}>{fmtBytes(h.uploads.bytes)}</div>
-            <div className="kpi-label">{t('ps.uploads_total', { n: h.uploads.files })}</div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop:18,overflowX:'auto' }}>
-        <div className="card-title">{t('ps.per_tenant')}</div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('pa.col_company')}</th><th>{t('ps.db')}</th>
-              <th>{t('pa.col_users')}</th><th>{t('pa.col_ideas')}</th>
-              <th>{t('ps.uploads')}</th><th>{t('table.status')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {h.tenants.map((x) => (
-              <tr key={x.id}>
-                <td><div style={{ fontWeight:600 }}>{x.name}</div><div style={{ fontSize:11,color:'var(--subtle)' }}>{x.slug}</div></td>
-                <td style={{ color: x.db === 'ok' ? 'var(--success)' : 'var(--danger)',fontWeight:600,fontSize:12 }}>{x.db}</td>
-                <td style={{ fontWeight:700 }}>{x.users}</td>
-                <td style={{ fontWeight:700 }}>{x.ideas}</td>
-                <td style={{ fontSize:12 }}>{fmtBytes(x.uploads_bytes)}<span style={{ color:'var(--subtle)' }}> · {x.uploads_files || 0}</span></td>
-                <td style={{ fontSize:12 }}>{x.status}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}

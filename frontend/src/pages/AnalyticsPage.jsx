@@ -100,14 +100,6 @@ export default function AnalyticsPage() {
             Real-time innovation pipeline performance, quality metrics, and category distribution.
           </div>
         </div>
-        <div style={{ display:'flex',gap:8,alignItems:'center',flexWrap:'wrap' }}>
-          <span style={{ background:'var(--primary-light)',color:'var(--primary)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6 }}>
-            <span>⚡ Live Performance</span>
-          </span>
-          <span style={{ background:'var(--success-light)',color:'var(--success)',padding:'6px 14px',borderRadius:20,fontSize:12,fontWeight:700,display:'inline-flex',alignItems:'center',gap:6 }}>
-            <span>✨ {ss.overall_avg || 0}/100 Quality Avg</span>
-          </span>
-        </div>
       </div>
 
       {/* KPI Grid */}

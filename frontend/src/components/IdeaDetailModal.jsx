@@ -112,7 +112,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
       if (res.data.success) {
         const vr = await votesApi.stats({ idea_id: ideaId });
         setVoteData(vr.data);
-        showToast(`${t('community.rating_ok')}: ${rating}/5 ⭐`, 'success');
+        showToast(`${t('community.rating_ok')}: ${rating}/5 Rating`, 'success');
       } else showToast(res.data.error || t('msg.error'), 'danger');
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
@@ -161,7 +161,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const HiddenNote = ({ section }) => (
     <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:12.5,
                   color:'var(--text-muted)',display:'flex',gap:7,alignItems:'flex-start' }}>
-      <span aria-hidden="true">🔒</span>
+      <span aria-hidden="true">Protected</span>
       <span>{t('idea.section_hidden').replace('{section}', t(`section.${section}`))}</span>
     </div>
   );
@@ -297,7 +297,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
                         <div>{idea.situation_summary || '—'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
-                          <span aria-hidden="true">🔒</span>
+                          <span aria-hidden="true">Protected</span>
                           <span>{t('idea.situation_hidden_hint')}</span>
                         </div>
                       </div>
@@ -314,7 +314,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
                         <div>{idea.solution_summary || '—'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
-                          <span aria-hidden="true">🔒</span>
+                          <span aria-hidden="true">Protected</span>
                           <span>{t('idea.solution_hidden_hint')}</span>
                         </div>
                       </div>
@@ -433,7 +433,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                           <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:6,fontWeight:600,textTransform:'uppercase' }}>{t('community.rating_title')}</div>
                           {avgRating > 0 && (
                             <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:6 }}>
-                              <span style={{ color:'#f59e0b',fontWeight:700 }}>{avgRating.toFixed(1)} ⭐</span>
+                              <span style={{ color:'#f59e0b',fontWeight:700 }}>{avgRating.toFixed(1)} Rating</span>
                               <span style={{ fontSize:11,color:'var(--subtle)' }}>{voteCount} {t('unit.votes')}</span>
                             </div>
                           )}
