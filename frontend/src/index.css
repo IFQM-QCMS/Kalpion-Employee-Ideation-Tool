@@ -209,8 +209,14 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
   display:flex;flex-direction:column;flex-shrink:0;
   transition:width var(--t-slow) var(--ease);
   border-right:1px solid var(--sidebar-border);
-  overflow-x:hidden;overflow-y:auto;
+  /* The sidebar itself no longer scrolls — the menu inside it does. Scrolling
+     the whole column let the account block ride up over the last menu item. */
+  overflow:hidden;
 }
+/* The menu: the only part that scrolls. min-height:0 is what actually lets a
+   flex child shrink below its content and therefore scroll at all. */
+.sidebar-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden}
+.sidebar-nav::-webkit-scrollbar{width:0}
 #sidebar.collapsed{width:68px}
 #sidebar::-webkit-scrollbar{width:0}
 
@@ -293,10 +299,15 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
 }
 
 .sidebar-user{
-  padding:14px 16px;margin-top:auto;
+  padding:14px 16px;
+  /* Pinned, and OPAQUE. It was a 2%-white wash over whatever happened to be
+     behind it, so a menu item showing through was unreadable and the name on
+     top of it doubly so. flex-shrink:0 keeps it from being squeezed when the
+     menu is long. */
+  flex-shrink:0;
   border-top:1px solid var(--sidebar-border);
   display:flex;align-items:center;gap:11px;overflow:hidden;
-  background:rgba(255,255,255,.02);
+  background:var(--sidebar-bg);
 }
 .sidebar-user-info span{
   font-size:12px;color:var(--sidebar-text);display:block;

@@ -77,6 +77,12 @@ export default function Sidebar({ collapsed, onToggle }) {
         </span>
       </div>
 
+      {/* The menu scrolls on its own so the account block below stays put.
+          Everything used to scroll together, and the footer - which is almost
+          transparent - rode up over the last menu item, so the name read on top
+          of "My Profile" and neither could be made out. */}
+      <div className="sidebar-nav">
+
       {!isPA && (
         <>
           <div className="nav-section">{t('section.main')}</div>
@@ -140,6 +146,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         </>
       )}
 
+      </div>
       <div className="sidebar-user">
         <div className="avatar" style={{ flexShrink:0 }}>
           {user.avatar_initials || user.name?.[0] || '?'}

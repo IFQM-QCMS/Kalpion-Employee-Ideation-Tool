@@ -150,42 +150,50 @@ export default function BillingPage() {
           <div style={{ fontSize: 13, color: 'var(--subtle)', lineHeight: 1.6 }}>{t('bill.no_plan')}</div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: 30, flexWrap: 'wrap', marginBottom: 18 }}>
-              <div>
-                <div style={{ fontSize: 21, fontWeight: 700, color: 'var(--heading)' }}>{plan.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--subtle)' }}>{plan.cycle_label}</div>
-              </div>
-              {/*
-                * The figure shown is the one the Pay button charges.
-                *
-                * It used to be `amount_paise` — the stored price — captioned
-                * "including X% GST". That is only true for a plan priced with
-                * GST included. On a plan priced GST-exclusive the stored amount
-                * is the pre-tax figure, so the page quietly understated the
-                * bill and the checkout window opened on a larger number than
-                * the one the customer had just read.
-                */}
-              <div>
-                <div style={{ fontSize: 21, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                  {money(plan.total_rupees * 100)}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--subtle)' }}>
-                  {Number(plan.gst_percent) > 0
-                    ? t('bill.incl_gst', { gst: plan.gst_percent })
-                    : t('bill.no_gst')}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 21, fontWeight: 700 }}>{sub.days_left ?? '—'}</div>
-                <div style={{ fontSize: 12, color: 'var(--subtle)' }}>{t('bill.days_left')}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600, paddingTop: 5 }}>
-                  {sub.ends_at ? fmtDate(sub.ends_at) : '—'}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--subtle)' }}>{t('bill.due')}</div>
-              </div>
-            </div>
+            {/* A table, not four figures floating in a row.
+                As free-standing numbers nothing lined up: the price sat beside a
+                day count beside a date, all at the same weight, so there was no
+                telling which was the amount due and which was a countdown. Rows
+                with named labels answer that by construction. */}
+            <table className="table" style={{ marginBottom: 18 }}>
+              <tbody>
+                <tr>
+                  <td style={{ color: 'var(--subtle)', width: '42%' }}>{t('bill.plan_lbl')}</td>
+                  <td style={{ fontWeight: 700, color: 'var(--heading)' }}>
+                    {plan.name}
+                    <span style={{ fontWeight: 500, color: 'var(--subtle)', marginLeft: 8, fontSize: 12.5 }}>
+                      {plan.cycle_label}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ color: 'var(--subtle)' }}>{t('bill.amount_lbl')}</td>
+                  <td>
+                    {/* The figure shown is the one the Pay button charges. It
+                        used to be the stored price captioned "including X% GST",
+                        which is only true for a GST-inclusive plan — on an
+                        exclusive one the page understated the bill and checkout
+                        opened on a larger number than the customer had read. */}
+                    <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                      {money(plan.total_rupees * 100)}
+                    </span>
+                    <span style={{ color: 'var(--subtle)', marginLeft: 8, fontSize: 12.5 }}>
+                      {Number(plan.gst_percent) > 0
+                        ? t('bill.incl_gst', { gst: plan.gst_percent })
+                        : t('bill.no_gst')}
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ color: 'var(--subtle)' }}>{t('bill.days_left')}</td>
+                  <td style={{ fontWeight: 700 }}>{sub.days_left ?? '—'}</td>
+                </tr>
+                <tr>
+                  <td style={{ color: 'var(--subtle)' }}>{t('bill.due')}</td>
+                  <td style={{ fontWeight: 600 }}>{sub.ends_at ? fmtDate(sub.ends_at) : '—'}</td>
+                </tr>
+              </tbody>
+            </table>
 
             {canPay && gw.enabled && (
               <div style={{

@@ -112,7 +112,13 @@ export default function ReviewQueuePage() {
             onClick={() => submitBulk('Approved')}>{t('bulk.approve_all')}</button>
           <button className="btn btn-sm" style={{ background:'#ef4444',color:'#fff',border:'none' }}
             onClick={() => submitBulk('Rejected')}>{t('bulk.reject_all')}</button>
-          <button className="btn btn-sm btn-outline" style={{ color:'#fff',borderColor:'#ffffff66' }}
+          {/* Explicitly transparent.
+              This carried .btn-outline, whose background is a light surface
+              colour from the theme, while the inline style forced white text -
+              so the button rendered as a blank white pill with an invisible
+              label on a dark bar. It worked; nobody could tell it was there. */}
+          <button className="btn btn-sm"
+            style={{ background:'transparent',color:'#fff',border:'1px solid #ffffff66' }}
             onClick={() => { setSelected(new Set()); setSelectAll(false); }}>{t('bulk.clear')}</button>
         </div>
       )}

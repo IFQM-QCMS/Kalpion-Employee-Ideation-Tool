@@ -506,13 +506,57 @@ export async function hierarchy(db) {
  * field would be worse than refusing it — the screen would report success and
  * the number would not change.
  */
+/**
+ * Update your own profile.
+ *
+ * ── What a person may change about themselves, and what they may not ───────
+ *
+ * Department, business unit and location are descriptive: they say where
+ * somebody works, they are routinely wrong after a move, and the person
+ * themselves is the one who knows. Letting them fix it is the difference
+ * between a directory that is current and one that quietly rots because the
+ * only route to a correction is an admin's queue.
+ *
+ * Role, points, manager and status are NOT here, and must never be. Role and
+ * manager decide what an idea can reach and who judges it; points are earned.
+ * Somebody who could set their own role could approve their own idea, so the
+ * server takes only the three fields below and ignores anything else in the
+ * body rather than trusting the form that sent it.
+ *
+ * Email and phone are identity rather than description. The phone has its own
+ * verified flow (see requestPhoneChangeCode); a bare change here is refused
+ * with a message saying where to go.
+ */
+const SELF_EDITABLE = ['department', 'business_unit', 'location'];
+
 export async function updateProfile(db, actor, body) {
   const phone = String(body.phone || '').trim();
   const current = String(actor.phone || '').trim();
   if (phone && digitsOf(phone) !== digitsOf(current)) {
     throw badRequest('To change your mobile number, verify the new one with the code we send.');
   }
-  return { success: true };
+
+  const updates = {};
+  for (const field of SELF_EDITABLE) {
+    if (body[field] === undefined) continue;
+    const v = String(body[field] ?? '').trim().slice(0, 100);
+    updates[field] = v || null;
+  }
+  if (!Object.keys(updates).length) return { success: true, message: 'Nothing to update.' };
+
+  const cols = Object.keys(updates);
+  await db.execute(
+    `UPDATE users SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`,
+    [...cols.map((c) => updates[c]), actor.id]
+  );
+
+  const [[fresh]] = await db.execute(
+    `SELECT u.*, m.name AS manager_name FROM users u
+       LEFT JOIN users m ON m.id = u.manager_id
+      WHERE u.id = ? LIMIT 1`,
+    [actor.id]
+  );
+  return { success: true, message: 'Profile updated.', user: fresh || null };
 }
 
 const digitsOf = (v) => String(v || '').replace(/\D/g, '');

@@ -93,9 +93,52 @@ function PhoneChange({ current, onChanged, t }) {
   );
 }
 
+const EDITABLE = [
+  ['department', 'profile.dept'],
+  ['business_unit', 'profile.bu'],
+  ['location', 'profile.loc'],
+];
+
+const CELL = { padding:'11px 13px',borderRadius:10,background:'var(--surface-2,var(--chip-bg))',border:'1px solid var(--border)' };
+const CAP  = { fontSize:11,fontWeight:700,color:'var(--subtle)',textTransform:'uppercase',letterSpacing:.4 };
+
+/* A read-only fact, with a line saying why where that is not obvious. A field
+   nobody can edit and nobody explains reads as broken. */
+function Detail({ label, value, note }) {
+  return (
+    <div style={CELL}>
+      <div style={CAP}>{label}</div>
+      <div style={{ marginTop:5,fontSize:13.5,fontWeight:600,color:value?'var(--text)':'var(--subtle)',overflowWrap:'anywhere' }}>
+        {value || '—'}
+      </div>
+      {note && <div style={{ marginTop:4,fontSize:10.5,color:'var(--subtle)' }}>{note}</div>}
+    </div>
+  );
+}
+
 export default function ProfilePage() {
   const { user, setUser } = useAuth();
   const { t }    = useLang();
+
+  const { showToast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const [form, setForm] = useState({ department:'', business_unit:'', location:'' });
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await usersApi.updateProfile(form);
+      if (res.data?.success) {
+        setUser && setUser({ ...user, ...form });
+        showToast(res.data.message || t('profile.saved'), 'success');
+        setEditing(false);
+      } else showToast(res.data?.error || t('msg.server_error'), 'danger');
+    } catch (err) {
+      showToast(err?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setSaving(false);
+  }
 
   if (!user) return null;
 
@@ -119,21 +162,61 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* Details as labelled cards, not a bare two-column table.
+          The table put a grey label against a dash for every empty field, so a
+          profile with nothing filled in read as broken rather than as new — and
+          offered no way to fix any of it.
+
+          The three descriptive fields are editable. Role, points and reporting
+          line are not: they decide what an idea can reach and who judges it,
+          and the server ignores them whatever this form sends. */}
       <div className="card" style={{ marginTop:16 }}>
-        <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('profile.details')}</div>
-        <table className="table" id="profile-table">
-          <tbody>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.dept')}</td><td>{user.department||'–'}</td></tr>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.email_lbl')}</td><td>{user.email}</td></tr>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.phone')}</td><td>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,gap:12,flexWrap:'wrap' }}>
+          <div style={{ fontWeight:700,fontSize:13,color:'var(--heading)' }}>{t('profile.details')}</div>
+          {!editing ? (
+            <button className="btn btn-outline btn-sm" onClick={() => {
+              setForm({ department:user.department||'', business_unit:user.business_unit||'', location:user.location||'' });
+              setEditing(true);
+            }}>{t('profile.edit')}</button>
+          ) : (
+            <div style={{ display:'flex',gap:8 }}>
+              <button className="btn btn-outline btn-sm" disabled={saving} onClick={() => setEditing(false)}>{t('btn.cancel')}</button>
+              <button className="btn btn-primary btn-sm" disabled={saving} onClick={save}>
+                {saving ? t('btn.saving') : t('profile.save')}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(215px,1fr))',gap:12 }}>
+          <Detail label={t('profile.email_lbl')} value={user.email} />
+
+          <div style={CELL}>
+            <div style={CAP}>{t('profile.phone')}</div>
+            <div style={{ marginTop:5 }}>
               <PhoneChange current={user.phone} t={t}
                 onChanged={(p) => setUser && setUser({ ...user, phone: p })} />
-            </td></tr>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.reports_to')}</td><td>{user.manager_name||'–'}</td></tr>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.bu')}</td><td>{user.business_unit||'–'}</td></tr>
-            <tr><td style={{ color:'var(--subtle)',padding:'5px 0' }}>{t('profile.loc')}</td><td>{user.location||'–'}</td></tr>
-          </tbody>
-        </table>
+            </div>
+          </div>
+
+          {EDITABLE.map(([key, labelKey]) => (
+            <div key={key} style={CELL}>
+              <div style={CAP}>{t(labelKey)}</div>
+              {editing ? (
+                <input className="form-control" style={{ marginTop:6,fontSize:13 }} maxLength={100}
+                  value={form[key]} placeholder={t('profile.not_set')}
+                  onChange={(e) => setForm(f => ({ ...f, [key]: e.target.value }))} />
+              ) : (
+                <div style={{ marginTop:5,fontSize:13.5,fontWeight:600,color:user[key]?'var(--text)':'var(--subtle)' }}>
+                  {user[key] || t('profile.not_set')}
+                </div>
+              )}
+            </div>
+          ))}
+
+          <Detail label={t('profile.reports_to')} value={user.manager_name} note={t('profile.managed_note')} />
+          <Detail label={t('profile.role_lbl')} value={formatRole(user.role, t)} note={t('profile.managed_note')} />
+        </div>
       </div>
     </div>
   );

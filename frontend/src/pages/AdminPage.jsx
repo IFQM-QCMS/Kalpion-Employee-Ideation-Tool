@@ -10,6 +10,7 @@ import ReportingLineLookup from '../components/ReportingLineLookup';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import BulkImportModal from '../components/BulkImportModal';
 import InfoDot from '../components/InfoDot';
+import Pager, { usePager } from '../components/Pager';
 
 /*
  * React's `style` prop takes an object, not a CSS string. These were strings
@@ -418,10 +419,15 @@ export default function AdminPage() {
       {/* System */}
       {tab === 5 && <BrandingCard t={t} showToast={showToast} />}
 
+      {/* Grouped into a card and given room.
+          This was a bare 600px column on the page background: every field at the
+          same weight, section titles indistinguishable from the labels beneath
+          them, and two thirds of a wide screen left empty beside it. Nothing
+          here changed except how it is grouped and how much room it gets. */}
       {tab === 5 && settings && (
-        <div style={{ maxWidth:600,marginTop:16 }}>
-          <form onSubmit={handleSaveSettings}>
-            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',marginBottom:16 }}>{t('admin.sla_heading')}</div>
+        <div style={{ maxWidth:880,marginTop:16 }}>
+          <form onSubmit={handleSaveSettings} className="card">
+            <div style={SECTION_HEAD}>{t('admin.sla_heading')}</div>
             <div className="form-row">
               <div className="form-group">
                 <label>{t('admin.sla_days')}<InfoDot term="sla_days" /></label>
@@ -911,6 +917,14 @@ const STAGE_OPTIONS = [
 ];
 const DEFAULT_STAGES = ['originator','immediate_manager','department_manager','plant_head'];
 
+/* Section headings inside the settings form: a rule and a weight change, so a
+   heading is distinguishable from the field labels beneath it. */
+const SECTION_HEAD = {
+  fontSize: 12, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase',
+  color: 'var(--heading)', margin: '4px 0 14px',
+  paddingBottom: 8, borderBottom: '1px solid var(--border)',
+};
+
 const HIER_ROLE_COLORS = {
   admin:'#374151', executive:'#4b5563', plant_head:'#52525b', senior_manager:'#6b7280', department_manager:'#d97706',
   manager:'#f59e0b', project_lead:'#0891b2', team_lead:'#0284c7',
@@ -920,6 +934,7 @@ const HIER_ROLE_COLORS = {
 function HierarchyTab({ t, showToast, currentUserId }) {
   const [users,     setUsers]     = useState([]);
   const [truncated, setTruncated] = useState(false);
+  const [hierSearch, setHierSearch] = useState('');
   const [limit,     setLimit]     = useState(0);
   const [total,     setTotal]     = useState(0);
   const [managers,  setManagers]  = useState([]);
@@ -1236,7 +1251,41 @@ function HierarchyTab({ t, showToast, currentUserId }) {
             {t('sa.too_many_tree', { shown: limit, total })}
           </div>
         )}
-        {!roots.length
+        {/* Find one person without reading the tree.
+            Scrolling a thousand nested cards to reach somebody is not a way to
+            find them, and it is the thing an admin actually came here to do.
+            A search shows matches as a flat list with their manager on the row,
+            because the branch above a person is not what you are looking for
+            when you already know their name. */}
+        <input
+          className="form-control"
+          style={{ marginBottom: 12, maxWidth: 340 }}
+          placeholder={t('hier.search_ph')}
+          value={hierSearch}
+          onChange={(e) => setHierSearch(e.target.value)}
+        />
+
+        {hierSearch.trim() ? (
+          (() => {
+            const q = hierSearch.trim().toLowerCase();
+            const hits = users.filter(u =>
+              [u.name, u.employee_id, u.department, u.email]
+                .some(v => String(v || '').toLowerCase().includes(q)));
+            if (!hits.length) return <div className="empty-state">{t('sa.no_users')}</div>;
+            return (
+              <>
+                <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:8 }}>
+                  {t('hier.n_matches', { n: hits.length })}
+                </div>
+                {hits.slice(0, 50).map(u => (
+                  <ReportingNode key={u.id} node={{ ...u, children: [] }} depth={0} t={t}
+                    managers={managers} savingId={savingId} currentUserId={currentUserId}
+                    onReassign={reassign} />
+                ))}
+              </>
+            );
+          })()
+        ) : !roots.length
           ? <div className="empty-state">{t('sa.no_users')}</div>
           : roots.map(n => (
             <ReportingNode key={n.id} node={n} depth={0} t={t}
@@ -1248,39 +1297,98 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   );
 }
 
+/*
+ * One person in the reporting tree.
+ *
+ * Two things made this unusable once an organisation had real numbers in it.
+ *
+ * Every row mounted a <select> listing every possible manager. At a thousand
+ * employees that is a thousand selects each holding a thousand options - a
+ * million DOM nodes for a screen showing forty. The browser, not the server,
+ * was what stopped responding. The selector is now mounted only for the row
+ * being changed; every other row shows the manager's name as text.
+ *
+ * And the tree drew itself in full, indenting 36px per level, so a deep
+ * organisation ran off the side of the screen with no way to fold a branch.
+ * Branches now collapse, and anything below the second level starts collapsed -
+ * an admin opens the part they are working on rather than scrolling past all
+ * of it.
+ */
 function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onReassign }) {
   const color = HIER_ROLE_COLORS[node.role] || '#888';
-  const sorted = [...(node.children || [])].sort((a, b) => {
+  const kids = [...(node.children || [])].sort((a, b) => {
     const o = Object.fromEntries([...CHAIN_LADDER].reverse().map((r, i) => [r, i]));
     return (o[a.role]??9) - (o[b.role]??9) || a.name.localeCompare(b.name);
   });
-  // The admin's own row and other admins keep their selector too — only the
-  // node itself is excluded from its manager options (self-reporting).
+  const [open, setOpen] = useState(depth < 2);
+  const [editing, setEditing] = useState(false);
+
+  const manager = managers.find(m => m.id === node.manager_id);
   const options = managers.filter(m => m.id !== node.id);
+
+  // How many people sit under this person in total, not just directly. It is
+  // the number that decides whether a branch is worth opening.
+  const countBelow = (n) => (n.children || []).reduce((a, c) => a + 1 + countBelow(c), 0);
+  const below = countBelow(node);
+
   return (
-    <div style={{ position:'relative',marginLeft:depth*36,marginBottom:8 }}>
-      {depth > 0 && <div style={{ position:'absolute',left:-18,top:'50%',width:14,height:1,background:'var(--border)' }}></div>}
-      <div style={{ borderLeft:`3px solid ${color}`,padding:'10px 14px',background:'var(--surface)',borderRadius:'var(--r)',boxShadow:'var(--shadow-sm)',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap' }}>
+    <div style={{ position:'relative',marginLeft:depth ? 22 : 0,marginBottom:6 }}>
+      {depth > 0 && <div style={{ position:'absolute',left:-12,top:'50%',width:10,height:1,background:'var(--border)' }}></div>}
+      <div style={{ borderLeft:`3px solid ${color}`,padding:'8px 12px',background:'var(--surface)',
+                    borderRadius:'var(--r)',boxShadow:'var(--shadow-sm)',display:'flex',
+                    alignItems:'center',gap:10,flexWrap:'wrap' }}>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          disabled={!kids.length}
+          title={kids.length ? (open ? t('hier.collapse') : t('hier.expand')) : ''}
+          style={{
+            width:20,height:20,flexShrink:0,borderRadius:5,cursor:kids.length?'pointer':'default',
+            border:'1px solid var(--border)',background:'transparent',
+            color:kids.length?'var(--text-muted)':'transparent',fontSize:11,lineHeight:1,fontFamily:'inherit',
+          }}
+        >{kids.length ? (open ? '−' : '+') : ''}</button>
+
         <div className="avatar" style={{ background:`linear-gradient(135deg,${color},${color}cc)`,flexShrink:0,fontWeight:800 }}>
           {node.avatar_initials || node.name?.[0] || '?'}
         </div>
-        <div style={{ flex:1,minWidth:160 }}>
-          <div style={{ fontWeight:700,fontSize:13,color:'var(--text)' }}>{node.name}</div>
+        <div style={{ flex:1,minWidth:150 }}>
+          <div style={{ fontWeight:700,fontSize:13,color:'var(--text)' }}>
+            {node.name}
+            {!!below && !open && (
+              <span style={{ marginLeft:8,fontSize:11,fontWeight:600,color:'var(--subtle)' }}>
+                {t('hier.n_below', { n: below })}
+              </span>
+            )}
+          </div>
           <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{node.employee_id} · {node.department||'–'}</div>
         </div>
         <span className="badge" style={{ background:`${color}18`,color,border:`1px solid ${color}40`,fontWeight:700 }}>{formatRole(node.role, t)}</span>
-        <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+
+        <div style={{ display:'flex',alignItems:'center',gap:6,minWidth:200,justifyContent:'flex-end' }}>
           <span style={{ fontSize:11,color:'var(--subtle)' }}>{t('hier.reports_to')}</span>
-          <select className="form-control" style={{ width:190,fontSize:12,padding:'4px 8px' }}
-            value={node.manager_id || ''}
-            disabled={savingId === node.id}
-            onChange={e => onReassign(node.id, e.target.value ? Number(e.target.value) : null)}>
-            <option value="">{t('admin.uf_none')}</option>
-            {options.map(m => <option key={m.id} value={m.id}>{m.name} ({formatRole(m.role, t)})</option>)}
-          </select>
+          {editing ? (
+            <select className="form-control" style={{ width:190,fontSize:12,padding:'4px 8px' }}
+              autoFocus
+              value={node.manager_id || ''}
+              disabled={savingId === node.id}
+              onBlur={() => setEditing(false)}
+              onChange={e => { onReassign(node.id, e.target.value ? Number(e.target.value) : null); setEditing(false); }}>
+              <option value="">{t('admin.uf_none')}</option>
+              {options.map(m => <option key={m.id} value={m.id}>{m.name} ({formatRole(m.role, t)})</option>)}
+            </select>
+          ) : (
+            <button type="button" className="btn btn-sm btn-outline"
+              style={{ fontSize:12,padding:'4px 10px',maxWidth:190,overflow:'hidden',
+                       textOverflow:'ellipsis',whiteSpace:'nowrap' }}
+              disabled={savingId === node.id}
+              onClick={() => setEditing(true)}>
+              {manager ? manager.name : t('admin.uf_none')}
+            </button>
+          )}
         </div>
       </div>
-      {sorted.map(c => (
+      {open && kids.map(c => (
         <ReportingNode key={c.id} node={c} depth={depth+1} t={t}
           managers={managers} savingId={savingId} currentUserId={currentUserId} onReassign={onReassign} />
       ))}
@@ -1422,6 +1530,10 @@ function ApprovedIdeasTab({ t, showToast }) {
   const [pushing, setPushing] = useState(false);
   const [viewId,  setViewId]  = useState(null);
 
+  /* Twenty to a page, like the other lists. An organisation with years of
+     approved ideas otherwise renders every one of them at once. */
+  const pager = usePager(ideas);
+
   useEffect(() => { load(); }, []);
   async function load() {
     setLoading(true);
@@ -1456,7 +1568,7 @@ function ApprovedIdeasTab({ t, showToast }) {
           <div style={{ fontSize:12,color:'var(--subtle)' }}>{t('admin.approved_sub')}</div>
         </div>
         <button className="btn btn-primary btn-sm" disabled={pushing || !ideas.length || notReady} onClick={() => push(null)}>
-          {pushing ? t('msg.loading') : `⇪ ${t('admin.qcms_push_all')}`}
+          {pushing ? t('msg.loading') : t('admin.qcms_push_all')}
         </button>
       </div>
 
@@ -1478,7 +1590,7 @@ function ApprovedIdeasTab({ t, showToast }) {
                 </tr>
               </thead>
               <tbody>
-                {ideas.map(i => (
+                {pager.slice.map(i => (
                   <tr key={i.id} style={{ borderTop:'1px solid var(--border)' }}>
                     <td style={{ padding:'9px 12px',fontWeight:600 }}>{i.idea_code}</td>
                     <td style={{ padding:'9px 12px' }}>{i.title}</td>
@@ -1493,6 +1605,7 @@ function ApprovedIdeasTab({ t, showToast }) {
                 ))}
               </tbody>
             </table>
+            <Pager {...pager} noun="approved ideas" />
           </div>
         )
       }
@@ -1587,7 +1700,7 @@ function IntegrationTab({ t, showToast }) {
       <div style={{ display:'flex',gap:10,marginTop:8 }}>
         <button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? t('btn.saving') : t('btn.save')}</button>
         <button className="btn btn-outline" disabled={pushing || !enabled || !config?.api_key_set} onClick={pushAll}>
-          {pushing ? t('msg.loading') : `⇪ ${t('admin.qcms_push_all')}`}
+          {pushing ? t('msg.loading') : t('admin.qcms_push_all')}
         </button>
       </div>
 

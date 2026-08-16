@@ -1355,3 +1355,47 @@ test('billing: a trial runs on the Trial plan, and that plan cannot be deleted',
   assert.ok(after.some((p) => p.id === trial.id && p.status === 'active'),
     'the Trial plan must survive a delete attempt, and stay active');
 });
+
+/*
+ * Editing your own profile.
+ *
+ * The three descriptive fields are the person's to correct — they are the one
+ * who knows they have moved department. Role, points and reporting line are
+ * not: role and manager decide what an idea can reach and who judges it, and
+ * points are earned. Somebody able to set their own role could approve their
+ * own idea, so the server takes a fixed list of fields rather than trusting
+ * the form that sent them.
+ */
+test('profile: a user may fix their own details but cannot promote themselves', async () => {
+  const u = await login('user@orga.test', PASSWORDS.orgaUser);
+  // Points are earned by earlier cases in this file, so the property under test
+  // is that they are UNCHANGED by this call — not that they are zero.
+  const [before] = await sql('ifqm_test_a',
+    "SELECT points FROM ifqm_test_a.users WHERE email = 'user@orga.test'");
+
+  const res = await api('POST', '/api/users/profile', {
+    token: u.token,
+    body: {
+      department: 'Quality', business_unit: 'Plant 2', location: 'Hosur',
+      // Everything below is an attempt to grant privilege, and must be ignored.
+      role: 'admin', points: 99999, manager_id: 1, status: 'inactive',
+    },
+  });
+  assert.equal(res.status, 200);
+
+  const [row] = await sql('ifqm_test_a',
+    "SELECT department, business_unit, location, role, points, status FROM ifqm_test_a.users WHERE email = 'user@orga.test'");
+  assert.equal(row.department, 'Quality');
+  assert.equal(row.business_unit, 'Plant 2');
+  assert.equal(row.location, 'Hosur');
+  assert.equal(row.role, 'employee', 'a user must not be able to set their own role');
+  assert.equal(Number(row.points), Number(before.points), 'points are earned, never claimed');
+  assert.equal(row.status, 'active', 'status is not a self-service field');
+
+  // Changing the number is a verified flow of its own, not a profile field.
+  const phone = await api('POST', '/api/users/profile', {
+    token: u.token, body: { phone: '9800000123' },
+  });
+  assert.equal(phone.status, 400);
+  assert.match(phone.data.error, /verify the new one/i);
+});

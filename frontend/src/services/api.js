@@ -237,6 +237,9 @@ export const usersApi = {
   updateManager: (id, managerId) => api.put(`/users/${id}/manager`, { manager_id: managerId }),
   deleteUser: (id) => api.delete(`/users/${id}`),
   profile: () => api.get('/users/profile'),
+  // Saves only the descriptive fields; the server ignores anything else it
+  // is sent, so role, points and reporting line cannot be set from here.
+  updateProfile: (data) => api.post('/users/profile', data),
 };
 
 // ── Bulk employee import (org admin) ──────────────────────────────────
