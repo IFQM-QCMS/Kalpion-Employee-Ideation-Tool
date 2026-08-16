@@ -55,7 +55,20 @@ function describeDevice(ua) {
 /* An address on a private range is almost always the hosting provider's own
    proxy rather than anything about the person, so the row says so instead of
    leaving an operator to wonder why every sign-in is from 10.x. */
-const NETWORK_NOTE = { private: 'internal network', local: 'this machine', public: '' };
+/*
+ * What an address actually tells you.
+ *
+ * Behind a hosting provider every sign-in arrives from the provider's own
+ * internal range, so the column shows 10.x.x.x for everybody. That is not the
+ * visitor's address and must not be allowed to read as one — an operator
+ * scanning this table for "who signed in from where" would otherwise treat
+ * infrastructure plumbing as evidence.
+ */
+const NETWORK_NOTE = {
+  private: 'hosting provider’s address, not the visitor’s',
+  local: 'this machine',
+  public: '',
+};
 
 const OUTCOME_STYLE = {
   success: { bg: 'var(--success-light)', fg: 'var(--success)' },
@@ -99,17 +112,25 @@ export default function PlatformLoginsPage() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [actorType, outcome, limit]);
 
   /*
-   * Poll, so a sign-in that happens while this screen is open appears without
-   * anybody pressing Refresh. The record is written fire-and-forget on the
-   * login path, so it lands within a moment of the event; the page simply was
-   * not looking again. Paused while the tab is hidden - polling a screen
-   * nobody is reading is load for nothing.
+   * Refresh when the tab is brought back to the front — not on a timer.
+   *
+   * This polled every fifteen seconds, which made the page visibly reload
+   * itself while somebody was reading it: rows jumped, the spinner flashed,
+   * and a table being scanned moved under the cursor. "Real time" on a page
+   * that lists sign-ins does not mean redrawing it four times a minute; it
+   * means what you are looking at is current when you look at it.
+   *
+   * So: fetch on open, fetch again when the tab regains focus, and otherwise
+   * only when Refresh is pressed.
    */
   useEffect(() => {
-    const tick = () => { if (!document.hidden) load(); };
-    const id = setInterval(tick, 15000);
-    document.addEventListener('visibilitychange', tick);
-    return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick); };
+    const onFocus = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
+    };
     /* eslint-disable-next-line */
   }, [actorType, outcome, limit]);
 

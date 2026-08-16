@@ -16,7 +16,13 @@ import { notFoundHandler, errorHandler } from './middleware/errorHandler.js';
 export function createApp() {
   const app = express();
 
-  app.set('trust proxy', 1);
+  /*
+   * Configured, not hard-coded. At 1 the hosted deployment logged every sign-in
+   * from a 10.x.x.x address — its own load balancer — because more than one
+   * proxy sits in front and one hop back never reaches the client. See
+   * readTrustProxy in config for why this is a setting and not a constant.
+   */
+  app.set('trust proxy', config.trustProxy);
   app.disable('x-powered-by');
 
   // Security headers.
@@ -50,7 +56,9 @@ export function createApp() {
   app.use(
     cors({
       origin(origin, cb) {
-        if (!origin || config.corsOrigins.includes(origin)) return cb(null, true);
+        if (!origin || config.corsOrigins.includes(origin) || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+          return cb(null, true);
+        }
         return cb(new Error(`Origin ${origin} not allowed by CORS`));
       },
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

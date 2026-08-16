@@ -48,8 +48,38 @@ function readDbSsl() {
 const dbPort = int(process.env.DB_PORT, 3306);
 const dbSsl = readDbSsl();
 
+/*
+ * How many proxies sit in front of this application.
+ *
+ * Express walks back through X-Forwarded-For by this many hops to decide what
+ * req.ip is. Set to 1 — one hop — every sign-in on the hosted deployment was
+ * recorded from a 10.x.x.x address, because the host runs more than one proxy
+ * and one hop back is still its own internal load balancer. The login activity
+ * screen was therefore showing the hosting provider's plumbing in a column
+ * headed "IP address", which is worse than showing nothing: it looks like
+ * evidence.
+ *
+ * 'true' trusts the whole chain and takes the left-most entry, which is the
+ * client. That is right behind a provider whose edge rewrites the header, and
+ * wrong behind anything that passes a client-supplied one through — there, a
+ * caller can put whatever it likes in X-Forwarded-For and be believed. So it is
+ * configuration rather than a constant: the deployment knows its own topology
+ * and this file does not.
+ */
+function readTrustProxy() {
+  const raw = (process.env.TRUST_PROXY || '').trim().toLowerCase();
+  if (!raw) return 1;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 1;
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
+
+  // See readTrustProxy above: how many proxy hops to believe.
+  trustProxy: readTrustProxy(),
   port: int(process.env.PORT, 4000),
 
   // Public base URL of the React frontend — used to build emailed links

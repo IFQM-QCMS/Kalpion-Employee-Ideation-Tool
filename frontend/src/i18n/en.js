@@ -1268,7 +1268,7 @@ export default {
   'admin.sections_none':'Colleagues see the title and nothing else.',
 
   // ── Login activity, continued ────────────────────────────────────────
-  'la.col_location':'Location (approx.)',
+  'la.col_location':'Region (from time zone)',
 
   // ── Information bubbles ──────────────────────────────────────────────
   'info.employee_sections':'Which parts of somebody else’s idea an ordinary colleague may read. It does not affect the author, who always sees their own idea in full, nor anyone reviewing it, who has to read what they are deciding on. Untick a section and it disappears for everybody else, with a short note in its place so the idea does not look half-filled-in. The safest starting point is the one-line proposal alone: people can see what is being worked on without being able to lift the detail.',
