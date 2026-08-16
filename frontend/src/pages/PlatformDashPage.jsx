@@ -220,7 +220,12 @@ export default function PlatformDashPage() {
               <span style={{ fontSize:11,color:'var(--subtle)',fontWeight:600 }}>{counts.total} Tenants</span>
             </div>
             <div style={{ display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',padding:'10px 0' }}>
-              <Donut size={150} thickness={24} data={statusDonut} centerValue={counts.total} centerLabel={t('pa.kpi_total_orgs')} />
+              {/* No centre label. "Total Organizations" is far wider than the
+                  hole it sat in, so it ran out across the ring and off both
+                  sides of it. The number needs no caption here: the card is
+                  headed Organisation Status and the count beside it already
+                  says what is being counted. */}
+              <Donut size={150} thickness={24} data={statusDonut} centerValue={counts.total} />
               <div style={{ flex:1,minWidth:120 }}><Legend items={statusDonut} /></div>
             </div>
           </div>
