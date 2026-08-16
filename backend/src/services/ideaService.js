@@ -23,6 +23,7 @@ import { getApprovalConfig } from './settingsService.js';
 import { getOrgSettings, queueEmail } from './mailerService.js';
 import { generateIdeaCode, addNotification, addWorkflow, addPoints } from './coreHelpers.js';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
+import logger from '../utils/logger.js';
 import { IDEA_SECTIONS, employeeSections } from './ideaSections.js';
 
 const POINTS = config.points;
@@ -797,6 +798,39 @@ export async function submitOrDraft(db, user, action, b) {
   }
 
   const [crows] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
+
+  /*
+   * Tell the person who submitted it that it arrived.
+   *
+   * Only them: an acknowledgement is addressed to one reader and nobody else
+   * needs a copy. The manager already has their own notice above, and sending
+   * this to a wider list would turn every submission into inbox noise for
+   * people who cannot act on it.
+   *
+   * Sent only on a real submission, never on a saved draft and never on the
+   * re-save of something already submitted, or somebody editing their idea
+   * three times would be thanked three times for the same thing.
+   */
+  if (action === 'submit' && !wasAlreadySubmitted && user.email) {
+    try {
+      const code = crows[0].idea_code;
+      await queueEmail(
+        db, user.email, user.name,
+        `Idea ${code} received`,
+        `Dear ${user.name},\n\n`
+        + `Your idea has been submitted successfully and is now with your reviewer.\n\n`
+        + `Reference: ${code}\n`
+        + `Title: ${title}\n\n`
+        + `You can follow its progress under "My Ideas" - the timeline there shows every `
+        + `step it passes through, and you will be told when a decision is made.\n\n`
+        + `Thank you for taking the time to write it up.`
+      );
+    } catch (e) {
+      // A confirmation that could not be sent must never fail the submission it
+      // is confirming. The idea is saved; the email is a courtesy.
+      logger.warn(`idea ${ideaId}: submitter acknowledgement not queued — ${e.message}`);
+    }
+  }
 
   return {
     success: true,

@@ -5,6 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
+import Pager, { usePager } from '../components/Pager';
 
 /*
  * Platform → Payments.
@@ -110,6 +111,12 @@ export default function PlatformBillingPage() {
       return true;
     });
   }, [data, filter, search]);
+
+  /* Twenty organisations to a page. At a thousand customers this table was
+     several thousand DOM nodes rebuilt on every filter keystroke, and that cost
+     lands on the browser rather than the server. */
+  const pager = usePager(rows);
+  useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [filter, search]);
 
   async function sweep(dryRun) {
     setBusy(true);
@@ -225,7 +232,7 @@ export default function PlatformBillingPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((o) => {
+                {pager.slice.map((o) => {
                   const badge = stateBadge(o, t);
                   const until = o.billing.ends_at || o.billing.trial_ends_at || o.billing.period_end;
                   return (
@@ -266,6 +273,7 @@ export default function PlatformBillingPage() {
                 })}
               </tbody>
             </table>
+          <Pager {...pager} noun="organizations" />
           </div>
         )}
       </div>

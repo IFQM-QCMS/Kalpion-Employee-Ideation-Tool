@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { usersApi } from '../services/api';
 import { fmtDate, statusBadge, translateStatus, formatRole, isPrivileged } from '../utils/helpers';
+import Pager, { usePager } from '../components/Pager';
 
 export default function AuditPage() {
   const { user }   = useAuth();
@@ -29,6 +30,10 @@ export default function AuditPage() {
     setLoading(false);
   }
 
+  // Twenty to a page: the list endpoints already bound what they return,
+  // but rendering every row was the browser's cost, not the server's.
+  const pager = usePager(rows);
+
   return (
     <div className="card" style={{ overflowX:'auto' }}>
       <table className="table">
@@ -53,7 +58,7 @@ export default function AuditPage() {
           {!loading && !error && !rows.length && (
             <tr><td colSpan="5" className="text-center">{t('msg.no_audit')}</td></tr>
           )}
-          {rows.map((w, i) => (
+          {pager.slice.map((w, i) => (
             <tr key={i}>
               <td>{fmtDate(w.created_at)}</td>
               <td>
@@ -67,6 +72,7 @@ export default function AuditPage() {
           ))}
         </tbody>
       </table>
+        <Pager {...pager} noun="entries" />
     </div>
   );
 }

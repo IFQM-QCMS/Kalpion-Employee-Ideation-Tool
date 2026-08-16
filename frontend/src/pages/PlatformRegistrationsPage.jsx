@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import InfoDot from '../components/InfoDot';
+import Pager, { usePager } from '../components/Pager';
 
 /*
   Platform → Registrations.
@@ -105,6 +106,10 @@ export default function PlatformRegistrationsPage() {
       r.proposed_slug, r.gstin, r.udyam_number, r.city, r.state]
       .some((v) => String(v || '').toLowerCase().includes(q)));
   }, [rows, search]);
+
+  /* Twenty applications to a page. */
+  const pager = usePager(filtered);
+  useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [search, tab]);
 
   /*
    * Approving no longer means typing an org code into a browser prompt.
@@ -211,54 +216,77 @@ export default function PlatformRegistrationsPage() {
         <div className="card"><div className="empty-state">{t('pa.reg_none')}</div></div>
       )}
 
-      {!loading && filtered.map((r) => {
-        const tone = STATUS_TONE[r.status] || STATUS_TONE.pending;
-        const open = openId === r.id;
-        return (
-          <div className="card" key={r.id} style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap',
-                          alignItems: 'flex-start' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 750, fontSize: 15.5, color: 'var(--heading)' }}>{r.company_name}</span>
-                  <span style={{ background: tone.bg, color: tone.fg, fontSize: 10, fontWeight: 750,
-                                 padding: '3px 9px', borderRadius: 999, textTransform: 'uppercase' }}>
-                    {r.status}
-                  </span>
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--subtle)', marginTop: 3 }}>
-                  REG-{r.id} · {r.contact_name} · {r.contact_email} · {t('pa.reg_applied')} {fmt(r.created_at)}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button className="btn btn-outline btn-sm" onClick={() => setOpenId(open ? null : r.id)}>
-                  {open ? t('pa.reg_hide') : t('pa.reg_details')}
-                </button>
-                {r.status === 'pending' && (
-                  <>
-                    <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => reject(r)}>
-                      {t('pa.reg_reject')}
-                    </button>
-                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => openApproval(r)}>
-                      {t('pa.reg_approve')}
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Decision trail for anything already handled. */}
-            {r.status !== 'pending' && (r.reviewed_at || r.review_note || r.tenant_slug) && (
-              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-                {r.reviewed_at && <span>{t('pa.reg_reviewed')} {fmt(r.reviewed_at)}</span>}
-                {r.tenant_slug && <span> · {t('pa.reg_became')} <b>{r.tenant_slug}</b></span>}
-                {r.review_note && <div style={{ marginTop: 4 }}>{t('pa.reg_note')}: {r.review_note}</div>}
-              </div>
+      {/* A table, not a stack of cards.
+          Image 16: at any real number of applications the card list is a long
+          scroll where nothing lines up, so the columns people actually scan -
+          who applied, when, and what state it is in - cannot be compared down
+          the page. Details stay one click away, in a row beneath. */}
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <table className="table" style={{ minWidth: 760 }}>
+          <thead>
+            <tr>
+              <th>{t('pa.reg_f_company')}</th>
+              <th>{t('pa.reg_f_contact')}</th>
+              <th>{t('pa.reg_applied')}</th>
+              <th>{t('table.status')}</th>
+              <th style={{ textAlign: 'right' }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {!loading && !pager.slice.length && (
+              <tr><td colSpan="5" className="text-center">{t('pa.reg_none')}</td></tr>
             )}
+            {!loading && pager.slice.map((r) => {
+              const tone = STATUS_TONE[r.status] || STATUS_TONE.pending;
+              const open = openId === r.id;
+              return (
+                <Fragment key={r.id}>
+                  <tr>
+                    <td>
+                      <div style={{ fontWeight: 700, color: 'var(--heading)' }}>{r.company_name}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>
+                        REG-{r.id}{r.tenant_slug ? ` · ${r.tenant_slug}` : ''}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 12.5 }}>
+                      <div>{r.contact_name}</div>
+                      <div style={{ color: 'var(--subtle)', fontSize: 11.5 }}>{r.contact_email}</div>
+                    </td>
+                    <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>{fmt(r.created_at)}</td>
+                    <td>
+                      <span style={{ background: tone.bg, color: tone.fg, fontSize: 10, fontWeight: 750,
+                                     padding: '3px 9px', borderRadius: 999, textTransform: 'uppercase' }}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button className="btn btn-outline btn-sm" onClick={() => setOpenId(open ? null : r.id)}>
+                        {open ? t('pa.reg_hide') : t('pa.reg_details')}
+                      </button>
+                      {r.status === 'pending' && (
+                        <>
+                          <button className="btn btn-outline btn-sm" style={{ marginLeft: 6 }}
+                            disabled={busy} onClick={() => reject(r)}>{t('pa.reg_reject')}</button>
+                          <button className="btn btn-primary btn-sm" style={{ marginLeft: 6 }}
+                            disabled={busy} onClick={() => openApproval(r)}>{t('pa.reg_approve')}</button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
 
-            {open && (
-              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                  {r.status !== 'pending' && (r.reviewed_at || r.review_note || r.tenant_slug) && (
+                    <tr>
+                      <td colSpan="5" style={{ paddingTop: 0, fontSize: 12, color: 'var(--text-muted)' }}>
+                        {r.reviewed_at && <span>{t('pa.reg_reviewed')} {fmt(r.reviewed_at)}</span>}
+                        {r.tenant_slug && <span> · {t('pa.reg_became')} <b>{r.tenant_slug}</b></span>}
+                        {r.review_note && <span> · {t('pa.reg_note')}: {r.review_note}</span>}
+                      </td>
+                    </tr>
+                  )}
+
+                  {open && (
+                    <tr>
+                      <td colSpan="5" style={{ background: 'var(--surface-2)' }}>
                 <Group title={t('pa.reg_g_org')}>
                   <Field label={t('pa.reg_f_company')} value={r.company_name} />
                   <Field label={t('pa.reg_f_slug')} value={r.proposed_slug} mono />
@@ -308,11 +336,16 @@ export default function PlatformRegistrationsPage() {
                   <Field label={t('pa.reg_f_consent')}
                     value={r.accepted_terms ? t('pa.reg_consent_yes') : t('pa.reg_consent_no')} />
                 </Group>
-              </div>
-            )}
-          </div>
-        );
-      })}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+        <Pager {...pager} noun="applications" />
+      </div>
     </>
   );
 }

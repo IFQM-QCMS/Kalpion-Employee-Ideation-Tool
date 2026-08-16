@@ -9,6 +9,7 @@ import IdeaDetailModal from '../components/IdeaDetailModal';
 import InfoDot from '../components/InfoDot';
 import ScreenGuard from '../components/ScreenGuard';
 import BulkArchivePanel from '../components/BulkArchivePanel';
+import Pager, { usePager } from '../components/Pager';
 
 /* Escape for the print window — that HTML is built by string concatenation, so
    React's automatic escaping does not apply to it. */
@@ -46,6 +47,10 @@ export default function AllIdeasPage() {
   const { t }         = useLang();
   const { showToast } = useToast();
   const [ideas,   setIdeas]   = useState([]);
+
+  /* Twenty to a page. The endpoint already bounds what it returns; rendering
+     every row of it was the browser's cost, not the server's. */
+  const pager = usePager(ideas);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [search,  setSearch]  = useState('');
@@ -236,7 +241,7 @@ export default function AllIdeasPage() {
             {!loading && !ideas.length && (
               <tr><td colSpan="12" className="text-center">{t('msg.no_ideas')}</td></tr>
             )}
-            {ideas.map(i => {
+            {pager.slice.map(i => {
               const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
               const cScore  = communityScore(i.ai_score, i.upvotes||0, i.downvotes||0);
               return (
@@ -303,6 +308,7 @@ export default function AllIdeasPage() {
             })}
           </tbody>
         </table>
+        <Pager {...pager} noun="ideas" />
       </div>
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); loadIdeas(); }} />}

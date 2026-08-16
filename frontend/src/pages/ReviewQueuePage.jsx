@@ -9,6 +9,7 @@ import ReviewActionModal from '../components/ReviewActionModal';
 import AssignReviewersModal from '../components/AssignReviewersModal';
 import ReviewerDecisionModal from '../components/ReviewerDecisionModal';
 import ScreenGuard from '../components/ScreenGuard';
+import Pager, { usePager } from '../components/Pager';
 
 function EngBadge({ aiScore, avgRating, voteCount, t }) {
   const ei = engagementIndex(aiScore, avgRating, voteCount);
@@ -87,6 +88,10 @@ export default function ReviewQueuePage() {
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
 
+  // Twenty to a page: the list endpoints already bound what they return,
+  // but rendering every row was the browser's cost, not the server's.
+  const pager = usePager(ideas);
+
   return (
     <ScreenGuard>
       {user?.role === 'admin' && (
@@ -128,7 +133,7 @@ export default function ReviewQueuePage() {
       {!loading && !error && !ideas.length && <div className="empty-state">{t('msg.no_review')}</div>}
 
       <div id="review-list">
-        {ideas.map(i => {
+        {pager.slice.map(i => {
           const isSelf       = parseInt(i.submitter_id) === parseInt(user?.id);
           const isMultiRv    = i.workflow_type === 'multi_reviewer';
           const isMyPending  = i.my_reviewer_decision === 'pending';
@@ -242,6 +247,7 @@ export default function ReviewQueuePage() {
           );
         })}
       </div>
+      <Pager {...pager} noun="ideas" />
 
       {openDetailId && <IdeaDetailModal ideaId={openDetailId} onClose={() => { setOpenDetailId(null); load(); }} />}
       {openReviewId && <ReviewActionModal ideaId={openReviewId} ideaCode={openReviewCode} onClose={() => { setOpenReviewId(null); load(); }} />}

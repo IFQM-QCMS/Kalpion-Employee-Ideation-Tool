@@ -32,6 +32,36 @@ import { useAuth } from '../context/AuthContext';
 export default function ContentProtection({ enabled }) {
   const { user } = useAuth();
 
+  /*
+   * ── Right-click, off across the whole platform ─────────────────────────
+   *
+   * Separate from the opt-in protection below, and unconditional: the block
+   * above applies only inside [data-protect] and only when an organisation has
+   * switched it on, whereas this covers every screen for everybody signed in.
+   *
+   * Form fields are deliberately exempt. The context menu is how people paste -
+   * an API key, a GSTIN, a long template - and taking it away from an input
+   * does nothing for content protection while making the console painful to
+   * operate. Nothing is being protected inside a box the user is typing into.
+   *
+   * Worth being straight about what this is: a deterrent against the casual
+   * right-click-and-copy, not a control. The keyboard shortcut still copies,
+   * developer tools still read the DOM, and no page can stop a screenshot or a
+   * phone camera. What actually keeps an idea from the wrong reader is the
+   * server not sending it - see redactSolution in ideaService.
+   */
+  useEffect(() => {
+    const isEditable = (el) => !!el?.closest?.(
+      'input, textarea, select, [contenteditable="true"], [contenteditable=""]'
+    );
+    const blockMenu = (e) => {
+      if (isEditable(e.target)) return;
+      e.preventDefault();
+    };
+    document.addEventListener('contextmenu', blockMenu);
+    return () => document.removeEventListener('contextmenu', blockMenu);
+  }, []);
+
   useEffect(() => {
     if (!enabled) return undefined;
 
