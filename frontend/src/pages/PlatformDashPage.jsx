@@ -227,7 +227,7 @@ export default function PlatformDashPage() {
           <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
             <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
               <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('pa.chart_ideas_by_org')}</div>
-              <span style={{ fontSize:11,color:'var(--primary)',fontWeight:700 }}>Top Organizations by Volume</span>
+              <span style={{ fontSize:11,color:'var(--primary)',fontWeight:700 }}>{t('pa.top_orgs_volume')}</span>
             </div>
             <div className="bar-chart">
               {topByIdeas.length

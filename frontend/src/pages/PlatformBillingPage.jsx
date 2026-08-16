@@ -225,7 +225,7 @@ export default function PlatformBillingPage() {
         <input className="form-control" style={{ maxWidth: 220 }} value={search}
           placeholder={t('msgb.search')} onChange={(e) => setSearch(e.target.value)} />
         <button className="btn btn-primary" disabled={busy} onClick={triggerMonthlyInvoices}>
-          Send Monthly Invoices
+          {t('msgb.send_invoices')}
         </button>
         <button className="btn" disabled={busy} onClick={() => sweep(true)} title={t('msgb.sweep_dry_hint')}>
           {t('msgb.sweep_preview')}

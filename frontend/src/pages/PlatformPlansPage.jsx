@@ -241,8 +241,8 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 </Field>
                 <Field label="Status">
                   <select className="form-control" value={form.status} onChange={set('status')}>
-                    <option value="active">Active</option>
-                    <option value="inactive">Deleted</option>
+                    <option value="active">{t('pl.st_active')}</option>
+                    <option value="inactive">{t('pl.st_deleted')}</option>
                   </select>
                 </Field>
               </div>
@@ -276,16 +276,16 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
               </Field>
 
               <div className="form-group">
-                <label>GST treatment<InfoDot term="gst_mode" /></label>
+                <label>{t('pl.gst_treatment')}<InfoDot term="gst_mode" /></label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, cursor: 'pointer' }}>
                   <input type="radio" checked={form.gst_mode === 'included'}
                     onChange={() => setForm((f) => ({ ...f, gst_mode: 'included' }))} />
-                  GST is already in the amount above
+                  {t('pl.gst_incl')}
                 </label>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6, cursor: 'pointer' }}>
                   <input type="radio" checked={form.gst_mode === 'excluded'}
                     onChange={() => setForm((f) => ({ ...f, gst_mode: 'excluded' }))} />
-                  GST is added on top of the amount above
+                  {t('pl.gst_excl')}
                 </label>
               </div>
 
@@ -306,7 +306,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                   display: 'flex', justifyContent: 'space-between', marginTop: 6, paddingTop: 6,
                   borderTop: '1px solid var(--border)',
                 }}>
-                  <span style={{ fontWeight: 700 }}>The organisation pays</span>
+                  <span style={{ fontWeight: 700 }}>{t('pl.org_pays')}</span>
                   <strong style={{ color: 'var(--primary)' }}>{money(preview.total)}</strong>
                 </div>
               </div>
@@ -327,11 +327,11 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
               <div className="form-row">
                 <Field label="Maximum users" hint="Empty = unlimited">
                   <input className="form-control" value={form.max_users} onChange={setNum('max_users')}
-                    placeholder="Unlimited" inputMode="numeric" />
+                    placeholder={t('pl.unlimited')} inputMode="numeric" />
                 </Field>
                 <Field label="Storage limit (GB)" hint="Empty = unlimited">
                   <input className="form-control" value={form.storage_gb} onChange={setNum('storage_gb')}
-                    placeholder="Unlimited" inputMode="numeric" />
+                    placeholder={t('pl.unlimited')} inputMode="numeric" />
                 </Field>
               </div>
               {/* Sized from the user cap rather than guessed. A cap that is
@@ -339,11 +339,11 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                   exactly what happened when a flat 2,000-a-month figure was
                   applied to page loads. */}
               <div className="form-group">
-                <label>Monthly request allowance<InfoDot term="request_allowance" /></label>
+                <label>{t('pl.monthly_allowance')}<InfoDot term="request_allowance" /></label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input className="form-control" style={{ width: 190 }} inputMode="numeric"
                     value={form.api_quota_monthly} onChange={setNum('api_quota_monthly')}
-                    placeholder="Unlimited" />
+                    placeholder={t('pl.unlimited')} />
                   {suggestQuota(form.max_users) && (
                     <button type="button" className="btn btn-outline btn-sm"
                       onClick={() => setForm((f) => ({
@@ -364,7 +364,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
               <div className="form-row">
                 <Field label="Maximum departments" hint="Empty = unlimited">
                   <input className="form-control" value={form.max_departments} onChange={setNum('max_departments')}
-                    placeholder="Unlimited" inputMode="numeric" />
+                    placeholder={t('pl.unlimited')} inputMode="numeric" />
                 </Field>
                 <Field label="Support level">
                   <select className="form-control" value={form.support_level} onChange={set('support_level')}>
@@ -499,16 +499,16 @@ export default function PlatformPlansPage() {
                     gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: 'var(--heading)', margin: 0, letterSpacing: '-.5px' }}>
-            Plan Definitions
+            {t('pl.title')}
           </h1>
           <div style={{ fontSize: 13, color: 'var(--subtle)', marginTop: 4 }}>
-            What IFQM charges, and what each plan includes.
+            {t('pl.sub')}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn btn-outline" onClick={load}>{t('btn.refresh')}</button>
           <button className="btn btn-outline" onClick={exportCsv} disabled={!filtered.length}>
-            Export catalogue
+            {t('pl.export')}
           </button>
           <button className="btn btn-primary" onClick={() => setEditing(null)}>+ New plan</button>
         </div>
@@ -533,17 +533,17 @@ export default function PlatformPlansPage() {
 
       <div className="card" style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="form-control" style={{ flex: '1 1 240px', minWidth: 200 }}
-          placeholder="Search name, code or description…" value={search}
+          placeholder={t('pl.search_ph')} value={search}
           onChange={(e) => setSearch(e.target.value)} />
         <select className="form-control" style={{ width: 150 }} value={status}
           onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="inactive">Deleted</option>
+          <option value="">{t('pl.all_statuses')}</option>
+          <option value="active">{t('pl.st_active')}</option>
+          <option value="inactive">{t('pl.st_deleted')}</option>
         </select>
         <select className="form-control" style={{ width: 170 }} value={cycle}
           onChange={(e) => setCycle(e.target.value)}>
-          <option value="">All cycles</option>
+          <option value="">{t('pl.all_cycles')}</option>
           {CYCLES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         {(search || status || cycle) && (
@@ -560,14 +560,14 @@ export default function PlatformPlansPage() {
             <tr>
               <th>Plan</th>
               <th>Code</th>
-              <th>Price</th>
-              <th>Billing cycle</th>
-              <th>Max users</th>
-              <th>Storage</th>
-              <th>Requests / month</th>
-              <th>Organisations</th>
+              <th>{t('pl.c_price')}</th>
+              <th>{t('pl.c_cycle')}</th>
+              <th>{t('pl.c_max_users')}</th>
+              <th>{t('pl.c_storage')}</th>
+              <th>{t('pl.c_requests')}</th>
+              <th>{t('pl.c_orgs')}</th>
               <th>Status</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
+              <th style={{ textAlign: 'right' }}>{t('pl.c_actions')}</th>
             </tr>
           </thead>
           <tbody>

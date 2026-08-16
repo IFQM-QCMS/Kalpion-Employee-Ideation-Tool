@@ -157,8 +157,8 @@ export default function AllIdeasPage() {
       <h1>IFQM — Ideas</h1>
       <p>${ideas.length} idea(s) · exported ${new Date().toLocaleString()}</p>
       <table><thead><tr>
-        <th>Code</th><th>Title</th><th>Solution (gist)</th><th>Patentable</th><th>Submitter</th><th>Dept</th>
-        <th>Impact</th><th>Score</th><th>Status</th><th>Date and time</th>
+        <th>Code</th><th>Title</th><th>Solution (gist)</th><th>{t('table.patentable')}</th><th>{t('table.submitter')}</th><th>Dept</th>
+        <th>{t('table.impact')}</th><th>{t('table.score')}</th><th>Status</th><th>{t('table.datetime')}</th>
       </tr></thead><tbody>${rows}</tbody></table></body></html>`);
     w.document.close();
     w.focus();

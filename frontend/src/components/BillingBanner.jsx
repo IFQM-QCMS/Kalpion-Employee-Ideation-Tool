@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LangContext';
 import { settingsApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 
@@ -25,6 +26,7 @@ const WARN_FROM_DAYS = 7;
 
 export default function BillingBanner() {
   const { user } = useAuth();
+  const { t } = useLang();
   const [sub, setSub] = useState(null);
   const [plan, setPlan] = useState(null);
   const [dismissed, setDismissed] = useState(false);
@@ -71,7 +73,7 @@ export default function BillingBanner() {
             live route rather than an invitation to send an email. */}
         {isAdmin && (
           <Link className="btn btn-primary btn-sm" to="/billing" style={{ marginTop: 12 }}>
-            Go to billing
+            {t('bill.go_billing')}
           </Link>
         )}
         {plan && (
@@ -104,7 +106,7 @@ export default function BillingBanner() {
           : ' Your organisation administrator has been notified.'}
       </div>
       {isAdmin && <Link className="btn btn-sm btn-primary" to="/billing">Billing</Link>}
-      <button className="btn btn-sm btn-outline" onClick={() => setDismissed(true)}>Dismiss</button>
+      <button className="btn btn-sm btn-outline" onClick={() => setDismissed(true)}>{t('btn.dismiss')}</button>
     </div>
   );
 }

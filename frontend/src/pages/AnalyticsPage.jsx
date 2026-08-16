@@ -145,7 +145,7 @@ export default function AnalyticsPage() {
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.impact_dist')}</div>
-            <span style={{ fontSize:11,color:'var(--subtle)',fontWeight:600 }}>Categories Split</span>
+            <span style={{ fontSize:11,color:'var(--subtle)',fontWeight:600 }}>{t('anl.categories_split')}</span>
           </div>
           <div className="bar-chart" id="analytics-impact">
             {impDist.length
@@ -179,7 +179,7 @@ export default function AnalyticsPage() {
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.score_dist')}</div>
-            <span style={{ fontSize:11,color:'var(--success)',fontWeight:700 }}>AI Evaluation Breakdown</span>
+            <span style={{ fontSize:11,color:'var(--success)',fontWeight:700 }}>{t('anl.ai_breakdown')}</span>
           </div>
           <div style={{ display:'flex',alignItems:'center',gap:20,flexWrap:'wrap' }}>
             <div style={{ textAlign:'center' }}>
