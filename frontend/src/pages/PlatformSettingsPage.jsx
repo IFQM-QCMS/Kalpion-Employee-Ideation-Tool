@@ -7,6 +7,7 @@ import { fmtDate } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 import MessagingConnector from '../components/MessagingConnector';
 import { GatewayPanel } from './PlatformBillingPage';
+import OrgPicker from '../components/OrgPicker';
 
 /*
  * Platform → Settings. Five tabs:
@@ -189,10 +190,12 @@ function OrgSettingsTab() {
 
       <div className="form-group">
         <label>{t('pt.to_org')}</label>
-        <select className="form-control" value={id} onChange={(e) => setId(e.target.value)}>
-          <option value="">—</option>
-          {tenants.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.slug})</option>)}
-        </select>
+        {/* A typeahead, not a native <select>. The list is every organisation
+            on the platform, and an option list cannot be searched — at a
+            thousand customers, finding one means knowing where its name falls
+            alphabetically. Same control as the New Ticket picker. */}
+        <OrgPicker orgs={tenants} value={id} onChange={setId}
+          placeholder={t('pt.to_org_ph')} />
       </div>
 
       {s && (
