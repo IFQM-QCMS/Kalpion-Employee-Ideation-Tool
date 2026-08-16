@@ -6,6 +6,7 @@ import { platformApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 import MessagingConnector from '../components/MessagingConnector';
+import { GatewayPanel } from './PlatformBillingPage';
 
 /*
  * Platform → Settings. Five tabs:
@@ -26,7 +27,7 @@ import MessagingConnector from '../components/MessagingConnector';
  * stored one". See platformSettingsService for why this is not a mask.
  */
 const TABS = ['ps.tab_defaults', 'ps.tab_org', 'ps.tab_messaging',
-  'ps.tab_maintenance', 'ps.tab_admins'];
+  'ps.tab_maintenance', 'ps.tab_payments', 'ps.tab_admins'];
 const FLAGS = ['anonymous_allowed', 'public_board_enabled', 'challenges_enabled'];
 
 const fmtBytes = (b) => {
@@ -59,7 +60,11 @@ export default function PlatformSettingsPage() {
       {tab === 1 && <OrgSettingsTab />}
       {tab === 2 && <MessagingConnector />}
       {tab === 3 && <MaintenanceTab />}
-      {tab === 4 && <AdminsTab />}
+      {/* The payment gateway is configuration, not a billing action, so it
+          belongs with the other settings rather than on the screen used to
+          chase money. */}
+      {tab === 4 && <GatewayPanel />}
+      {tab === 5 && <AdminsTab />}
     </>
   );
 }

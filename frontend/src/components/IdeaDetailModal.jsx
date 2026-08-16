@@ -4,7 +4,8 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { ideasApi, votesApi, uploadApi, exportApi, ideaAdminApi } from '../services/api';
 import {
-  statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas,
+  statusBadge, impactBadge, scoreBadgeClass, scoreBandKey, scoreBandColour,
+  translateStatus, translateImpact, translateAreas,
   fmtDate, fmtDateTime, actionLabel, isPrivileged, communityScore,
 } from '../utils/helpers';
 import ReviewActionModal from './ReviewActionModal';
@@ -13,7 +14,8 @@ import ReviewerDecisionModal from './ReviewerDecisionModal';
 import InfoDot from './InfoDot';
 import ScreenGuard from './ScreenGuard';
 
-const TAB_KEYS = ['modal.details', 'modal.timeline', 'modal.attachments'];
+const TAB_KEYS = ['modal.overview', 'modal.impact', 'modal.assessment',
+  'modal.timeline', 'modal.attachments'];
 
 export default function IdeaDetailModal({ ideaId, onClose }) {
   const { user }      = useAuth();
@@ -217,7 +219,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
             {!loading && !error && idea && (
               <>
-                {/* Tab 0: Details */}
+                {/* Tab 0: Overview — who, when, and the idea in the author's own words. */}
                 <div id="dtab1" className={`tab-content${activeTab===0?' active':''}`} style={{ display:activeTab===0?'block':'none' }}>
                   <div className="form-row" style={{ marginBottom:12 }}>
                     <div><strong>{t('detail.submitted_by')}:</strong> {idea.submitter_name} ({idea.department||'–'})</div>
@@ -322,6 +324,12 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       <div data-protect style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>{idea.proposed_solution}</div>
                     )}
                   </div>
+                </div>
+
+                {/* Tab 1: Impact and benefits — the figures that decide whether
+                    an idea is worth doing, kept apart from the narrative so a
+                    reviewer can compare them without scrolling past it. */}
+                <div className={`tab-content${activeTab===1?' active':''}`} style={{ display:activeTab===1?'block':'none' }}>
                   <div className="form-row" style={{ marginBottom:10 }}>
                     <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>
                     <div><strong>{t('detail.impact_level')}<InfoDot term="impact_level" />:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'–'}</span></div>
@@ -362,16 +370,48 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     );
                   })()}
 
+                </div>
+
+                {/* Tab 2: Assessment — the machine's read on the idea. Its own
+                    tab because it is advisory: it belongs near the decision but
+                    must not sit above the author's own words. */}
+                <div className={`tab-content${activeTab===2?' active':''}`} style={{ display:activeTab===2?'block':'none' }}>
                   {/* AI Panel */}
                   <div className="ai-panel" style={{ marginTop:14 }}>
                     <div className="ai-panel-title">{t('detail.ai_eval')}</div>
-                    <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:6 }}>
-                      <strong style={{ fontSize:13 }}>{t('detail.score')}:</strong>
-                      {idea.ai_score > 0
-                        ? <span className={scoreBadgeClass(idea.ai_score)}>{idea.ai_score}/100</span>
-                        : <span className="score-badge score-none">{t('detail.not_scored')}</span>
-                      }
-                    </div>
+                    {/* A horizontal bar rather than a badge or a dial.
+                        A number on its own says nothing about where it sits on
+                        the scale - 19/100 and 79/100 looked identical apart from
+                        the digits - and the ring it replaces spent a lot of
+                        space saying one number. A bar shows the reading against
+                        its range at a glance, and carries a word so the figure
+                        means something without a key. */}
+                    {idea.ai_score > 0 ? (
+                      <div style={{ marginBottom:10 }}>
+                        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5 }}>
+                          <strong style={{ fontSize:13 }}>{t('detail.score')}</strong>
+                          <span style={{ fontSize:13,color:'var(--text-muted)' }}>
+                            <b style={{ fontSize:17,color:'var(--heading)' }}>{idea.ai_score}</b>
+                            <span style={{ fontSize:12 }}> / 100 · {t(scoreBandKey(idea.ai_score))}</span>
+                          </span>
+                        </div>
+                        <div style={{
+                          height:9,borderRadius:999,background:'var(--surface-2,var(--chip-bg))',
+                          overflow:'hidden',border:'1px solid var(--border)',
+                        }}>
+                          <div style={{
+                            width:`${Math.max(0,Math.min(100,idea.ai_score))}%`,height:'100%',
+                            background:scoreBandColour(idea.ai_score),
+                            borderRadius:999,transition:'width .3s ease',
+                          }} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:6 }}>
+                        <strong style={{ fontSize:13 }}>{t('detail.score')}:</strong>
+                        <span className="score-badge score-none">{t('detail.not_scored')}</span>
+                      </div>
+                    )}
                     <div style={{ fontSize:13,color:'var(--text)',lineHeight:1.5 }}>
                       {(idea.ai_reason && idea.ai_reason.trim()) ? idea.ai_reason : t('detail.no_ai')}
                     </div>
@@ -479,8 +519,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   )}
                 </div>
 
-                {/* Tab 1: Timeline */}
-                <div id="dtab2" className={`tab-content${activeTab===1?' active':''}`} style={{ display:activeTab===1?'block':'none' }}>
+                {/* Tab 3: Timeline */}
+                <div id="dtab2" className={`tab-content${activeTab===3?' active':''}`} style={{ display:activeTab===3?'block':'none' }}>
                   {isHidden('timeline')
                     ? <HiddenNote section="timeline" />
                     : !(idea.workflow||[]).length
@@ -498,8 +538,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   }
                 </div>
 
-                {/* Tab 2: Attachments */}
-                <div id="dtab3" className={`tab-content${activeTab===2?' active':''}`} style={{ display:activeTab===2?'block':'none' }}>
+                {/* Tab 4: Attachments */}
+                <div id="dtab3" className={`tab-content${activeTab===4?' active':''}`} style={{ display:activeTab===4?'block':'none' }}>
                   {isHidden('attachments')
                     ? <HiddenNote section="attachments" />
                     : !(idea.attachments||[]).length

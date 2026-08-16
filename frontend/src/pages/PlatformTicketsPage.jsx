@@ -5,6 +5,7 @@ import { platformApi } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import { STATUS_STYLE, PRIORITY_COLOR } from './SupportPage';
 import BulkArchivePanel from '../components/BulkArchivePanel';
+import OrgPicker from '../components/OrgPicker';
 
 /*
  * Platform → Support Tickets. IFQM's queue across every organisation.
@@ -321,10 +322,11 @@ function OutboundModal({ onClose, onCreated, t }) {
           <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12 }}>{t('pt.new_hint')}</div>
           <div className="form-group">
             <label>{t('pt.to_org')} *</label>
-            <select className="form-control" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              <option value="">—</option>
-              {tenants.map((x) => <option key={x.id} value={x.id}>{x.name} ({x.slug})</option>)}
-            </select>
+            {/* A typeahead, not a <select>. The dropdown listed every
+                organisation at once, which is fine at five and unusable at a
+                thousand — there is no way to search a native option list. */}
+            <OrgPicker orgs={tenants} value={tenantId} onChange={setTenantId}
+              placeholder={t('pt.to_org_ph')} />
           </div>
           <div className="form-group">
             <label>{t('sup.col_subject')} *</label>

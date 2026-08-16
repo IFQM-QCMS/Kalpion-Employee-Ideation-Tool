@@ -116,6 +116,26 @@ export default function PlatformBillingPage() {
      several thousand DOM nodes rebuilt on every filter keystroke, and that cost
      lands on the browser rather than the server. */
   const pager = usePager(rows);
+
+  /*
+   * Bulk selection.
+   *
+   * Every action on this screen was one organisation at a time, so recording a
+   * month of payments meant opening and closing the same dialog forty times.
+   * The set is keyed by id and survives paging - a selection made on page one
+   * is still a selection on page three, which is the whole point of selecting
+   * before acting.
+   */
+  const [picked, setPicked] = useState(() => new Set());
+  const togglePick = (id) => setPicked((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  // "All" means every row the current filter matched, not merely the twenty on
+  // screen — selecting a page at a time would be a trap at a thousand rows.
+  const allPicked = rows.length > 0 && rows.every((o) => picked.has(o.id));
+  const toggleAll = () => setPicked(allPicked ? new Set() : new Set(rows.map((o) => o.id)));
   useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [filter, search]);
 
   async function sweep(dryRun) {
@@ -192,7 +212,6 @@ export default function PlatformBillingPage() {
         </div>
       )}
 
-      <GatewayPanel />
 
       {/* ── Controls ──────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
@@ -223,6 +242,10 @@ export default function PlatformBillingPage() {
             <table className="data-table" style={{ minWidth: 900 }}>
               <thead>
                 <tr>
+                  <th style={{ width: 34 }}>
+                    <input type="checkbox" checked={allPicked} onChange={toggleAll}
+                      aria-label={t('msgb.select_all')} />
+                  </th>
                   <th>{t('msgb.c_org')}</th>
                   <th>{t('msgb.c_plan')}</th>
                   <th style={{ textAlign: 'right' }}>{t('msgb.c_amount')}</th>
@@ -236,7 +259,12 @@ export default function PlatformBillingPage() {
                   const badge = stateBadge(o, t);
                   const until = o.billing.ends_at || o.billing.trial_ends_at || o.billing.period_end;
                   return (
-                    <tr key={o.id}>
+                    <tr key={o.id} style={picked.has(o.id) ? { background: 'var(--primary-light)' } : undefined}>
+                      <td>
+                        <input type="checkbox" checked={picked.has(o.id)}
+                          onChange={() => togglePick(o.id)}
+                          aria-label={`Select ${o.name}`} />
+                      </td>
                       <td>
                         <button className="btn-link" onClick={() => navigate(`/platform/tenants/${o.id}`)}
                           style={{
@@ -302,7 +330,7 @@ export default function PlatformBillingPage() {
  * The key SECRET is never sent to this browser. The Key ID is, deliberately:
  * Razorpay's checkout script needs it, and it is public by design.
  */
-function GatewayPanel() {
+export function GatewayPanel() {
   const { t } = useLang();
   const { showToast } = useToast();
   const [g, setG] = useState(null);

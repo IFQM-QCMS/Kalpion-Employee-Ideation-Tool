@@ -66,6 +66,30 @@ export function scoreBadgeClass(score) {
   return 'score-badge score-none';
 }
 
+/*
+ * What a score means, in a word, and what colour to draw it.
+ *
+ * The number alone was doing no work: 19 and 79 looked the same on screen apart
+ * from the digits, and nothing said which end of the scale was good. Same
+ * thresholds as scoreBadgeClass above, so the bar and the badge can never
+ * disagree about the same idea.
+ */
+export function scoreBandKey(score) {
+  const s = parseInt(score) || 0;
+  if (s >= 75) return 'score.band_strong';
+  if (s >= 50) return 'score.band_fair';
+  if (s > 0)   return 'score.band_thin';
+  return 'score.band_none';
+}
+
+export function scoreBandColour(score) {
+  const s = parseInt(score) || 0;
+  if (s >= 75) return 'var(--success)';
+  if (s >= 50) return 'var(--warning)';
+  if (s > 0)   return 'var(--danger)';
+  return 'var(--border)';
+}
+
 export function actionLabel(action) {
   const m = {
     'Submitted':'S','Approved':'A','Rejected':'R','Under Review':'U',
