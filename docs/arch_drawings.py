@@ -99,7 +99,7 @@ def a3_stack():
         ('Screens', 'React 18  ·  Vite  ·  React Router  ·  plain CSS (no UI framework)', FILL_MED),
         ('Transport', 'HTTPS  ·  JSON  ·  signed session tokens', FILL_SOFT),
         ('Server', 'Node.js  ·  Express  ·  Helmet  ·  rate limiting', FILL_SOFT),
-        ('Rules', '35 services — every business rule, none of them aware of HTTP', FILL_MED),
+        ('Rules', '40 services — every business rule, none of them aware of HTTP', FILL_MED),
         ('Data', 'MySQL 8  ·  raw SQL, no ORM  ·  one schema per customer', FILL_SOFT),
         ('Files', 'Local disk, one folder per customer, served through a checked download', FILL_SOFT),
     ]
@@ -137,12 +137,12 @@ def a4_modules():
     band(ax, 4, 9, 82, 12.5, '', fill=FILL_MED)
     ax.text(6, 15.5, 'Services', fontsize=7.2, fontweight='bold', family='DejaVu Sans')
     grid = [('ideas · voting\ncomments', 20), ('users · hierarchy\nimport', 33),
-            ('auth · one-time\ncodes', 46), ('settings · approval\nstages', 59),
+            ('auth · otp ·\nverification', 46), ('settings · approval\nstages', 59),
             ('platform · billing\nplans', 72)]
     for label, x in grid:
         box(ax, x - 5.8, 15.6, 11.6, 5, label, fill=FILL_PLAIN, size=5.8)
-    grid2 = [('mail · SMS', 20), ('scoring', 33), ('QCMS push', 46),
-             ('exports · PDF', 59), ('registrations', 72)]
+    grid2 = [('mail · sms\ndelivery log', 20), ('scoring', 33), ('QCMS push', 46),
+             ('exports · PDF', 59), ('registrations ·\nmaintenance', 72)]
     for label, x in grid2:
         box(ax, x - 5.8, 9.8, 11.6, 5, label, fill=FILL_PLAIN, size=5.8)
     arrow(ax, (45, 9), (45, 6.8))
@@ -197,20 +197,32 @@ def a6_security():
 
 
 def a7_integration():
-    """Which way data travels with the outside world."""
-    fig, ax = canvas(8.4, 3.2)
-    box(ax, 32, 11, 22, 10, 'IFQM Employee\nIdeation Tool', fill=FILL_MED, size=8, bold=True)
-    for label, x, y in [('QCMS\nquality system', 66, 19), ('Email server\n(SMTP)', 66, 5),
-                        ('SMS provider', 3, 19), ('AI scoring\n(optional)', 3, 5)]:
-        box(ax, x, y, 16, 8, label, fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.3)
-        if x > 32:
-            arrow(ax, (54, y + 4), (x, y + 4), label='out')
-        else:
-            arrow(ax, (32, y + 4), (x + 16, y + 4), label='out')
-    note(ax, 43, 3, 'Every arrow points outward. Nothing outside can push data in —\n'
-                    'there are no inbound integrations at all.', ha='center')
-    return save(fig, 'A7_integration')
+    """Which way data travels with the outside world, and over which port."""
+    fig, ax = canvas(9.4, 4.6)
+    box(ax, 34, 16, 24, 11, 'IFQM Employee\nIdeation Tool', fill=FILL_MED, size=8.4, bold=True)
 
+    for label, x, y, cap in [
+        ('QCMS\nquality system', 74, 31, 'approved ideas'),
+        ('Mail — SMTP\nport 465 / 587', 74, 19, 'codes, resets · tried first'),
+        ('Mail — HTTPS API\nport 443', 74, 7, 'the same messages, where SMTP is blocked'),
+    ]:
+        box(ax, x, y, 20, 8.6, label, fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.2)
+        arrow(ax, (58, y + 4.3), (x, y + 4.3), label=cap, size=5.5)
+
+    for label, x, y, cap in [
+        ('SMS gateway\n(DLT-registered)', 2, 31, 'one-time codes'),
+        ('Razorpay\n(optional)', 2, 19, 'subscription payment'),
+        ('AI scoring\n(optional)', 2, 7, 'off by default'),
+    ]:
+        box(ax, x, y, 20, 8.6, label, fill=EXTERNAL_FILL, edge=EXTERNAL, size=6.2)
+        arrow(ax, (34, y + 4.3), (x + 20, y + 4.3), label=cap, size=5.5)
+
+    note(ax, 47, 2.0,
+         'Every arrow points outward: nothing outside can push data in, and there are no inbound integrations.\n'
+         'The two mail entries are one integration with two transports — SMTP is tried first, and the HTTPS API\n'
+         'carries the same message where a host blocks outbound SMTP. Every one of these is optional: the system\n'
+         'keeps working, with less function, when any of them is absent.', ha='center')
+    return save(fig, 'A7_integration')
 
 # ══════════════════════════════════════════════════════════════════════════
 # PART D — detailed design
@@ -306,28 +318,41 @@ def d4_er_master():
     # Tall enough for the three-entity right-hand column. The canvas used to be
     # 6.6 high, which put support_tickets off the bottom edge and left the
     # closing note printing straight through it.
-    fig, ax = canvas(10.0, 7.4)
-    ax.text(50, 70.5, 'ifqm_master  —  the registry  (13 tables; the 7 principal ones are shown)',
+    # Taller: migrations 019 and 022 put the one-time-code and delivery
+    # tables in the registry, and they are what sign-in by code is built on.
+    # A reader looking for where a code lives would not have found it here.
+    fig, ax = canvas(10.6, 8.8)
+    ax.text(50, 84.5, 'ifqm_master  —  the registry  (15 tables; the 10 principal ones are shown)',
             ha='center', fontsize=9.0, fontweight='bold', family='DejaVu Sans')
 
     # Positions come from the heights the entities turn out to be. An entity's
     # height depends on how many columns it has, so anything hard-coded starts
     # colliding the moment a table gains a field.
-    left = stack(ax, 2, 66, 24, accent=GOOD, specs=[
+    left = stack(ax, 2, 80, 24, accent=GOOD, specs=[
         ('plans', [('PK', 'id'), ('', 'code  (unique)'), ('', 'name'),
                    ('', 'amount_paise'), ('', 'billing_cycle'),
                    ('', 'gst_percent  ·  gst_mode'), ('', 'max_users'),
                    ('', 'api_quota_monthly')]),
         ('platform_admins', [('PK', 'id'), ('', 'name  ·  email'), ('', 'password_hash')]),
+        # Codes live in the REGISTRY, not in a tenant schema: one is issued
+        # before the organisation is known (registration), and sign-in has to
+        # find it without opening a tenant database first.
+        ('login_otps', [('PK', 'id'), ('', 'identifier'), ('', 'id_type  ·  channel'),
+                       ('', 'code_hash  (bcrypt)'), ('', 'purpose'),
+                       ('FK', 'tenant_id → tenants'), ('', 'attempts'),
+                       ('', 'expires_at  ·  consumed_at')]),
     ])
-    middle = stack(ax, 34, 66, 26, accent=PRIMARY, specs=[
+    middle = stack(ax, 34, 80, 26, accent=PRIMARY, specs=[
         ('tenants', [('PK', 'id'), ('', 'name'), ('', 'slug  (unique)'),
                      ('', 'db_name'), ('', 'status'), ('FK', 'plan_id → plans'),
                      ('', 'billing_status'), ('', 'trial_ends_at'), ('', 'period_end')]),
         ('login_directory', [('PK', 'id'), ('', 'identifier  (unique)'),
                              ('FK', 'tenant_id → tenants'), ('', 'user_id')]),
+        ('payment_attempts', [('PK', 'id'), ('FK', 'tenant_id → tenants'),
+                              ('FK', 'plan_id → plans'), ('', 'order_ref  (unique)'),
+                              ('', 'amount_paise  ·  gst_paise'), ('', 'status')]),
     ])
-    right = stack(ax, 69, 66, 27, accent=DATA, specs=[
+    right = stack(ax, 69, 80, 27, accent=DATA, specs=[
         ('tenant_registrations', [('PK', 'id'), ('', 'company_name'),
                                   ('', 'udyam_number  ·  gstin'), ('', 'pan  ·  cin'),
                                   ('', 'status'), ('FK', 'tenant_id → tenants'),
@@ -337,6 +362,11 @@ def d4_er_master():
         ('support_tickets', [('PK', 'id'), ('', 'ticket_code  (unique)'),
                              ('FK', 'tenant_id → tenants'), ('', 'status  ·  priority'),
                              ('', 'archived_at')]),
+        # Never the message body — it carries the code — and the recipient is
+        # masked to its last four digits before the row is written.
+        ('sms_delivery_log', [('PK', 'id'), ('', 'provider  ·  purpose'),
+                              ('', 'recipient  (masked)'), ('', 'template_id'),
+                              ('', 'ok  ·  http_status'), ('', 'gateway_ref')]),
     ])
 
     # Only real foreign keys are drawn. A line between two tables that do not
@@ -347,13 +377,16 @@ def d4_er_master():
     elbow(ax, middle['tenants'], right['tenant_billing_events'], label='has', mid=64)
     elbow(ax, middle['tenants'], right['support_tickets'], label='raises', mid=62)
     elbow(ax, middle['tenants'], middle['login_directory'], label='indexes', mid=32)
+    elbow(ax, left['login_otps'], middle['tenants'], label='issued for', b_many=False, mid=30)
+    elbow(ax, middle['tenants'], middle['payment_attempts'], label='pays by', mid=31)
 
     # Below the longest column, computed rather than guessed — see d5_er_tenant.
     floor = min(e['bottom'] for col in (left, middle, right) for e in col.values())
     note(ax, 50, floor - 3.5,
          'PK identifies a row.  FK points at another table.  Three prongs mean “many”, a single bar means “one”.\n'
-         'Six standalone tables are left off: platform_settings, login_attempts, platform_login_activity,\n'
-         'login_otps, tenant_api_usage and support_ticket_messages.  The registry holds no employee and no idea.',
+         'Five standalone tables are left off: platform_settings, login_attempts, platform_login_activity,\n'
+         'tenant_api_usage and support_ticket_messages.\n'
+         'The registry holds no employee and no idea — those live only in each organisation’s own schema.',
          ha='center')
     return save(fig, 'D4_er_master')
 
