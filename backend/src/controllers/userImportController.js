@@ -39,7 +39,9 @@ export const preview = asyncHandler(async (req, res) => {
 /** POST /api/users/import — create the accounts (background job). */
 export const start = asyncHandler(async (req, res) => {
   const file = requireFile(req);
-  const result = await importService.startImport(req.db, req.user, file.buffer, file.originalname);
+  const result = await importService.startImport(
+    req.db, req.user, file.buffer, file.originalname, req.tenant
+  );
   return respond(res, result, 202); // accepted; poll the job for progress
 });
 

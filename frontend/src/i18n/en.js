@@ -29,7 +29,7 @@ export default {
   // ── Login ──
   'login.app_title':'Employee Ideation Tool',
   'login.tagline':'Turn great ideas into real improvements.',
-  'login.id_short':'Email / Phone No.',
+  'login.id_short':'Username / Email / Phone',
   'login.new_here':'New here?',
   'login.new_here_sub':'Accounts on IFQM are created by your organisation admin. Request access and we’ll help you get set up.',
   'login.request_access':'Request access',
@@ -1092,8 +1092,8 @@ export default {
 
   'detail.export_pdf':'Export PDF',
 
-  'login.identifier':'Email or phone number',
-  'login.identifier_ph':'you@company.com or 98765 43210',
+  'login.identifier':'Username, email or phone number',
+  'login.identifier_ph':'yashas123, you@company.com or 98765 43210',
 
   'admin.uf_phone':'Phone',
   'admin.uf_phone_ph':'Optional',
@@ -1520,9 +1520,13 @@ export default {
   'analytics.impact_dist':'Impact Area Distribution',
   'analytics.monthly_trend':'Monthly Submission Trend',
   'analytics.score_dist':'Quality Score Distribution',
-  'login.otp_id_ph':'Registered email or mobile number',
+  'login.otp_id_ph':'Username, registered email or mobile number',
   'admin.uf_phone_required':'A mobile number is required for every user.',
   'admin.uf_phone_invalid':'Enter a valid mobile number, including the country or area code.',
+  'admin.uf_username':'Username',
+  'admin.uf_username_ph':'e.g. yashas123',
+  'admin.uf_login_hint':'Give a username or an email address — at least one, as it is how the person signs in. A username is 3–30 characters (letters, numbers, dot, underscore, hyphen) and must be unique across the whole platform.',
+  'admin.uf_no_email':'No email',
   'profile.phone_change':'Change',
   'profile.phone_send_code':'Send code',
   'profile.phone_confirm':'Confirm',

@@ -14,7 +14,9 @@ import bcrypt from 'bcryptjs';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
 import { tempPasswordFor } from './userImportService.js';
-import { indexUser, deindexUser } from './directoryService.js';
+import {
+  indexUser, deindexUser, isUsername, claimUsername, usernameAvailable, releaseUsername,
+} from './directoryService.js';
 import logger from '../utils/logger.js';
 
 // Role sets used across create/update/managers (mirrors the PHP literals).
@@ -103,9 +105,11 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', 
   const where = [];
   const params = [];
   if (search) {
-    where.push('(u.name LIKE ? OR u.email LIKE ? OR u.employee_id LIKE ?)');
+    // Username is searchable too — for an account created without an address it
+    // is the only thing an admin has to look the person up by.
+    where.push('(u.name LIKE ? OR u.email LIKE ? OR u.employee_id LIKE ? OR u.username LIKE ?)');
     const like = `%${search}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like);
   }
 
   /*
@@ -141,7 +145,7 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', 
   const total = Number(countRows[0]?.total || 0);
 
   const [rows] = await db.execute(
-    `SELECT u.id, u.employee_id, u.name, u.department, u.business_unit, u.location,
+    `SELECT u.id, u.employee_id, u.username, u.name, u.department, u.business_unit, u.location,
             u.email, u.role, u.avatar_initials, u.points, u.status, u.manager_id,
             u.must_change_password, u.activated_at,
             m.name AS manager_name
@@ -230,6 +234,7 @@ export async function reportingChain(db, userId) {
 export async function createUser(db, actor, body, tenant = null) {
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim().toLowerCase();
+  const username = String(body.username || '').trim().toLowerCase();
   const employeeId = String(body.employee_id || '').trim();
   const department = String(body.department || '').trim();
   const businessUnit = String(body.business_unit || '').trim();
@@ -246,10 +251,27 @@ export async function createUser(db, actor, body, tenant = null) {
   const birthYear = (dobRaw.match(/\d{4}/) || [])[0] || '';
   const explicitPassword = body.password || ''; // legacy/optional override
 
-  if (!name || !email || !employeeId) {
-    throw badRequest('Name, email, and employee ID are required.');
+  if (!name || !employeeId) {
+    throw badRequest('Name and employee ID are required.');
   }
-  if (!isValidEmail(email)) throw badRequest('Invalid email address.');
+  /*
+   * An address is no longer compulsory (migration 025). Most of the people this
+   * platform is for work on a shop floor and have no company mailbox, and the
+   * old rule meant somebody had to invent an address before an account could
+   * exist at all — which then received nothing, and was still what they had to
+   * type to sign in.
+   *
+   * What IS required is a way to sign in: a username or an address, at least
+   * one. Checked together so the message can name the choice rather than
+   * complain about whichever field happens to be read first.
+   */
+  if (!username && !email) {
+    throw badRequest('Give the user a username or an email address — at least one is needed to sign in.');
+  }
+  if (email && !isValidEmail(email)) throw badRequest('Invalid email address.');
+  if (username && !isUsername(username)) {
+    throw badRequest('A username must be 3-30 characters using letters, numbers, dot, underscore or hyphen, and must contain at least one letter.');
+  }
   /*
    * A mobile number is required of every account, however it is created.
    *
@@ -270,10 +292,18 @@ export async function createUser(db, actor, body, tenant = null) {
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
 
   const [dup] = await db.execute(
-    'SELECT id FROM users WHERE email=? OR employee_id=? LIMIT 1',
-    [email, employeeId]
+    `SELECT id FROM users
+      WHERE (? <> '' AND email = ?) OR employee_id = ? OR (? <> '' AND username = ?)
+      LIMIT 1`,
+    [email, email, employeeId, username, username]
   );
-  if (dup.length) throw new ApiError(409, 'Email or employee ID already exists.');
+  if (dup.length) throw new ApiError(409, 'That email, username or employee ID is already in use.');
+
+  // A username is unique across the whole platform, so this cannot be answered
+  // from the tenant's own table — the name may be held by another customer.
+  if (username && tenant && !(await usernameAvailable(username, { tenantId: tenant.id }))) {
+    throw new ApiError(409, `The username "${username}" is already taken.`);
+  }
 
   const initials = avatarInitials(name) || firstCharUpper(name);
 
@@ -286,13 +316,27 @@ export async function createUser(db, actor, body, tenant = null) {
   const dob = /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null;
 
   const [result] = await db.execute(
-    `INSERT INTO users (employee_id, name, email, password_hash, phone, date_of_birth,
+    `INSERT INTO users (employee_id, username, name, email, password_hash, phone, date_of_birth,
                         department, business_unit, location, role, manager_id, avatar_initials,
                         status, must_change_password, password_changed_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'active',?,NOW())`,
-    [employeeId, name, email, hash, phone || null, dob, department, businessUnit, location,
-      role, managerId, initials, usingDerived ? 1 : 0]
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,NOW())`,
+    [employeeId, username || null, name, email || null, hash, phone || null, dob,
+      department, businessUnit, location, role, managerId, initials, usingDerived ? 1 : 0]
   );
+
+  /*
+   * Claim the username for real, now that there is a user id to own it.
+   *
+   * The availability check above is advisory — another organisation can claim
+   * the same name in the gap between that read and this write. The claim is a
+   * single insert against a primary key, so exactly one of them wins; the loser
+   * undoes the account it just created rather than leaving an employee holding
+   * a username that signs them in to somebody else's database.
+   */
+  if (tenant && username && !(await claimUsername(tenant, result.insertId, username))) {
+    await db.execute('DELETE FROM users WHERE id = ?', [result.insertId]).catch(() => {});
+    throw new ApiError(409, `The username "${username}" was taken a moment ago. Please choose another.`);
+  }
 
   // Register the account in the global login directory so it can sign in with
   // email or phone and no org code (best-effort; login self-heals otherwise).
@@ -312,7 +356,9 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   id = parseInt(id, 10) || 0;
   if (!id) throw badRequest('Missing user ID.');
 
-  const [tgtRows] = await db.execute('SELECT id, role, email FROM users WHERE id=? LIMIT 1', [id]);
+  const [tgtRows] = await db.execute(
+    'SELECT id, role, email, username FROM users WHERE id=? LIMIT 1', [id]
+  );
   const target = tgtRows[0];
   if (!target) throw notFound('User not found.');
   if (target.role === 'super_admin') throw forbidden('Cannot edit super admin.');
@@ -326,8 +372,31 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   const role = body.role || target.role;
   const managerId = body.manager_id ? parseInt(body.manager_id, 10) : null;
   const status = (body.status || 'active') === 'inactive' ? 'inactive' : 'active';
+  /*
+   * A username is only touched when the field is actually present in the
+   * request. Absent means "leave it alone"; an explicit empty string means
+   * "remove it" — which is refused below if it would leave the account with no
+   * way to sign in.
+   */
+  const usernameGiven = body.username !== undefined;
+  const username = String(body.username || '').trim().toLowerCase();
 
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
+  if (usernameGiven && username && !isUsername(username)) {
+    throw badRequest('A username must be 3-30 characters using letters, numbers, dot, underscore or hyphen, and must contain at least one letter.');
+  }
+  if (usernameGiven && !username && !target.email) {
+    throw badRequest('This account has no email address, so its username cannot be removed — it would leave no way to sign in.');
+  }
+  if (usernameGiven && username && username !== (target.username || '')) {
+    const [clash] = await db.execute(
+      'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1', [username, id]
+    );
+    if (clash.length) throw new ApiError(409, 'That username is already in use.');
+    if (tenant && !(await usernameAvailable(username, { tenantId: tenant.id, userId: id }))) {
+      throw new ApiError(409, `The username "${username}" is already taken.`);
+    }
+  }
   // Same rule as creation, applied on the way out too: an edit must not be able
   // to remove the only number the account can be recovered through.
   if (!phone) throw badRequest('A mobile number is required for every user.');
@@ -344,10 +413,20 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   await db.execute(
     `UPDATE users SET name=?, department=?, business_unit=?, location=?, phone=?, role=?,
                       manager_id=?, avatar_initials=?, status=?,
+                      username = IF(?, ?, username),
                       deactivated_at = IF(? = 'inactive', COALESCE(deactivated_at, NOW()), NULL)
       WHERE id=?`,
-    [name, department, businessUnit, location, phone || null, role, managerId, initials, status, status, id]
+    [name, department, businessUnit, location, phone || null, role, managerId, initials, status,
+      usernameGiven ? 1 : 0, username || null, status, id]
   );
+
+  // A changed or cleared username frees the old one platform-wide, then claims
+  // the new one. Released first, so somebody renaming from 'rk' to 'rkumar' and
+  // back again is not blocked by their own abandoned name.
+  if (tenant && usernameGiven && username !== (target.username || '')) {
+    if (target.username) await releaseUsername(target.username);
+    if (username) await claimUsername(tenant, id, username);
+  }
 
   // Keep the login directory in step with a changed phone number.
   if (tenant) indexUser(tenant, { id, email: target.email, phone }).catch(() => {});

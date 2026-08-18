@@ -39,6 +39,7 @@ import { assignableRoles } from './userService.js';
 import { hashMany } from './hashPool.js';
 import { badRequest, notFound, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
+import { isUsername, claimUsername, indexUser } from './directoryService.js';
 
 // ── Limits ──────────────────────────────────────────────────────────────────
 export const MAX_ROWS = 20000;      // hard ceiling per upload
@@ -59,8 +60,13 @@ export const COLUMNS = [
     note: 'Required.' },
   { key: 'last_name',   header: 'last_name',   required: false, max: 60,  width: 18,
     note: 'Optional, but recommended — it is part of the displayed name.' },
-  { key: 'email',       header: 'email',       required: true,  max: 150, width: 28,
-    note: 'Work email. Required, must be unique.' },
+  // Since migration 025 an account signs in with a username OR an address, so
+  // neither is required on its own — the pair is, and that is checked per row.
+  // A workforce with no company mailboxes is the normal case this serves.
+  { key: 'username',    header: 'username',    required: false, max: 50,  width: 18,
+    note: 'Sign-in name, e.g. yashas123. Give this OR an email. Unique across the whole platform.' },
+  { key: 'email',       header: 'email',       required: false, max: 150, width: 28,
+    note: 'Work email. Give this OR a username. Must be unique.' },
   { key: 'year_of_birth', header: 'year_of_birth', required: true, max: 4, width: 14,
     note: 'Four-digit year, e.g. 1994. Required — the first-login password is built from it.' },
   { key: 'role',        header: 'role',        required: false, max: 20,  width: 16,
@@ -93,6 +99,7 @@ for (const c of COLUMNS) {
  ['first name', 'first_name'], ['last name', 'last_name'], ['surname', 'last_name'],
  ['title', 'salutation'],
  ['email address', 'email'], ['e mail', 'email'],
+  ['user name', 'username'], ['login', 'username'], ['login id', 'username'], ['userid', 'username'],
  ['dob', 'year_of_birth'], ['birth date', 'year_of_birth'], ['date of birth', 'year_of_birth'],
  ['date_of_birth', 'year_of_birth'], ['birth year', 'year_of_birth'], ['yob', 'year_of_birth'],
  ['designation', 'role'], ['manager', 'manager_employee_id'], ['manager id', 'manager_employee_id'],
@@ -162,6 +169,7 @@ export async function buildTemplate(actorRole) {
     salutation: 'Ms',
     first_name: 'Asha',
     last_name: 'Rao',
+    username: 'asha.rao',
     email: 'asha.rao@yourcompany.com',
     year_of_birth: '1994',
     role: 'employee',
@@ -362,18 +370,23 @@ export async function validateRows(db, actor, records) {
   const allowedRoles = assignableRoles(actor.role);
 
   // Everything already in this tenant, so we can spot collisions cheaply.
-  const [existing] = await db.query('SELECT id, employee_id, LOWER(email) AS email FROM users');
+  const [existing] = await db.query(
+    'SELECT id, employee_id, LOWER(email) AS email, LOWER(username) AS username FROM users'
+  );
   const byEmpId = new Map();
   const emails = new Set();
+  const usernames = new Set();
   for (const u of existing) {
     if (u.employee_id) byEmpId.set(String(u.employee_id).toLowerCase(), u.id);
     if (u.email) emails.add(u.email);
+    if (u.username) usernames.add(u.username);
   }
 
   const errors = [];
   const valid = [];
   const seenEmpId = new Map();  // within-sheet duplicate detection
   const seenEmail = new Map();
+  const seenUsername = new Map();
 
   const reject = (rec, message) => errors.push({
     row_number: rec.__row,
@@ -402,11 +415,19 @@ export async function validateRows(db, actor, records) {
     // is composed rather than replaced — nothing downstream has to change.
     const name = [firstName, lastName].filter(Boolean).join(' ').trim();
     const email = (rec.email || '').trim().toLowerCase();
+    const username = (rec.username || '').trim().toLowerCase();
 
     // ── required ──
     if (!employeeId) { reject(rec, 'employee_id is required.'); continue; }
     if (!name)       { reject(rec, 'name is required.'); continue; }
-    if (!email)      { reject(rec, 'email is required.'); continue; }
+    if (!email && !username) {
+      reject(rec, 'Give a username or an email — one of the two is how this person signs in.');
+      continue;
+    }
+    if (username && !isUsername(username)) {
+      reject(rec, `"${username}" is not a valid username — 3-30 characters of letters, numbers, dot, underscore or hyphen, including at least one letter.`);
+      continue;
+    }
 
     // ── lengths (a single over-long value would abort the whole batch INSERT) ──
     let tooLong = null;
@@ -416,7 +437,7 @@ export async function validateRows(db, actor, records) {
     }
     if (tooLong) { reject(rec, tooLong); continue; }
 
-    if (!EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
+    if (email && !EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
 
     // ── date of birth / temp password ──
     const birth = parseBirth(rec.year_of_birth);
@@ -435,7 +456,7 @@ export async function validateRows(db, actor, records) {
       reject(rec, `Duplicate employee_id "${employeeId}" — already used on row ${seenEmpId.get(empKey)}.`);
       continue;
     }
-    if (seenEmail.has(email)) {
+    if (email && seenEmail.has(email)) {
       reject(rec, `Duplicate email "${email}" — already used on row ${seenEmail.get(email)}.`);
       continue;
     }
@@ -445,19 +466,39 @@ export async function validateRows(db, actor, records) {
       reject(rec, `An employee with ID "${employeeId}" already exists — row skipped (existing users are never modified by an import).`);
       continue;
     }
-    if (emails.has(email)) {
+    if (email && emails.has(email)) {
       reject(rec, `A user with email "${email}" already exists — row skipped (existing users are never modified by an import).`);
       continue;
     }
 
     seenEmpId.set(empKey, rec.__row);
-    seenEmail.set(email, rec.__row);
+    if (email) seenEmail.set(email, rec.__row);
+
+    /*
+     * Usernames, twice over. Within the sheet and within this tenant is what can
+     * be answered here; the platform-wide claim happens at insert time, because
+     * a name may be held by a different customer entirely and this function is
+     * deliberately pure — it reads nothing outside the tenant and writes
+     * nothing at all, so the preview and the commit cannot disagree.
+     */
+    if (username) {
+      if (seenUsername.has(username)) {
+        reject(rec, `Duplicate username "${username}" — already used on row ${seenUsername.get(username)}.`);
+        continue;
+      }
+      if (usernames.has(username)) {
+        reject(rec, `A user with username "${username}" already exists — row skipped (existing users are never modified by an import).`);
+        continue;
+      }
+      seenUsername.set(username, rec.__row);
+    }
 
     valid.push({
       __row: rec.__row,
       employee_id: employeeId,
       name,
-      email,
+      email: email || null,
+      username: username || null,
       salutation: salutation || null,
       first_name: firstName,
       last_name: lastName || null,
@@ -566,7 +607,7 @@ function avatarInitials(name) {
  * reference a manager that appears later in the same sheet without us having to
  * topologically sort anything.
  */
-async function insertUsers(db, rows, onProgress, onPhase) {
+async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
   const hashes = await hashMany(
     rows.map((r) => ({ key: r.employee_id, password: tempPasswordFor(r.name, r.birth_year, r.employee_id) })),
     TEMP_PASSWORD_ROUNDS,
@@ -583,13 +624,13 @@ async function insertUsers(db, rows, onProgress, onPhase) {
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
       const chunk = rows.slice(i, i + INSERT_CHUNK);
       const values = chunk.map((r) => [
-        r.employee_id, r.name, r.email, hashes.get(r.employee_id),
+        r.employee_id, r.username, r.name, r.email, hashes.get(r.employee_id),
         r.phone, r.department, r.business_unit, r.location, r.role,
         avatarInitials(r.name), r.salutation, r.first_name, r.last_name, r.year_of_birth,
       ]);
       await conn.query(
         `INSERT INTO users
-           (employee_id, name, email, password_hash, phone, department, business_unit,
+           (employee_id, username, name, email, password_hash, phone, department, business_unit,
             location, role, avatar_initials, salutation, first_name, last_name, year_of_birth,
             status, points, must_change_password, password_changed_at)
          VALUES ?`,
@@ -628,6 +669,38 @@ async function insertUsers(db, rows, onProgress, onPhase) {
     }
 
     await conn.commit();
+
+    /*
+     * Claim the imported usernames platform-wide, now that the rows exist.
+     *
+     * validateRows() already refused any name held inside this tenant, but a
+     * username is unique across every customer and that question can only be
+     * answered by the registry. Any name lost here — because another
+     * organisation claimed it between the preview and now — is cleared from the
+     * account rather than left in place: a username that resolves to somebody
+     * else's database would send this employee to a stranger's login, which is
+     * far worse than an account that signs in by email or has to be given a
+     * name by hand.
+     */
+    if (tenant) {
+      const named = rows.filter((r) => r.username);
+      for (const r of named) {
+        const userId = idByEmp.get(r.employee_id.toLowerCase());
+        if (!userId) continue;
+        const won = await claimUsername(tenant, userId, r.username).catch(() => false);
+        if (!won) {
+          logger.warn(`import: username "${r.username}" was already taken — cleared on ${r.employee_id}`);
+          await db.execute('UPDATE users SET username = NULL WHERE id = ?', [userId]).catch(() => {});
+        }
+      }
+      // Addresses and numbers go in the directory the ordinary way, so imported
+      // accounts can sign in without an org code like any other.
+      for (const r of rows) {
+        const userId = idByEmp.get(r.employee_id.toLowerCase());
+        if (userId) indexUser(tenant, { id: userId, email: r.email, phone: r.phone }).catch(() => {});
+      }
+    }
+
     return rows.length;
   } catch (err) {
     await conn.rollback().catch(() => {});
@@ -660,7 +733,7 @@ export async function preview(db, actor, buffer, filename) {
 }
 
 /** Kick off a real import. Returns immediately; the work happens in background. */
-export async function startImport(db, actor, buffer, filename) {
+export async function startImport(db, actor, buffer, filename, tenant = null) {
   // One at a time per tenant: two concurrent imports of the same file would race
   // on the same employee_ids and one would die on the unique index.
   const [running] = await db.query(
@@ -725,7 +798,7 @@ async function runJob(db, jobId, valid) {
   const onPhase = (phase) =>
     db.execute('UPDATE user_import_jobs SET phase=? WHERE id=?', [phase, jobId]).catch(() => {});
 
-  const created = await insertUsers(db, valid, onProgress, onPhase);
+  const created = await insertUsers(db, valid, onProgress, onPhase, tenant);
 
   await db.execute(
     `UPDATE user_import_jobs

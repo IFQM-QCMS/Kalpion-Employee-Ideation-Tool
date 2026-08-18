@@ -53,7 +53,7 @@ test('wrong password is 401 and counts toward lockout', async () => {
 test('nonexistent email gets the same 401 as a wrong password (no enumeration)', async () => {
   const r = await login('nobody@orga.test', 'whatever', 'orga');
   assert.equal(r.status, 401);
-  assert.match(r.error, /Invalid email\/phone or password/);
+  assert.match(r.error, /Invalid sign-in details or password/);
 });
 
 test('5 failures lock the account for 15 minutes', async () => {
@@ -832,7 +832,7 @@ test('a user signs in with their registered phone number', async () => {
 test('an unknown email is refused generically, exactly like a wrong password', async () => {
   const r = await login('does-not-exist@nowhere.test', 'whatever'); // no org code
   assert.equal(r.status, 401);
-  assert.match(r.error, /Invalid email\/phone or password/);
+  assert.match(r.error, /Invalid sign-in details or password/);
 });
 
 // ── Co-suggesters beyond two, benefits attachment, monthly dashboard ────────
@@ -1661,4 +1661,156 @@ test('an idea forwarded to QCMS is distinguishable from one merely approved', as
   assert.ok(Number(usage.qcms_pushed) >= 1,
     `the platform must count a forwarded idea, got ${JSON.stringify(usage.qcms_pushed)}`);
   assert.equal(Number(usage.qcms_failed), 0, 'and must not count it as a failure');
+});
+
+// ── Username sign-in, and email that is no longer compulsory ─────────────────
+/*
+ * users.email was NOT NULL UNIQUE and was the login identifier, so an employee
+ * with no company mailbox — most of a shop floor — had to be given a
+ * fabricated address before an account could exist, which then received
+ * nothing and was still what they had to type to sign in.
+ */
+
+test('a user can be created with a username and no email, and sign in with it', async () => {
+  const created = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      name: 'Yashas M', username: 'yashas123', employee_id: 'YM001',
+      phone: '+919812345691', password: 'UsernamePass123', role: 'employee',
+      department: 'Production',
+    },
+  });
+  assert.equal(created.data.success, true,
+    `an account with no email must be creatable — server said: ${JSON.stringify(created.data)}`);
+
+  const [row] = await sql('ifqm_test_a',
+    "SELECT username, email FROM ifqm_test_a.users WHERE employee_id='YM001'");
+  assert.equal(row.username, 'yashas123');
+  assert.equal(row.email, null, 'no address must be stored as NULL, not an empty string');
+
+  // The point of the whole change: signing in with the username, no org code.
+  const signedIn = await api('POST', '/api/auth/login', {
+    body: { email: 'yashas123', password: 'UsernamePass123' },
+  });
+  assert.equal(signedIn.status, 200,
+    `username sign-in must work — server said: ${JSON.stringify(signedIn.data)}`);
+  assert.equal(signedIn.data.user.name, 'Yashas M');
+
+  // Case is not part of the identity — somebody typing it from a handset gets
+  // a capital first letter whether they meant one or not.
+  const upper = await api('POST', '/api/auth/login', {
+    body: { email: 'Yashas123', password: 'UsernamePass123' },
+  });
+  assert.equal(upper.status, 200, 'a username must not be case-sensitive');
+
+  // A second account with no email must not collide with the first on the
+  // UNIQUE index — NULLs do not collide, empty strings would have.
+  const second = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      name: 'Second NoMail', username: 'second.user', employee_id: 'YM002',
+      phone: '+919812345692', password: 'UsernamePass123', role: 'employee',
+    },
+  });
+  assert.equal(second.data.success, true,
+    'two accounts without an address must both be creatable');
+});
+
+test('an account must have a username or an email, and a username is platform-wide', async () => {
+  // Neither identifier: refused, because nothing could sign in.
+  const neither = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: { name: 'No Way In', employee_id: 'YM003', phone: '+919812345693',
+      password: 'UsernamePass123', role: 'employee' },
+  });
+  assert.notEqual(neither.status, 200, 'an account with no way to sign in must be refused');
+
+  // Malformed usernames are refused rather than stored — each of these would
+  // land in the same keyspace as an email or a phone key and could shadow
+  // somebody else's sign-in.
+  for (const bad of ['ab', '9812345678', 'has space', 'user@acme.com', 'x'.repeat(31)]) {
+    const res = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: { name: 'Bad Name', username: bad, employee_id: `BAD${bad.length}`,
+        phone: '+919812345694', password: 'UsernamePass123', role: 'employee' },
+    });
+    assert.notEqual(res.status, 200, `username "${bad}" must be refused`);
+  }
+
+  /*
+   * The one that matters: a username is unique across the WHOLE platform, not
+   * per organisation, because login_directory is keyed on the identifier alone
+   * — that single key is what lets somebody sign in without an org code. Org B
+   * must not be able to take a name Org A already holds, and must not be left
+   * holding a user row for a name it did not get.
+   */
+  const taken = await api('POST', '/api/users', {
+    token: BADMIN,
+    body: { name: 'Impostor', username: 'yashas123', employee_id: 'IMP001',
+      phone: '+919812345695', password: 'UsernamePass123', role: 'employee' },
+  });
+  assert.equal(taken.status, 409,
+    `another organisation must not be able to claim a taken username — got ${taken.status}`);
+  const leftovers = await sql('ifqm_test_b',
+    "SELECT id FROM ifqm_test_b.users WHERE employee_id='IMP001'");
+  assert.equal(leftovers.length, 0,
+    'a refused claim must not leave the half-created account behind');
+
+  // And the original owner still resolves to their OWN organisation.
+  const still = await api('POST', '/api/auth/login', {
+    body: { email: 'yashas123', password: 'UsernamePass123' },
+  });
+  assert.equal(still.status, 200, 'the original owner must still be able to sign in');
+});
+
+/*
+ * Bulk import is the path that matters most for this change: a workforce with
+ * no company mailboxes is imported from a sheet, not typed in one at a time.
+ *
+ * validateRows is exercised directly rather than over HTTP because the endpoint
+ * takes a spreadsheet, and building an xlsx fixture would test ExcelJS rather
+ * than the rule under examination. It is the same function the preview and the
+ * commit both call, so what it accepts here is exactly what an import creates.
+ */
+test('bulk import accepts a username with no email, and refuses a row with neither', async () => {
+  const { validateRows } = await import('../src/services/userImportService.js');
+
+  // Stands in for the tenant connection: the function reads the existing user
+  // table once, and this is that table.
+  const db = {
+    query: async () => [[
+      { id: 1, employee_id: 'EXIST1', email: 'taken@orga.test', username: 'takenname' },
+    ]],
+  };
+  const actor = { role: 'admin' };
+  const row = (over) => ({
+    __row: 2, employee_id: 'IMP100', first_name: 'Asha', last_name: 'Rao',
+    year_of_birth: '1994', phone: '+919812345670', role: 'employee', ...over,
+  });
+
+  const ok = await validateRows(db, actor, [row({ username: 'asha.rao' })]);
+  assert.equal(ok.valid.length, 1, `a username-only row must be accepted: ${JSON.stringify(ok.errors)}`);
+  assert.equal(ok.valid[0].username, 'asha.rao');
+  assert.equal(ok.valid[0].email, null, 'a blank address must import as NULL, not an empty string');
+
+  const emailOnly = await validateRows(db, actor, [row({ email: 'asha@orga.test' })]);
+  assert.equal(emailOnly.valid.length, 1, 'an email-only row must still be accepted');
+
+  const neither = await validateRows(db, actor, [row({})]);
+  assert.equal(neither.valid.length, 0, 'a row with no username and no email must be refused');
+  assert.match(neither.errors[0].message, /username or an email/);
+
+  const badName = await validateRows(db, actor, [row({ username: '9812345678' })]);
+  assert.equal(badName.valid.length, 0,
+    'an all-digit username must be refused — it would collide with a phone key');
+
+  const dupInTenant = await validateRows(db, actor, [row({ username: 'takenname' })]);
+  assert.equal(dupInTenant.valid.length, 0, 'a username already in this tenant must be refused');
+
+  const dupInSheet = await validateRows(db, actor, [
+    row({ username: 'same.name' }),
+    row({ __row: 3, employee_id: 'IMP101', username: 'same.name' }),
+  ]);
+  assert.equal(dupInSheet.valid.length, 1, 'two rows claiming one username: only the first survives');
+  assert.match(dupInSheet.errors[0].message, /Duplicate username/);
 });

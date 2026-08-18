@@ -194,6 +194,17 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
 }
 
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
+  /*
+   * No address is a normal state, not an error. Since migration 025 an account
+   * may exist with a username and a mobile number and nothing else, and every
+   * notification path in the product reaches this function eventually. Refusing
+   * here — once — is what keeps "this employee has no mailbox" from surfacing
+   * as a failed idea submission somewhere far away.
+   */
+  if (!String(toEmail || '').trim()) {
+    return { success: false, skipped: true, error: 'No email address on file for this recipient.' };
+  }
+
   const { host, port, from, fromName, transport } = config.platformMail;
 
   /*
@@ -372,6 +383,17 @@ function headerSafe(s) {
  */
 export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml) {
   /*
+   * No address is a normal state, not an error. Since migration 025 an account
+   * may exist with a username and a mobile number and nothing else, and every
+   * notification path in the product reaches this function eventually. Refusing
+   * here — once — is what keeps "this employee has no mailbox" from surfacing
+   * as a failed idea submission somewhere far away.
+   */
+  if (!String(toEmail || '').trim()) {
+    return { success: false, skipped: true, error: 'No email address on file for this recipient.' };
+  }
+
+  /*
    * A tenant with its own SMTP host keeps using it — mail appearing to come
    * from the customer's own domain is a feature. Everything else falls through
    * to the platform provider, which is the only route available for mail with
@@ -397,6 +419,7 @@ export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml
 
 /** Insert an email into the queue (PHP queueEmail). */
 export async function queueEmail(db, toEmail, toName, subject, body) {
+  if (!String(toEmail || '').trim()) return { success: false, skipped: true };
   try {
     await db.execute(
       `INSERT INTO email_queue (to_email, to_name, subject, body, status, attempts, created_at)

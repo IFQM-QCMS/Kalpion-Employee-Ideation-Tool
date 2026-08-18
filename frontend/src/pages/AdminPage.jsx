@@ -337,7 +337,12 @@ export default function AdminPage() {
                           <div className="avatar" style={{ width:30,height:30,fontSize:11 }}>{u.avatar_initials||u.name?.[0]||'?'}</div>
                           <div>
                             <div style={{ fontWeight:600,fontSize:13 }}>{u.name}</div>
-                            <div style={{ fontSize:11,color:'var(--subtle)' }}>{u.employee_id} · {u.email}</div>
+                            {/* Whichever sign-in identifier the account actually
+                                has. An account created without an address shows
+                                its username instead of a lonely bullet. */}
+                            <div style={{ fontSize:11,color:'var(--subtle)' }}>
+                              {[u.employee_id, u.username, u.email].filter(Boolean).join(' · ')}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1178,7 +1183,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
           (() => {
             const q = hierSearch.trim().toLowerCase();
             const hits = users.filter(u =>
-              [u.name, u.employee_id, u.department, u.email]
+              [u.name, u.employee_id, u.username, u.department, u.email]
                 .some(v => String(v || '').toLowerCase().includes(q)));
             if (!hits.length) return <div className="empty-state">{t('sa.no_users')}</div>;
             return (
@@ -1310,6 +1315,7 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
   const [name,    setName]    = useState(editUser?.name||'');
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
   const [email,   setEmail]   = useState(editUser?.email||'');
+  const [uname,   setUname]   = useState(editUser?.username||'');
   const [dob,     setDob]     = useState('');
   const [phone,   setPhone]   = useState(editUser?.phone||'');
   const [role,    setRole]    = useState(editUser?.role||'employee');
@@ -1339,7 +1345,8 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
     if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
     if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
     setSaving(true);
-    const payload = { name, email, employee_id: empId, role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
+    const payload = { name, email, username: uname.trim().toLowerCase(), employee_id: empId,
+      role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
     if (isEdit) { payload.id = editUser.id; payload.status = status; }
     else payload.date_of_birth = dob; // first-login password = first 4 letters of name + birth year
     try {
@@ -1371,9 +1378,24 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
             <div className="form-group"><label>{t('admin.uf_name')} *</label><input className="form-control" value={name} onChange={e=>setName(e.target.value)} id="uf-name" /></div>
             <div className="form-group"><label>{t('admin.uf_emp_id')} *<InfoDot term="employee_id" /></label><input className="form-control" value={empId} onChange={e=>setEmpId(e.target.value)} id="uf-emp-id" /></div>
           </div>
+          {/* Username OR email — at least one, because one of them is how the
+              person signs in. Neither is starred: starring both would say
+              "both required", and starring neither says "your choice", which
+              is what the hint underneath spells out. */}
           <div className="form-row">
-            <div className="form-group"><label>{t('admin.uf_email')} *</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
+            <div className="form-group">
+              <label>{t('admin.uf_username')}</label>
+              <input className="form-control" value={uname} id="uf-username" autoComplete="off"
+                onChange={e=>setUname(e.target.value)} placeholder={t('admin.uf_username_ph')} />
+            </div>
+            <div className="form-group"><label>{t('admin.uf_email')}</label><input className="form-control" type="email" value={email} onChange={e=>setEmail(e.target.value)} id="uf-email" /></div>
+          </div>
+          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:-4,marginBottom:10 }}>
+            {t('admin.uf_login_hint')}
+          </div>
+          <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_phone')} <span style={{color:'var(--danger)'}}>*</span></label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} required /></div>
+            <div className="form-group" />
           </div>
           {!isEdit && (
             <div className="form-group" id="uf-dob-group">

@@ -19,7 +19,9 @@ import { signToken } from '../utils/jwt.js';
 import { masterDb } from '../database/master.js';
 import { recordLogin } from './activityService.js';
 import { resolveTenant, getTenantPool, sanitizeSlug } from '../database/tenant.js';
-import { resolveTenantByLogin, indexUser, isEmail, normalizePhone } from './directoryService.js';
+import {
+  resolveTenantByLogin, indexUser, isEmail, normalizePhone, normalizeUsername,
+} from './directoryService.js';
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import * as verification from './verificationService.js';
@@ -110,7 +112,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
   password = String(password ?? '');
   const cleanSlug = sanitizeSlug(orgSlug);
 
-  if (!email || !password) throw badRequest('Email and password are required.');
+  if (!email || !password) throw badRequest('Enter your username, email or mobile number, and your password.');
 
   const loginId = `${email.toLowerCase()}|${cleanSlug || 'default'}`;
 
@@ -214,7 +216,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     const remaining = Math.max(0, MAX_ATTEMPTS - after.count);
     throw unauthorized(
       remaining > 0
-        ? `Invalid email/phone or password. ${remaining} attempt(s) remaining.`
+        ? `Invalid sign-in details or password. ${remaining} attempt(s) remaining.`
         : 'Too many failed attempts. Please try again in 15 minutes.'
     );
   }
@@ -229,11 +231,24 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
        FROM users u
        LEFT JOIN users m ON m.id = u.manager_id
       WHERE `;
+  /*
+   * Three kinds of identifier, resolved in the order that makes each of them
+   * unambiguous: an address has an '@', a number reduces to digits, and a
+   * username is what is left — letters with no '@', which by construction can
+   * be neither of the other two (see directoryService.isUsername).
+   */
   const phoneKey = normalizePhone(email);
+  const usernameKey = normalizeUsername(email);
   let where; let params;
-  if (!isEmail(email) && phoneKey) {
+  if (isEmail(email)) {
+    where = 'LOWER(u.email) = ?';
+    params = [email.toLowerCase()];
+  } else if (phoneKey) {
     where = "REPLACE(REPLACE(REPLACE(REPLACE(u.phone,' ',''),'-',''),'+',''),'(','') LIKE ?";
     params = [`%${phoneKey}`];
+  } else if (usernameKey) {
+    where = 'LOWER(u.username) = ?';
+    params = [usernameKey];
   } else {
     where = 'LOWER(u.email) = ?';
     params = [email.toLowerCase()];
@@ -259,7 +274,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     });
     const err =
       remaining > 0
-        ? `Invalid email/phone or password. ${remaining} attempt(s) remaining.`
+        ? `Invalid sign-in details or password. ${remaining} attempt(s) remaining.`
         : 'Too many failed attempts. Please try again in 15 minutes.';
     throw unauthorized(err);
   }

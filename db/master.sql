@@ -96,7 +96,11 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 -- self-healed for pre-existing users on their first sign-in (see directoryService).
 CREATE TABLE IF NOT EXISTS login_directory (
   identifier   VARCHAR(190) NOT NULL,
-  id_type      ENUM('email','phone') NOT NULL,
+  -- 'username' added by migration 025. All three share this one keyspace, and
+  -- the format rules keep them apart structurally: an email contains '@', a
+  -- phone reduces to digits, a username must contain a letter and may not
+  -- contain '@'. See directoryService.isUsername().
+  id_type      ENUM('email','phone','username') NOT NULL,
   tenant_id    INT NOT NULL,
   tenant_slug  VARCHAR(50)  NOT NULL,
   user_id      INT NOT NULL,

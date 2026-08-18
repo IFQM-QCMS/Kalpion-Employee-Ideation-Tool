@@ -20,8 +20,16 @@
 CREATE TABLE IF NOT EXISTS users (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   employee_id     VARCHAR(20)  NOT NULL UNIQUE,
+  -- Sign-in name, unique across the WHOLE platform (migration 025), because
+  -- login_directory resolves an identifier to an organisation through a single
+  -- primary key — that is what allows signing in without an org code.
+  username        VARCHAR(50)  NULL DEFAULT NULL,
   name            VARCHAR(100) NOT NULL,
-  email           VARCHAR(150) NOT NULL UNIQUE,
+  -- Nullable since migration 025: an employee with no company mailbox had to be
+  -- given a fabricated address before an account could exist. An account needs
+  -- at least one of username/email, enforced in userService so the error can
+  -- name the field to fill in.
+  email           VARCHAR(150) NULL DEFAULT NULL UNIQUE,
   password_hash   VARCHAR(255) NOT NULL,
   phone           VARCHAR(20),
   department      VARCHAR(100),
@@ -56,6 +64,7 @@ CREATE TABLE IF NOT EXISTS users (
 
   activated_at         DATETIME NULL DEFAULT NULL,
   FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL,
+  UNIQUE KEY uq_users_username (username),
   INDEX idx_users_email_status (email, status),
   INDEX idx_users_name (name),
   INDEX idx_users_manager (manager_id)

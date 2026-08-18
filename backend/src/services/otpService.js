@@ -29,7 +29,9 @@ import crypto from 'node:crypto';
 import config from '../config/index.js';
 import { masterDb } from '../database/master.js';
 import { signToken } from '../utils/jwt.js';
-import { resolveTenantByLogin, normalizePhone, isEmail } from './directoryService.js';
+import {
+  resolveTenantByLogin, normalizePhone, isEmail, normalizeUsername,
+} from './directoryService.js';
 import { getTenantPool } from '../database/tenant.js';
 import {
   sendSms, maskPhone, dltConfig, dltMissing, fillTemplate, messageFor, smsReady, kaleyraMissing,
@@ -149,9 +151,17 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   const phone = normalizePhone(raw);
   const email = isEmail(raw) ? raw.toLowerCase() : '';
-  const key = phone || email;
-  const idType = phone ? 'phone' : 'email';
-  if (!key) throw badRequest('Enter a valid phone number.');
+  /*
+   * A username identifies the account but is not somewhere a code can be sent.
+   * It resolves to the person, and the code then goes to their registered
+   * number or address like any other — otherwise signing in by username would
+   * work with a password and quietly fail with a one-time code, which is the
+   * kind of half-feature that is worse than not having it.
+   */
+  const username = (!phone && !email) ? normalizeUsername(raw) : '';
+  const key = phone || email || username;
+  const idType = phone ? 'phone' : (email ? 'email' : 'username');
+  if (!key) throw badRequest('Enter your username, email address or mobile number.');
 
   const master = masterDb();
 
@@ -176,12 +186,18 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     tenant = await resolveTenantByLogin(key);
     if (tenant) {
       const db = getTenantPool(tenant);
-      const [[u] = []] = phone
-        ? await db.execute(
-          "SELECT id, name, email, phone FROM users WHERE status='active' AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1",
-          [`%${phone}`]
-        )
-        : await db.execute("SELECT id, name, email, phone FROM users WHERE email = ? AND status='active' LIMIT 1", [key]);
+      let sql; let args;
+      if (phone) {
+        sql = "SELECT id, name, email, phone FROM users WHERE status='active' AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1";
+        args = [`%${phone}`];
+      } else if (username) {
+        sql = "SELECT id, name, email, phone FROM users WHERE username = ? AND status='active' LIMIT 1";
+        args = [key];
+      } else {
+        sql = "SELECT id, name, email, phone FROM users WHERE email = ? AND status='active' LIMIT 1";
+        args = [key];
+      }
+      const [[u] = []] = await db.execute(sql, args);
       user = u || null;
     }
   } catch (e) {
@@ -264,6 +280,9 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
    */
   const emailAddr = idType === 'email' ? key : (user.email || '');
   const phoneNum = idType === 'phone' ? key : (user.phone || '');
+  // Typed a username: neither channel was named, so the account's own number is
+  // preferred — it is the one field every account is required to have.
+  const preferSms = idType === 'phone' || (idType === 'username' && !!phoneNum);
   /*
    * Each route reports the channel it *is*, rather than leaving it to be
    * inferred from the provider name afterwards. The inference was a hard-coded
@@ -286,7 +305,7 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     }
   };
 
-  const preferred = idType === 'phone' ? 'sms' : 'email';
+  const preferred = preferSms ? 'sms' : 'email';
   let sent = { sent: false, provider: 'none', detail: 'no channel available', channel: null };
 
   if (preferred === 'sms' && phoneNum) sent = await trySms();
