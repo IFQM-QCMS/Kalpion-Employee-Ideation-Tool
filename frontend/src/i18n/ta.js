@@ -474,8 +474,8 @@ export default {
 
   'analytics.approval_rate':'ஒப்புதல் விகிதம்',
   'analytics.impl_rate':'செயல்படுத்தல் விகிதம்',
-  'analytics.impl_rate_sub':'QC க்கு அனுப்பிய யோசனைகள்',
-  'analytics.avg_score_sub':'QC க்கு அனுப்பிய யோசனைகள்',
+  'analytics.impl_rate_sub':'செயல்படுத்தும் வரை சென்ற கருத்துகள்',
+  'analytics.avg_score_sub':'சமர்ப்பிக்கப்பட்ட அனைத்து கருத்துகளின் சராசரி',
   'analytics.avg_score':'சராசரி தர மதிப்பெண்',
   'analytics.status_dist':'நிலை விநியோகம்',
   'analytics.impact_dist':'தாக்கப் பகுதி விநியோகம்',
@@ -1442,4 +1442,8 @@ export default {
   'pl.monthly_allowance':'மாதாந்திர கோரிக்கை வரம்பு',
   'pl.search_ph':'பெயர், குறியீடு அல்லது விளக்கம் தேடு…',
   'pl.unlimited':'வரம்பற்றது',
+  'qc.in_qc':'QC-இல்',
+  'qc.in_qc_hint':'அங்கீகரிக்கப்பட்டு QC கருவிக்கு அனுப்பப்பட்டது, அங்கு அது பணியாகக் கண்காணிக்கப்படுகிறது.',
+  'qc.failed':'QC அனுப்புதல் தோல்வி',
+  'qc.failed_hint':'அங்கீகரிக்கப்பட்டது, ஆனால் QC கருவிக்கு அனுப்பிய கடைசி முயற்சி வெற்றிபெறவில்லை. மீண்டும் அனுப்பலாம்.',
 };

@@ -3,6 +3,7 @@ import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas, fmtDate, engagementIndex } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
+import QcBadge from '../components/QcBadge';
 
 function EngBadge({ aiScore, avgRating, voteCount, t }) {
   const ei = engagementIndex(aiScore, avgRating, voteCount);
@@ -96,7 +97,7 @@ export default function MyIdeasPage() {
                 <div className="idea-card-title">{i.title}</div>
               </div>
               <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4 }}>
-                <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span>
+                <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span><QcBadge status={i.qcms_push_status} />
                 {i.ai_score > 0 && <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>}
                 {i.status !== 'Draft' && <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />}
               </div>

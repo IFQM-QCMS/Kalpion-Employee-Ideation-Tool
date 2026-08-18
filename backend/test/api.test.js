@@ -1600,3 +1600,65 @@ test('a review committee decides unanimously — one rejection is enough', async
   });
   assert.equal(res.data.new_status, 'Approved', 'unanimous approval approves the idea');
 });
+
+// ── Approved vs actually forwarded to QCMS ───────────────────────────────────
+/*
+ * An approved idea and one that has been handed to the QC tool as tracked work
+ * looked identical everywhere outside the org admin's own Approved Ideas tab.
+ * Two things had to be true for the distinction to be visible: the push state
+ * has to travel with the idea to every screen that shows a status, and the
+ * platform's count of forwarded ideas has to be real.
+ */
+test('an idea forwarded to QCMS is distinguishable from one merely approved', async () => {
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Reclaim rinse water on the plating line',
+      present_situation: 'Rinse water goes to drain after a single pass, at roughly 40 kilolitres a shift.',
+      proposed_solution: 'Add a counter-flow rinse cascade so the last stage feeds the first.',
+      investment_required: '300000',
+    },
+  });
+  const ideaId = submit.data.idea_id;
+
+  // Approved, but never sent anywhere.
+  await sql('ifqm_test_a', `UPDATE ifqm_test_a.ideas SET status='Approved' WHERE id=${ideaId}`);
+  let res = await api('GET', `/api/ideas/${ideaId}`, { token: AUSER });
+  assert.equal(res.data.idea.status, 'Approved');
+  assert.ok(!res.data.idea.qcms_push_status,
+    'an approved idea that was never sent must carry no push status');
+
+  // Now forwarded. The screens read qcms_push_status, so it has to survive the
+  // trip on every payload that shows a status badge.
+  await sql('ifqm_test_a',
+    `UPDATE ifqm_test_a.ideas SET qcms_push_status='imported', qcms_pushed_at=NOW() WHERE id=${ideaId}`);
+
+  res = await api('GET', `/api/ideas/${ideaId}`, { token: AUSER });
+  assert.equal(res.data.idea.qcms_push_status, 'imported', 'the idea detail must carry the push state');
+  assert.equal(res.data.idea.status, 'Approved',
+    'forwarding must not disturb the approval status — they are separate facts');
+
+  const inList = (await api('GET', '/api/ideas', { token: AUSER })).data.ideas.find((i) => i.id === ideaId);
+  assert.equal(inList?.qcms_push_status, 'imported', 'the browse list must carry it');
+
+  const inMine = (await api('GET', '/api/ideas/my', { token: AUSER })).data.ideas.find((i) => i.id === ideaId);
+  assert.equal(inMine?.qcms_push_status, 'imported', 'My Ideas must carry it');
+
+  // The board names its columns instead of selecting i.*, so it was the one
+  // screen where the mark would silently never appear.
+  const onBoard = (await api('GET', '/api/votes/board', { token: AUSER })).data.ideas?.find((i) => i.id === ideaId);
+  assert.equal(onBoard?.qcms_push_status, 'imported', 'the community board must carry it too');
+
+  /*
+   * And the platform's own count. It queried qcms_push_status = 'success',
+   * which pushIdeaToQcms never writes — the vocabulary is imported | duplicate
+   * | failed — so "ideas forwarded to QCMS" read zero on every deployment no
+   * matter how many had actually gone across.
+   */
+  const detail = await api('GET', `/api/platform/tenants/${tenantAId}`, { token: PA });
+  const usage = detail.data.usage;   // tenantDetail spreads the shell at top level
+  assert.ok(usage, 'the tenant detail must carry a usage block');
+  assert.ok(Number(usage.qcms_pushed) >= 1,
+    `the platform must count a forwarded idea, got ${JSON.stringify(usage.qcms_pushed)}`);
+  assert.equal(Number(usage.qcms_failed), 0, 'and must not count it as a failure');
+});

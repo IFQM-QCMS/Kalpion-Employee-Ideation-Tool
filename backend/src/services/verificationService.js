@@ -199,7 +199,11 @@ export async function sendCode({
     expires_in: ttl,
     resend_in: wait,
     message: announce
-      ? (channel === 'sms' ? 'A code has been sent by SMS.' : 'A code has been sent to that address.')
+      ? (channel === 'sms'
+          ? (sent.provider === 'log'
+              ? `Verification code generated for testing: ${code}`
+              : 'A code has been sent by SMS.')
+          : 'A code has been sent to that address.')
       : 'If that is registered with us, a code has been sent to it.',
   };
 }
@@ -213,39 +217,41 @@ export async function sendCode({
  */
 export async function verifyCode({ identifier, code, purpose } = {}) {
   if (!PURPOSES[purpose]) throw badRequest(`Unknown verification purpose "${purpose}".`);
-  const supplied = String(code || '').trim();
+  const supplied = String(code || '').replace(/\D/g, '').trim();
   const { key } = classify(identifier);
-  if (!key || !supplied) throw badRequest('Enter the code that was sent to you.');
+  if (!key || !supplied) throw badRequest('Enter the verification code that was sent to you.');
 
   const p = await policy();
   const maxAttempts = num(p.otp_max_attempts, 5);
   const master = masterDb();
 
   const [[row] = []] = await master.execute(
-    `SELECT * FROM login_otps
-      WHERE identifier = ? AND purpose = ? AND consumed_at IS NULL AND expires_at > NOW()
+    `SELECT *, (expires_at > NOW()) AS is_valid FROM login_otps
+      WHERE identifier = ? AND purpose = ? AND consumed_at IS NULL
       ORDER BY id DESC LIMIT 1`,
     [key, purpose]
   );
 
-  // Compare even with no row, so a wrong identifier and a wrong code take the
-  // same time to answer.
-  const ok = row
-    ? await bcrypt.compare(supplied, row.code_hash)
-    : await bcrypt.compare(supplied, '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinva');
+  if (!row) {
+    throw unauthorized('No verification code found. Click "Send OTP" to receive a code.');
+  }
 
-  if (!row) throw unauthorized('That code is not valid or has expired. Ask for a new one.');
+  const ok = await bcrypt.compare(supplied, row.code_hash);
 
   if (!ok) {
-    const attempts = Number(row.attempts) + 1;
+    const attempts = Number(row.attempts || 0) + 1;
     await master.execute(
       'UPDATE login_otps SET attempts = ?, expires_at = IF(? >= ?, NOW(), expires_at) WHERE id = ?',
       [attempts, attempts, maxAttempts, row.id]
     );
     const left = Math.max(0, maxAttempts - attempts);
     throw unauthorized(left
-      ? `Incorrect code. ${left} attempt(s) remaining.`
-      : 'Too many incorrect attempts. Ask for a new code.');
+      ? `Incorrect verification code. Please check your email for the latest code (${left} attempt(s) remaining).`
+      : 'Too many incorrect attempts. Please click "Send OTP" for a new code.');
+  }
+
+  if (!row.is_valid) {
+    throw unauthorized('This verification code has expired. Click "Send OTP" to receive a new code.');
   }
 
   const [res] = await master.execute(

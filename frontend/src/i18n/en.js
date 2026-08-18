@@ -940,8 +940,8 @@ export default {
   // ── Analytics ──
   'analytics.approval_rate':'Approval Rate',
   'analytics.impl_rate':'Implementation Rate',
-  'analytics.impl_rate_sub':'Ideas forwarded to QC',
-  'analytics.avg_score_sub':'Ideas forwarded to QC',
+  'analytics.impl_rate_sub':'Ideas taken through to implementation',
+  'analytics.avg_score_sub':'Average across all submitted ideas',
   'analytics.avg_score':'Avg Quality Score',
   'analytics.status_dist':'Status Distribution',
   'analytics.impact_dist':'Impact Area Distribution',
@@ -1558,4 +1558,8 @@ export default {
   'pl.monthly_allowance':'Monthly request allowance',
   'pl.search_ph':'Search name, code or description…',
   'pl.unlimited':'Unlimited',
+  'qc.in_qc':'In QC',
+  'qc.in_qc_hint':'Approved and forwarded to the QC tool, where it is tracked as work.',
+  'qc.failed':'QC send failed',
+  'qc.failed_hint':'Approved, but the last attempt to send it to the QC tool did not succeed. It can be sent again.',
 };

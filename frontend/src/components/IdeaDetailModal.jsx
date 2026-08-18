@@ -13,6 +13,7 @@ import AssignReviewersModal from './AssignReviewersModal';
 import ReviewerDecisionModal from './ReviewerDecisionModal';
 import InfoDot from './InfoDot';
 import ScreenGuard from './ScreenGuard';
+import QcBadge from './QcBadge';
 
 const TAB_KEYS = ['modal.overview', 'modal.impact', 'modal.assessment',
   'modal.timeline', 'modal.attachments'];
@@ -225,7 +226,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     <div><strong>{t('detail.submitted_by')}:</strong> {idea.submitter_name} ({idea.department||'–'})</div>
                     <div style={{ display:'flex',alignItems:'center',gap:8 }}>
                       <strong>{t('table.status')}:</strong>
-                      <span className={`badge ${statusBadge(idea.status)}`}>{translateStatus(idea.status,t)}</span>
+                      <span className={`badge ${statusBadge(idea.status)}`}>{translateStatus(idea.status,t)}</span><QcBadge status={idea.qcms_push_status} />
                     </div>
                   </div>
 

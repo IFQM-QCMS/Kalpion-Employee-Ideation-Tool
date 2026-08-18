@@ -10,6 +10,7 @@ import InfoDot from '../components/InfoDot';
 import ScreenGuard from '../components/ScreenGuard';
 import BulkArchivePanel from '../components/BulkArchivePanel';
 import Pager, { usePager } from '../components/Pager';
+import QcBadge from '../components/QcBadge';
 
 /* Escape for the print window — that HTML is built by string concatenation, so
    React's automatic escaping does not apply to it. */
@@ -286,7 +287,7 @@ export default function AllIdeasPage() {
                       : <span style={{ fontSize:11,color:'var(--subtle)' }}>—</span>
                     }
                   </td>
-                  <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span></td>
+                  <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} /></td>
                   <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.submitted_at)}</td>
                   <td>
                     {/* Outside the idea? No full view is offered - the overlay

@@ -11,6 +11,7 @@ import IdeaDetailModal from '../components/IdeaDetailModal';
 import BulkImportModal from '../components/BulkImportModal';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
+import QcBadge from '../components/QcBadge';
 
 /*
  * React's `style` prop takes an object, not a CSS string. These were strings
@@ -278,7 +279,7 @@ export default function AdminPage() {
                     <td><strong>{i.idea_code}</strong></td>
                     <td>{i.title.length>50?i.title.substring(0,50)+'…':i.title}</td>
                     <td>{i.submitter_name}</td>
-                    <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span></td>
+                    <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span><QcBadge status={i.qcms_push_status} /></td>
                     <td>{i.submitted_at?fmtDate(i.submitted_at):'–'}</td>
                     <td><button className="btn btn-outline btn-sm" onClick={() => setOpenIdeaId(i.id)}>{t('btn.view')}</button></td>
                   </tr>

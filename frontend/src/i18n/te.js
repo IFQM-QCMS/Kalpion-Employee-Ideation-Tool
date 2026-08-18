@@ -474,8 +474,8 @@ export default {
 
   'analytics.approval_rate':'ఆమోద రేటు',
   'analytics.impl_rate':'అమలు రేటు',
-  'analytics.impl_rate_sub':'QC కి పంపిన ఆలోచనలు',
-  'analytics.avg_score_sub':'QC కి పంపిన ఆలోచనలు',
+  'analytics.impl_rate_sub':'అమలు వరకు చేరిన ఆలోచనలు',
+  'analytics.avg_score_sub':'సమర్పించిన అన్ని ఆలోచనల సగటు',
   'analytics.avg_score':'సగటు నాణ్యత స్కోరు',
   'analytics.status_dist':'స్థితి పంపిణీ',
   'analytics.impact_dist':'ప్రభావ రంగ పంపిణీ',
@@ -1442,4 +1442,8 @@ export default {
   'pl.monthly_allowance':'నెలవారీ అభ్యర్థన పరిమితి',
   'pl.search_ph':'పేరు, కోడ్ లేదా వివరణ వెతకండి…',
   'pl.unlimited':'అపరిమితం',
+  'qc.in_qc':'QCలో',
+  'qc.in_qc_hint':'ఆమోదించి QC సాధనానికి పంపబడింది, అక్కడ అది పనిగా ట్రాక్ చేయబడుతుంది.',
+  'qc.failed':'QC పంపడం విఫలమైంది',
+  'qc.failed_hint':'ఆమోదించబడింది, కానీ QC సాధనానికి పంపే చివరి ప్రయత్నం విజయవంతం కాలేదు. మళ్ళీ పంపవచ్చు.',
 };

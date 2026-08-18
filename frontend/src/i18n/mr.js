@@ -474,8 +474,8 @@ export default {
 
   'analytics.approval_rate':'मंजुरी दर',
   'analytics.impl_rate':'अंमलबजावणी दर',
-  'analytics.impl_rate_sub':'QC कडे पाठवलेल्या कल्पना',
-  'analytics.avg_score_sub':'QC कडे पाठवलेल्या कल्पना',
+  'analytics.impl_rate_sub':'अंमलबजावणीपर्यंत पोहोचलेल्या कल्पना',
+  'analytics.avg_score_sub':'सादर केलेल्या सर्व कल्पनांची सरासरी',
   'analytics.avg_score':'सरासरी गुणवत्ता गुण',
   'analytics.status_dist':'स्थिती वितरण',
   'analytics.impact_dist':'प्रभाव क्षेत्र वितरण',
@@ -1442,4 +1442,8 @@ export default {
   'pl.monthly_allowance':'मासिक विनंती मर्यादा',
   'pl.search_ph':'नाव, कोड किंवा वर्णन शोधा…',
   'pl.unlimited':'अमर्यादित',
+  'qc.in_qc':'QC मध्ये',
+  'qc.in_qc_hint':'मंजूर करून QC साधनाकडे पाठवले, जिथे ते कामाच्या स्वरूपात ट्रॅक केले जाते.',
+  'qc.failed':'QC पाठवणे अयशस्वी',
+  'qc.failed_hint':'मंजूर, पण QC साधनाकडे पाठवण्याचा शेवटचा प्रयत्न यशस्वी झाला नाही. पुन्हा पाठवता येईल.',
 };

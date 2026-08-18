@@ -474,8 +474,8 @@ export default {
 
   'analytics.approval_rate':'അംഗീകാര നിരക്ക്',
   'analytics.impl_rate':'നടപ്പാക്കൽ നിരക്ക്',
-  'analytics.impl_rate_sub':'QC ലേക്ക് അയച്ച ആശയങ്ങൾ',
-  'analytics.avg_score_sub':'QC ലേക്ക് അയച്ച ആശയങ്ങൾ',
+  'analytics.impl_rate_sub':'നടപ്പാക്കൽ വരെ എത്തിയ ആശയങ്ങൾ',
+  'analytics.avg_score_sub':'സമർപ്പിച്ച എല്ലാ ആശയങ്ങളുടെയും ശരാശരി',
   'analytics.avg_score':'ശരാശരി ഗുണനിലവാര സ്കോർ',
   'analytics.status_dist':'സ്ഥിതി വിതരണം',
   'analytics.impact_dist':'സ്വാധീന മേഖലാ വിതരണം',
@@ -1442,4 +1442,8 @@ export default {
   'pl.monthly_allowance':'പ്രതിമാസ അഭ്യർത്ഥന പരിധി',
   'pl.search_ph':'പേര്, കോഡ് അല്ലെങ്കിൽ വിവരണം തിരയുക…',
   'pl.unlimited':'പരിധിയില്ലാത്ത',
+  'qc.in_qc':'QC-യിൽ',
+  'qc.in_qc_hint':'അംഗീകരിച്ച് QC ഉപകരണത്തിലേക്ക് അയച്ചു, അവിടെ ഇത് ജോലിയായി ട്രാക്ക് ചെയ്യപ്പെടുന്നു.',
+  'qc.failed':'QC അയയ്ക്കൽ പരാജയപ്പെട്ടു',
+  'qc.failed_hint':'അംഗീകരിച്ചു, പക്ഷേ QC ഉപകരണത്തിലേക്ക് അയയ്ക്കാനുള്ള അവസാന ശ്രമം വിജയിച്ചില്ല. വീണ്ടും അയയ്ക്കാം.',
 };

@@ -666,8 +666,8 @@ export default {
 
   'analytics.approval_rate':'स्वीकृति दर',
   'analytics.impl_rate':'कार्यान्वयन दर',
-  'analytics.impl_rate_sub':'QC को भेजे गए विचार',
-  'analytics.avg_score_sub':'QC को भेजे गए विचार',
+  'analytics.impl_rate_sub':'कार्यान्वयन तक पहुँचे विचार',
+  'analytics.avg_score_sub':'सभी प्रस्तुत विचारों का औसत',
   'analytics.avg_score':'औसत गुणवत्ता स्कोर',
   'analytics.status_dist':'स्थिति वितरण',
   'analytics.impact_dist':'प्रभाव क्षेत्र वितरण',
@@ -1446,4 +1446,8 @@ export default {
   'pl.monthly_allowance':'मासिक अनुरोध सीमा',
   'pl.search_ph':'नाम, कोड या विवरण खोजें…',
   'pl.unlimited':'असीमित',
+  'qc.in_qc':'QC में',
+  'qc.in_qc_hint':'स्वीकृत और QC टूल को भेजा गया, जहाँ इसे कार्य के रूप में ट्रैक किया जाता है।',
+  'qc.failed':'QC भेजना विफल',
+  'qc.failed_hint':'स्वीकृत, परंतु QC टूल को भेजने का पिछला प्रयास सफल नहीं हुआ। इसे दोबारा भेजा जा सकता है।',
 };

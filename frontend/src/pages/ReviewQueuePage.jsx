@@ -10,6 +10,7 @@ import AssignReviewersModal from '../components/AssignReviewersModal';
 import ReviewerDecisionModal from '../components/ReviewerDecisionModal';
 import ScreenGuard from '../components/ScreenGuard';
 import Pager, { usePager } from '../components/Pager';
+import QcBadge from '../components/QcBadge';
 
 function EngBadge({ aiScore, avgRating, voteCount, t }) {
   const ei = engagementIndex(aiScore, avgRating, voteCount);
@@ -164,7 +165,7 @@ export default function ReviewQueuePage() {
                   </div>
                 </div>
                 <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4 }}>
-                  <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
+                  <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} />
                   {i.ai_score > 0 && <span className={scoreBadgeClass(i.ai_score)}>AI: {i.ai_score}/100</span>}
                 </div>
               </div>

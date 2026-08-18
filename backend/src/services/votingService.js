@@ -219,6 +219,10 @@ export async function board(db, user, sort) {
     `SELECT i.id, i.idea_code, i.title, i.present_situation, i.proposed_solution,
             i.impact_level, i.status, i.created_at, i.is_anonymous, i.ai_score,
             i.submitter_id, i.co_suggester_1_id, i.co_suggester_2_id, i.current_reviewer_id,
+            -- Whether an approved idea has actually reached the QC tool. This
+            -- list names its columns rather than using i.*, so the board would
+            -- otherwise be the one screen where the "In QC" mark never appeared.
+            i.qcms_push_status,
             u.name AS submitter_name, u.avatar_initials, u.department,
             (SELECT COUNT(*) FROM idea_community_votes WHERE idea_id=i.id AND vote_type='up')   AS upvotes,
             (SELECT COUNT(*) FROM idea_community_votes WHERE idea_id=i.id AND vote_type='down') AS downvotes,

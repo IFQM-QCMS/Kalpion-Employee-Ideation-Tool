@@ -6,6 +6,7 @@ import { votesApi, exportApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import ScreenGuard from '../components/ScreenGuard';
+import QcBadge from '../components/QcBadge';
 
 export default function BoardPage() {
   const { user }      = useAuth();
@@ -168,7 +169,7 @@ export default function BoardPage() {
                     </div>
                   )}
                   <div style={{ display:'flex',gap:8,marginTop:8,alignItems:'center',flexWrap:'wrap' }}>
-                    <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
+                    <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} />
                     <span className={`badge ${impactBadge(i.impact_level)}`}>
                       {translateImpact(i.impact_level, t)} {t('idea.impact_suffix')}
                     </span>

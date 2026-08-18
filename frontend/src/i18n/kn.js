@@ -666,8 +666,8 @@ export default {
 
   'analytics.approval_rate':'ಅನುಮೋದನೆ ದರ',
   'analytics.impl_rate':'ಅನುಷ್ಠಾನ ದರ',
-  'analytics.impl_rate_sub':'QC ಗೆ ಕಳುಹಿಸಿದ ಆಲೋಚನೆಗಳು',
-  'analytics.avg_score_sub':'QC ಗೆ ಕಳುಹಿಸಿದ ಆಲೋಚನೆಗಳು',
+  'analytics.impl_rate_sub':'ಅನುಷ್ಠಾನದವರೆಗೆ ತಲುಪಿದ ಆಲೋಚನೆಗಳು',
+  'analytics.avg_score_sub':'ಸಲ್ಲಿಸಿದ ಎಲ್ಲಾ ಆಲೋಚನೆಗಳ ಸರಾಸರಿ',
   'analytics.avg_score':'ಸರಾಸರಿ ಗುಣಮಟ್ಟ ಅಂಕ',
   'analytics.status_dist':'ಸ್ಥಿತಿ ವಿತರಣೆ',
   'analytics.impact_dist':'ಪರಿಣಾಮ ಕ್ಷೇತ್ರ ವಿತರಣೆ',
@@ -1446,4 +1446,8 @@ export default {
   'pl.monthly_allowance':'ಮಾಸಿಕ ವಿನಂತಿ ಮಿತಿ',
   'pl.search_ph':'ಹೆಸರು, ಕೋಡ್ ಅಥವಾ ವಿವರಣೆ ಹುಡುಕಿ…',
   'pl.unlimited':'ಅನಿಯಮಿತ',
+  'qc.in_qc':'QC ನಲ್ಲಿ',
+  'qc.in_qc_hint':'ಅನುಮೋದಿಸಿ QC ಸಾಧನಕ್ಕೆ ಕಳುಹಿಸಲಾಗಿದೆ, ಅಲ್ಲಿ ಅದನ್ನು ಕೆಲಸವಾಗಿ ಟ್ರ್ಯಾಕ್ ಮಾಡಲಾಗುತ್ತದೆ.',
+  'qc.failed':'QC ಕಳುಹಿಸುವಿಕೆ ವಿಫಲ',
+  'qc.failed_hint':'ಅನುಮೋದಿತ, ಆದರೆ QC ಸಾಧನಕ್ಕೆ ಕಳುಹಿಸುವ ಕೊನೆಯ ಪ್ರಯತ್ನ ಯಶಸ್ವಿಯಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಕಳುಹಿಸಬಹುದು.',
 };

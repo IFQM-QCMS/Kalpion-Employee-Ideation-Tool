@@ -130,8 +130,16 @@ export async function tenants() {
       // rather than blanking the whole row.
       let qcmsPushed = 0;
       try {
+        // 'imported' or 'duplicate' — the two outcomes that mean the idea is in
+        // QCMS. This read 'success', which pushIdeaToQcms never writes (it
+        // returns imported | duplicate | failed), so the figure was always 0
+        // however many ideas an organisation had actually forwarded.
+        //
+        // 'duplicate' counts: QCMS answering 409 means the idea is already
+        // there, which is the same end state as importing it.
         const [[qp]] = await db.query(
-          "SELECT COUNT(*) AS c FROM ideas WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status = 'success'"
+          `SELECT COUNT(*) AS c FROM ideas
+            WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status IN ('imported','duplicate')`
         );
         qcmsPushed = Number(qp.c) || 0;
       } catch { /* column absent on an un-migrated tenant */ }
@@ -250,9 +258,12 @@ async function tenantShell(t) {
     ideas_implemented: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Implemented'"),
     ideas_rejected: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Rejected'"),
     // The point at which an idea stops being a suggestion and becomes tracked
-    // work in the QCMS tool - the figure that shows the platform paid for itself.
+    // work in the QCMS tool - the figure that shows the platform paid for
+    // itself. Same correction as the per-tenant count above: the status
+    // vocabulary is imported | duplicate | failed, never 'success'.
     qcms_pushed: await count(
-      "SELECT COUNT(*) AS c FROM ideas WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status = 'success'"
+      `SELECT COUNT(*) AS c FROM ideas
+        WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status IN ('imported','duplicate')`
     ),
     qcms_failed: await count(
       "SELECT COUNT(*) AS c FROM ideas WHERE qcms_push_status = 'failed'"
