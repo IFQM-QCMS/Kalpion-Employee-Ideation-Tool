@@ -20,6 +20,10 @@ const CYCLES = [
   ['half_yearly', 'Half-yearly'],
   ['yearly', 'Yearly (1 year)'],
   ['one_time', 'One-time'],
+  // No end date at all, unlike one_time which is a long fixed term. Assigning a
+  // lifetime plan marks the organisation exempt with no period end, so the
+  // nightly lapse sweep never looks at it.
+  ['lifetime', 'Lifetime (never expires)'],
 ];
 const TIERS = [
   ['trial', 'Trial'],

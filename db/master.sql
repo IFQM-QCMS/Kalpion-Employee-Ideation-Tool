@@ -383,7 +383,9 @@ CREATE TABLE IF NOT EXISTS plans (
   tier           ENUM('trial','starter','professional','enterprise','custom')
                  NOT NULL DEFAULT 'starter',
   amount_paise   BIGINT       NOT NULL DEFAULT 0,
-  billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time')
+  -- 'lifetime' (migration 026) is the only cycle with no end date at all.
+  -- 'one_time' is a long fixed term, not a perpetual one: it still expires.
+  billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time','lifetime')
                  NOT NULL DEFAULT 'yearly',
   gst_percent    DECIMAL(5,2) NOT NULL DEFAULT 18.00,
   -- Whether the stored amount already contains the tax or the tax is added to
@@ -425,7 +427,12 @@ VALUES
   ('STARTER', 'Starter',      'For a single plant getting started with structured ideation.',
    'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 1500000,  'standard', 'active'),
   ('PRO',     'Professional', 'For multi-plant MSMEs running ideation across departments.',
-   'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 22500000, 'priority', 'active');
+   'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 22500000, 'priority', 'active'),
+  -- Permanent and free: a pilot site, a partner, or an internal organisation.
+  -- Assigning it marks the tenant exempt with no period end, so the nightly
+  -- lapse sweep never examines it.
+  ('LIFETIME','Lifetime (Free)','Permanent access at no charge. Never expires and is never billed.',
+   'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active');
 
 -- Who changed an organisation's plan, when, from what to what, and why. A
 -- billing dispute is answered from a record or it is answered from memory.

@@ -1814,3 +1814,60 @@ test('bulk import accepts a username with no email, and refuses a row with neith
   assert.equal(dupInSheet.valid.length, 1, 'two rows claiming one username: only the first survives');
   assert.match(dupInSheet.errors[0].message, /Duplicate username/);
 });
+
+// ── Lifetime plan ────────────────────────────────────────────────────────────
+/*
+ * billing_cycle already had 'one_time', mapped to 3650 days and commented
+ * "effectively perpetual; still has an end date on file". Effectively is the
+ * problem: the date is real and the nightly sweep reads it, so in ten years it
+ * would expire an organisation that was sold a plan which does not expire.
+ */
+test('a lifetime plan never expires and is never billed again', async () => {
+  const plans = await api('GET', '/api/platform/plans', { token: PA });
+  const lifetime = (plans.data.plans || []).find((p) => p.code === 'LIFETIME');
+  assert.ok(lifetime, 'the seeded LIFETIME plan must exist');
+  assert.equal(lifetime.billing_cycle, 'lifetime');
+  assert.equal(Number(lifetime.amount_paise), 0, 'the seeded lifetime plan is free');
+  assert.equal(lifetime.cycle_days, null,
+    'a lifetime plan must report no cycle length — a number here would behave like an expiry');
+  assert.equal(lifetime.is_lifetime, true);
+
+  const assigned = await api('POST', `/api/platform/tenants/${tenantBId}/plan`, {
+    token: PA, body: { plan_id: lifetime.id },
+  });
+  assert.equal(assigned.data.success, true,
+    `assigning it must work — server said: ${JSON.stringify(assigned.data)}`);
+
+  const [row] = await sql('ifqm_test_master',
+    `SELECT billing_status, period_end FROM ifqm_test_master.tenants WHERE id = ${tenantBId}`);
+  assert.equal(row.period_end, null, 'a lifetime organisation must have no period end');
+  assert.equal(row.billing_status, 'exempt',
+    "and must be exempt, which is what keeps it out of the lapse sweep's query");
+
+  // The label has to separate "sold a perpetual plan" from "we chose not to
+  // bill them" — both are exempt, and the screens should not say the same thing.
+  const sub = await api('GET', `/api/platform/tenants/${tenantBId}/subscription`, { token: PA });
+  assert.equal(sub.data.subscription.is_lifetime, true);
+  assert.match(sub.data.subscription.label, /Lifetime/);
+  assert.equal(sub.data.subscription.blocked, false, 'it must never be blocked');
+
+  /*
+   * The two calls that would quietly undo it. CYCLE_DAYS.lifetime is null, so
+   * both used to fall through `|| 365` and hand a perpetual organisation an
+   * expiry date a year out — invisible until the sweep suspended them.
+   */
+  const renew = await api('POST', `/api/platform/tenants/${tenantBId}/mark-paid`, {
+    token: PA, body: { periods: 1 },
+  });
+  assert.notEqual(renew.status, 200, 'renewing a lifetime plan must be refused, not silently applied');
+
+  const trial = await api('POST', `/api/platform/tenants/${tenantBId}/trial`, {
+    token: PA, body: { days: 30 },
+  });
+  assert.notEqual(trial.status, 200, 'a trial window on a lifetime plan must be refused');
+
+  const after = await sql('ifqm_test_master',
+    `SELECT billing_status, period_end FROM ifqm_test_master.tenants WHERE id = ${tenantBId}`);
+  assert.equal(after[0].period_end, null, 'and neither refusal may have left an end date behind');
+  assert.equal(after[0].billing_status, 'exempt');
+});

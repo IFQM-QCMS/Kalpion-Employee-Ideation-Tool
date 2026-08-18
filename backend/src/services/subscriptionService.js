@@ -17,7 +17,7 @@
  */
 import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
-import { decoratePlan, priceBreakdown, CYCLE_DAYS } from './planService.js';
+import { decoratePlan, priceBreakdown, CYCLE_DAYS, isLifetime } from './planService.js';
 import { getPlatformSetting } from './platformSettingsService.js';
 import logger from '../utils/logger.js';
 import { invalidateQuotaCache, usageFor } from '../middleware/tenantQuota.js';
@@ -69,9 +69,18 @@ async function record(tenantId, event, fields = {}, actor = null) {
 export function billingState(tenant, { graceDays = 2 } = {}) {
   const status = tenant.billing_status || 'trial';
   if (status === 'exempt') {
+    /*
+     * Two different situations share this status, and the screens should not
+     * describe them the same way. A lifetime plan was SOLD (or granted) as
+     * perpetual; an organisation IFQM simply chose not to bill is an
+     * arrangement. Both are never charged, so both are exempt — the plan is
+     * what tells them apart.
+     */
+    const lifetime = tenant.billing_cycle === 'lifetime' || tenant.plan_cycle === 'lifetime';
     return {
       state: 'exempt', days_left: null, blocked: false, in_grace: false,
-      grace_days_left: null, label: 'Not billed',
+      grace_days_left: null, is_lifetime: lifetime,
+      label: lifetime ? 'Lifetime — never expires' : 'Not billed',
     };
   }
 
@@ -360,7 +369,10 @@ export async function subscriptionFor(tenantId) {
       period_start: tenant.period_start,
       period_end: tenant.period_end,
       billing_note: tenant.billing_note,
-      ...billingState(tenant, { graceDays: grace }),
+      // The tenants row carries no billing cycle — it is on the plan — so it is
+      // handed in explicitly. Without it an exempt lifetime organisation would
+      // read "Not billed" here while reading "Lifetime" on the overview list.
+      ...billingState({ ...tenant, plan_cycle: plan?.billing_cycle }, { graceDays: grace }),
     },
     plan,
     history: events,
@@ -391,9 +403,21 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
   const [[plan]] = await masterDb().execute('SELECT * FROM plans WHERE id = ? LIMIT 1', [wanted]);
   if (!plan) throw badRequest('That plan no longer exists.');
 
-  const days = trialDays === undefined || trialDays === null || trialDays === ''
-    ? await defaultTrialDays()
-    : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0));
+  const lifetimePlan = isLifetime(plan.billing_cycle);
+
+  /*
+   * A lifetime plan takes no trial, and that is not an error worth stopping for.
+   *
+   * A trial is a window before billing starts, and billing never starts here —
+   * so a trial length is not wrong, it is simply meaningless, and refusing the
+   * assignment over it would make granting a free perpetual plan require the
+   * operator to first notice and clear a trial default they never chose. It is
+   * ignored, and the reply says so rather than leaving them to spot it.
+   */
+  const days = lifetimePlan ? 0 : (
+    trialDays === undefined || trialDays === null || trialDays === ''
+      ? await defaultTrialDays()
+      : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0)));
 
   /*
    * A trial runs on the trial plan, never on a paid one.
@@ -417,14 +441,30 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
   }
 
   const now = new Date();
-  const cycleDays = CYCLE_DAYS[plan.billing_cycle] || 365;
+  const lifetime = lifetimePlan;
+  const cycleDays = lifetime ? null : (CYCLE_DAYS[plan.billing_cycle] || 365);
 
   let billingStatus;
   let trialEnds = null;
   let periodStart = null;
   let periodEnd = null;
 
-  if (days > 0) {
+  if (lifetime) {
+    /*
+     * No end date, and 'exempt' rather than 'active'.
+     *
+     * Both halves matter. period_end = NULL is what makes it perpetual; the
+     * status is what keeps it out of sweepLapsed(), which selects only
+     * trial/active/past_due — so a lifetime organisation is never examined,
+     * never chased for payment and never suspended. Leaving it 'active' with a
+     * null date would work today only because billingState() treats a missing
+     * date as "not started", which is a different fact that could reasonably be
+     * changed later.
+     */
+    billingStatus = 'exempt';
+    periodStart = now;
+    periodEnd = null;
+  } else if (days > 0) {
     billingStatus = 'trial';
     trialEnds = addDays(now, days);
     // The paid period starts when the trial ends, so the organisation is never
@@ -444,7 +484,7 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
       WHERE id = ?`,
     [
       plan.id, days, trialEnds ? sqlDate(trialEnds) : null, billingStatus,
-      sqlDate(periodStart), sqlDate(periodEnd),
+      sqlDate(periodStart), periodEnd ? sqlDate(periodEnd) : null,
       note ? String(note).slice(0, 500) : tenant.billing_note,
       id,
     ]
@@ -467,9 +507,11 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
 
   return {
     success: true,
-    message: days
-      ? `${tenant.name} is on ${plan.name} with a ${days}-day trial.`
-      : `${tenant.name} is on ${plan.name}, billing from today.`,
+    message: lifetime
+      ? `${tenant.name} is on ${plan.name}. It never expires and will not be billed again.`
+      : (days
+        ? `${tenant.name} is on ${plan.name} with a ${days}-day trial.`
+        : `${tenant.name} is on ${plan.name}, billing from today.`),
   };
 }
 
@@ -498,6 +540,11 @@ export async function setTrialDays(tenantId, days, actor = null, note = '') {
     const [[plan]] = await masterDb().execute(
       'SELECT billing_cycle FROM plans WHERE id = ? LIMIT 1', [tenant.plan_id]
     );
+    // Same trap as markPaid: a trial window on a plan that never ends would
+    // give the organisation its first expiry date.
+    if (isLifetime(plan?.billing_cycle)) {
+      throw badRequest(`${tenant.name} is on a lifetime plan, which never expires — a trial period would only give it an end date.`);
+    }
     cycleDays = CYCLE_DAYS[plan?.billing_cycle] || 365;
   }
 
@@ -547,6 +594,15 @@ export async function markPaid(tenantId, { periods = 1, note = '' } = {}, actor 
   if (!tenant.plan_id) throw badRequest('Put this organisation on a plan first.');
 
   const [[plan]] = await masterDb().execute('SELECT * FROM plans WHERE id = ? LIMIT 1', [tenant.plan_id]);
+  /*
+   * A lifetime plan has nothing to extend, and quietly extending it is worse
+   * than refusing: CYCLE_DAYS.lifetime is null, so the `|| 365` below would
+   * have turned a perpetual organisation into a yearly one and handed it an
+   * expiry date a year out — visible to nobody until the sweep suspended them.
+   */
+  if (isLifetime(plan?.billing_cycle)) {
+    throw badRequest(`${tenant.name} is on a lifetime plan. There is nothing to renew.`);
+  }
   const cycleDays = CYCLE_DAYS[plan?.billing_cycle] || 365;
   const n = Math.max(1, Math.min(12, parseInt(periods, 10) || 1));
 

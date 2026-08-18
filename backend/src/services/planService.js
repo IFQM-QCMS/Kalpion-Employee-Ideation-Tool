@@ -12,7 +12,7 @@ import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
 
 const TIERS = ['trial', 'starter', 'professional', 'enterprise', 'custom'];
-const CYCLES = ['monthly', 'quarterly', 'half_yearly', 'yearly', 'one_time'];
+const CYCLES = ['monthly', 'quarterly', 'half_yearly', 'yearly', 'one_time', 'lifetime'];
 const GST_MODES = ['included', 'excluded'];
 const SUPPORT = ['basic', 'standard', 'priority', 'dedicated'];
 
@@ -22,8 +22,23 @@ export const CYCLE_DAYS = {
   quarterly: 91,
   half_yearly: 182,
   yearly: 365,
-  one_time: 3650,      // effectively perpetual; still has an end date on file
+  one_time: 3650,      // a long fixed term — it does still expire
+  /*
+   * Lifetime has no length, and null is the honest way to say so. Every caller
+   * has to decide what that means rather than receive a number that quietly
+   * behaves like an expiry date.
+   *
+   * one_time above is the cautionary case: 3650 days was described as
+   * "effectively perpetual", but the date is real and the nightly sweep reads
+   * it, so in ten years it would expire an organisation sold a plan that does
+   * not expire — long enough that nobody remembers why, near enough that it
+   * arrives.
+   */
+  lifetime: null,
 };
+
+/** Does this plan ever need paying again? */
+export const isLifetime = (cycle) => cycle === 'lifetime';
 
 const CYCLE_LABEL = {
   monthly: 'Monthly',
@@ -31,6 +46,7 @@ const CYCLE_LABEL = {
   half_yearly: 'Half-yearly',
   yearly: 'Yearly',
   one_time: 'One-time',
+  lifetime: 'Lifetime',
 };
 
 /**
@@ -94,7 +110,10 @@ export function decoratePlan(row) {
     gst_rupees: toRupees(b.gst_paise),
     total_rupees: toRupees(b.total_paise),
     cycle_label: CYCLE_LABEL[row.billing_cycle] || row.billing_cycle,
-    cycle_days: CYCLE_DAYS[row.billing_cycle] || 365,
+    // null for a lifetime plan, and left null rather than defaulted to 365 — the
+  // screens read this to decide whether to show a renewal date at all.
+  cycle_days: isLifetime(row.billing_cycle) ? null : (CYCLE_DAYS[row.billing_cycle] || 365),
+  is_lifetime: isLifetime(row.billing_cycle),
     // "Unlimited" is NULL, not 0. Zero would be a real limit meaning nobody may
     // join, which is never what an operator means by leaving a box empty.
     max_users_label: row.max_users == null ? 'Unlimited' : String(row.max_users),
@@ -325,5 +344,5 @@ export async function retirePlan(id) {
 
 export default {
   listPlans, getPlan, createPlan, updatePlan, retirePlan,
-  toPaise, toRupees, priceBreakdown, decoratePlan, suggestQuota, CYCLE_DAYS,
+  toPaise, toRupees, priceBreakdown, decoratePlan, suggestQuota, CYCLE_DAYS, isLifetime,
 };
