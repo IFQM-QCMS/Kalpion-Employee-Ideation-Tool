@@ -37,3 +37,8 @@ Thumbs.db
 
 # Database backups — data, never source
 backend/backups/
+
+# Word's lock file for an open .docx — created beside the document, not content
+~$*.docx
+# Vite writes this while resolving its config; regenerated every run
+frontend/vite.config.js.timestamp-*.mjs
