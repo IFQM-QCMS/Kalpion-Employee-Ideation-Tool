@@ -188,6 +188,28 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
 -- These rows are that list, made editable. They are DEFAULTS ONLY: an existing
 -- tenant's org_settings are its own, and changing a default here never reaches
 -- back into an organisation that already exists.
+-- Exceptions to the corporate-email rule on self-registration (migration 027).
+--
+-- registrationService refuses an application from a consumer mailbox provider,
+-- because the work email domain is the strongest remaining signal that an
+-- applicant is a real business. A genuine small firm very often has no domain
+-- and runs on Gmail, so the rule ships with a way for a platform admin to let
+-- one through without a deployment.
+--
+-- An entry is one exact address ('ravi@gmail.com' — that person only) or a
+-- whole domain ('gmail.com' — the provider reopened for everybody).
+CREATE TABLE IF NOT EXISTS email_whitelist (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  entry       VARCHAR(190) NOT NULL,
+  entry_type  ENUM('address','domain') NOT NULL,
+  -- Why the exception exists. It is what makes it auditable months later.
+  note        VARCHAR(255) NULL,
+  created_by  VARCHAR(150) NULL,
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_email_whitelist_entry (entry),
+  KEY idx_email_whitelist_type (entry_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS platform_settings (
   key_name   VARCHAR(100) NOT NULL PRIMARY KEY,
   value      TEXT,

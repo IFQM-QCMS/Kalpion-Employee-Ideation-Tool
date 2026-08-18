@@ -433,6 +433,11 @@ export const ideaAdminApi = {
 export const platformApi = {
   tenants: () => api.get('/platform/tenants'),
   registrations: (status = '') => api.get('/platform/registrations', { params: { status } }),
+  // Exceptions to the corporate-email rule: one address, or a whole personal
+  // mailbox provider, allowed to apply.
+  emailWhitelist:       ()     => api.get('/platform/registrations/whitelist'),
+  emailWhitelistAdd:    (data) => api.post('/platform/registrations/whitelist', data),
+  emailWhitelistRemove: (id)   => api.delete(`/platform/registrations/whitelist/${id}`),
   // §12.12 — sign-in activity feed.
   activity: (params = {}) => api.get('/platform/activity', { params }),
   // The plan and trial length are chosen at the moment of approval, when the

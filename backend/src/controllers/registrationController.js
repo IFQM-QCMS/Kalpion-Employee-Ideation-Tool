@@ -14,11 +14,15 @@ export const submit = asyncHandler(async (req, res) =>
 
 /** Live check for the signup form, so a personal address is caught as it is typed. */
 export const checkEmail = asyncHandler(async (req, res) => {
-  const result = registrations.checkCorporateEmail(req.query.email || '');
+  const result = await registrations.checkCorporateEmail(req.query.email || '');
   return respond(res, {
     success: true,
     acceptable: result.ok,
     reason: result.reason || null,
+    // The form uses this to soften its wording: a personal address is a "we can
+    // enable this for you" case, not the same kind of no as a malformed one.
+    free_provider: !!result.free_provider,
+    allowed_by_exception: !!result.allowed_by_exception,
     domain: registrations.emailDomain(req.query.email || ''),
   });
 });
@@ -77,4 +81,18 @@ export const reject = asyncHandler(async (req, res) =>
     adminId: Number(String(req.user?.id || '').replace(/^pa_/, '')) || null,
     note: req.body?.note || '',
   }))
+);
+
+/* ── The corporate-email exception list (platform admins only) ────────────── */
+
+export const whitelist = asyncHandler(async (_req, res) =>
+  respond(res, await registrations.listWhitelist())
+);
+
+export const whitelistAdd = asyncHandler(async (req, res) =>
+  respond(res, await registrations.addWhitelistEntry(req.body || {}, req.user), 201)
+);
+
+export const whitelistRemove = asyncHandler(async (req, res) =>
+  respond(res, await registrations.removeWhitelistEntry(req.params.id))
 );

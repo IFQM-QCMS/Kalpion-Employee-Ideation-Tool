@@ -98,6 +98,15 @@ router.post('/admins/change-password', platform.changeOwnPassword);
 router.get('/registrations', registrations.list);
 router.post('/registrations/:id/approve', registrations.approve);
 router.post('/registrations/:id/reject', registrations.reject);
+/*
+ * Exceptions to the corporate-email rule on self-registration. Declared after
+ * '/registrations/:id/...' would be wrong — '/registrations/whitelist' would be
+ * captured by ':id' — so the literal path is declared first, the same reason
+ * '/plans' precedes '/tenants/:id' above.
+ */
+router.get('/registrations/whitelist', registrations.whitelist);
+router.post('/registrations/whitelist', registrations.whitelistAdd);
+router.delete('/registrations/whitelist/:id', registrations.whitelistRemove);
 
 router.get('/activity', platform.loginActivity);   // §12.12 sign-in feed
 

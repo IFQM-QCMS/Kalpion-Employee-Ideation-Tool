@@ -4,6 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { platformApi } from '../services/api';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
+import { fmtDate } from '../utils/helpers';
 
 /*
   Platform → Registrations.
@@ -65,6 +66,124 @@ function Group({ title, children }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 14 }}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/*
+ * Exceptions to the corporate-email rule.
+ *
+ * It lives on this page rather than in Settings because this is where the
+ * problem is met: an application is refused, the applicant emails to say they
+ * genuinely have no company domain, and the person reading that message is
+ * looking at this queue. Putting the lever two screens away is how a policy
+ * becomes a reason to email the developer.
+ */
+function EmailWhitelist() {
+  const { t } = useLang();
+  const { showToast } = useToast();
+  const [entries, setEntries] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [entry, setEntry] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  useEffect(() => { if (open) load(); /* eslint-disable-next-line */ }, [open]);
+
+  async function load() {
+    try {
+      const res = await platformApi.emailWhitelist();
+      if (res.data.success) setEntries(res.data.entries || []);
+    } catch { showToast(t('msg.network_error'), 'danger'); }
+  }
+
+  async function add(e) {
+    e.preventDefault();
+    setBusy(true); setErr('');
+    try {
+      const res = await platformApi.emailWhitelistAdd({ entry: entry.trim(), note: note.trim() });
+      if (res.data.success) {
+        setEntry(''); setNote('');
+        showToast(t('pa.wl_added'), 'success');
+        load();
+      } else setErr(res.data.error || t('msg.error'));
+    } catch (e2) { setErr(e2.response?.data?.error || t('msg.server_error')); }
+    setBusy(false);
+  }
+
+  async function remove(row) {
+    if (!confirm(t('pa.wl_confirm_remove', { entry: row.entry }))) return;
+    try {
+      await platformApi.emailWhitelistRemove(row.id);
+      showToast(t('pa.wl_removed'), 'success');
+      load();
+    } catch { showToast(t('msg.server_error'), 'danger'); }
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div className="card-title" style={{ margin: 0 }}>{t('pa.wl_title')}</div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', margin: '4px 0 0' }}>{t('pa.wl_sub')}</p>
+        </div>
+        <button className="btn btn-outline btn-sm" onClick={() => setOpen((v) => !v)}>
+          {open ? t('btn.close') : t('pa.wl_manage')}
+        </button>
+      </div>
+
+      {open && (
+        <div style={{ marginTop: 14 }}>
+          <form onSubmit={add} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            <input className="form-control" style={{ maxWidth: 240 }} value={entry}
+              onChange={(e) => setEntry(e.target.value)} placeholder={t('pa.wl_entry_ph')} required />
+            <input className="form-control" style={{ flex: 1, minWidth: 200 }} value={note}
+              onChange={(e) => setNote(e.target.value)} placeholder={t('pa.wl_note_ph')} />
+            <button className="btn btn-primary btn-sm" disabled={busy || !entry.trim()}>
+              {busy ? t('btn.saving') : t('pa.wl_add')}
+            </button>
+          </form>
+          <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 6 }}>{t('pa.wl_hint')}</div>
+          {err && <div className="alert alert-danger" style={{ marginTop: 10, fontSize: 12.5 }}>{err}</div>}
+
+          {!entries.length ? (
+            <div style={{ fontSize: 12.5, color: 'var(--subtle)', marginTop: 14 }}>{t('pa.wl_empty')}</div>
+          ) : (
+            <div style={{ overflowX: 'auto', marginTop: 14 }}>
+              <table className="table" style={{ fontSize: 12.5 }}>
+                <thead>
+                  <tr>
+                    <th>{t('pa.wl_col_entry')}</th>
+                    <th>{t('pa.wl_col_scope')}</th>
+                    <th>{t('pa.wl_col_note')}</th>
+                    <th>{t('pa.wl_col_added')}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map((row) => (
+                    <tr key={row.id}>
+                      <td style={{ fontFamily: 'monospace' }}>{row.entry}</td>
+                      <td>{t(row.entry_type === 'domain' ? 'pa.wl_scope_domain' : 'pa.wl_scope_address')}</td>
+                      <td style={{ color: 'var(--text-muted)' }}>{row.note || '—'}</td>
+                      <td style={{ color: 'var(--text-muted)' }}>
+                        {fmtDate(row.created_at)}{row.created_by ? ` · ${row.created_by}` : ''}
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="btn btn-sm"
+                          style={{ background: 'var(--danger-light)', color: 'var(--danger)',
+                                   border: '1px solid var(--danger-dim)' }}
+                          onClick={() => remove(row)}>{t('btn.remove')}</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -185,6 +304,8 @@ export default function PlatformRegistrationsPage() {
             onClick={() => setIssued(null)}>{t('btn.close') || 'Close'}</button>
         </div>
       )}
+
+      <EmailWhitelist />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ margin: '0 0 4px' }}>{t('pa.reg_title')}<InfoDot term="registration_queue" /></div>

@@ -1934,3 +1934,112 @@ test('an application is accepted without the statutory identifiers, which are st
   assert.throws(() => validateApplication({ ...base, company_name: '' }), /company name/i);
   assert.throws(() => validateApplication({ ...base, contact_phone: '' }), /mobile number|phone/i);
 });
+
+// ── Domain-based approval, and the exception list ────────────────────────────
+/*
+ * registrationService has carried a FREE_EMAIL_DOMAINS list since it was
+ * written, with a comment explaining why an application from Gmail is either a
+ * sole trader on personal email or noise — and nothing ever consulted it. Only
+ * disposable mailboxes were refused.
+ *
+ * It matters more since the statutory identifiers came off the form: those
+ * numbers were how a reviewer checked an applicant against the public
+ * registers, so the work email domain is now the strongest remaining signal
+ * that an application comes from a real business.
+ */
+test('applications from personal mailboxes are refused unless allowed explicitly', async () => {
+  const svc = await import('../src/services/registrationService.js');
+
+  const corporate = await svc.checkCorporateEmail('rekha@nandiprecision.com');
+  assert.equal(corporate.ok, true, 'a company domain is accepted');
+
+  let personal = await svc.checkCorporateEmail('ravi@gmail.com');
+  assert.equal(personal.ok, false, 'a personal mailbox is refused by default');
+  assert.equal(personal.free_provider, true);
+  assert.match(personal.reason, /company email/i);
+
+  // Disposable is refused for a different reason, and is not whitelistable at
+  // all — an address designed to stop existing is not a small business without
+  // a domain.
+  const throwaway = await svc.checkCorporateEmail('x@mailinator.com');
+  assert.equal(throwaway.ok, false);
+  assert.match(throwaway.reason, /Temporary/i);
+
+  // ── One address ──
+  const added = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'ravi@gmail.com', note: 'No company domain — verified by phone.' },
+  });
+  assert.equal(added.data.success, true,
+    `the exception must be addable — server said: ${JSON.stringify(added.data)}`);
+  assert.equal(added.data.entry_type, 'address');
+
+  personal = await svc.checkCorporateEmail('ravi@gmail.com');
+  assert.equal(personal.ok, true, 'the allowed address now passes');
+  assert.equal(personal.allowed_by_exception, true, 'and is marked as an exception, not an ordinary pass');
+
+  // Everybody else on that provider is still refused — this is the whole point
+  // of allowing an address rather than a domain.
+  const neighbour = await svc.checkCorporateEmail('someoneelse@gmail.com');
+  assert.equal(neighbour.ok, false, 'allowing one address must not open the provider');
+
+  // The live check the signup form calls as you type must agree with the rule
+  // the submit path enforces, or the form says yes and the server says no.
+  const live = await api('GET', '/api/registrations/check-email?email=ravi@gmail.com');
+  assert.equal(live.data.acceptable, true);
+  const liveNeighbour = await api('GET', '/api/registrations/check-email?email=someoneelse@gmail.com');
+  assert.equal(liveNeighbour.data.acceptable, false);
+  assert.equal(liveNeighbour.data.free_provider, true,
+    'the form needs to know this is a "we can enable it" no, not a malformed-address no');
+
+  // ── A whole provider ──
+  const wide = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'gmail.com', note: 'Campaign — expecting Gmail applicants.' },
+  });
+  assert.equal(wide.data.entry_type, 'domain');
+  const nowOk = await svc.checkCorporateEmail('someoneelse@gmail.com');
+  assert.equal(nowOk.ok, true, 'allowing the domain opens it for everybody');
+
+  // ── What may not be added ──
+  const dup = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'gmail.com' },
+  });
+  assert.equal(dup.status, 409, 'the same entry twice is a conflict, not a silent no-op');
+
+  const throwawayEntry = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'mailinator.com' },
+  });
+  assert.notEqual(throwawayEntry.status, 201, 'a throwaway provider must not be allowable');
+
+  /*
+   * Adding a corporate domain would be a no-op that reads as an action:
+   * somebody adds it, sees it listed, and believes they granted something that
+   * was never blocked. Refused with an explanation instead.
+   */
+  const pointless = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'nandiprecision.com' },
+  });
+  assert.notEqual(pointless.status, 201, 'a domain that was never blocked must be refused');
+  assert.match(pointless.data.error, /already accepted/i);
+
+  // ── Removing puts the rule back ──
+  const list = await api('GET', '/api/platform/registrations/whitelist', { token: PA });
+  const domainRow = list.data.entries.find((e) => e.entry === 'gmail.com');
+  assert.ok(domainRow.note, 'the reason must be kept — it is what makes the exception auditable');
+  await api('DELETE', `/api/platform/registrations/whitelist/${domainRow.id}`, { token: PA });
+
+  const reblocked = await svc.checkCorporateEmail('someoneelse@gmail.com');
+  assert.equal(reblocked.ok, false, 'removing the domain refuses the provider again');
+  const stillAllowed = await svc.checkCorporateEmail('ravi@gmail.com');
+  assert.equal(stillAllowed.ok, true, 'but the individual exception survives it');
+});
+
+test('the exception list is platform-admin only', async () => {
+  const asOrgAdmin = await api('GET', '/api/platform/registrations/whitelist', { token: AADMIN });
+  assert.ok(asOrgAdmin.status === 401 || asOrgAdmin.status === 403,
+    `an org admin must not read the list — got ${asOrgAdmin.status}`);
+  const anon = await api('POST', '/api/platform/registrations/whitelist', {
+    body: { entry: 'attacker@gmail.com' },
+  });
+  assert.ok(anon.status === 401 || anon.status === 403,
+    `and must not be addable anonymously — got ${anon.status}`);
+});

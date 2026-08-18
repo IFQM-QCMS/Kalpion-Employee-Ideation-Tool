@@ -116,10 +116,68 @@ export function emailDomain(email) {
 }
 
 /**
- * Is this a corporate address we will accept an application from?
- * @returns {{ ok: boolean, reason?: string }}
+ * Has a platform admin allowed this address, or its whole provider, through the
+ * corporate-email rule?
+ *
+ * Two shapes of entry, checked in that order of specificity: the exact address,
+ * then the bare domain. Allowing 'ravi@gmail.com' lets one person apply;
+ * allowing 'gmail.com' reopens the provider for everybody.
+ *
+ * A registry that cannot be read answers "not allowed". That is the safe way
+ * round: the failure then shows up as an applicant being told to use a work
+ * address, which is visible and recoverable, rather than as the rule silently
+ * switching itself off for everyone.
  */
-export function checkCorporateEmail(email) {
+export async function isAllowedFreeEmail(email) {
+  const e = str(email).toLowerCase();
+  const domain = emailDomain(e);
+  if (!e || !domain) return false;
+  try {
+    const [rows] = await masterDb().execute(
+      'SELECT entry FROM email_whitelist WHERE entry IN (?, ?) LIMIT 1', [e, domain]
+    );
+    return rows.length > 0;
+  } catch (err) {
+    logger.warn('email whitelist lookup failed', err.message);
+    return false;
+  }
+}
+
+/**
+ * Is this a corporate address we will accept an application from?
+ *
+ * ── Why the free-provider rule is enforced at all ──────────────────────────
+ *
+ * FREE_EMAIL_DOMAINS has sat above since this file was written, with a comment
+ * explaining exactly why a company applying from Gmail is either a sole trader
+ * on personal email or noise — and nothing consulted it. Only disposable
+ * mailboxes were refused.
+ *
+ * It matters more now than it did. Udyam, GSTIN, PAN and CIN came off the
+ * registration form, and those numbers were how a reviewer checked an applicant
+ * against the public registers. With them gone the work email domain is the
+ * strongest remaining signal that an application comes from a real business.
+ *
+ * ── And why it is not enforced alone ───────────────────────────────────────
+ *
+ * A genuine two-person engineering firm very often has no domain at all. A rule
+ * meant to filter noise would quietly exclude the customer, so the exception
+ * ships with it: a platform admin can allow one address, or a whole provider,
+ * without a deployment.
+ *
+ * @returns {Promise<{ ok: boolean, reason?: string, allowed_by_exception?: boolean }>}
+ */
+/**
+ * The half of the rule that needs no database: is this a well-formed address on
+ * a domain we would never accept whatever anybody says?
+ *
+ * Split out so validateApplication() can stay synchronous and pure. The
+ * provider rule needs the registry, and threading a database read through a
+ * validator that is otherwise a function of its argument would make every
+ * caller — and every test — carry a connection to ask whether a string looks
+ * like an email.
+ */
+export function checkEmailShape(email) {
   const e = str(email).toLowerCase();
   if (!EMAIL_RE.test(e)) return { ok: false, reason: 'Enter a valid email address.' };
 
@@ -127,13 +185,37 @@ export function checkCorporateEmail(email) {
   if (!domain || !domain.includes('.')) {
     return { ok: false, reason: 'Enter a valid email address.' };
   }
-  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
-    return { ok: false, reason: 'Temporary email addresses are not accepted.' };
-  }
-  // A bare TLD or a single-label host is not a valid email domain.
+  // A bare TLD or a single-label host is not a valid email domain. Checked
+  // before the lists, because neither can meaningfully contain one.
   const labels = domain.split('.');
   if (labels.length < 2 || labels.some((l) => !l)) {
     return { ok: false, reason: 'Enter a valid work email address.' };
+  }
+  /*
+   * Disposable mailboxes are refused outright and are NOT whitelistable. A
+   * throwaway address is not a small business without a domain; it is an
+   * address designed to stop existing, and an approved workspace whose only
+   * contact has evaporated helps nobody.
+   */
+  if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    return { ok: false, reason: 'Temporary email addresses are not accepted.' };
+  }
+  return { ok: true, free_provider: FREE_EMAIL_DOMAINS.has(domain) };
+}
+
+export async function checkCorporateEmail(email) {
+  const e = str(email).toLowerCase();
+  const shape = checkEmailShape(e);
+  if (!shape.ok) return shape;
+
+  if (shape.free_provider) {
+    if (await isAllowedFreeEmail(e)) return { ok: true, allowed_by_exception: true };
+    return {
+      ok: false,
+      free_provider: true,
+      reason: 'Please apply from your company email address. '
+        + 'If your business does not have one, contact us and we will enable this address for you.',
+    };
   }
   return { ok: true };
 }
@@ -155,7 +237,7 @@ export function validateApplication(body) {
   }
 
   const contactEmail = str(body.contact_email).toLowerCase();
-  const emailCheck = checkCorporateEmail(contactEmail);
+  const emailCheck = checkEmailShape(contactEmail);
   if (!emailCheck.ok) throw badRequest(emailCheck.reason);
 
   const contactName = str(body.contact_name);
@@ -326,6 +408,19 @@ export async function submitRegistration(body, meta = {}) {
   const master = masterDb();
 
   /*
+   * The provider rule, applied again at the door that actually creates the row.
+   *
+   * In practice an application cannot reach here from a blocked provider — the
+   * address must carry a consumed one-time code, and the only thing that issues
+   * one is sendRegistrationEmailOtp, which applies the same rule. This is not
+   * relying on that. The two doors are separate code paths that can be changed
+   * independently, and the cost of checking twice is one indexed lookup against
+   * the cost of an unnoticed hole in the only check on who may apply.
+   */
+  const policy = await checkCorporateEmail(row.contact_email);
+  if (!policy.ok) throw badRequest(policy.reason);
+
+  /*
    * Both the address and the number must have been proved, in the last half
    * hour, by a code this server issued and consumed.
    *
@@ -389,6 +484,99 @@ export async function submitRegistration(body, meta = {}) {
 }
 
 /** GET /api/platform/registrations — platform admin. */
+/* ── The corporate-email exception list ──────────────────────────────────────
+ *
+ * Platform-admin only. Small enough to return whole: an operator who has
+ * hundreds of these has a policy problem rather than a paging problem, and
+ * seeing all of them at once is the point — the list is meant to be reviewed.
+ */
+
+/** Classify an entry as one address or a whole provider, or reject it. */
+export function parseWhitelistEntry(raw) {
+  const v = str(raw).toLowerCase().replace(/^@/, '');
+  if (!v) return { ok: false, reason: 'Enter an email address or a domain.' };
+
+  if (v.includes('@')) {
+    if (!EMAIL_RE.test(v)) return { ok: false, reason: 'That is not a valid email address.' };
+    // Checked before the provider test below, or a throwaway address would be
+    // turned away with the wrong reason ("that is a company domain").
+    if (DISPOSABLE_EMAIL_DOMAINS.has(emailDomain(v))) {
+      return {
+        ok: false,
+        reason: 'Throwaway mailbox addresses cannot be allowed. '
+          + 'An approved workspace whose only contact address is designed to stop existing helps nobody.',
+      };
+    }
+    /*
+     * Allowing a corporate address is a no-op that reads as an action, which is
+     * worse than an error: somebody adds 'ravi@acme.com', sees it in the list,
+     * and believes they have granted something. acme.com was never blocked.
+     */
+    if (!FREE_EMAIL_DOMAINS.has(emailDomain(v))) {
+      return {
+        ok: false,
+        reason: `${emailDomain(v)} is a company domain — applications from it are already accepted. `
+          + 'This list is only for personal-mailbox providers such as gmail.com.',
+      };
+    }
+    return { ok: true, entry: v, entry_type: 'address' };
+  }
+
+  const labels = v.split('.');
+  if (labels.length < 2 || labels.some((l) => !l) || /\s/.test(v)) {
+    return { ok: false, reason: 'That is not a valid domain.' };
+  }
+  if (DISPOSABLE_EMAIL_DOMAINS.has(v)) {
+    return {
+      ok: false,
+      reason: 'Throwaway mailbox providers cannot be allowed. '
+        + 'An approved workspace whose only contact address is designed to stop existing helps nobody.',
+    };
+  }
+  if (!FREE_EMAIL_DOMAINS.has(v)) {
+    return {
+      ok: false,
+      reason: `${v} is not a blocked provider — applications from it are already accepted.`,
+    };
+  }
+  return { ok: true, entry: v, entry_type: 'domain' };
+}
+
+export async function listWhitelist() {
+  const [rows] = await masterDb().query(
+    'SELECT id, entry, entry_type, note, created_by, created_at FROM email_whitelist ORDER BY created_at DESC'
+  );
+  return { success: true, entries: rows };
+}
+
+export async function addWhitelistEntry({ entry, note = '' } = {}, actor = null) {
+  const parsed = parseWhitelistEntry(entry);
+  if (!parsed.ok) throw badRequest(parsed.reason);
+
+  try {
+    await masterDb().execute(
+      `INSERT INTO email_whitelist (entry, entry_type, note, created_by)
+            VALUES (?, ?, ?, ?)`,
+      [parsed.entry, parsed.entry_type, str(note).slice(0, 255) || null,
+        str(actor?.email || actor?.name).slice(0, 150) || null]
+    );
+  } catch (err) {
+    if (err?.code === 'ER_DUP_ENTRY') {
+      throw new ApiError(409, `${parsed.entry} is already on the list.`);
+    }
+    throw err;
+  }
+  logger.info(`registrations: allowed ${parsed.entry_type} "${parsed.entry}" past the corporate-email rule`);
+  return { success: true, entry: parsed.entry, entry_type: parsed.entry_type };
+}
+
+export async function removeWhitelistEntry(id) {
+  const n = Number(id) || 0;
+  const [res] = await masterDb().execute('DELETE FROM email_whitelist WHERE id = ?', [n]);
+  if (!res.affectedRows) throw notFound('That entry is no longer on the list.');
+  return { success: true };
+}
+
 export async function listRegistrations({ status = '' } = {}) {
   const master = masterDb();
   const where = ['pending', 'approved', 'rejected'].includes(status) ? 'WHERE r.status = ?' : '';
@@ -577,5 +765,6 @@ export async function rejectRegistration(id, { adminId = null, note = '' } = {})
 
 export default {
   submitRegistration, listRegistrations, approveRegistration, rejectRegistration,
-  checkCorporateEmail, emailDomain,
+  checkCorporateEmail, checkEmailShape, isAllowedFreeEmail, emailDomain,
+  listWhitelist, addWhitelistEntry, removeWhitelistEntry, parseWhitelistEntry,
 };

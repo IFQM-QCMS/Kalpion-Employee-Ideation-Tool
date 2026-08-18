@@ -253,15 +253,10 @@ export default function SignupPage() {
   /*
    * Every field on a step has to be filled before the next one opens.
    *
-   * The reason is not tidiness. A half-filled application cannot be checked
-   * against the Udyam and GST registers, so it sits in the queue while somebody
-   * emails back and forth for the missing number - which used to be most of
-   * them. Asking once, while the applicant still has the certificate in front
-   * of them, is faster for everybody.
-   *
-   * The one conditional field is CIN. It is only ever issued to registered
-   * companies and LLPs; a proprietorship has never had one, so demanding it
-   * would make registration impossible for them.
+   * The reason is not tidiness. A half-filled application sits in the queue
+   * while somebody emails back and forth for what is missing, which used to be
+   * most of them. Asking once, while the applicant is still here, is faster for
+   * everybody.
    */
   const FIELD_RULES = {
     company_name:  { label: 'registered company name', min: 3 },
