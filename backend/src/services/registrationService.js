@@ -147,11 +147,8 @@ function normaliseSlug(raw) {
  * Validate an application and return the row to insert.
  * Throws ApiError(400) with a single, actionable message on the first problem.
  */
-/* Entity types the Registrar of Companies issues a CIN to. Everything else
-   - proprietorships, partnership firms, societies - never has one. */
-const COMPANY_ENTITY_TYPES = ['private_limited', 'public_limited', 'llp'];
 
-function validateApplication(body) {
+export function validateApplication(body) {
   const companyName = str(body.company_name);
   if (companyName.length < 2 || companyName.length > 150) {
     throw badRequest('Enter your registered company name (2–150 characters).');
@@ -251,22 +248,22 @@ function validateApplication(body) {
    * Everything above validates the FORM of a value if one was supplied. This
    * block is about whether it was supplied at all.
    *
-   * An application missing its Udyam or GST number cannot be checked against
-   * the public registers, so it stalls in the queue while somebody chases the
-   * applicant by email. Requiring them at the point of application is the whole
-   * point - and it has to be enforced here, not only in the browser, because
-   * the browser is not a place where rules live.
+   * ── The statutory identifiers are no longer asked for ──────────────────────
    *
-   * CIN is the exception: only companies and LLPs are ever issued one.
+   * Udyam, GSTIN, PAN, CIN and the website used to be required here, and the
+   * form collected them on its own step. They are no longer on the form, so
+   * requiring them would refuse every application the product now sends.
+   *
+   * The COLUMNS are deliberately kept, and so is the format checking above:
+   * every application already submitted keeps its numbers, the platform screens
+   * go on showing them, and anything supplied by an older client or a future
+   * step is still stored and still validated. What changed is that an absent
+   * value is now an absent value rather than a rejection.
    */
   const required = [
     [companyName, 'registered company name'],
     [designation, 'designation'],
     [phone, 'contact phone number'],
-    [website, 'website'],
-    [udyam, 'Udyam registration number'],
-    [gstin, 'GSTIN'],
-    [pan, 'business PAN'],
     [entityType, 'entity type'],
     [category, 'MSME category'],
     [str(body.sector), 'sector'],
@@ -283,9 +280,6 @@ function validateApplication(body) {
   }
   if (employeeCount == null) throw badRequest('Enter your number of employees.');
   if (year == null) throw badRequest('Enter the year your business was established.');
-  if (COMPANY_ENTITY_TYPES.includes(entityType) && !cin) {
-    throw badRequest('Enter your CIN. Registered companies and LLPs are always issued one.');
-  }
 
   if (!body.accepted_terms) {
     throw badRequest('Please confirm you are authorised to register this organisation.');

@@ -1871,3 +1871,66 @@ test('a lifetime plan never expires and is never billed again', async () => {
   assert.equal(after[0].period_end, null, 'and neither refusal may have left an end date behind');
   assert.equal(after[0].billing_status, 'exempt');
 });
+
+// ── Company registration without the statutory identifiers ───────────────────
+/*
+ * Udyam, GSTIN, PAN, CIN and the website used to be required, on a step of
+ * their own. They are the fields an applicant is least likely to have to hand
+ * at the moment they decide to try the product — the certificates are in
+ * somebody else's drawer — so the form was abandoned there.
+ *
+ * The columns are kept. What had to change is that an absent value is an absent
+ * value rather than a rejection, and that a value still supplied is still
+ * validated and stored, so nothing already submitted is disturbed.
+ */
+test('an application is accepted without the statutory identifiers, which are still stored if sent', async () => {
+  const { validateApplication } = await import('../src/services/registrationService.js');
+
+  const base = {
+    company_name: 'Nandi Precision Works', proposed_slug: 'nandi',
+    contact_name: 'Rekha Prasad', contact_designation: 'Director',
+    contact_email: 'rekha@nandiprecision.com', contact_phone: '+919812345680',
+    entity_type: 'private_limited', enterprise_category: 'small',
+    sector: 'Manufacturing', nic_code: '2591',
+    employee_count: '85', annual_turnover_band: '2cr_10cr', year_established: '2015',
+    address_line: 'Plot 14, Peenya Industrial Area', city: 'Bengaluru',
+    state: 'Karnataka', pincode: '560058', country: 'India',
+    accepted_terms: true,
+  };
+
+  // None of the five supplied: accepted.
+  const row = validateApplication({ ...base });
+  assert.ok(row, 'an application with no statutory identifiers must be accepted');
+  assert.equal(row.company_name, 'Nandi Precision Works');
+
+  /*
+   * A private limited company with no CIN. This is the case that previously
+   * threw ("Registered companies and LLPs are always issued one") and would
+   * now reject every application the form sends, since it no longer asks.
+   */
+  assert.equal(row.entity_type, 'private_limited');
+  assert.ok(!row.cin, 'a company without a CIN must no longer be refused');
+
+  // Still stored when supplied — an older client, or a later step, must not
+  // silently lose what it sent.
+  const withIds = validateApplication({
+    ...base,
+    udyam_number: 'UDYAM-KR-03-0012345', gstin: '29ABCDE1234F1Z5',
+    pan: 'ABCDE1234F', cin: 'U29100KA2015PTC012345',
+    website: 'https://nandiprecision.com',
+  });
+  assert.equal(withIds.gstin, '29ABCDE1234F1Z5');
+  assert.equal(withIds.pan, 'ABCDE1234F');
+  assert.equal(withIds.udyam_number, 'UDYAM-KR-03-0012345');
+  assert.equal(withIds.cin, 'U29100KA2015PTC012345');
+  assert.equal(withIds.website, 'https://nandiprecision.com');
+
+  // And still checked when supplied: a malformed number is a typo worth
+  // catching, even though a blank one is now fine.
+  assert.throws(() => validateApplication({ ...base, gstin: 'NOT-A-GSTIN' }),
+    /GSTIN/i, 'a malformed GSTIN must still be refused');
+
+  // The fields that genuinely identify the applicant are still required.
+  assert.throws(() => validateApplication({ ...base, company_name: '' }), /company name/i);
+  assert.throws(() => validateApplication({ ...base, contact_phone: '' }), /mobile number|phone/i);
+});

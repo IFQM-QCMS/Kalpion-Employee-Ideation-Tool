@@ -16,9 +16,18 @@ import InfoDot from '../components/InfoDot';
   platform admin approves it — the form says so plainly rather than implying an
   instant account, because an unmet expectation at signup is a support ticket.
 
-  Only company name, contact name and a work email are required. Everything else
-  is optional on purpose: a half-filled application a reviewer can chase beats an
-  abandoned one, and the reviewer sees exactly what was left blank.
+  The statutory identifiers — Udyam number, GSTIN, PAN, CIN — and the website are
+  no longer asked for. They were required, on a step of their own, and they are
+  the fields an applicant is least likely to have to hand at the moment they
+  decide to try the product: the certificates are in somebody else's drawer, so
+  the form was abandoned there. The COLUMNS are kept and the server still
+  validates and stores anything it is sent, so every application already
+  submitted keeps its numbers and the platform screens go on showing them.
+
+  What that costs is worth stating plainly: those numbers were how a reviewer
+  checked an applicant against the public registers before a workspace was
+  created. Approval now rests on the company name, the work email domain and
+  the contact details, so the check moves from the form to the reviewer.
 */
 
 const ENTITY_TYPES = [
@@ -69,17 +78,21 @@ const STATES = [
 ];
 
 const BLANK = {
-  company_name: '', proposed_slug: '', website: '',
+  company_name: '', proposed_slug: '',
   contact_name: '', contact_designation: '', contact_email: '', contact_phone: '',
-  udyam_number: '', gstin: '', pan: '', cin: '',
+  /*
+   * Not on the form, and kept here deliberately. The columns behind them still
+   * exist and the server still validates and stores whatever it is sent, so
+   * these travel as empty strings rather than being absent — which keeps the
+   * request shape stable and means restoring the fields later is a change to
+   * the markup alone.
+   */
+  website: '', udyam_number: '', gstin: '', pan: '', cin: '',
   entity_type: '', enterprise_category: '', sector: '', nic_code: '',
   employee_count: '', annual_turnover_band: '', year_established: '',
   address_line: '', city: '', state: '', pincode: '', country: 'India',
   accepted_terms: false,
 };
-
-/* Entity types that are issued a CIN. Everything else never has one. */
-const COMPANY_TYPES = ['private_limited', 'public_limited', 'llp'];
 
 const STEPS = ['Your details', 'Business profile', 'Location & review'];
 
@@ -254,23 +267,12 @@ export default function SignupPage() {
     company_name:  { label: 'registered company name', min: 3 },
     proposed_slug: { label: 'preferred organization code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
                      hint: 'Lower-case letters, numbers, hyphen or underscore.' },
-    website:       { label: 'website', re: /^https?:\/\/[^\s.]+\.[^\s]{2,}$/i,
-                     hint: 'Include http:// or https://.' },
     contact_name:  { label: 'full name', min: 3 },
     contact_designation: { label: 'designation', min: 2 },
     contact_email: { label: 'work email address', re: /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/ },
     contact_phone: { label: 'phone number', re: /^(\+?91[-\s]?)?[6-9]\d{9}$/,
                      hint: 'Ten digits, optionally with +91.' },
 
-    udyam_number:  { label: 'Udyam registration number', re: /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/i,
-                     hint: 'It looks like UDYAM-KR-03-0012345.' },
-    gstin:         { label: 'GSTIN', re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
-                     hint: 'Fifteen characters, as printed on your GST certificate.' },
-    pan:           { label: 'business PAN', re: /^[A-Z]{5}\d{4}[A-Z]$/i,
-                     hint: 'Five letters, four digits, one letter.' },
-    cin:           { label: 'CIN', re: /^[A-Z]\d{5}[A-Z]{2}\d{4}[A-Z]{3}\d{6}$/i,
-                     hint: 'Twenty-one characters from your incorporation certificate.',
-                     onlyIf: (f) => COMPANY_TYPES.includes(f.entity_type) },
     entity_type:         { label: 'entity type' },
     enterprise_category: { label: 'MSME category' },
     sector:              { label: 'sector' },
@@ -287,10 +289,17 @@ export default function SignupPage() {
     country:      { label: 'country', min: 2 },
   };
 
+  /*
+   * Udyam, GSTIN, PAN, CIN and the website are no longer asked for. The COLUMNS
+   * behind them are kept and the server still validates and stores anything it
+   * is sent, so applications already submitted keep their numbers and the
+   * platform screens go on showing them — they are simply not demanded of an
+   * applicant who wants to start.
+   */
   const STEP_FIELDS = [
-    ['company_name', 'proposed_slug', 'website',
+    ['company_name', 'proposed_slug',
      'contact_name', 'contact_designation', 'contact_email', 'contact_phone'],
-    ['udyam_number', 'gstin', 'pan', 'cin', 'entity_type', 'enterprise_category',
+    ['entity_type', 'enterprise_category',
      'sector', 'nic_code', 'employee_count', 'annual_turnover_band', 'year_established'],
     ['address_line', 'city', 'state', 'pincode', 'country'],
   ];
@@ -479,11 +488,6 @@ export default function SignupPage() {
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="acme" />
                         <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
-                      </div>
-                      <div>
-                        <label htmlFor="website">Website <span className="req">*</span></label>
-                        <input id="website" type="url" value={form.website} onChange={set('website')}
-                          placeholder="https://acme.co.in" />
                       </div>
                     </div>
                   </fieldset>
@@ -724,34 +728,8 @@ export default function SignupPage() {
               {step === 1 && (
                 <>
                   <fieldset>
-                    <legend>Statutory identity</legend>
-                    <p className="hint" style={{ marginTop: -6, marginBottom: 12 }}>
-                      Straight off your Udyam certificate. We check these against the
-                      public registers before a workspace is created, which is why they
-                      are all required. CIN applies to companies and LLPs only.
-                    </p>
+                    <legend>Business profile</legend>
                     <div className="grid">
-                      <div>
-                        <label htmlFor="udyam_number">Udyam registration number <span className="req">*</span><InfoDot term="udyam" /></label>
-                        <input id="udyam_number" value={form.udyam_number} onChange={set('udyam_number')}
-                          placeholder="UDYAM-KR-03-0012345" />
-                      </div>
-                      <div>
-                        <label htmlFor="gstin">GSTIN <span className="req">*</span><InfoDot term="gstin" /></label>
-                        <input id="gstin" value={form.gstin} onChange={set('gstin')} placeholder="29ABCDE1234F1Z5" />
-                        <p className="hint">Fifteen characters, exactly as printed on your GST certificate.</p>
-                      </div>
-                      <div>
-                        <label htmlFor="pan">Business PAN <span className="req">*</span></label>
-                        <input id="pan" value={form.pan} onChange={set('pan')} placeholder="ABCDE1234F" />
-                      </div>
-                      <div>
-                        <label htmlFor="cin">CIN {COMPANY_TYPES.includes(form.entity_type)
-                          ? <span className="req">*</span>
-                          : <span className="opt">companies and LLPs only</span>}</label>
-                        <input id="cin" value={form.cin} onChange={set('cin')} placeholder="U29100KA2015PTC012345" />
-                        <p className="hint">Only issued to registered companies and LLPs.</p>
-                      </div>
                       <div>
                         <label htmlFor="entity_type">Entity type <span className="req">*</span></label>
                         <select id="entity_type" value={form.entity_type} onChange={set('entity_type')}>
@@ -766,12 +744,6 @@ export default function SignupPage() {
                           {CATEGORIES.map(([v, l, hint]) => <option key={v} value={v}>{l} — {hint}</option>)}
                         </select>
                       </div>
-                    </div>
-                  </fieldset>
-
-                  <fieldset style={{ marginBottom: 0 }}>
-                    <legend>Business profile</legend>
-                    <div className="grid">
                       <div>
                         <label htmlFor="sector">Sector <span className="req">*</span></label>
                         <select id="sector" value={form.sector} onChange={set('sector')}>
