@@ -84,8 +84,8 @@ export default function AnalyticsPage() {
   const kpis = [
     [t('dash.total'), total, '', paletteIcon('bulb'), 'Total Ideas Submitted'],
     [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check'), 'Approved & Implemented Rate'],
-    [t('analytics.impl_rate'), total ? Math.round(impl/total*100) : 0, '%', paletteIcon('rocket'), 'Implementation Velocity'],
-    [t('analytics.avg_score'), ss.overall_avg||0, '', paletteIcon('star'), 'Quality AI Score Benchmark'],
+    [t('analytics.impl_rate'), total ? Math.round(impl/total*100) : 0, '%', paletteIcon('rocket'), t('analytics.impl_rate_sub')],
+    [t('analytics.avg_score'), ss.overall_avg||0, '', paletteIcon('star'), t('analytics.avg_score_sub')],
   ];
 
   return (
@@ -216,7 +216,7 @@ function tint(hex) {
 }
 // A subtle same-hue gradient for a bar fill (lighter → base).
 function grad(hex) { return `linear-gradient(90deg,${hex}cc,${hex})`; }
-// Gauge colour by AI-score band (green / amber / red; grey when unscored).
+// Gauge colour by quality-score band (green / amber / red; grey when unscored).
 function scoreColor(v) { const n = Number(v) || 0; return n <= 0 ? '#94a3b8' : n >= 75 ? '#1baf7a' : n >= 50 ? '#eda100' : '#e34948'; }
 
 function paletteIcon(name) {

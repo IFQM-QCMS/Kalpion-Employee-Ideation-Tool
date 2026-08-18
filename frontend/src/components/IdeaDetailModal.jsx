@@ -376,7 +376,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     tab because it is advisory: it belongs near the decision but
                     must not sit above the author's own words. */}
                 <div className={`tab-content${activeTab===2?' active':''}`} style={{ display:activeTab===2?'block':'none' }}>
-                  {/* AI Panel */}
+                  {/* Quality evaluation panel */}
                   <div className="ai-panel" style={{ marginTop:14 }}>
                     <div className="ai-panel-title">{t('detail.ai_eval')}</div>
                     {/* A horizontal bar rather than a badge or a dial.
@@ -438,7 +438,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                         <div style={{ marginLeft:'auto',textAlign:'right' }}>
                           <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:4 }}>{t('community.score')}<InfoDot term="community_score" /></div>
                           <span className={scoreBadgeClass(cScoreVal)} style={{ fontSize:15,padding:'4px 12px' }}>{cScoreVal}/100</span>
-                          {idea.ai_score > 0 && <div style={{ fontSize:10,color:'var(--subtle)',marginTop:3 }}>AI: {idea.ai_score} · Votes: {adjStr}</div>}
+                          {idea.ai_score > 0 && <div style={{ fontSize:10,color:'var(--subtle)',marginTop:3 }}>Score: {idea.ai_score} · Votes: {adjStr}</div>}
                         </div>
                       </div>
 

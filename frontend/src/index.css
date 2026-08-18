@@ -976,13 +976,26 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
 /* ── MODALS ─────────────────────────────────────────────────────────────── */
 .modal-overlay{
   position:fixed;inset:0;z-index:1000;
-  display:flex;align-items:center;justify-content:center;padding:24px;
+  /* flex-start + auto margins, NOT align-items:center.
+     Centring a child that is taller than a fixed container overflows it
+     equally in both directions — and the top overflow cannot be reached,
+     because there is nothing above a fixed element's origin to scroll to. A
+     tall dialog lost its header off the top of the screen with no way to get
+     it back. With flex-start the overlay can scroll, and margin:auto on the
+     dialog still centres it whenever there is room. */
+  display:flex;align-items:flex-start;justify-content:center;padding:24px;
+  overflow-y:auto;overscroll-behavior:contain;
   background:rgba(12,14,20,.45);
   backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
   animation:fade-in var(--t) var(--ease);
 }
 .modal{
-  width:620px;max-width:100%;max-height:88vh;
+  width:620px;max-width:100%;
+  /* Measured against the overlay's padding rather than the raw viewport: at
+     88vh plus 24px top and bottom, a dialog could still be taller than the
+     screen it had to fit inside. */
+  max-height:calc(100vh - 48px);
+  margin:auto;
   display:flex;flex-direction:column;overflow:hidden;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--r-xl);box-shadow:var(--shadow-xl);

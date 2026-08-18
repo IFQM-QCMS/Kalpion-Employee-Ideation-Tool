@@ -36,8 +36,9 @@ import logger from '../utils/logger.js';
 
 /** Shown to tenants when the operator has not written their own wording. */
 export const DEFAULT_MESSAGE =
-  'IFQM is temporarily unavailable while we carry out scheduled maintenance. '
-  + 'Please check with your platform administrator.';
+  'We are carrying out scheduled maintenance and the platform is temporarily '
+  + 'unavailable. Your data is safe and no action is required from you. '
+  + 'Please try again shortly, or contact your administrator if you need help.';
 
 const CACHE_MS = 5000;
 let cache = null;
