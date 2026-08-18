@@ -62,8 +62,7 @@ const UPLOADS_BASE = path.join(__dirname, '..', '..', 'uploads');
  */
 const DEFAULTS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
-  'challenges_enabled', 'approval_mode', 'approval_reviewer_roles',
-  'approval_final_approver_roles', 'approval_threshold', 'approval_stages',
+  'challenges_enabled', 'approval_stages',
   // Billing. These are platform-wide policy, not per-organisation settings:
   // how long a new organisation evaluates for, when it starts being warned,
   // whether lapsing actually locks anybody out, and who to contact about it.
@@ -88,28 +87,22 @@ const DEFAULTS_WHITELIST = [
  */
 const NEW_TENANT_KEYS = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
-  'challenges_enabled', 'approval_mode', 'approval_reviewer_roles',
-  'approval_final_approver_roles', 'approval_threshold', 'approval_stages',
+  'challenges_enabled', 'approval_stages',
 ];
 
 /** Mirrors settingsService's whitelist — what IFQM may change on a live tenant. */
 const TENANT_SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'email_enabled', 'smtp_host', 'smtp_port', 'smtp_user',
-  'smtp_pass', 'smtp_from', 'smtp_from_name', 'approval_mode',
-  'approval_reviewer_roles', 'approval_final_approver_roles', 'approval_threshold',
+  'smtp_pass', 'smtp_from', 'smtp_from_name',
+  // One ordered chain, one key. The mode/role-list/threshold keys that used to
+  // sit here described the same chain three other ways and are gone.
   'approval_stages',
-];
-
-const VALID_CHAIN_ROLES = [
-  'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
-  'plant_head', 'executive', 'admin', 'super_admin',
 ];
 
 /** Coerce a settings value the same way the tenant's own settings screen does. */
 function normaliseSetting(key, rawValue) {
   let value = rawValue;
-  if (key === 'approval_mode' && !['default', 'custom', 'stages'].includes(value)) return null;
   if (key === 'approval_stages') {
     // Same rule as settingsService: unknown stage keys are dropped, the
     // originator is implicit and first, and a chain with no approver in it is
@@ -119,9 +112,6 @@ function normaliseSetting(key, rawValue) {
     )];
     if (!stages.length) return null;
     return ['originator', ...stages].join(',');
-  }
-  if (key === 'approval_threshold') {
-    return String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));
   }
   if (key === 'review_sla_days' || key === 'escalation_days') {
     return String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));
@@ -146,10 +136,6 @@ function normaliseSetting(key, rawValue) {
   if (key === 'quota_warn_percent') {
     const n = parseInt(value, 10);
     return String(Math.max(1, Math.min(100, Number.isFinite(n) ? n : 80)));
-  }
-  if (key === 'approval_reviewer_roles' || key === 'approval_final_approver_roles') {
-    return String(value).split(',').map((s) => s.trim())
-      .filter((r) => VALID_CHAIN_ROLES.includes(r)).join(',');
   }
   return String(value);
 }
@@ -209,10 +195,6 @@ export async function updateDefaults(body) {
  */
 export async function defaultsForNewTenant() {
   const BUILT_IN = [
-    ['approval_mode', 'default'],
-    ['approval_reviewer_roles', 'team_lead,project_lead,manager,senior_manager'],
-    ['approval_final_approver_roles', 'executive,admin,super_admin'],
-    ['approval_threshold', '100'],
     ['approval_stages', DEFAULT_STAGES.join(',')],
   ];
   try {

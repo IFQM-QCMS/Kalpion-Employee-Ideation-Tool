@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS ideas (
   ai_score                 INT DEFAULT 0,
   ai_reason                TEXT,
   workflow_type            ENUM('hierarchical','multi_reviewer') NOT NULL DEFAULT 'hierarchical',
+  -- Historical only (migration 024). Committee decisions are unanimous; nothing
+  -- reads or writes this. Kept so the record of how already-decided ideas were
+  -- judged is not rewritten.
   approval_threshold       TINYINT NOT NULL DEFAULT 100,
   upvotes                  INT NOT NULL DEFAULT 0,
   downvotes                INT NOT NULL DEFAULT 0,
@@ -312,12 +315,10 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('smtp_pass',                 ''),
   ('smtp_from',                 ''),
   ('smtp_from_name',            'IFQM Ideation'),
-  ('approval_mode',             'default'),
-  ('approval_reviewer_roles',   'team_lead,project_lead,manager,senior_manager'),
-  ('approval_final_approver_roles', 'executive,admin,super_admin'),
-  ('approval_threshold',        '100'),
-  -- Named approval chain (migration 003). Seeded for every organisation but only
-  -- in force when approval_mode = 'stages'.
+  -- The approval chain, as one ordered sequence (migration 024). It replaced
+  -- approval_mode / approval_reviewer_roles / approval_final_approver_roles /
+  -- approval_threshold, which described this same chain three different ways
+  -- and disagreed with each other.
   ('approval_stages',           'originator,immediate_manager,department_manager,plant_head'),
   -- MOM 29 Jul 2026. solution_visibility replaces what used to be a constant in
   -- ideaService: authors_reviewers | managers_only | everyone.

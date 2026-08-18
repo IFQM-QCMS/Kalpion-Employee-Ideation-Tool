@@ -1080,21 +1080,6 @@ export async function assignReviewers(db, user, b) {
 
   if (!ideaId || !reviewerIds.length) throw badRequest('idea_id and reviewer_ids required.');
 
-  /*
-   * The share of the committee that has to approve.
-   *
-   * Two things were wrong here. The screen sends `approval_threshold` and this
-   * read `b.threshold`, so whatever the person chose was thrown away; and when
-   * nothing was sent it fell back to a hard-coded 100%, ignoring the figure the
-   * organisation had set in the admin panel. Both meant every committee needed
-   * a unanimous decision no matter what anybody configured.
-   */
-  const orgThreshold = (await getApprovalConfig(db)).threshold;
-  const requested = b.approval_threshold ?? b.threshold;
-  const threshold = requested === undefined || requested === null || requested === ''
-    ? orgThreshold
-    : Math.max(1, Math.min(100, parseInt(requested, 10) || orgThreshold));
-
   const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
   const idea = irows[0];
   if (!idea) throw notFound('Idea not found.');
@@ -1105,8 +1090,8 @@ export async function assignReviewers(db, user, b) {
 
   await db.execute('DELETE FROM idea_reviewers WHERE idea_id=?', [ideaId]);
   await db.execute(
-    "UPDATE ideas SET workflow_type='multi_reviewer', approval_threshold=?, status='Under Review', updated_at=NOW() WHERE id=?",
-    [threshold, ideaId]
+    "UPDATE ideas SET workflow_type='multi_reviewer', status='Under Review', updated_at=NOW() WHERE id=?",
+    [ideaId]
   );
 
   for (const rid of reviewerIds) {
@@ -1116,7 +1101,7 @@ export async function assignReviewers(db, user, b) {
   }
 
   await addWorkflow(db, ideaId, user.id, 'Reviewed',
-    `Routed to committee (${reviewerIds.length} reviewers, threshold: ${threshold}%)`);
+    `Routed to committee (${reviewerIds.length} reviewers — all must approve)`);
   await addNotification(db, idea.submitter_id, 'Idea Under Committee Review',
     `Your idea ${idea.idea_code} has been routed to a review committee.`, ideaId);
 
@@ -1154,17 +1139,25 @@ export async function reviewerDecision(db, user, b) {
   const rejected = allDecisions.filter((d) => d === 'rejected').length;
   const pending = allDecisions.filter((d) => d === 'pending').length;
 
-  const cfg = await getApprovalConfig(db);
-  const threshold = cfg.mode === 'custom' ? cfg.threshold : parseInt(idea.approval_threshold ?? 100, 10);
-
+  /*
+   * A committee decides unanimously: one rejection ends it, and it is approved
+   * once everyone has approved.
+   *
+   * This replaces a configurable percentage. The percentage was a second,
+   * competing description of "who has to agree" — an idea could satisfy the
+   * named approval chain and still be rejected by an unrelated number, and the
+   * number itself was read from the org config in one mode and from a snapshot
+   * on the idea row in the others, so two committees running the same day could
+   * be judged by different rules. Unanimity needs no configuration and is what
+   * every organisation on the platform had set in practice.
+   */
   let newStatus = null;
   let pts = 0;
-  if (threshold === 100 && rejected > 0) {
+  if (rejected > 0) {
     newStatus = 'Rejected';
-  } else if (pending === 0) {
-    const rate = total > 0 ? (approved / total) * 100 : 0;
-    if (rate >= threshold) { newStatus = 'Approved'; pts = POINTS.approved; }
-    else { newStatus = 'Rejected'; }
+  } else if (pending === 0 && total > 0) {
+    newStatus = 'Approved';
+    pts = POINTS.approved;
   }
 
   if (newStatus) {

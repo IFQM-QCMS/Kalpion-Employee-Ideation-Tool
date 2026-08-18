@@ -9,6 +9,10 @@ import MessagingConnector from '../components/MessagingConnector';
 import { GatewayPanel } from './PlatformBillingPage';
 import OrgPicker from '../components/OrgPicker';
 
+// Mirrors DEFAULT_STAGES in backend/src/services/approvalStages.js — shown so a
+// platform admin can see what a new organisation starts with, not edit it here.
+const DEFAULT_CHAIN_STAGES = ['originator', 'immediate_manager', 'department_manager', 'plant_head'];
+
 /*
  * Platform → Settings. Five tabs:
  *
@@ -124,19 +128,17 @@ function DefaultsTab() {
         ))}
       </div>
 
-      <div className="form-row">
-        <div className="form-group">
-          <label>{t('ps.approval_mode')}</label>
-          <select className="form-control" value={d.approval_mode || 'default'} onChange={(e) => set('approval_mode', e.target.value)}>
-            <option value="default">{t('ps.mode_default')}</option>
-            <option value="custom">{t('ps.mode_custom')}</option>
-          </select>
+      {/* Every new organisation starts on the same chain and edits it in its own
+          Organisation Settings. This used to be a mode selector and a committee
+          percentage — two settings that described the approval chain differently
+          from the chain itself, set here by someone who does not run it. */}
+      <div className="form-group">
+        <label>{t('ps.default_chain')}</label>
+        <div style={{ fontSize:13,color:'var(--text)',background:'var(--bg)',
+          border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'10px 12px' }}>
+          {DEFAULT_CHAIN_STAGES.map((s) => t(`stage.${s}`)).join('  →  ')}
         </div>
-        <div className="form-group">
-          <label>{t('ps.threshold')}</label>
-          <input className="form-control" type="number" min="1" max="100" value={d.approval_threshold || ''}
-            onChange={(e) => set('approval_threshold', e.target.value)} />
-        </div>
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('ps.default_chain_hint')}</div>
       </div>
 
       <button className="btn btn-primary" disabled={busy} onClick={save}>{t('admin.save_settings')}</button>

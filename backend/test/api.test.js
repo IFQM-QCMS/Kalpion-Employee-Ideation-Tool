@@ -1450,3 +1450,153 @@ test('branding: an uploaded logo survives the uploads folder being wiped', async
   const gone = await api('GET', '/api/branding', { token: employee.token });
   assert.ok(!gone.data?.branding?.logo, 'a removed logo must not reappear from the stored bytes');
 });
+
+// ── One approval chain ───────────────────────────────────────────────────────
+/*
+ * The chain used to be described four ways at once: a built-in role pair, an
+ * ordered stage list, a free-form pair of role checkbox sets, and a committee
+ * percentage that overrode the lot. Only one was in force at a time and they
+ * disagreed, so the settings screen could show an admin a chain the engine did
+ * not walk. There was no test over any of it, which is how they drifted.
+ */
+
+test('the approval chain is derived from the stage list, and the dead keys are refused', async () => {
+  // A chain an organisation might actually build: skip the department manager.
+  let res = await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,immediate_manager,plant_head' },
+  });
+  assert.equal(res.data.success, true, 'a valid stage list must save');
+
+  res = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(res.data.settings.approval_stages, 'originator,immediate_manager,plant_head');
+
+  // The four removed keys must not be writable. A stale client (or an old
+  // browser tab) posting them must not resurrect a second description of the
+  // chain in the settings table.
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: {
+      approval_mode: 'custom',
+      approval_reviewer_roles: 'team_lead,executive',
+      approval_final_approver_roles: 'super_admin',
+      approval_threshold: '40',
+    },
+  });
+  const stored = await sql('ifqm_test_a',
+    `SELECT key_name FROM ifqm_test_a.org_settings
+      WHERE key_name IN ('approval_mode','approval_reviewer_roles',
+                         'approval_final_approver_roles','approval_threshold')`);
+  assert.equal(stored.length, 0, 'the removed approval keys must not be storable');
+
+  // A chain with no approver in it is refused rather than stored — it would
+  // leave every submitted idea with nobody able to action it.
+  res = await api('POST', '/api/settings', { token: AADMIN, body: { approval_stages: 'originator' } });
+  assert.notEqual(res.status, 200, 'a chain with no approver must be refused');
+
+  // An unknown stage key is dropped, not stored: a step nobody holds is a step
+  // no idea can pass, and it would only surface as a stuck submission.
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,immediate_manager,chief_vibes_officer,plant_head' },
+  });
+  res = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(res.data.settings.approval_stages, 'originator,immediate_manager,plant_head',
+    'an unrecognised stage must be dropped, leaving the rest of the chain intact');
+
+  // Put it back so later cases see the built-in chain.
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+test('a review committee decides unanimously — one rejection is enough', async () => {
+  // Two real reviewers, so "all of them" is a meaningful claim rather than an
+  // accident of there being only one.
+  const mk = async (email, name, phone) => {
+    const created = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: {
+        name, email, password: 'CommitteePass123', role: 'manager', department: 'Ops',
+        // Every account needs an employee ID and a mobile number, whatever
+        // creates it — see createUser.
+        employee_id: email.split('@')[0].toUpperCase(), phone,
+      },
+    });
+    assert.equal(created.data.success, true,
+      `${email} must be creatable — server said: ${JSON.stringify(created.data)}`);
+    return (await login(email, 'CommitteePass123', 'orga')).token;
+  };
+  const rv1 = await mk('committee1@orga.test', 'Committee One', '+919812345671');
+  const rv2 = await mk('committee2@orga.test', 'Committee Two', '+919812345672');
+  // Org admins hold no approval authority (§13.12) and may not route either, so
+  // the routing is done by a manager — which is who does it in practice.
+  const router = await mk('committeelead@orga.test', 'Committee Lead', '+919812345673');
+  const ids = await sql('ifqm_test_a',
+    `SELECT id, email FROM ifqm_test_a.users WHERE email IN ('committee1@orga.test','committee2@orga.test')`);
+  const idOf = (e) => ids.find((r) => r.email === e).id;
+
+  const submitOne = async (title) => {
+    const s = await api('POST', '/api/ideas/submit', {
+      token: AUSER,
+      body: {
+        title,
+        present_situation: 'Compressed air leaks across the shop floor are found only during annual audits.',
+        proposed_solution: 'Fit ultrasonic leak detectors and review the readings each shift handover.',
+        investment_required: '120000',
+      },
+    });
+    assert.equal(s.data.success, true, 'the idea must submit');
+    return s.data.idea_id;
+  };
+
+  // ── One rejection ends it, even with an approval already recorded ──
+  const rejectedIdea = await submitOne('Ultrasonic leak detection — committee A');
+  let res = await api('POST', '/api/ideas/assign-reviewers', {
+    token: router,
+    // The old threshold field, still sent by a stale client. It must have no
+    // effect whatsoever — under the old code 50% here would have APPROVED this
+    // idea on the single approval below.
+    body: {
+      idea_id: rejectedIdea,
+      reviewer_ids: [idOf('committee1@orga.test'), idOf('committee2@orga.test')],
+      approval_threshold: 50,
+    },
+  });
+  assert.equal(res.data.success, true,
+    `routing to committee must succeed — server said: ${JSON.stringify(res.data)}`);
+
+  res = await api('POST', '/api/ideas/reviewer-decision', {
+    token: rv1,
+    body: { idea_id: rejectedIdea, decision: 'approved', comment: 'Worth doing.' },
+  });
+  assert.equal(res.data.success, true);
+  assert.equal(res.data.new_status, null,
+    'one approval out of two decides nothing — the committee is not finished');
+
+  res = await api('POST', '/api/ideas/reviewer-decision', {
+    token: rv2,
+    body: { idea_id: rejectedIdea, decision: 'rejected', comment: 'Payback is too long.' },
+  });
+  assert.equal(res.data.new_status, 'Rejected',
+    'a single rejection rejects the idea, whatever the other reviewers said');
+
+  // ── Everyone approves ──
+  const approvedIdea = await submitOne('Ultrasonic leak detection — committee B');
+  await api('POST', '/api/ideas/assign-reviewers', {
+    token: router,
+    body: {
+      idea_id: approvedIdea,
+      reviewer_ids: [idOf('committee1@orga.test'), idOf('committee2@orga.test')],
+    },
+  });
+  res = await api('POST', '/api/ideas/reviewer-decision', {
+    token: rv1, body: { idea_id: approvedIdea, decision: 'approved' },
+  });
+  assert.equal(res.data.new_status, null, 'still waiting on the second reviewer');
+  res = await api('POST', '/api/ideas/reviewer-decision', {
+    token: rv2, body: { idea_id: approvedIdea, decision: 'approved' },
+  });
+  assert.equal(res.data.new_status, 'Approved', 'unanimous approval approves the idea');
+});

@@ -7,9 +7,7 @@
  */
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import {
-  parseStages, stagesToChain, STAGE_CATALOG,
-  DEFAULT_REVIEWER_ROLES as CHAIN_DEFAULT_REVIEWERS,
-  DEFAULT_FINAL_ROLES as CHAIN_DEFAULT_FINALS,
+  parseStages, stagesToChain, STAGE_CATALOG, DEFAULT_STAGES, DEFAULT_CHAIN,
 } from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
 import config from '../config/index.js';
@@ -21,8 +19,12 @@ const PLATFORM_MAX_FILE_MB = config.maxFileMb;
 const SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'email_enabled', 'smtp_host', 'smtp_port', 'smtp_user',
-  'smtp_pass', 'smtp_from', 'smtp_from_name', 'approval_mode',
-  'approval_reviewer_roles', 'approval_final_approver_roles', 'approval_threshold',
+  'smtp_pass', 'smtp_from', 'smtp_from_name',
+  // The approval chain is one ordered list of steps. `approval_mode`,
+  // `approval_reviewer_roles`, `approval_final_approver_roles` and
+  // `approval_threshold` are deliberately absent: they are the three competing
+  // descriptions of this same chain that were removed, and accepting a write to
+  // any of them would let a stale client resurrect one.
   'approval_stages',
   // MOM §13.1 — who may read a full proposed solution. This was a constant in
   // ideaService; the org admin now owns it.
@@ -40,82 +42,34 @@ const SETTINGS_WHITELIST = [
 export const SOLUTION_VISIBILITY_MODES = ['authors_reviewers', 'managers_only', 'everyone'];
 export const PREDICTION_VISIBILITY_MODES = ['seniors', 'everyone'];
 
-const APPROVAL_MODES = ['default', 'custom', 'stages'];
-
 const SMTP_PASS_MASK = '••••••••';
 const isAdmin = (role) => role === 'admin' || role === 'super_admin';
 
-/*
- * MOM 29 Jul 2026 §13.11/§13.12 — the built-in chain now ends at Plant Head,
- * not Executive, and super_admin is no longer an approver anywhere. Both lists
- * are imported from approvalStages so that the stage-based and role-based modes
- * cannot drift apart: they described the same chain and used to define it twice.
+/**
+ * The organisation's approval chain: one ordered list of steps, resolved into
+ * the reviewer/final role lists the escalation engine consumes.
+ *
+ * `stages` is returned alongside so the settings screen and the idea timeline
+ * can SHOW the sequence rather than reconstruct it. That reconstruction was the
+ * source of the old disagreement between preview and behaviour.
+ *
+ * A stored list with no approver in it falls back to the built-in sequence
+ * rather than leaving submitted ideas with nobody able to action them.
  */
-const DEFAULT_REVIEWER_ROLES = CHAIN_DEFAULT_REVIEWERS;
-const DEFAULT_FINAL_ROLES = CHAIN_DEFAULT_FINALS;
-
-// Roles a tenant admin may place in their approval chain. Anything else typed
-// into the role lists is dropped on save — a bad role name would silently
-// exclude reviewers from the escalation walk. super_admin is absent by design
-// (§13.11): it cannot be selected, and any stored chain that still names it is
-// filtered out on read.
-const VALID_CHAIN_ROLES = [
-  'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
-  'plant_head', 'executive', 'admin',
-];
-
 export async function getApprovalConfig(db) {
   const settings = await getOrgSettings(db);
-  const mode = settings.approval_mode ?? 'default';
+  const stages = parseStages(settings.approval_stages);
+  const chain = stagesToChain(stages);
 
-  /*
-   * Stage mode — the organisation described its chain as an ordered list of
-   * named steps (Originator → Immediate Manager → Department Manager → Plant
-   * Head). Everything downstream still consumes reviewer_roles/final_roles, so
-   * the ordering is resolved into those two lists here and the escalation
-   * engine never learns that stages exist.
-   *
-   * A stage list with no approver in it falls through to the built-in chain
-   * rather than leaving submitted ideas with nobody able to action them.
-   */
-  if (mode === 'stages') {
-    const stages = parseStages(settings.approval_stages);
-    const chain = stagesToChain(stages);
-    if (chain) {
-      return {
-        mode: 'stages',
-        stages,
-        reviewer_roles: chain.reviewer_roles,
-        final_roles: chain.final_roles,
-        threshold: clampThreshold(settings.approval_threshold),
-      };
-    }
-  }
-
-  if (mode !== 'custom') {
+  if (!chain) {
     return {
-      mode: 'default',
-      reviewer_roles: [...DEFAULT_REVIEWER_ROLES],
-      final_roles: [...DEFAULT_FINAL_ROLES],
-      threshold: parseInt(settings.approval_threshold ?? '100', 10) || 100,
+      stages: [...DEFAULT_STAGES],
+      reviewer_roles: [...DEFAULT_CHAIN.reviewer_roles],
+      final_roles: [...DEFAULT_CHAIN.final_roles],
     };
   }
-
-  const parseRoles = (v) => String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  let reviewerRoles = parseRoles(settings.approval_reviewer_roles);
-  let finalRoles = parseRoles(settings.approval_final_approver_roles);
-  if (!reviewerRoles.length) reviewerRoles = [...DEFAULT_REVIEWER_ROLES];
-  if (!finalRoles.length) finalRoles = [...DEFAULT_FINAL_ROLES];
-
-  return {
-    mode: 'custom',
-    reviewer_roles: reviewerRoles,
-    final_roles: finalRoles,
-    threshold: clampThreshold(settings.approval_threshold),
-  };
+  return { stages, reviewer_roles: chain.reviewer_roles, final_roles: chain.final_roles };
 }
-
-const clampThreshold = (v) => Math.max(1, Math.min(100, parseInt(v ?? '100', 10) || 100));
 
 // ── GET all settings (with SMTP-password masking) ──────────────────
 export async function getSettings(db, user) {
@@ -163,7 +117,6 @@ export async function updateSettings(db, body) {
     if (key === 'smtp_pass' && (!String(rawValue ?? '').trim() || rawValue === SMTP_PASS_MASK)) continue;
 
     let value = rawValue;
-    if (key === 'approval_mode' && !APPROVAL_MODES.includes(value)) continue; // reject invalid mode
     // An unrecognised visibility mode must not silently become "everyone" —
     // that would publish every solution in the org on a typo.
     if (key === 'solution_visibility' && !SOLUTION_VISIBILITY_MODES.includes(String(value))) continue;
@@ -183,18 +136,11 @@ export async function updateSettings(db, body) {
       const wanted = String(value).split(',').map((x) => x.trim()).filter(Boolean);
       value = IDEA_SECTIONS.filter((x) => wanted.includes(x)).join(',');
     }
-    if (key === 'approval_threshold') {
-      value = String(Math.max(1, Math.min(100, parseInt(value, 10) || 0)));
-    }
-    if (key === 'approval_reviewer_roles' || key === 'approval_final_approver_roles') {
-      value = String(value).split(',').map((s) => s.trim())
-        .filter((r) => VALID_CHAIN_ROLES.includes(r)).join(',');
-    }
     /*
-     * Stage keys are validated against the catalog for the same reason the role
-     * lists are: a stage nobody holds is a step no idea can ever pass, and it
-     * would only be discovered by an employee whose submission stopped moving.
-     * An unrecognised key is dropped rather than stored.
+     * Stage keys are validated against the catalog: a stage nobody holds is a
+     * step no idea can ever pass, and it would only be discovered by an
+     * employee whose submission stopped moving. An unrecognised key is dropped
+     * rather than stored.
      */
     if (key === 'approval_stages') {
       const stages = String(value).split(',').map((s) => s.trim()).filter((s) => STAGE_CATALOG[s]);

@@ -487,7 +487,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   {isMultiRv && (idea.reviewers||[]).length > 0 && (
                     <div className="ai-panel" style={{ marginTop:14,borderLeftColor:'#0284c7',background:'linear-gradient(135deg,#eff6ff,var(--panel-bg))' }}>
                       <div className="ai-panel-title" style={{ color:'#0284c7' }}>
-                        ■ {t('review.committee_badge')} — {idea.approval_threshold}{t('committee.approval_req')}
+                        ■ {t('review.committee_badge')} — {t('committee.approval_req')}
                       </div>
                       <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12 }}>
                         {(idea.reviewers||[]).filter(r=>r.decision==='approved').length} {t('committee.approved_count')} ·{' '}

@@ -196,10 +196,11 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('anonymous_allowed',             '1'),
   ('public_board_enabled',          '1'),
   ('challenges_enabled',            '1'),
-  ('approval_mode',                 'default'),
-  ('approval_reviewer_roles',       'team_lead,project_lead,manager,senior_manager'),
-  ('approval_final_approver_roles', 'executive,admin,super_admin'),
-  ('approval_threshold',            '100');
+  -- The approval chain, as one ordered sequence of steps. See migration 024:
+  -- the mode / reviewer-role / final-role / threshold keys that used to sit
+  -- here were three competing descriptions of this same chain plus a percentage
+  -- that overrode all of them.
+  ('approval_stages',               'originator,immediate_manager,department_manager,plant_head');
 
 
 -- ═══════════════════════════════════════════════════════════════════════════

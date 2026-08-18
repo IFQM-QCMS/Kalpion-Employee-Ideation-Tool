@@ -3,11 +3,18 @@
  * chain from, and the translation of that chain into the reviewer/final role
  * lists the escalation engine already understands.
  *
- * ── Why a stage list and not just two role checkboxes ───────────────────────
- * The chain an organisation describes to its own people is an ORDER —
- * "originator → immediate manager → department manager → plant head" — not two
- * unordered sets of roles. Storing the order is what lets the admin screen add,
- * remove and rearrange the steps, and it is what makes the preview honest.
+ * ── One sequence, not three ways of saying the same thing ───────────────────
+ * There were three approval "modes": a built-in chain, this ordered stage list,
+ * and a pair of free-form role checkbox sets. All three described the same
+ * journey, none of them agreed, and only one could be in force at a time — so
+ * the settings screen showed an admin three different answers to "who approves
+ * my ideas?" and left them to work out which one counted.
+ *
+ * There is now one representation: an ORDER of named steps, "originator →
+ * immediate manager → department manager → plant head". Storing the order is
+ * what lets the admin screen add, remove and rearrange the steps, and it is
+ * what makes the preview honest — the preview is now rendered from the same
+ * list the engine walks, so it cannot advertise a chain that is not run.
  *
  * The engine is untouched. `stagesToChain()` derives from the list exactly the
  * two things ideaService asks getApprovalConfig() for:
@@ -28,21 +35,28 @@
 /**
  * Stage key → the users.role a person must hold to act at that stage.
  *
+ * Listed junior → senior, because that is the order an admin builds a chain in
+ * and the order the "add a step" menu should offer.
+ *
+ * Each job title appears EXACTLY ONCE. It previously appeared up to three times
+ * on the same screen — once in this catalog, once in the reviewer-role
+ * checkboxes and once in the final-approver checkboxes — so an admin choosing
+ * "Senior Manager" had to know which of three identically-labelled controls
+ * governed their chain. There is now one list and one meaning per title.
+ *
  * `immediate_manager` maps to plain `manager`: it is the submitter's own line
  * manager, which is a level in the reporting tree rather than a distinct job
  * title. Large organisations keep it; flatter ones delete the stage and ideas
  * go straight to the department manager.
  */
 export const STAGE_CATALOG = {
-  originator:         { role: null,                 fixed: true },
+  originator:         { role: null, fixed: true },
   immediate_manager:  { role: 'manager' },
-  department_manager: { role: 'department_manager' },
-  plant_head:         { role: 'plant_head' },
-  // Also selectable, so an organisation that already runs the older role-based
-  // chain can express it as stages without inventing job titles it does not use.
   team_lead:          { role: 'team_lead' },
   project_lead:       { role: 'project_lead' },
+  department_manager: { role: 'department_manager' },
   senior_manager:     { role: 'senior_manager' },
+  plant_head:         { role: 'plant_head' },
   executive:          { role: 'executive' },
 };
 
@@ -54,27 +68,20 @@ export const DEFAULT_STAGES = [
 ];
 
 /**
- * An idea must never be able to dead-end. Whatever chain an organisation
- * builds, the org admin can always close what is sitting in front of them, so
- * this is appended to the final-approver set rather than replacing it.
+ * The chain a tenant falls back to: the built-in sequence, resolved through the
+ * same function every other chain goes through.
  *
- * MOM 29 Jul 2026 §13.11 removes `super_admin` from the approval chain. It was
- * here as a second safety net, but a super admin approving ideas is exactly the
- * conflation of platform ownership with business judgement the MOM objects to:
- * whoever holds the org's super-admin credentials is usually IT, not the person
- * qualified to accept a shop-floor improvement. `admin` alone keeps the
- * dead-end guarantee.
+ * It used to be two hand-written role lists sitting beside DEFAULT_STAGES, and
+ * they disagreed — the lists made five roles reviewers while the stage sequence
+ * named two, so the preview an admin read and the chain the engine walked were
+ * different documents. Deriving removes the possibility.
+ *
+ * MOM 29 Jul 2026 §13.11 keeps `super_admin` out of the chain entirely: whoever
+ * holds the org's super-admin credentials is usually IT, not the person
+ * qualified to accept a shop-floor improvement. §13.12 puts final authority
+ * with the Plant Head, and org admins hold no approval authority at all.
  */
-const ALWAYS_FINAL = [];
-
-/**
- * §13.12 — the built-in chain's final authority is the Plant Head, replacing
- * Executive. Org admins are strictly excluded from approval authority.
- */
-export const DEFAULT_FINAL_ROLES = ['plant_head'];
-export const DEFAULT_REVIEWER_ROLES = [
-  'team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager',
-];
+export const DEFAULT_CHAIN = stagesToChain(DEFAULT_STAGES);
 
 /** Parse the stored CSV into a clean, de-duplicated, originator-first list. */
 export function parseStages(raw) {
@@ -115,4 +122,7 @@ export function stagesToChain(stages) {
   return { reviewer_roles: reviewerRoles, final_roles: finalRoles };
 }
 
-export default { STAGE_CATALOG, STAGE_KEYS, DEFAULT_STAGES, parseStages, approverStages, stagesToChain };
+export default {
+  STAGE_CATALOG, STAGE_KEYS, DEFAULT_STAGES, DEFAULT_CHAIN,
+  parseStages, approverStages, stagesToChain,
+};

@@ -885,35 +885,31 @@ function CategoriesTab({ t, showToast }) {
  *     edge; the server refuses assignments that would close a loop.
  */
 
-// Seniority ladder, junior → senior. Escalation walks manager_id upward, so
-// this order is only used for the preview text and checkbox layout.
-const CHAIN_LADDER = ['team_lead','project_lead','manager','senior_manager','executive','admin','super_admin'];
-// PHP offered 4 reviewer / 3 final roles; the pool is widened so an org can
-// also make executives part of the chain or let senior managers close ideas.
-const REVIEWER_ROLE_OPTIONS = ['team_lead','project_lead','manager','department_manager','senior_manager','plant_head','executive'];
-const FINAL_ROLE_OPTIONS    = ['manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
-/*
- * Must mirror backend/src/services/approvalStages.js. MOM §13.11/§13.12 dropped
- * super_admin as an approver and moved final authority to Plant Head; leaving
- * these stale meant the preview advertised a chain the server no longer runs.
- */
-const DEFAULT_REVIEWERS = ['team_lead','project_lead','manager','department_manager','senior_manager'];
-const DEFAULT_FINALS    = ['plant_head','admin'];
+// Seniority ladder, junior → senior. Used to sort the roots of the reporting
+// tree; the approval chain no longer consults it.
+const CHAIN_LADDER = ['team_lead','project_lead','manager','senior_manager','plant_head','executive','admin'];
 
 /*
- * ── Approval stages ────────────────────────────────────────────────
- * The chain as an organisation describes it to its own people: an ORDER of
- * named steps, not two unordered sets of roles. Mirrors STAGE_CATALOG and
- * DEFAULT_STAGES in backend/src/services/approvalStages.js — the server derives
- * reviewer/final roles from this list, and validates every key it is sent, so
- * this array is the menu rather than the authority.
+ * ── The approval chain ─────────────────────────────────────────────
+ * One ordered list of steps, and the only description of the chain there is.
+ *
+ * It used to be one of three: a built-in chain, this list, and a pair of
+ * reviewer/final role checkbox sets. Every job title appeared in two or three
+ * of them, so "Senior Manager" was three separate controls on one screen and
+ * only the ones belonging to the selected mode did anything. The two role sets
+ * and the mode selector are gone.
+ *
+ * Mirrors STAGE_CATALOG and DEFAULT_STAGES in
+ * backend/src/services/approvalStages.js — the server derives the reviewer and
+ * final roles from this list and validates every key it is sent, so this array
+ * is the menu rather than the authority.
  *
  * `originator` is the person who submits. It is pinned first and cannot be
  * removed: an approval step cannot precede the idea existing.
  */
 const STAGE_OPTIONS = [
-  'immediate_manager','department_manager','plant_head',
-  'team_lead','project_lead','senior_manager','executive',
+  'immediate_manager','team_lead','project_lead',
+  'department_manager','senior_manager','plant_head','executive',
 ];
 const DEFAULT_STAGES = ['originator','immediate_manager','department_manager','plant_head'];
 
@@ -943,10 +939,6 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   const [savingId,  setSavingId]  = useState(null);
 
   // Approval workflow state
-  const [mode,      setMode]      = useState('default');
-  const [revRoles,  setRevRoles]  = useState(DEFAULT_REVIEWERS);
-  const [finRoles,  setFinRoles]  = useState(DEFAULT_FINALS);
-  const [threshold, setThreshold] = useState(100);
   const [stages,    setStages]    = useState(DEFAULT_STAGES);
   const [addStage,  setAddStage]  = useState('');
   const [wfSaving,  setWfSaving]  = useState(false);
@@ -971,14 +963,10 @@ function HierarchyTab({ t, showToast, currentUserId }) {
       }
       setManagers(mgrRes.data.managers || []);
       const s = setRes.data.settings || {};
-      setMode(['custom','stages'].includes(s.approval_mode) ? s.approval_mode : 'default');
       const parse = (v, fb) => {
         const list = String(v || '').split(',').map(x => x.trim()).filter(Boolean);
         return list.length ? list : fb;
       };
-      setRevRoles(parse(s.approval_reviewer_roles, DEFAULT_REVIEWERS));
-      setFinRoles(parse(s.approval_final_approver_roles, DEFAULT_FINALS));
-      setThreshold(Math.max(1, Math.min(100, parseInt(s.approval_threshold, 10) || 100)));
       // Whatever is stored, the originator leads and never repeats — the same
       // normalisation the server applies on read.
       const stored = parse(s.approval_stages, DEFAULT_STAGES)
@@ -986,10 +974,6 @@ function HierarchyTab({ t, showToast, currentUserId }) {
       setStages(['originator', ...new Set(stored.filter(x => x !== 'originator'))]);
     } catch { setError(t('msg.fail_load')); }
     setLoading(false);
-  }
-
-  function toggleRole(list, setList, role) {
-    setList(list.includes(role) ? list.filter(r => r !== role) : [...list, role]);
   }
 
   // ── stage list editing ──
@@ -1016,24 +1000,14 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   }
 
   async function saveWorkflow() {
-    if (mode === 'custom' && (!revRoles.length || !finRoles.length)) {
-      setWfMsg({ ok:false, text: t('hier.roles_required') });
-      return;
-    }
-    if (mode === 'stages' && stages.filter(s => s !== 'originator').length === 0) {
+    if (stages.filter(s => s !== 'originator').length === 0) {
       setWfMsg({ ok:false, text: t('hier.stages_required') });
       return;
     }
     setWfSaving(true);
     setWfMsg(null);
     try {
-      const res = await settingsApi.update({
-        approval_mode: mode,
-        approval_reviewer_roles: revRoles.join(','),
-        approval_final_approver_roles: finRoles.join(','),
-        approval_stages: stages.join(','),
-        approval_threshold: String(threshold),
-      });
+      const res = await settingsApi.update({ approval_stages: stages.join(',') });
       if (res.data.success) { setWfMsg({ ok:true, text: t('hier.saved') }); showToast(t('hier.saved'),'success'); }
       else setWfMsg({ ok:false, text: res.data.error || t('admin.settings_failed') });
     } catch { setWfMsg({ ok:false, text: t('msg.server_error') }); }
@@ -1042,11 +1016,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
 
   function resetWorkflow() {
     if (!confirm(t('hier.confirm_reset'))) return;
-    setMode('default');
-    setRevRoles(DEFAULT_REVIEWERS);
-    setFinRoles(DEFAULT_FINALS);
     setStages(DEFAULT_STAGES);
-    setThreshold(100);
     setWfMsg(null);
   }
 
@@ -1071,17 +1041,18 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
   if (error)   return <div className="alert alert-danger" style={{ marginTop:16 }}>{error}</div>;
 
-  // Chain preview: junior → senior among the selected reviewer roles.
-  const orderedRev = CHAIN_LADDER.filter(r => revRoles.includes(r));
+  /*
+   * The preview is the stage list read aloud. It is now a restatement of the
+   * one thing on screen rather than a fourth description of the chain: it used
+   * to branch three ways and two of those branches showed roles that were not
+   * in force, which is how an admin could read a chain the engine never walked.
+   */
   const approverStages = stages.filter(s => s !== 'originator');
   const chainPreview =
-    mode === 'stages'
-      ? [t('stage.originator'), ...approverStages.map(s => t(`stage.${s}`))].join(' → ')
-        + (approverStages.length ? ` (${t('hier.stage_final')}: ${t(`stage.${approverStages[approverStages.length-1]}`)})` : '')
-    : mode === 'custom'
-      ? [t('role.employee'), ...orderedRev.map(r => formatRole(r, t))].join(' → ')
-        + ` → ${t('hier.final_short')}: ` + finRoles.map(r => formatRole(r, t)).join(' / ')
-      : `${t('role.employee')} → ${DEFAULT_REVIEWERS.map(r => formatRole(r, t)).join(' → ')} → ${t('hier.final_short')}: ${DEFAULT_FINALS.map(r => formatRole(r, t)).join(' / ')}`;
+    [t('stage.originator'), ...approverStages.map(s => t(`stage.${s}`))].join('  →  ')
+    + (approverStages.length
+        ? `  (${t('hier.stage_final')}: ${t(`stage.${approverStages[approverStages.length - 1]}`)})`
+        : '');
 
   // Build the reporting tree.
   const byId = {};
@@ -1094,14 +1065,6 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   const rootOrder = Object.fromEntries([...CHAIN_LADDER].reverse().map((r, i) => [r, i]));
   roots.sort((a,b) => (rootOrder[a.role]??9)-(rootOrder[b.role]??9) || a.name.localeCompare(b.name));
 
-  const roleChip = (r, selected, onClick) => (
-    <label key={r} style={{ display:'flex',alignItems:'center',gap:4,cursor:'pointer',fontSize:12,
-      background:'var(--surface)',padding:'4px 10px',borderRadius:4,border:'1px solid var(--border)' }}>
-      <input type="checkbox" checked={selected} onChange={onClick} style={{ accentColor:'var(--primary)' }} />
-      {formatRole(r, t)}
-    </label>
-  );
-
   return (
     <div style={{ marginTop:16 }}>
       {/* ── Approval Workflow ── */}
@@ -1109,119 +1072,64 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         <div className="card-title">{t('hier.approval_title')}</div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14 }}>{t('hier.approval_sub')}</div>
 
-        <div className="form-group" style={{ marginBottom:14 }}>
-          <label style={{ fontWeight:500,marginBottom:8,display:'block' }}>{t('hier.mode_label')}<InfoDot term="workflow_mode" /></label>
-          <div style={{ display:'flex',gap:20,flexWrap:'wrap' }}>
-            <label style={{ display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13 }}>
-              <input type="radio" name="approval_mode" value="default" checked={mode==='default'} onChange={() => setMode('default')} />
-              {t('hier.mode_default')}
-            </label>
-            <label style={{ display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13 }}>
-              <input type="radio" name="approval_mode" value="stages" checked={mode==='stages'} onChange={() => setMode('stages')} />
-              {t('hier.mode_stages')}
-            </label>
-            <label style={{ display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:13 }}>
-              <input type="radio" name="approval_mode" value="custom" checked={mode==='custom'} onChange={() => setMode('custom')} />
-              {t('hier.mode_custom')}
-            </label>
-          </div>
-          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.default_hint')}</div>
-        </div>
-
-        {/* Stage editor — add, remove and reorder the steps an idea travels
+        {/* The chain: add, remove and reorder the steps an idea travels
             through. The originator is pinned at the top with no remove button:
             it is the submission itself, not an approval. */}
-        {mode === 'stages' && (
-          <div style={{ borderLeft:'2px solid var(--primary)',paddingLeft:14,marginBottom:14 }}>
-            <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}<InfoDot term="approval_stages" /></label>
-            <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:10 }}>{t('hier.stages_hint')}</div>
+        <div style={{ marginBottom:14 }}>
+          <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}<InfoDot term="approval_stages" /></label>
+          <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:10 }}>{t('hier.stages_hint')}</div>
 
-            <div style={{ display:'flex',flexDirection:'column',gap:6,marginBottom:12 }}>
-              {stages.map((s, i) => {
-                const isOriginator = s === 'originator';
-                const isFinal = !isOriginator && i === stages.length - 1;
-                return (
-                  <div key={s} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 12px',
-                    background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--r)',
-                    borderLeft:`3px solid ${isOriginator ? '#10b981' : isFinal ? '#374151' : 'var(--primary)'}` }}>
-                    <span style={{ fontSize:11,color:'var(--subtle)',minWidth:16,textAlign:'right' }}>{i+1}</span>
-                    <div style={{ flex:1,minWidth:0 }}>
-                      <div style={{ fontSize:13,fontWeight:600,color:'var(--text)' }}>
-                        {t(`stage.${s}`)}
-                        {s === 'immediate_manager' && (
-                          <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}> ({t('stage.immediate_manager_note')})</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>
-                        {isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}
-                      </div>
+          <div style={{ display:'flex',flexDirection:'column',gap:6,marginBottom:12 }}>
+            {stages.map((s, i) => {
+              const isOriginator = s === 'originator';
+              const isFinal = !isOriginator && i === stages.length - 1;
+              return (
+                <div key={s} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 12px',
+                  background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--r)',
+                  borderLeft:`3px solid ${isOriginator ? '#10b981' : isFinal ? '#374151' : 'var(--primary)'}` }}>
+                  <span style={{ fontSize:11,color:'var(--subtle)',minWidth:16,textAlign:'right' }}>{i+1}</span>
+                  <div style={{ flex:1,minWidth:0 }}>
+                    <div style={{ fontSize:13,fontWeight:600,color:'var(--text)' }}>
+                      {t(`stage.${s}`)}
+                      {s === 'immediate_manager' && (
+                        <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}> ({t('stage.immediate_manager_note')})</span>
+                      )}
                     </div>
-                    {!isOriginator && (
-                      <div style={{ display:'flex',gap:4 }}>
-                        <button type="button" className="btn btn-outline btn-sm" disabled={i <= 1}
-                          onClick={() => moveStage(i, -1)} aria-label="Move up">↑</button>
-                        <button type="button" className="btn btn-outline btn-sm" disabled={i >= stages.length - 1}
-                          onClick={() => moveStage(i, 1)} aria-label="Move down">↓</button>
-                        <button type="button" className="btn btn-sm"
-                          style={{ background:'var(--danger-light)',color:'var(--danger)',border:'1px solid var(--danger-dim)' }}
-                          onClick={() => removeStage(s)}>{t('btn.remove')}</button>
-                      </div>
-                    )}
+                    <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>
+                      {isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {STAGE_OPTIONS.some(s => !stages.includes(s)) ? (
-              <div style={{ display:'flex',gap:8,flexWrap:'wrap',alignItems:'center' }}>
-                <select className="form-control" style={{ width:230 }} value={addStage}
-                  onChange={e => setAddStage(e.target.value)}>
-                  <option value="">{t('hier.stage_add')}…</option>
-                  {STAGE_OPTIONS.filter(s => !stages.includes(s)).map(s => (
-                    <option key={s} value={s}>{t(`stage.${s}`)}</option>
-                  ))}
-                </select>
-                <button type="button" className="btn btn-outline btn-sm" disabled={!addStage}
-                  onClick={() => appendStage(addStage)}>+ {t('hier.stage_add')}</button>
-              </div>
-            ) : (
-              <div style={{ fontSize:11,color:'var(--subtle)' }}>{t('hier.stage_all_used')}</div>
-            )}
+                  {!isOriginator && (
+                    <div style={{ display:'flex',gap:4 }}>
+                      <button type="button" className="btn btn-outline btn-sm" disabled={i <= 1}
+                        onClick={() => moveStage(i, -1)} aria-label="Move up">↑</button>
+                      <button type="button" className="btn btn-outline btn-sm" disabled={i >= stages.length - 1}
+                        onClick={() => moveStage(i, 1)} aria-label="Move down">↓</button>
+                      <button type="button" className="btn btn-sm"
+                        style={{ background:'var(--danger-light)',color:'var(--danger)',border:'1px solid var(--danger-dim)' }}
+                        onClick={() => removeStage(s)}>{t('btn.remove')}</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
 
-        {mode === 'custom' && (
-          <div style={{ borderLeft:'2px solid var(--primary)',paddingLeft:14,marginBottom:14 }}>
-            <div className="form-group" style={{ marginBottom:12 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.reviewer_roles')}<InfoDot term="reviewer_roles" /></label>
-              <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
-                {REVIEWER_ROLE_OPTIONS.map(r => roleChip(r, revRoles.includes(r), () => toggleRole(revRoles, setRevRoles, r)))}
-              </div>
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.reviewer_hint')}</div>
+          {STAGE_OPTIONS.some(s => !stages.includes(s)) ? (
+            <div style={{ display:'flex',gap:8,flexWrap:'wrap',alignItems:'center' }}>
+              <select className="form-control" style={{ width:230 }} value={addStage}
+                onChange={e => setAddStage(e.target.value)}>
+                <option value="">{t('hier.stage_add')}…</option>
+                {STAGE_OPTIONS.filter(s => !stages.includes(s)).map(s => (
+                  <option key={s} value={s}>{t(`stage.${s}`)}</option>
+                ))}
+              </select>
+              <button type="button" className="btn btn-outline btn-sm" disabled={!addStage}
+                onClick={() => appendStage(addStage)}>+ {t('hier.stage_add')}</button>
             </div>
-            <div className="form-group" style={{ marginBottom:12 }}>
-              <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.final_roles')}<InfoDot term="final_roles" /></label>
-              <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
-                {FINAL_ROLE_OPTIONS.map(r => roleChip(r, finRoles.includes(r), () => toggleRole(finRoles, setFinRoles, r)))}
-              </div>
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.final_hint')}</div>
-            </div>
-          </div>
-        )}
-
-        {/* The threshold used to live inside the "custom roles" block, so an
-            organisation on any other mode could not see or change it — yet it
-            governs every idea routed to a committee, in every mode. */}
-        <div className="form-group" style={{ marginBottom:14,maxWidth:260 }}>
-          <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.threshold')}<InfoDot term="approval_threshold" /></label>
-          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-            <input className="form-control" type="number" min="1" max="100" value={threshold}
-              style={{ width:110 }}
-              onChange={e => setThreshold(e.target.value)}
-              onBlur={() => setThreshold(v => Math.max(1, Math.min(100, parseInt(v, 10) || 100)))} />
-            <span style={{ fontSize:13,color:'var(--text-muted)' }}>%</span>
-          </div>
-          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('hier.threshold_hint')}</div>
+          ) : (
+            <div style={{ fontSize:11,color:'var(--subtle)' }}>{t('hier.stage_all_used')}</div>
+          )}
         </div>
 
         <div style={{ fontSize:12,background:'var(--bg)',border:'1px dashed var(--border)',borderRadius:'var(--r)',padding:'8px 12px',marginBottom:14 }}>
