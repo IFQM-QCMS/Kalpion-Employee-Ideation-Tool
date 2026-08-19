@@ -397,6 +397,97 @@ export function validateApplication(body) {
 }
 
 /**
+ * Tell IFQM that somebody has applied.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * An application landed in a queue that nobody is looking at. The applicant is
+ * told "we will email you once it has been reviewed", and until somebody
+ * happened to open the console that was a promise with no mechanism behind it.
+ * The first working day of a customer's relationship with the product was
+ * silence of unknown length.
+ *
+ * ── Who it goes to ─────────────────────────────────────────────────────────
+ *
+ * Every platform admin, because "the person who checks registrations" is not a
+ * role the schema knows about — anybody with console access may be the one who
+ * acts. The billing contact is included when one is configured, since that is
+ * the address IFQM already publishes for commercial questions.
+ *
+ * ── Why it can never fail the submission ───────────────────────────────────
+ *
+ * The whole thing is wrapped and swallowed. An applicant who filled in a long
+ * form, verified an address and verified a phone must not be told their
+ * application failed because OUR notification could not be delivered — the row
+ * is already committed and the queue is the source of truth. A failure is
+ * logged loudly instead, because a notification that silently stopped working
+ * is exactly the thing nobody notices.
+ */
+export async function notifyPlatformOfApplication(reg, reference) {
+  const { sendViaPlatform } = await import('./mailerService.js');
+  const master = masterDb();
+
+  const recipients = new Map();
+  try {
+    const [admins] = await master.query('SELECT name, email FROM platform_admins');
+    for (const a of admins) {
+      if (a.email) recipients.set(String(a.email).toLowerCase(), a.name || 'IFQM');
+    }
+  } catch (e) {
+    logger.warn('registration notice: could not read platform admins', e.message);
+  }
+  try {
+    const [[row] = []] = await master.execute(
+      "SELECT value FROM platform_settings WHERE key_name = 'billing_contact_email' LIMIT 1"
+    );
+    const billing = str(row && row.value).toLowerCase();
+    if (billing && !recipients.has(billing)) recipients.set(billing, 'IFQM');
+  } catch { /* optional */ }
+
+  if (!recipients.size) {
+    logger.warn(`registration notice: ${reference} has no platform recipient configured`);
+    return { recipients: 0, sent: 0 };
+  }
+
+  const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, '');
+  const line = (label, value) => (value
+    ? `<tr><td style="padding:4px 14px 4px 0;color:#667089">${label}</td>`
+      + `<td style="padding:4px 0;color:#111"><b>${esc(value)}</b></td></tr>`
+    : '');
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
+  <p style="margin:0 0 4px"><b>${esc(reg.company_name)}</b> has applied for a workspace.</p>
+  <p style="margin:0 0 14px;color:#667089">Reference ${esc(reference)} — waiting in the registration queue.</p>
+  <table style="border-collapse:collapse;font-size:14px">
+    ${line('Contact', reg.contact_name)}
+    ${line('Designation', reg.contact_designation)}
+    ${line('Email', reg.contact_email)}
+    ${line('Phone', reg.contact_phone)}
+    ${line('Email domain', reg.email_domain)}
+    ${line('Requested code', reg.proposed_slug)}
+    ${line('Sector', reg.sector)}
+    ${line('Employees', reg.employee_count)}
+    ${line('Location', [reg.city, reg.state].filter(Boolean).join(', '))}
+  </table>
+  <p style="margin:16px 0 0">Both the email address and the mobile number were verified by
+  one-time code before this was submitted.</p>
+  <p style="margin:14px 0 0;color:#667089">Open the platform console to approve or reject it.</p>
+</div>`;
+
+  const subject = `New workspace application — ${reg.company_name} (${reference})`;
+  const results = await Promise.allSettled(
+    [...recipients].map(([email, name]) => sendViaPlatform(email, name, subject, html))
+  );
+  const sent = results.filter((r) => r.status === 'fulfilled' && r.value && r.value.success !== false).length;
+  if (sent) logger.info(`registration notice: ${reference} sent to ${sent} platform recipient(s)`);
+  else logger.error(`registration notice: ${reference} reached nobody — check platform mail`);
+  // Returned rather than only logged so the recipient selection can be asserted
+  // on without a mail server: who it goes to is the part worth testing, and it
+  // is decided entirely before anything is sent.
+  return { recipients: recipients.size, sent };
+}
+
+/**
  * POST /api/registrations — public.
  *
  * Returns only a reference number. It deliberately does NOT say whether the
@@ -474,11 +565,18 @@ export async function submitRegistration(body, meta = {}) {
     ]
   );
 
-  logger.info(`registration: ${row.company_name} (${row.email_domain}) queued as REG-${res.insertId}`);
+  const reference = `REG-${res.insertId}`;
+  logger.info(`registration: ${row.company_name} (${row.email_domain}) queued as ${reference}`);
+
+  // Deliberately not awaited. The application is committed; the applicant
+  // should not wait on our outbound mail server to be told so.
+  notifyPlatformOfApplication(row, reference).catch((e) =>
+    logger.error(`registration notice: ${reference} failed — ${e.message}`));
+
   return {
     success: true,
     status: 'pending',
-    reference: `REG-${res.insertId}`,
+    reference,
     message: 'Application received. We will email you once it has been reviewed.',
   };
 }
@@ -736,14 +834,32 @@ export async function approveRegistration(id, {
   await master.execute('UPDATE tenants SET domain = ? WHERE id = ?', [reg.email_domain, created.tenant_id]);
 
   logger.info(`registration REG-${reg.id} approved → tenant ${slug} (${created.tenant_id})`);
+
+  /*
+   * Awaited, unlike the application notice earlier in this file, because the
+   * answer changes what the console tells the operator to do next: hand the
+   * password over themselves, or not.
+   */
+  const { sendTemporaryPassword } = await import('./mailerService.js');
+  const emailed = await sendTemporaryPassword({
+    email: reg.contact_email, name: reg.contact_name, orgName: reg.company_name,
+    slug, password: tempPassword, reason: 'welcome',
+  });
+
   return {
     success: true,
     tenant_id: created.tenant_id,
     slug,
     admin_email: reg.contact_email,
+    // Still returned even when the email went. Mail fails, and an operator
+    // holding the only copy of a credential is the difference between
+    // "resend it" and "provision the whole thing again".
     temp_password: tempPassword,
-    message: 'Organisation created. Share the temporary password with the applicant — '
-      + 'it is shown once and must be changed at first sign-in.',
+    password_emailed: emailed,
+    message: emailed
+      ? `Organisation created. The temporary password has been emailed to ${reg.contact_email}.`
+      : 'Organisation created, but the welcome email could not be sent — share the '
+        + 'temporary password with the applicant yourself. It is shown once.',
   };
 }
 

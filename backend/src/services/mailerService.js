@@ -418,6 +418,70 @@ export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml
 }
 
 /** Insert an email into the queue (PHP queueEmail). */
+/**
+ * Send somebody the temporary password their account was created with.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * Both places that mint a temporary password — approving a registration, and
+ * resetting an org admin's password from the console — returned it to the
+ * screen with "share it with the applicant". That meant the credential to a
+ * brand-new workspace travelled by whatever channel the operator reached for:
+ * a phone call, a WhatsApp message, an email typed by hand. It also meant the
+ * first thing a new customer experienced was waiting for somebody to get round
+ * to it.
+ *
+ * ── What it does NOT change ────────────────────────────────────────────────
+ *
+ * The password is still returned to the caller and still shown once in the
+ * console. Mail fails — that is the entire reason this codebase has an SMTP
+ * cooldown and an API fallback — and an operator holding the only copy of a
+ * credential is the difference between "resend it" and "provision it again".
+ * The screen says which of the two happened.
+ *
+ * @returns {Promise<boolean>} whether it was actually delivered
+ */
+export async function sendTemporaryPassword({ email, name, orgName, slug, password, reason }) {
+  if (!String(email || '').trim() || !password) return false;
+
+  const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, '');
+  const lead = reason === 'reset'
+    ? `The password for your IFQM administrator account at <b>${esc(orgName)}</b> has been reset.`
+    : `Your IFQM workspace for <b>${esc(orgName)}</b> is ready.`;
+
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
+  <p>Hello ${esc(name) || 'there'},</p>
+  <p>${lead}</p>
+  <table style="border-collapse:collapse;font-size:14px;margin:14px 0">
+    <tr><td style="padding:4px 14px 4px 0;color:#667089">Sign in with</td>
+        <td style="padding:4px 0"><b>${esc(email)}</b></td></tr>
+    ${slug ? `<tr><td style="padding:4px 14px 4px 0;color:#667089">Organisation code</td>
+        <td style="padding:4px 0"><b>${esc(slug)}</b></td></tr>` : ''}
+    <tr><td style="padding:4px 14px 4px 0;color:#667089">Temporary password</td>
+        <td style="padding:4px 0"><b style="font-family:Consolas,monospace;font-size:16px;
+            background:#F4F4F4;padding:3px 8px;border-radius:4px">${esc(password)}</b></td></tr>
+  </table>
+  <p>You will be asked to choose your own password the first time you sign in.
+  Until you do, this one is the only thing standing in front of your organisation's
+  account — so please sign in soon, and do not forward this message.</p>
+  <p style="color:#667089;margin-top:18px">If you were not expecting this, tell us straight away.</p>
+</div>`;
+
+  const subject = reason === 'reset'
+    ? 'Your IFQM administrator password has been reset'
+    : `Your IFQM workspace for ${orgName} is ready`;
+
+  try {
+    const res = await sendViaPlatform(email, name, subject, html);
+    // sendViaPlatform reports a missing address as {skipped:true} rather than
+    // throwing, so a falsy success has to be read as "not delivered".
+    return !(res && res.success === false);
+  } catch (e) {
+    logger.warn(`temporary password email to ${email} failed: ${e.message}`);
+    return false;
+  }
+}
+
 export async function queueEmail(db, toEmail, toName, subject, body) {
   if (!String(toEmail || '').trim()) return { success: false, skipped: true };
   try {
@@ -485,5 +549,5 @@ export async function processEmailQueue(db) {
 
 export default {
   getOrgSettings, sendSmtpEmail, queueEmail, processEmailQueue,
-  sendViaPlatform, platformMailReady, verifyPlatformMail,
+  sendViaPlatform, sendTemporaryPassword, platformMailReady, verifyPlatformMail,
 };

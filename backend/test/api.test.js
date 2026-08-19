@@ -2095,3 +2095,99 @@ test('an organisation may lower the attachment limit but never raise it past the
 
   await setCeiling(10);   // leave it as the other cases expect
 });
+
+// ── IFQM hears about a new application ───────────────────────────────────────
+/*
+ * An application landed in a queue nobody was watching. The applicant is told
+ * "we will email you once it has been reviewed", and until somebody happened to
+ * open the console that was a promise with no mechanism behind it.
+ */
+test('a new application notifies every platform admin, and cannot fail the submission', async () => {
+  const svc = await import('../src/services/registrationService.js');
+
+  const reg = {
+    company_name: 'Peenya Tooling Works', proposed_slug: 'peenya',
+    contact_name: 'D. Shetty', contact_designation: 'Partner',
+    contact_email: 'd.shetty@peenyatooling.com', contact_phone: '+919812345699',
+    email_domain: 'peenyatooling.com', sector: 'Manufacturing',
+    employee_count: 40, city: 'Bengaluru', state: 'Karnataka',
+  };
+
+  const summary = await svc.notifyPlatformOfApplication(reg, 'REG-9001');
+  assert.ok(summary.recipients >= 1,
+    `the seeded platform admin must be a recipient, got ${JSON.stringify(summary)}`);
+
+  /*
+   * Nothing actually leaves the machine in a test run — platform mail is blanked
+   * by the harness — so `sent` is expected to be 0 here. That is precisely the
+   * case worth pinning: the notifier resolves rather than throwing when mail is
+   * unavailable, which is what keeps a failed notification from failing an
+   * application that is already committed.
+   */
+  assert.equal(typeof summary.sent, 'number');
+
+  // Adding a billing contact adds a recipient without displacing the admins.
+  await api('PUT', '/api/platform/settings/defaults', {
+    token: PA, body: { billing_contact_email: 'accounts@ifqm.io' },
+  });
+  const withBilling = await svc.notifyPlatformOfApplication(reg, 'REG-9002');
+  assert.ok(withBilling.recipients > summary.recipients,
+    'a configured billing contact must be added to the platform admins, not replace them');
+
+  // And a duplicate address is not mailed twice.
+  await api('PUT', '/api/platform/settings/defaults', {
+    token: PA, body: { billing_contact_email: 'platform@ifqm.io' },
+  });
+  const deduped = await svc.notifyPlatformOfApplication(reg, 'REG-9003');
+  assert.equal(deduped.recipients, summary.recipients,
+    'a billing contact that is already an admin must not be counted twice');
+});
+
+// ── The temporary password is emailed, not read down the phone ───────────────
+/*
+ * Approving a registration and resetting an org admin's password both minted a
+ * credential and put it on screen with "share it with the applicant". The
+ * credential to a brand-new workspace then travelled by whatever channel the
+ * operator reached for.
+ */
+test('a temporary password is emailed, and is still shown when the email cannot go', async () => {
+  const { sendTemporaryPassword } = await import('../src/services/mailerService.js');
+
+  // Platform mail is blanked by the harness, so this exercises the path that
+  // matters most: what happens when the send does NOT work.
+  const delivered = await sendTemporaryPassword({
+    email: 'newadmin@nandiprecision.com', name: 'Rekha Prasad',
+    orgName: 'Nandi Precision', slug: 'nandi', password: 'Temp-abc123', reason: 'welcome',
+  });
+  assert.equal(delivered, false, 'with no mail route configured it must report failure, not throw');
+
+  // No address is a normal state, not an error — the same rule the mailer
+  // applies everywhere since accounts stopped requiring an email.
+  assert.equal(await sendTemporaryPassword({ email: '', password: 'x' }), false);
+  assert.equal(await sendTemporaryPassword({ email: 'a@b.com', password: '' }), false);
+
+  /*
+   * The console reset still hands the password back whether or not the email
+   * went. Removing it on the assumption mail always works would turn a failed
+   * send into a locked-out administrator.
+   */
+  const res = await api('POST', `/api/platform/tenants/${tenantBId}/reset-admin-password`, {
+    token: PA, body: { admin_email: 'admin@orgb.test' },
+  });
+  assert.equal(res.data.success, true,
+    `the reset must succeed even with mail down — server said: ${JSON.stringify(res.data)}`);
+  assert.ok(res.data.temp_password, 'the password must still be shown');
+  assert.equal(res.data.password_emailed, false, 'and the screen must say it was not emailed');
+  assert.match(res.data.note, /could not be sent|pass this on/i,
+    'the note must tell the operator to hand it over themselves');
+
+  // The new password must actually work, and force a change at first sign-in.
+  const signedIn = await api('POST', '/api/auth/login', {
+    body: { email: 'admin@orgb.test', password: res.data.temp_password, orgSlug: 'orgb' },
+  });
+  assert.equal(signedIn.status, 200, 'the emailed password must be the one that works');
+  // Sent as a boolean or a 1 depending on the driver's tinyint handling — the
+  // fact being asserted is that it is set, not how MySQL spelled it.
+  assert.ok(signedIn.data.user.must_change_password,
+    'and must force a change at first sign-in');
+});

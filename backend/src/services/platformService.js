@@ -641,7 +641,7 @@ export async function resetTenantAdminPassword(tenantId, body) {
   try {
     const db = getTenantPool(t);
     const [rows] = await db.execute(
-      "SELECT id, email, role FROM users WHERE email = ? AND role IN ('admin','super_admin') LIMIT 1",
+      "SELECT id, name, email, role FROM users WHERE email = ? AND role IN ('admin','super_admin') LIMIT 1",
       [email]
     );
     const admin = rows[0];
@@ -658,11 +658,25 @@ export async function resetTenantAdminPassword(tenantId, body) {
     );
 
     logger.info(`platform: admin password reset for ${email} @ ${t.slug}`);
+
+    const { sendTemporaryPassword } = await import('./mailerService.js');
+    const emailed = await sendTemporaryPassword({
+      email: admin.email, name: admin.name || admin.email, orgName: t.name,
+      slug: t.slug, password: tempPassword, reason: 'reset',
+    });
+
     return {
       success: true,
       admin_email: admin.email,
+      // Kept on screen whether or not the mail went: see the note on
+      // sendTemporaryPassword. A reset whose email silently failed would
+      // otherwise lock out the very person it was meant to help.
       temp_password: tempPassword,
-      note: 'Shown once. The admin must change it at next sign-in.',
+      password_emailed: emailed,
+      note: emailed
+        ? `Emailed to ${admin.email}. Shown once here as well. The admin must change it at next sign-in.`
+        : 'The email could not be sent — pass this on yourself. Shown once, and must be '
+          + 'changed at next sign-in.',
     };
   } catch (e) {
     if (e instanceof ApiError) throw e;
