@@ -2191,3 +2191,64 @@ test('a temporary password is emailed, and is still shown when the email cannot 
   assert.ok(signedIn.data.user.must_change_password,
     'and must force a change at first sign-in');
 });
+
+// ── Archiving a ticket ───────────────────────────────────────────────────────
+/*
+ * The bulk endpoint has only ever archived resolved and closed tickets. The
+ * single-ticket path had no such rule, so it could be walked around by doing it
+ * one at a time — and a still-open ticket archived by accident is a customer
+ * waiting for an answer that is now invisible to everybody.
+ */
+test('only a resolved ticket can be archived, one at a time or in bulk', async () => {
+  const raise = async (subject) => {
+    const res = await api('POST', '/api/support/tickets', {
+      token: AADMIN,
+      body: { subject, category: 'question', priority: 'normal',
+        body: 'Raised by the suite to exercise archiving.' },
+    });
+    assert.equal(res.data.success, true,
+      `a ticket must be raisable — server said: ${JSON.stringify(res.data)}`);
+    return res.data.ticket_id ?? res.data.id;
+  };
+
+  const openId = await raise('Still waiting on an answer');
+
+  // Open: refused, with a reason that says what to do about it.
+  let res = await api('PATCH', `/api/platform/tickets/${openId}`, {
+    token: PA, body: { archived: true },
+  });
+  assert.notEqual(res.status, 200, 'an open ticket must not be archivable');
+  assert.match(res.data.error, /resolve or close it/i);
+
+  // Resolved: allowed.
+  await api('PATCH', `/api/platform/tickets/${openId}`, { token: PA, body: { status: 'resolved' } });
+  res = await api('PATCH', `/api/platform/tickets/${openId}`, { token: PA, body: { archived: true } });
+  assert.equal(res.data.success, true, 'a resolved ticket must be archivable');
+
+  const [row] = await sql('ifqm_test_master',
+    `SELECT archived_at FROM ifqm_test_master.support_tickets WHERE id = ${openId}`);
+  assert.ok(row.archived_at, 'and must actually be marked archived');
+
+  // Restoring is never restricted — getting something back must be easier than
+  // losing it.
+  res = await api('PATCH', `/api/platform/tickets/${openId}`, { token: PA, body: { archived: false } });
+  assert.equal(res.data.success, true, 'restoring must always be allowed');
+
+  // ── Bulk ──
+  const a = await raise('Bulk one');
+  const b = await raise('Bulk two');
+  await api('PATCH', `/api/platform/tickets/${a}`, { token: PA, body: { status: 'resolved' } });
+
+  const bulk = await api('POST', '/api/platform/tickets/bulk-archive', {
+    token: PA, body: { ids: [a, b], archive: true },
+  });
+  assert.equal(bulk.data.success, true);
+  assert.equal(bulk.data.affected, 1,
+    'only the resolved one of the two may be archived — the open one is skipped, not refused');
+
+  const rows = await sql('ifqm_test_master',
+    `SELECT id, archived_at FROM ifqm_test_master.support_tickets WHERE id IN (${a}, ${b})`);
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r.archived_at]));
+  assert.ok(byId[a], 'the resolved ticket is archived');
+  assert.ok(!byId[b], 'the open one is left alone');
+});

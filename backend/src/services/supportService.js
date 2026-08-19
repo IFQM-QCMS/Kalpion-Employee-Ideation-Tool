@@ -26,6 +26,12 @@ import logger from '../utils/logger.js';
 const CATEGORIES = ['bug', 'question', 'access', 'feature', 'other'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 const STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
+/*
+ * Far enough along to be filed away. Defined once and used by both the
+ * single-ticket and the bulk path, because they are the same rule and having
+ * written it twice is how they came to disagree.
+ */
+const ARCHIVABLE_STATUSES = ['resolved', 'closed'];
 
 // Statuses a tenant may set themselves. They can withdraw a request or confirm
 // it is done; triage (in_progress/waiting/resolved) belongs to IFQM.
@@ -364,11 +370,31 @@ export async function updatePlatformTicket(id, body) {
     params.push(assignee);
   }
 
-  // MOM §12.3. Reversible on purpose — an archive that cannot be undone is a
-  // delete with a friendlier name.
+  /*
+   * MOM §12.3. Reversible on purpose — an archive that cannot be undone is a
+   * delete with a friendlier name.
+   *
+   * Archiving one ticket is held to the same rule as archiving fifty: only a
+   * ticket that has been resolved or closed may go. The bulk endpoint has
+   * enforced that since it was written; this path did not, so the rule could be
+   * walked around simply by doing it one at a time — and a still-open ticket
+   * archived by accident is a customer waiting for an answer that is now
+   * invisible to everybody.
+   *
+   * Restoring is never restricted. Getting something back must always be easier
+   * than losing it.
+   */
   if (body?.archived !== undefined) {
+    const archiving = !!body.archived;
+    if (archiving && !ARCHIVABLE_STATUSES.includes(ticket.status)) {
+      throw badRequest(
+        `This ticket is still ${ticket.status.replace('_', ' ')}. `
+        + 'Resolve or close it before archiving, so nobody is left waiting on an answer '
+        + 'that has been filed away.'
+      );
+    }
     updates.push('archived_at = ?');
-    params.push(body.archived ? new Date() : null);
+    params.push(archiving ? new Date() : null);
   }
 
   if (!updates.length) throw badRequest('Nothing to update.');
@@ -414,7 +440,10 @@ export async function bulkArchiveTickets(body = {}) {
     where.push('updated_at < ?');
     params.push(`${beforeDate} 00:00:00`);
   }
-  if (!includeOpen) where.push("status IN ('resolved','closed')");
+  if (!includeOpen) {
+    where.push(`status IN (${ARCHIVABLE_STATUSES.map(() => '?').join(',')})`);
+    params.push(...ARCHIVABLE_STATUSES);
+  }
   where.push(archive ? 'archived_at IS NULL' : 'archived_at IS NOT NULL');
 
   const [res] = await masterDb().execute(
