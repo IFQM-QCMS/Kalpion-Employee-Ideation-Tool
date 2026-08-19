@@ -365,14 +365,25 @@ export async function forgotPassword({ email, orgSlug, host }) {
   // candidate against every unexpired row in the table, which let anyone burn
   // arbitrary CPU by posting junk tokens.
   const { token, selector, verifierHash } = await makeResetToken();
-  const expiresAt = new Date(Date.now() + 3600 * 1000)
-    .toISOString()
-    .slice(0, 19)
-    .replace('T', ' ');
 
+  /*
+   * The database computes the expiry, and that is not a style preference.
+   *
+   * This used to write `new Date(Date.now() + 3600e3).toISOString()` — a UTC
+   * string — into a column that findResetToken() then compares with
+   * `expires_at > NOW()`, where NOW() is MySQL's LOCAL time. On any server
+   * running ahead of UTC the token was already in the past the moment it was
+   * written: a deployment in India (UTC+5:30) issued reset links that were
+   * five and a half hours expired on arrival, and every one of them answered
+   * "Invalid or expired reset link. Please request a new one."
+   *
+   * login_otps has always done it this way, which is exactly why one-time
+   * codes worked while reset links did not.
+   */
   await db.execute(
-    'INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [user.id, selector, verifierHash, expiresAt]
+    `INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at)
+          VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
+    [user.id, selector, verifierHash]
   );
 
   try {
@@ -413,13 +424,32 @@ export async function forgotPassword({ email, orgSlug, host }) {
  * password_reset_tokens, redeemed by the existing /auth/reset-password. One way
  * to actually set a password, two ways to earn the right to.
  */
+/**
+ * Enough of an address or number to recognise, not enough to learn.
+ *
+ * Only ever returned to somebody who has just proved they know a valid
+ * identifier for the account, and only far enough for them to know which of
+ * their own devices to look at.
+ */
+function maskDestination(value) {
+  const v = String(value || '').trim();
+  if (!v) return '';
+  if (v.includes('@')) {
+    const [local, domain] = v.split('@');
+    const head = local.slice(0, 2);
+    return `${head}${'*'.repeat(Math.max(1, local.length - 2))}@${domain}`;
+  }
+  const digits = v.replace(/\D/g, '');
+  return digits.length > 4 ? `••••••${digits.slice(-4)}` : v;
+}
+
 export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
   const generic = {
     success: true,
     message: 'If that is registered with us, a code has been sent to it.',
   };
-  const { key, channel } = verification.classify(identifier);
-  if (!key) throw badRequest('Enter your registered email address or mobile number.');
+  const { key, idType } = verification.classify(identifier);
+  if (!key) throw badRequest('Enter your username, registered email address or mobile number.');
 
   // Same anti-enumeration rule as forgotPassword: an unknown identifier gets
   // the identical answer, so this cannot be used to test who has an account.
@@ -429,27 +459,63 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
   let user = null;
   try {
     const db = getTenantPool(tenant);
-    const [[u] = []] = channel === 'email'
-      ? await db.execute("SELECT id, name, email FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1", [key])
-      : await db.execute(
-        "SELECT id, name, email FROM users WHERE status = 'active' "
-        + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1", [`%${key}`]
-      );
+    let sql;
+    if (idType === 'email') {
+      sql = "SELECT id, name, email, phone FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1";
+    } else if (idType === 'username') {
+      sql = "SELECT id, name, email, phone FROM users WHERE LOWER(username) = ? AND status = 'active' LIMIT 1";
+    } else {
+      sql = "SELECT id, name, email, phone FROM users WHERE status = 'active' "
+        + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ?";
+    }
+    const [[u] = []] = await db.execute(sql, [idType === 'phone' ? `%${key}` : key]);
     user = u || null;
   } catch (e) {
     logger.warn('auth: reset-code lookup failed', e.message);
   }
   if (!user) return generic;
 
+  /*
+   * Where the code actually goes.
+   *
+   * An address or a number IS a destination, so it is used as typed. A username
+   * is not — it names the account and nothing more — so the code goes to the
+   * mobile number on the account, falling back to the address. The number is
+   * preferred because it is the field every account is required to have, and
+   * because somebody resetting a password is frequently locked out of the very
+   * mailbox an email would go to.
+   *
+   * The verification row is keyed on THAT destination rather than on what was
+   * typed, because verifyCode() looks the code up by identifier — key it on the
+   * username and the code that arrives by SMS could never be redeemed.
+   */
+  let destination = key;
+  if (idType === 'username') {
+    const phone = String(user.phone || '').trim();
+    const email = String(user.email || '').trim().toLowerCase();
+    destination = phone || email;
+    if (!destination) {
+      // No address and no number: nothing can be sent. Answered generically so
+      // this cannot be used to discover which accounts are unreachable.
+      logger.warn(`auth: reset by username "${key}" has no email or phone on the account`);
+      return generic;
+    }
+  }
+
   await verification.sendCode({
-    identifier: key,
+    identifier: destination,
     purpose: 'password_reset',
     name: user.name,
     tenantSlug: tenant.slug,
     userId: user.id,
     ip: meta.ip,
   });
-  return generic;
+  /*
+   * The destination is echoed back — masked — because the caller typed a
+   * username and has no way of knowing where the code went. "We sent a code"
+   * with no hint of where is how somebody sits waiting on the wrong device.
+   */
+  return { ...generic, sent_to: maskDestination(destination) };
 }
 
 /**
@@ -474,10 +540,12 @@ export async function verifyPasswordResetCode({ identifier, code } = {}) {
 
   await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
   const { token, selector, verifierHash } = await makeResetToken();
-  const expiresAt = new Date(Date.now() + 900 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+  // Same clock as the row it is compared against — see the note in
+  // forgotPassword. Fifteen minutes, not the hour a link gets.
   await db.execute(
-    'INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [user.id, selector, verifierHash, expiresAt]
+    `INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at)
+          VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE))`,
+    [user.id, selector, verifierHash]
   );
 
   logger.info(`auth: reset code accepted for user ${user.id} @ ${tenant.slug}`);

@@ -2321,3 +2321,151 @@ test('the closure PDF grows with the approval chain it has to show', async () =>
   assert.ok(full.text.length > bareSize,
     `the chain must actually be drawn — ${full.text.length} vs ${bareSize} bytes`);
 });
+
+// ── A password can be reset by username, phone or email ─────────────────────
+/*
+ * The code route existed on the server and nothing ever called it: the forgot
+ * dialog validated an email regex and refused everything else. Once accounts
+ * stopped requiring an email that was no longer an inconvenience — somebody
+ * with a username and a mobile number and no address had no way to reset a
+ * password at all.
+ */
+test('a reset code can be requested by username or phone, and goes somewhere reachable', async () => {
+  const auth = await import('../src/services/authService.js');
+  const verification = await import('../src/services/verificationService.js');
+
+  // classify() has to know the third identifier, or the reset path rejects it
+  // before it ever looks anybody up.
+  assert.equal(verification.classify('yashas123').idType, 'username');
+  assert.equal(verification.classify('yashas123').channel, '',
+    'a username is not a destination, so it carries no channel');
+  assert.equal(verification.classify('user@orga.test').idType, 'email');
+  assert.equal(verification.classify('+919812345691').idType, 'phone');
+
+  /*
+   * yashas123 was created earlier with a mobile number and NO email address.
+   * That is exactly the account the old dialog could not serve.
+   */
+  const byUsername = await auth.requestPasswordResetCode({ identifier: 'yashas123' });
+  assert.equal(byUsername.success, true);
+  assert.ok(byUsername.sent_to,
+    'a username reset must say where the code went — the caller cannot otherwise know');
+  assert.match(byUsername.sent_to, /5691$/,
+    `it must go to the number on that account, got ${byUsername.sent_to}`);
+
+  // The code must be redeemable against the DESTINATION, not the username —
+  // keying the row on what was typed would issue a code nobody could use.
+  const [row] = await sql('ifqm_test_master',
+    `SELECT identifier, purpose, user_id FROM ifqm_test_master.login_otps
+      WHERE purpose = 'password_reset' ORDER BY id DESC LIMIT 1`);
+  assert.ok(row, 'a reset code row must exist');
+  assert.notEqual(row.identifier, 'yashas123',
+    'the row must be keyed on where the code was sent, not on the username typed');
+  assert.ok(row.user_id, 'and must be bound to the account it will reset');
+
+  // An unknown identifier is answered identically — this must not become a way
+  // to discover which usernames exist.
+  const unknown = await auth.requestPasswordResetCode({ identifier: 'nobody.here' });
+  assert.equal(unknown.success, true);
+  assert.ok(!unknown.sent_to, 'an unknown identifier must not report a destination');
+
+  // Nonsense is refused outright rather than answered generically: there is
+  // nothing to protect, and the person has simply mistyped.
+  await assert.rejects(() => auth.requestPasswordResetCode({ identifier: '  ' }),
+    /username, registered email address or mobile number/i);
+});
+
+/*
+ * The code has to be redeemable end to end, or the dialog is telling somebody
+ * to type it into a box that leads nowhere. This walks the whole SMS route:
+ * ask by username, read the code the log provider issued, exchange it for a
+ * token, set a new password, sign in with it.
+ */
+test('a code sent to a username holder resets the password end to end', async () => {
+  const auth = await import('../src/services/authService.js');
+
+  /*
+   * The previous case already asked for a code for this account, and the resend
+   * throttle is real — sixty seconds. Cleared here rather than waited out or
+   * turned off globally: the throttle is behaviour worth keeping in force for
+   * every other case in this file.
+   */
+  await sql('ifqm_test_master',
+    "DELETE FROM ifqm_test_master.login_otps WHERE purpose = 'password_reset'");
+
+  const asked = await auth.requestPasswordResetCode({ identifier: 'yashas123' });
+  assert.equal(asked.success, true);
+
+  // The suite runs the mock SMS provider, so the code never leaves the machine.
+  // It is read back from the row it was written to, hashed — which is why the
+  // plaintext has to come from the provider's own record instead.
+  const [row] = await sql('ifqm_test_master',
+    `SELECT id, identifier, code_hash, user_id FROM ifqm_test_master.login_otps
+      WHERE purpose = 'password_reset' ORDER BY id DESC LIMIT 1`);
+  assert.ok(row && row.user_id, 'the code must be bound to the account');
+
+  /*
+   * Codes are bcrypt-hashed on purpose, so the test cannot read one back. It
+   * plants a known code instead — the same shape the service issues — which
+   * exercises verifyPasswordResetCode, the token it mints and the reset that
+   * redeems it, without weakening how codes are stored.
+   */
+  const bcrypt = (await import('bcryptjs')).default;
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.login_otps SET code_hash = ?, attempts = 0,
+            expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?`,
+    [await bcrypt.hash('424242', 4), row.id]);
+
+  const verified = await auth.verifyPasswordResetCode({
+    identifier: row.identifier, code: '424242',
+  });
+  assert.equal(verified.success, true, 'a correct code must be accepted');
+  assert.ok(verified.token, 'and must hand back the same kind of token the emailed link carries');
+  assert.ok(verified.org_slug, 'plus the org, so the reset page knows which database to open');
+
+  const reset = await api('POST', '/api/auth/reset-password', {
+    body: { token: verified.token, org_slug: verified.org_slug, password: 'BrandNewPass456' },
+  });
+  assert.equal(reset.data.success, true,
+    `the token must set a new password — server said: ${JSON.stringify(reset.data)}`);
+
+  // And the whole point: the person can now get in, by the username they
+  // started from.
+  const signedIn = await api('POST', '/api/auth/login', {
+    body: { email: 'yashas123', password: 'BrandNewPass456' },
+  });
+  assert.equal(signedIn.status, 200, 'the new password must work with the username');
+});
+
+/*
+ * The emailed reset link, which is the path a customer actually hits.
+ *
+ * password_reset_tokens.expires_at used to be written from Node as a UTC
+ * string, then compared by findResetToken() with `expires_at > NOW()` — MySQL's
+ * LOCAL clock. On any server running ahead of UTC the token was in the past
+ * before the email had been sent: a deployment in India issued reset links that
+ * were five and a half hours expired on arrival, and every one answered
+ * "Invalid or expired reset link."
+ *
+ * Asserted against the database's own clock rather than JavaScript's, because
+ * the disagreement between those two clocks IS the bug. Comparing in JS would
+ * have passed throughout.
+ */
+test('a reset token is still valid by the database clock that judges it', async () => {
+  await sql('ifqm_test_a', 'DELETE FROM ifqm_test_a.password_reset_tokens');
+
+  const asked = await api('POST', '/api/auth/forgot-password', {
+    body: { email: 'user@orga.test', org_slug: 'orga' },
+  });
+  assert.equal(asked.data.success, true, 'the request is answered generically either way');
+
+  const [row] = await sql('ifqm_test_a',
+    `SELECT expires_at > NOW() AS still_valid,
+            TIMESTAMPDIFF(MINUTE, NOW(), expires_at) AS minutes_left
+       FROM ifqm_test_a.password_reset_tokens ORDER BY id DESC LIMIT 1`);
+  assert.ok(row, 'a reset token must have been written');
+  assert.equal(Number(row.still_valid), 1,
+    `the token must not be born expired — ${row.minutes_left} minute(s) left by MySQL's clock`);
+  assert.ok(Number(row.minutes_left) > 50 && Number(row.minutes_left) <= 60,
+    `an emailed link lasts an hour, got ${row.minutes_left} minutes`);
+});

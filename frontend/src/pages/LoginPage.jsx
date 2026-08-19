@@ -202,6 +202,14 @@ export default function LoginPage() {
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotErr, setForgotErr] = useState('');
   const [forgotDone, setForgotDone] = useState(false);
+  // Which of the two routes the request took, and — for the code route — the
+  // masked destination the server reported.
+  const [forgotVia, setForgotVia] = useState('link');
+  const [forgotSentTo, setForgotSentTo] = useState('');
+  // The code step. Only reached on the SMS route; the emailed link finishes in
+  // the mailbox instead.
+  const [forgotCode, setForgotCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
 
   /*
    * MOM §4.1 / §4.2 — sign in with a one-time code.
@@ -311,28 +319,83 @@ export default function LoginPage() {
     e?.preventDefault();
     setForgotErr('');
     setForgotDone(false);
-    // Seed it with whatever was already typed above, when that looks like an
-    // address — the common case is somebody who typed their email, then found
-    // they could not remember the password.
-    setForgotEmail(email.includes('@') ? email.trim() : '');
+    // Seed it with whatever was already typed above, whatever kind of
+    // identifier that is. The common case is somebody who typed who they are,
+    // then found they could not remember the password — and since sign-in
+    // accepts a username or a number, so must this.
+    setForgotEmail(email.trim());
     setForgotOpen(true);
+  }
+
+  /*
+   * Exchange the code for a reset token, then finish on /reset-password — the
+   * same page the emailed link lands on.
+   *
+   * Deliberately NOT a second password form built into this dialog. Both routes
+   * end in the same place for the same reason the server does it that way: one
+   * way to actually set a password, two ways to earn the right to. A second
+   * form would be a second set of strength rules to keep in step.
+   */
+  async function submitForgotCode(e) {
+    e?.preventDefault();
+    const code = forgotCode.trim();
+    if (!code) return;
+    setForgotErr('');
+    setCodeBusy(true);
+    try {
+      const res = await authApi.resetCodeVerify(forgotEmail.trim(), code);
+      if (res.data?.success && res.data.token) {
+        const q = new URLSearchParams({ token: res.data.token });
+        if (res.data.org_slug) q.set('org', res.data.org_slug);
+        navigate(`/reset-password?${q.toString()}`);
+      } else {
+        setForgotErr(res.data?.error || t('login.request_failed'));
+      }
+    } catch (err) {
+      setForgotErr(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setCodeBusy(false);
   }
 
   async function submitForgot(e) {
     e?.preventDefault();
-    const addr = forgotEmail.trim();
-    // Checked here as well as by the browser, because the field is inside a
-    // dialog that can be submitted by Enter before validation has run.
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-      setForgotErr(t('login.forgot_invalid'));
-      return;
-    }
+    /*
+     * Two ways to earn a reset, chosen by what was typed.
+     *
+     * An address gets the emailed link, unchanged — it lands in a mailbox,
+     * survives being opened on another device, and is the better experience at
+     * a desk.
+     *
+     * A mobile number or a username gets a CODE. That route has existed on the
+     * server since it was written and nothing ever called it: this dialog
+     * validated an email regex and refused everything else, so the very people
+     * it was built for — somebody locked out of the mailbox a link would go to,
+     * somebody with no work address at all — had no way to reset a password.
+     * Once accounts stopped requiring an email that was not an inconvenience
+     * but a dead end.
+     */
+    const id = forgotEmail.trim();
+    if (!id) { setForgotErr(t('login.forgot_invalid')); return; }
+    const isEmailAddr = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
+
     setForgotErr('');
     setForgotBusy(true);
     try {
-      const res = await authApi.forgotPassword({ email: addr, org_slug: orgSlug });
-      if (res.data?.success) setForgotDone(true);
-      else setForgotErr(res.data?.error || t('login.request_failed'));
+      if (isEmailAddr) {
+        const res = await authApi.forgotPassword({ email: id, org_slug: orgSlug });
+        if (res.data?.success) { setForgotVia('link'); setForgotDone(true); }
+        else setForgotErr(res.data?.error || t('login.request_failed'));
+      } else {
+        const res = await authApi.resetCodeRequest(id);
+        if (res.data?.success) {
+          // The server masks where it went. Somebody who typed a username has
+          // no other way of knowing, and "a code has been sent" with no hint of
+          // where is how a person sits waiting on the wrong device.
+          setForgotSentTo(res.data.sent_to || '');
+          setForgotVia('code');
+          setForgotDone(true);
+        } else setForgotErr(res.data?.error || t('login.request_failed'));
+      }
     } catch (err) {
       setForgotErr(err?.response?.data?.error || t('msg.network_error'));
     }
@@ -595,12 +658,47 @@ export default function LoginPage() {
 
             {forgotDone ? (
               <>
-                <div className="ok">{t('login.reset_sent')}</div>
-                <div className="acts" style={{ marginTop: 16 }}>
-                  <button type="button" className="go" onClick={() => setForgotOpen(false)}>
-                    {t('btn.close')}
-                  </button>
+                <div className="ok">
+                  {forgotVia === 'code'
+                    ? (forgotSentTo
+                      ? t('login.reset_code_sent_to', { where: forgotSentTo })
+                      : t('login.reset_code_sent'))
+                    : t('login.reset_sent')}
                 </div>
+
+                {/* The emailed link is finished in the mailbox. A code is
+                    finished here, or the message would be telling somebody to
+                    type it into a box that does not exist. */}
+                {forgotVia === 'code' ? (
+                  <form onSubmit={submitForgotCode}>
+                    <div className="fld" style={{ marginTop: 14 }}>
+                      <input
+                        type="text" inputMode="numeric" autoComplete="one-time-code"
+                        value={forgotCode} autoFocus disabled={codeBusy}
+                        placeholder={t('login.otp_code_ph')}
+                        style={{ letterSpacing: '4px', fontWeight: 700 }}
+                        onChange={(ev) => { setForgotCode(ev.target.value); setForgotErr(''); }}
+                        aria-label={t('login.otp_code_ph')}
+                      />
+                    </div>
+                    {forgotErr && <div className="err">{forgotErr}</div>}
+                    <div className="acts" style={{ marginTop: 16 }}>
+                      <button type="button" className="ghost" disabled={codeBusy}
+                        onClick={() => setForgotOpen(false)}>
+                        {t('btn.cancel')}
+                      </button>
+                      <button type="submit" className="go" disabled={codeBusy || !forgotCode.trim()}>
+                        {codeBusy ? t('login.signing_in') : t('login.otp_verify')}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="acts" style={{ marginTop: 16 }}>
+                    <button type="button" className="go" onClick={() => setForgotOpen(false)}>
+                      {t('btn.close')}
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -608,11 +706,14 @@ export default function LoginPage() {
                 <form onSubmit={submitForgot}>
                   <div className="fld">
                     <span className="ic"><MailIcon /></span>
+                    {/* type="text", not "email". A browser refuses to submit a
+                        phone number or a username from an email field, which is
+                        what shut the code route out of this dialog. */}
                     <input
-                      type="email" value={forgotEmail} autoFocus autoComplete="email"
-                      placeholder={t('login.email_ph')} disabled={forgotBusy}
+                      type="text" value={forgotEmail} autoFocus autoComplete="username"
+                      placeholder={t('login.identifier_ph')} disabled={forgotBusy}
                       onChange={(ev) => { setForgotEmail(ev.target.value); setForgotErr(''); }}
-                      aria-label={t('login.prompt_email')}
+                      aria-label={t('login.identifier')}
                     />
                   </div>
                   {forgotErr && <div className="err">{forgotErr}</div>}

@@ -26,7 +26,7 @@ import crypto from 'node:crypto';
 import config from '../config/index.js';
 import { masterDb } from '../database/master.js';
 import { policy } from './otpService.js';
-import { isEmail, normalizePhone } from './directoryService.js';
+import { isEmail, normalizePhone, normalizeUsername } from './directoryService.js';
 import { sendViaPlatform, platformMailReady } from './mailerService.js';
 import { sendSms, messageFor, smsReady, maskPhone } from './smsService.js';
 import { badRequest, tooMany, unauthorized, ApiError } from '../utils/respond.js';
@@ -87,6 +87,15 @@ export function classify(raw) {
   if (isEmail(s)) return { key: s.toLowerCase(), idType: 'email', channel: 'email' };
   const phone = normalizePhone(s);
   if (phone) return { key: phone, idType: 'phone', channel: 'sms' };
+  /*
+   * A username identifies the account but is not somewhere a code can be sent,
+   * so it carries no channel — the caller has to look the person up and decide
+   * where to send it. Callers that only ever deliver to the identifier itself
+   * (registration, confirming a number) still see an empty channel and refuse,
+   * which is correct: you cannot verify a username by sending it a code.
+   */
+  const username = normalizeUsername(s);
+  if (username) return { key: username, idType: 'username', channel: '' };
   return { key: '', idType: '', channel: '' };
 }
 
