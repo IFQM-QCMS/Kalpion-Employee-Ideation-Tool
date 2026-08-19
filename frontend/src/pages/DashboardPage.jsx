@@ -57,8 +57,51 @@ export default function DashboardPage() {
   const maxCount = Math.max(...Object.values(counts), 1);
   const isReviewer = isPrivileged(user?.role);
 
+  /*
+   * Time of day from the browser, not the server. The server runs in UTC on a
+   * host in another country; greeting somebody "good evening" over their
+   * morning tea is the kind of small wrongness that makes software feel like it
+   * was built for somebody else.
+   */
+  const hour = new Date().getHours();
+  const greetKey = hour < 12 ? 'dash.greet_morning'
+    : hour < 17 ? 'dash.greet_afternoon'
+    : 'dash.greet_evening';
+  const firstName = String(user?.name || '').trim().split(/\s+/)[0];
+
   return (
     <>
+      {/*
+        The page used to open on a wall of counters. A dashboard's first job is
+        to tell somebody what to do next, and for almost everybody here that is
+        "raise the thing you came to raise" — so the action is at the top, in
+        front of the numbers, rather than behind a sidebar link.
+      */}
+      <div style={{ display:'flex',alignItems:'flex-end',justifyContent:'space-between',
+        gap:16,flexWrap:'wrap',marginBottom:18 }}>
+        <div>
+          <h1 style={{ fontSize:22,fontWeight:800,color:'var(--heading)',margin:0,
+            letterSpacing:'-.4px' }}>
+            {t(greetKey, { name: firstName })}
+          </h1>
+          <div style={{ fontSize:13,color:'var(--subtle)',marginTop:4 }}>
+            {isReviewer && data.pending_reviews > 0
+              ? t('dash.sub_reviewer', { n: data.pending_reviews })
+              : t('dash.sub_employee')}
+          </div>
+        </div>
+        <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+          {isReviewer && data.pending_reviews > 0 && (
+            <button className="btn btn-outline btn-sm" onClick={() => navigate('/review')}>
+              {t('dash.go_review', { n: data.pending_reviews })}
+            </button>
+          )}
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/submit')}>
+            {t('dash.go_submit')}
+          </button>
+        </div>
+      </div>
+
       {/* KPI Grid */}
       <div className="kpi-grid" id="dash-kpis">
         <div className="kpi-card">
@@ -131,11 +174,16 @@ export default function DashboardPage() {
       </div>
 
       {/* Status Distribution Bar Chart */}
-      <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:20 }}>
+      {/* auto-fit rather than 1fr 1fr: on a narrow screen the two panels stack
+          instead of being squeezed into unreadable halves. */}
+      <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',
+        gap:20,marginTop:20 }}>
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.status_dist')}</div>
-            <span style={{ fontSize: 11, color: 'var(--subtle)', fontWeight: 600 }}>Total: {data.total || 0}</span>
+            <span style={{ fontSize: 11, color: 'var(--subtle)', fontWeight: 600 }}>
+              {t('dash.total_n', { n: data.total || 0 })}
+            </span>
           </div>
           <div className="bar-chart" id="dash-status-chart">
             {Object.entries(counts).map(([s, c]) => (
@@ -154,7 +202,9 @@ export default function DashboardPage() {
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
             <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.recent_activity')}</div>
-            <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700 }}>Recent Updates</span>
+            <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700 }}>
+              {t('dash.recent_tag')}
+            </span>
           </div>
           <div id="dash-activity">
             {!data.recent?.length
