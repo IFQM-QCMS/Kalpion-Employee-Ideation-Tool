@@ -42,3 +42,6 @@ backend/backups/
 ~$*.docx
 # Vite writes this while resolving its config; regenerated every run
 frontend/vite.config.js.timestamp-*.mjs
+
+# Slide PNGs exported from PowerPoint to eyeball a build — regenerated on demand
+Customer Presentation/preview/
