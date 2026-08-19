@@ -23,6 +23,7 @@ import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
 import { masterDb } from '../database/master.js';
+import config from '../config/index.js';
 import { getTenantPool } from '../database/tenant.js';
 import { badRequest, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
@@ -71,6 +72,19 @@ const DEFAULTS_WHITELIST = [
   // Request allowances: whether the plan's limit is enforced, how far over is
   // tolerated, and where the warning starts.
   'quota_enforce', 'quota_grace_percent', 'quota_warn_percent',
+  /*
+   * The attachment ceiling every organisation is bounded by.
+   *
+   * Deliberately named apart from the tenant's own `max_file_mb`: the two live
+   * in different tables and mean different things — this is the most any
+   * organisation may be allowed, that is what one organisation has chosen for
+   * itself — and one name for both would be read as one setting.
+   *
+   * It is NOT in NEW_TENANT_KEYS. A platform ceiling copied into a customer's
+   * own settings would become a number they could edit, which is the opposite
+   * of a ceiling.
+   */
+  'platform_max_file_mb',
 ];
 
 /**
@@ -112,6 +126,16 @@ function normaliseSetting(key, rawValue) {
     )];
     if (!stages.length) return null;
     return ['originator', ...stages].join(',');
+  }
+  /*
+   * Bounded by MAX_FILE_MB from the environment, which stays the hard limit.
+   * The console decides policy; the server decides what it will physically
+   * accept, and a console that could raise the figure past multer's own limit
+   * would be promising uploads that fail at the door.
+   */
+  if (key === 'platform_max_file_mb') {
+    const n = parseInt(value, 10);
+    return String(Math.max(1, Math.min(config.maxFileMb, Number.isFinite(n) ? n : config.maxFileMb)));
   }
   if (key === 'review_sla_days' || key === 'escalation_days') {
     return String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));
@@ -158,6 +182,19 @@ export async function getPlatformSetting(key) {
     // A missing settings table must not take down whatever asked.
     return null;
   }
+}
+
+/**
+ * The largest attachment any organisation may permit, in MB.
+ *
+ * Falls back to the environment when unset or unreadable, and is clamped by it
+ * in every case — see the note on the normaliser above.
+ */
+export async function platformFileCeilingMb() {
+  const raw = await getPlatformSetting('platform_max_file_mb');
+  const n = parseInt(raw, 10);
+  const wanted = Number.isFinite(n) && n > 0 ? n : config.maxFileMb;
+  return Math.max(1, Math.min(config.maxFileMb, wanted));
 }
 
 // ── 1. New-tenant defaults ─────────────────────────────────────────

@@ -141,6 +141,18 @@ function DefaultsTab() {
         <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('ps.default_chain_hint')}</div>
       </div>
 
+      {/* The attachment ceiling every organisation is bounded by. An org admin
+          can go lower for their own people; nobody can go above this. It used
+          to be an environment variable, so raising it for one customer meant a
+          redeploy. */}
+      <div className="form-group" style={{ maxWidth: 280 }}>
+        <label>{t('ps.max_file_mb')}</label>
+        <input className="form-control" type="number" min="1" max="200"
+          value={d.platform_max_file_mb || ''}
+          onChange={(e) => set('platform_max_file_mb', e.target.value)} />
+        <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('ps.max_file_mb_hint')}</div>
+      </div>
+
       <button className="btn btn-primary" disabled={busy} onClick={save}>{t('admin.save_settings')}</button>
     </div>
   );

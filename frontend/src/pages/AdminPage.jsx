@@ -67,6 +67,9 @@ export default function AdminPage() {
   const [userMeta,    setUserMeta]    = useState({ total: 0, pages: 1 });
   const [managers,    setManagers]    = useState([]);
   const [settings,    setSettings]    = useState(null);
+  // The platform-wide attachment ceiling, sent with the settings. Defaults to
+  // the old hard-coded bound until the first response arrives.
+  const [fileCeiling, setFileCeiling] = useState(50);
   const [loading,     setLoading]     = useState(false);
   const [openIdeaId,  setOpenIdeaId]  = useState(null);
   const [showUserForm,setShowUserForm]= useState(false);
@@ -144,6 +147,10 @@ export default function AdminPage() {
       if (res.data.success) {
         const cfg = res.data.settings;
         setSettings(cfg);
+        // The bound the server will actually clamp to, set by IFQM in the
+        // platform console. Hard-coding max="50" here made the field promise a
+        // number the server would quietly trim.
+        if (res.data.platform_max_file_mb) setFileCeiling(res.data.platform_max_file_mb);
         // An absent key means the built-in default; a stored empty string means
         // the admin deliberately chose "title only". The two are not the same.
         const raw = cfg.employee_visible_sections;
@@ -502,9 +509,11 @@ export default function AdminPage() {
             <div className="form-row">
               <div className="form-group">
                 <label>{t('admin.max_file_mb')}<InfoDot term="max_file_mb" /></label>
-                <input className="form-control" name="max_file_mb" type="number" min="1" max="50"
+                <input className="form-control" name="max_file_mb" type="number" min="1" max={fileCeiling}
                   defaultValue={settings.max_file_mb || 10} />
-                <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.max_file_hint')}</div>
+                <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
+                  {t('admin.max_file_ceiling', { n: fileCeiling })}
+                </div>
               </div>
               <div className="form-group">
                 <label>{t('admin.situation_preview')}<InfoDot term="situation_preview" /></label>

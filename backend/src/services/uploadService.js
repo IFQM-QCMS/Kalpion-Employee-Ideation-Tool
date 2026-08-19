@@ -22,6 +22,7 @@ import config from '../config/index.js';
 import { badRequest, forbidden, ApiError } from '../utils/respond.js';
 import { masterDb } from '../database/master.js';
 import { getOrgSettings } from './mailerService.js';
+import { platformFileCeilingMb } from './platformSettingsService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_BASE = path.join(__dirname, '..', '..', 'uploads');
@@ -100,7 +101,11 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
    * tenant value is clamped rather than trusted.
    */
   const settings = await getOrgSettings(db);
-  const orgMb = Math.max(1, Math.min(config.maxFileMb, parseInt(settings.max_file_mb, 10) || config.maxFileMb));
+  // The ceiling is the platform admin's, not the environment's — see
+  // platformFileCeilingMb(). Clamped here as well as on save, because a value
+  // stored before the ceiling was lowered must not go on being honoured.
+  const ceiling = await platformFileCeilingMb();
+  const orgMb = Math.max(1, Math.min(ceiling, parseInt(settings.max_file_mb, 10) || ceiling));
   const maxBytes = orgMb * 1024 * 1024;
   if (file.size > maxBytes) throw badRequest(`File exceeds this organisation's ${orgMb} MB limit.`);
 

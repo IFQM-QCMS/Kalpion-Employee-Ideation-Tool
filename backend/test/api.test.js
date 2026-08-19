@@ -2043,3 +2043,55 @@ test('the exception list is platform-admin only', async () => {
   assert.ok(anon.status === 401 || anon.status === 403,
     `and must not be addable anonymously — got ${anon.status}`);
 });
+
+// ── The attachment ceiling belongs to IFQM, not the environment ──────────────
+/*
+ * The largest attachment any organisation could allow was MAX_FILE_MB, an
+ * environment variable, so raising it for one customer meant a redeploy.
+ * It is now a platform setting an org admin is bounded by and cannot exceed.
+ */
+test('an organisation may lower the attachment limit but never raise it past the platform ceiling', async () => {
+  const setCeiling = async (mb) => {
+    const res = await api('PUT', '/api/platform/settings/defaults', {
+      token: PA, body: { platform_max_file_mb: String(mb) },
+    });
+    assert.equal(res.data.success, true,
+      `the console must accept a ceiling — server said: ${JSON.stringify(res.data)}`);
+  };
+
+  await setCeiling(25);
+
+  // The org admin sees the bound their field is actually clamped to. Without
+  // this the form advertises one number while the server enforces another.
+  let seen = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(Number(seen.data.platform_max_file_mb), 25,
+    'the ceiling must travel with the org settings');
+
+  // Lower is theirs to choose.
+  await api('POST', '/api/settings', { token: AADMIN, body: { max_file_mb: '8' } });
+  seen = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(seen.data.settings.max_file_mb, '8', 'an organisation may set a smaller limit');
+
+  // Higher is not. Trimmed to the ceiling rather than refused, so an admin who
+  // types an optimistic number still ends up with a working setting.
+  await api('POST', '/api/settings', { token: AADMIN, body: { max_file_mb: '999' } });
+  seen = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(seen.data.settings.max_file_mb, '25',
+    'a value above the ceiling must be trimmed to it');
+
+  /*
+   * Lowering the ceiling afterwards must bind an already-stored value too. The
+   * clamp on save alone would leave yesterday's 25 being honoured today.
+   */
+  await setCeiling(5);
+  seen = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(Number(seen.data.platform_max_file_mb), 5);
+
+  // And the console itself cannot exceed what the server will accept.
+  await setCeiling(100000);
+  const capped = await api('GET', '/api/settings', { token: AADMIN });
+  assert.ok(Number(capped.data.platform_max_file_mb) <= 50,
+    `the console must stay within MAX_FILE_MB, got ${capped.data.platform_max_file_mb}`);
+
+  await setCeiling(10);   // leave it as the other cases expect
+});

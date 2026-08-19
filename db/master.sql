@@ -488,7 +488,11 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   -- workspace fully offline.
   ('quota_enforce',        '1'),
   ('quota_grace_percent',  '20'),
-  ('quota_warn_percent',   '80');
+  ('quota_warn_percent',   '80'),
+  -- The attachment ceiling every organisation is bounded by (migration 028).
+  -- Named apart from the tenant's own max_file_mb: this is the most any
+  -- organisation may be allowed, that is what one has chosen for itself.
+  ('platform_max_file_mb', '10');
 
 -- ── SMS / DLT delivery (migration 019) ──────────────────────────────────────
 -- Migration 012 built one-time-code sign-in and seeded its policy, but nothing

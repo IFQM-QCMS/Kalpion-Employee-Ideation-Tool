@@ -12,9 +12,17 @@ import {
 import { badRequest, ApiError } from '../utils/respond.js';
 import config from '../config/index.js';
 import { IDEA_SECTIONS } from './ideaSections.js';
+import { platformFileCeilingMb } from './platformSettingsService.js';
 
-/** The ceiling no organisation may exceed, from the server environment. */
-const PLATFORM_MAX_FILE_MB = config.maxFileMb;
+/*
+ * The ceiling no organisation may exceed.
+ *
+ * It used to be `config.maxFileMb` and nothing else, so raising it for one
+ * customer meant an environment variable and a redeploy. It is now whatever a
+ * platform admin has set in the console, still bounded by the environment —
+ * the console decides policy, the server decides what it will physically
+ * accept.
+ */
 
 const SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
@@ -88,7 +96,13 @@ export async function getSettings(db, user) {
     settings.smtp_pass_set = false;
   }
 
-  return { success: true, settings };
+  /*
+   * The ceiling travels with the settings so the org admin's field can show the
+   * bound it is actually clamped to. Without it the form advertises max="50"
+   * from a hard-coded attribute while the server silently trims to whatever the
+   * platform allows — the classic case of a screen and a rule disagreeing.
+   */
+  return { success: true, settings, platform_max_file_mb: await platformFileCeilingMb() };
 }
 
 // ── UPDATE whitelisted settings ────────────────────────────────────
@@ -124,7 +138,8 @@ export async function updateSettings(db, body) {
     // Bounded by the platform maximum: an organisation may lower its own limit
     // but not raise it past what the server is willing to accept.
     if (key === 'max_file_mb') {
-      value = String(Math.max(1, Math.min(PLATFORM_MAX_FILE_MB, parseInt(value, 10) || 10)));
+      const ceiling = await platformFileCeilingMb();
+      value = String(Math.max(1, Math.min(ceiling, parseInt(value, 10) || 10)));
     }
     if (key === 'situation_preview_chars') {
       value = String(Math.max(60, Math.min(600, parseInt(value, 10) || 180)));

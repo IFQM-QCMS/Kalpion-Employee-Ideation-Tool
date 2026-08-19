@@ -22,6 +22,15 @@ process.env.AUTH_RATE_LIMIT = '10000';        // per-IP limiter must not throttl
 // itself exercised deliberately), but leaving it in force here would 429 the
 // concurrency and throughput cases and mask what they are actually measuring.
 process.env.GLOBAL_RATE_LIMIT = '1000000';
+/*
+ * The hard attachment ceiling, pinned rather than inherited.
+ *
+ * The platform ceiling a console admin sets is clamped by this, so leaving it
+ * to whatever the developer happens to have in .env would make the upload-limit
+ * case pass or fail depending on the machine — and it would pass for the wrong
+ * reason on a machine where the two numbers happened to coincide.
+ */
+process.env.MAX_FILE_MB = '50';
 
 /*
  * ── Nothing may leave this machine during a test run ───────────────────────
