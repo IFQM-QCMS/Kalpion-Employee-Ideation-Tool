@@ -333,6 +333,10 @@ async function downloadBlob(path, filename) {
 }
 
 export const exportApi = {
+  // The product manual. Authenticated, so it cannot be a plain <a href> — it
+  // goes through the same blob download as every other export here.
+  userGuide: () => downloadBlob('/export/user-guide',
+    'IFQM-Employee-Ideation-Tool-User-Guide.pdf'),
   ideasCsv: () => downloadBlob('/export/ideas', 'ideas.csv'),
   leaderboardCsv: () => downloadBlob('/export/leaderboard', 'leaderboard.csv'),
   analyticsHtml: () => downloadBlob('/export/analytics', 'analytics.html'),

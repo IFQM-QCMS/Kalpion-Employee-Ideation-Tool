@@ -67,4 +67,44 @@ export const ideaPdf = asyncHandler(async (req, res) => {
   else buildIdeaGistPdf(idea, res, req.user);
 });
 
-export default { ideas, leaderboard, analytics, ideaPdf };
+/**
+ * GET /api/export/user-guide — the product manual, as a PDF.
+ *
+ * The guide has existed in docs/ since it was written and nothing in the
+ * product pointed at it, so the only people who ever saw it were the ones sent
+ * a copy by hand.
+ *
+ * Behind requireAuth like every other export. It documents screens that only a
+ * signed-in person can reach, and there is no reason to serve it to the open
+ * internet — but it is not tenant data either, so any authenticated role may
+ * have it.
+ *
+ * Streamed from disk rather than read into memory: it is a few megabytes and
+ * several people may ask at once.
+ */
+export const userGuide = asyncHandler(async (req, res) => {
+  const { createReadStream } = await import('node:fs');
+  const fsp = await import('node:fs/promises');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const file = path.resolve(here, '..', '..', '..', 'docs', 'EIT_User_Guide.pdf');
+
+  try {
+    await fsp.access(file);
+  } catch {
+    // A deployment that ships without docs/ is a packaging choice, not a crash.
+    // Say so plainly rather than returning a broken download.
+    return res.status(404).json({
+      success: false,
+      error: 'The user guide is not available on this deployment.',
+    });
+  }
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'attachment; filename="IFQM-Employee-Ideation-Tool-User-Guide.pdf"');
+  return createReadStream(file).pipe(res);
+});
+
+export default { ideas, leaderboard, analytics, ideaPdf, userGuide };

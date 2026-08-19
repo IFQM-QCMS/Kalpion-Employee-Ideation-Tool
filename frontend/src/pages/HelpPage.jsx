@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { isPrivileged, isAdmin } from '../utils/helpers';
+import { exportApi } from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 /*
  * Help, written for the person using the product rather than the person who
@@ -171,6 +173,25 @@ const SECTIONS = [
 ];
 
 export default function HelpPage() {
+  const { showToast } = useToast();
+  const [guideBusy, setGuideBusy] = useState(false);
+
+  /*
+   * The guide is behind requireAuth, so it cannot be a plain link — the browser
+   * would fetch it without the token and be handed a 401 instead of a file.
+   */
+  async function downloadGuide() {
+    setGuideBusy(true);
+    try {
+      await exportApi.userGuide();
+    } catch (e) {
+      showToast(e?.response?.status === 404
+        ? 'The user guide is not available on this deployment.'
+        : 'The guide could not be downloaded just now.', 'danger');
+    }
+    setGuideBusy(false);
+  }
+
   const { user } = useAuth();
   const { t } = useLang();
   const [query, setQuery] = useState('');
@@ -199,6 +220,23 @@ export default function HelpPage() {
         <div style={{ fontSize: 13, color: 'var(--subtle)', marginTop: 4 }}>
           The questions people ask most, answered plainly.
         </div>
+      </div>
+
+      {/* The manual. It has existed in docs/ since it was written and nothing in
+          the product pointed at it, so the only people who ever saw it were the
+          ones sent a copy by hand. */}
+      <div className="card" style={{ marginBottom: 18, display: 'flex', gap: 14,
+        alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div className="card-title" style={{ margin: 0 }}>User guide</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
+            Every screen, in order, with pictures. Worth handing to somebody on their
+            first day rather than talking them through it.
+          </div>
+        </div>
+        <button className="btn btn-primary btn-sm" disabled={guideBusy} onClick={downloadGuide}>
+          {guideBusy ? 'Preparing…' : 'Download PDF'}
+        </button>
       </div>
 
       {/* The promise, stated rather than implied. */}

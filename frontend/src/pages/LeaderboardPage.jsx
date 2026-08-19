@@ -160,6 +160,45 @@ export default function LeaderboardPage() {
   const periodLabel = () =>
     t(PERIODS.find((p) => p.val === period)?.label || 'lb.all');
 
+  /**
+   * Hand the standings to whatever mail client the machine uses — Outlook on
+   * every desktop this is deployed to.
+   *
+   * A mailto: cannot carry an attachment, so this sends the standings as text
+   * rather than the share card. That is the honest trade: the picture is
+   * already available through the two buttons beside this one, and a recipient
+   * reading it in a mail client wants names and numbers they can reply to, not
+   * an image they have to open.
+   *
+   * Body length is capped. Mail clients and the browsers that hand off to them
+   * silently truncate very long mailto URLs, and a half-sent leaderboard looks
+   * like a bug rather than a limit — so it sends the top ten and says so.
+   */
+  function emailLeaderboard() {
+    const rows = data?.individuals || [];
+    if (!rows.length) return;
+
+    const orgName = user?.org_name || 'IFQM';
+    const top = rows.slice(0, 10);
+    const lines = top.map((r, i) =>
+      `${String(i + 1).padStart(2, ' ')}. ${r.name} — ${r.points} ${t('unit.pts')}`
+      + ` (${r.ideas_count ?? r.idea_count ?? 0} ${t('lb.ideas_word')})`);
+
+    const body = [
+      `${t('lb.share_title')} — ${orgName}`,
+      periodLabel(),
+      '',
+      ...lines,
+      rows.length > top.length ? `\n${t('lb.email_more', { n: rows.length - top.length })}` : '',
+      '',
+      t('lb.email_footer'),
+    ].filter(Boolean).join('\n');
+
+    const subject = `${t('lb.share_title')} — ${orgName} (${periodLabel()})`;
+    window.location.href =
+      `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+
   async function shareCard(kind) {
     const rows = data?.individuals || [];
     if (!rows.length) return;
@@ -249,6 +288,13 @@ export default function LeaderboardPage() {
           <button className="btn btn-outline btn-sm"
             onClick={shareLeaderboardText} disabled={!indivs.length}>
             {t('lb.share_text')}
+          </button>
+          {/* Opens the desktop mail client — Outlook, wherever this is
+              deployed. Text rather than the card, because mailto: carries no
+              attachment; see emailLeaderboard(). */}
+          <button className="btn btn-outline btn-sm"
+            onClick={emailLeaderboard} disabled={!indivs.length}>
+            {t('lb.share_email')}
           </button>
         </div>
       </div>

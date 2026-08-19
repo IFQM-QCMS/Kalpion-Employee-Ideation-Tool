@@ -181,6 +181,87 @@ function calloutHeight(doc, w, lines) {
   return h + 4;
 }
 
+/**
+ * Every step the idea actually took, in order.
+ *
+ * Section G used to name one person: the last Approved or Implemented entry in
+ * the workflow. On a closure document that is the wrong record. An idea that
+ * reached the Plant Head passed through an immediate manager and a department
+ * manager first, each of whom made a judgement and may have written a comment,
+ * and a signed-off PDF that credits only the final signature loses the audit
+ * trail that made the decision defensible.
+ *
+ * Rendered as a table rather than prose because that is what it is read for:
+ * who, what they decided, when, and what they said.
+ *
+ * Returns the y after the block. Draws nothing when there is no history — an
+ * empty ruled table is worse than an honest absence.
+ */
+function approvalChain(doc, y, workflow) {
+  const steps = (workflow || []).filter((w) => s(w.action));
+  if (!steps.length) {
+    doc.font('R').fontSize(8).fillColor(MUTED)
+      .text('No workflow history recorded for this idea.', MARGIN, y, { width: CONTENT_W });
+    return y + 14;
+  }
+
+  const cols = [
+    { label: 'STEP', w: 26 },
+    { label: 'WHO', w: 118 },
+    { label: 'DECISION', w: 86 },
+    { label: 'WHEN', w: 96 },
+  ];
+  const commentW = CONTENT_W - cols.reduce((a, c) => a + c.w, 0);
+
+  // Header strip
+  doc.rect(MARGIN, y, CONTENT_W, 13).fill(LABEL_BG);
+  let x = MARGIN + 4;
+  doc.font('B').fontSize(6.8).fillColor(MUTED);
+  for (const c of cols) {
+    doc.text(c.label, x, y + 4, { width: c.w - 4, lineBreak: false });
+    x += c.w;
+  }
+  doc.text('COMMENT', x, y + 4, { width: commentW - 4, lineBreak: false });
+  y += 13;
+
+  steps.forEach((w, i) => {
+    const comment = s(w.comment);
+    doc.font('R').fontSize(7.6);
+    const rowH = Math.max(14, doc.heightOfString(comment || ' ', { width: commentW - 6 }) + 6);
+
+    // A new page mid-table would orphan rows under no header at all.
+    if (y + rowH > doc.page.height - 44) {
+      doc.addPage();
+      y = MARGIN;
+    }
+
+    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill(BOX_BG);
+
+    let cx = MARGIN + 4;
+    doc.font('B').fontSize(7.6).fillColor(MUTED)
+      .text(String(i + 1), cx, y + 4, { width: cols[0].w - 4, lineBreak: false });
+    cx += cols[0].w;
+    doc.font('B').fontSize(7.6).fillColor(INK)
+      .text(s(w.actor_name) || '—', cx, y + 4, { width: cols[1].w - 4, lineBreak: false });
+    cx += cols[1].w;
+    doc.font('B').fontSize(7.6).fillColor(/reject/i.test(s(w.action)) ? '#b3261e' : BLUE_DK)
+      .text(s(w.action), cx, y + 4, { width: cols[2].w - 4, lineBreak: false });
+    cx += cols[2].w;
+    doc.font('R').fontSize(7.4).fillColor(MUTED)
+      .text(fmtDateTimeLocal(w.created_at) || fmtDate(w.created_at), cx, y + 4,
+        { width: cols[3].w - 4, lineBreak: false });
+    cx += cols[3].w;
+    if (comment) {
+      doc.font('R').fontSize(7.4).fillColor(INK)
+        .text(comment, cx, y + 4, { width: commentW - 6 });
+    }
+    y += rowH;
+  });
+
+  doc.moveTo(MARGIN, y).lineTo(RIGHT, y).lineWidth(0.5).strokeColor(LINE).stroke();
+  return y + 10;
+}
+
 function calloutBox(doc, x, y, w, h, title, lines) {
   doc.rect(x, y, w, h).fillAndStroke('#ffffff', LINE);
   doc.font('B').fontSize(7.5).fillColor(BLUE_DK).text(title, x + 7, y + 6, { width: w - 12 });
@@ -449,6 +530,11 @@ export function buildIdeaPdf(idea, res) {
   y = field(doc, MARGIN, y, CONTENT_W, 'Facilitator', s(idea.manager_name), { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Sponsor / Champion', '', { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Approved By (Name & Date)', approvedBy, { labelW: 150 });
+
+  // Section H — the route the idea actually took to get here.
+  y += 4;
+  y = sectionHeader(doc, y, 'SECTION H — APPROVAL CHAIN', 'FULL HISTORY');
+  y = approvalChain(doc, y, idea.workflow);
 
   // Footer on every page — generation stamp, no external branding.
   const range = doc.bufferedPageRange();

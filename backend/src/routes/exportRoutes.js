@@ -21,5 +21,8 @@ router.get('/ideas', requireAuth, exp.ideas);              // action=ideas
 router.get('/leaderboard', requireAuth, exp.leaderboard);  // action=leaderboard
 router.get('/analytics', requireRole(...ANALYTICS_ROLES), exp.analytics); // action=analytics (HTML)
 router.get('/idea/:id/pdf', requireAuth, exp.ideaPdf); // single-idea closure summary PDF
+// The product manual. Authenticated but not tenant-scoped — it documents the
+// software, not anybody's data, so every signed-in role may read it.
+router.get('/user-guide', requireAuth, exp.userGuide);
 
 export default router;

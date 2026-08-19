@@ -2252,3 +2252,72 @@ test('only a resolved ticket can be archived, one at a time or in bulk', async (
   assert.ok(byId[a], 'the resolved ticket is archived');
   assert.ok(!byId[b], 'the open one is left alone');
 });
+
+// ── The user guide, and the approval chain on the closure PDF ────────────────
+test('the user guide downloads for any signed-in role, and not anonymously', async () => {
+  const anon = await api('GET', '/api/export/user-guide');
+  assert.ok(anon.status === 401 || anon.status === 403,
+    `the guide must not be served anonymously — got ${anon.status}`);
+
+  /*
+   * Any authenticated role, including an ordinary employee. It documents the
+   * software rather than anybody's data, so scoping it to admins would only
+   * keep it from the people most likely to need it.
+   */
+  const res = await api('GET', '/api/export/user-guide', { token: AUSER });
+  assert.ok(res.status === 200 || res.status === 404,
+    `an employee must get the guide or an honest 404, got ${res.status}`);
+  if (res.status === 404) {
+    // A deployment shipped without docs/ is a packaging choice, not a crash —
+    // but it must say so rather than serving a broken file.
+    assert.equal(res.data.success, false);
+    assert.match(res.data.error, /not available/i);
+  }
+});
+
+/*
+ * Section G named one person: the last Approved or Implemented workflow entry.
+ * On a closure document that is the wrong record — an idea that reached the
+ * Plant Head passed through two people before them, each of whom made a
+ * judgement, and a signed-off PDF crediting only the final signature loses the
+ * audit trail that made the decision defensible.
+ *
+ * PDF text is inside compressed streams, so the assertion is on size rather
+ * than content: an idea with a long history must produce a materially bigger
+ * document than the same idea with none. That is weak evidence of wording and
+ * strong evidence that the rows were drawn at all, which is the part that
+ * regressed.
+ */
+test('the closure PDF grows with the approval chain it has to show', async () => {
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Guard interlock on the shear',
+      present_situation: 'The guard is defeated during setup because the interlock is slow to reset.',
+      proposed_solution: 'Fit a faster interlock and a setup mode that keeps the guard live.',
+      investment_required: '45000',
+    },
+  });
+  const ideaId = submit.data.idea_id;
+
+  const bare = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: AADMIN });
+  assert.equal(bare.status, 200);
+  const bareSize = bare.text.length;
+
+  // Six steps, each with a comment long enough to wrap — which is also what
+  // exercises the row-height and page-break arithmetic.
+  for (let i = 1; i <= 6; i++) {
+    await sql('ifqm_test_a',
+      `INSERT INTO ifqm_test_a.idea_workflow (idea_id, actor_id, action, comment, created_at)
+       VALUES (${ideaId}, 1, 'Reviewed',
+         'Step ${i}: checked against the standard, the interlock timing and the setup procedure, and passed it upward.',
+         NOW())`);
+  }
+
+  const full = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: AADMIN });
+  assert.equal(full.status, 200);
+  assert.match(full.contentType, /application\/pdf/);
+  assert.ok(full.text.startsWith('%PDF'), 'still a valid PDF with a long chain');
+  assert.ok(full.text.length > bareSize,
+    `the chain must actually be drawn — ${full.text.length} vs ${bareSize} bytes`);
+});
