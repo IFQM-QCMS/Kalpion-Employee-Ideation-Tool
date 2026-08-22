@@ -370,6 +370,8 @@ export default function SignupPage() {
         .ifqm-signup *{box-sizing:border-box}
         .ifqm-signup .wrap{max-width:720px;margin:0 auto}
         .ifqm-signup .req{color:#dc2626;font-weight:700;margin-left:2px}
+        .ifqm-signup .reqnote{font-size:11.5px;color:var(--subtle);line-height:1.5;
+          margin:18px 0 0;padding-top:12px;border-top:1px solid var(--border)}
         .ifqm-signup a{text-decoration:none}
         .ifqm-signup .brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:24px}
         .ifqm-signup .brand img{height:42px;background:#fff;border-radius:11px;padding:6px 10px;object-fit:contain;
@@ -478,12 +480,12 @@ export default function SignupPage() {
                       <div className="full">
                         <label htmlFor="company_name">Registered company name <span className="req">*</span></label>
                         <input id="company_name" value={form.company_name} onChange={set('company_name')}
-                          placeholder="Acme Precision Components Pvt Ltd" required />
+                          placeholder="XYZ Industries Pvt Ltd" required />
                       </div>
                       <div>
                         <label htmlFor="proposed_slug">Preferred organization code <span className="req">*</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
-                          placeholder="acme" />
+                          placeholder="xyz" />
                         <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
                       </div>
                     </div>
@@ -495,12 +497,12 @@ export default function SignupPage() {
                       <div>
                         <label htmlFor="contact_name">Full name <span className="req">*</span></label>
                         <input id="contact_name" value={form.contact_name} onChange={set('contact_name')}
-                          placeholder="Priya Nair" required />
+                          placeholder="First name Last name" required />
                       </div>
                       <div>
                         <label htmlFor="contact_designation">Designation <span className="req">*</span></label>
                         <input id="contact_designation" value={form.contact_designation}
-                          onChange={set('contact_designation')} placeholder="Operations Head" />
+                          onChange={set('contact_designation')} placeholder="e.g. Operations Head" />
                       </div>
                       <div className="full">
                         <label htmlFor="contact_email">Work email <span className="req">*</span></label>
@@ -517,7 +519,7 @@ export default function SignupPage() {
                               setOtpMsg('');
                             }}
                             onBlur={validateEmail}
-                            placeholder="priya@acme.co.in"
+                            placeholder="xyz@domain.com"
                             disabled={emailVerified}
                             required
                             style={{ flex: 1 }}
@@ -564,7 +566,7 @@ export default function SignupPage() {
                               type="text"
                               inputMode="numeric"
                               maxLength={8}
-                              placeholder="Enter 6-digit OTP code"
+                              placeholder="6-digit code"
                               value={otpCode}
                               onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
                               onKeyDown={(e) => {
@@ -629,7 +631,7 @@ export default function SignupPage() {
                               setPhoneOtpCode('');
                               setPhoneOtpMsg('');
                             }}
-                            placeholder="+91 98765 43210"
+                            placeholder="+91 XXXXX XXXXX"
                             disabled={phoneVerified}
                             required
                             style={{ flex: 1 }}
@@ -665,7 +667,7 @@ export default function SignupPage() {
                               type="text"
                               inputMode="numeric"
                               maxLength={8}
-                              placeholder="Enter 6-digit OTP code"
+                              placeholder="6-digit code"
                               value={phoneOtpCode}
                               onChange={(e) => setPhoneOtpCode(e.target.value.replace(/\D/g, ''))}
                               onKeyDown={(e) => {
@@ -750,13 +752,13 @@ export default function SignupPage() {
                       </div>
                       <div>
                         <label htmlFor="nic_code">NIC activity code <span className="req">*</span><InfoDot term="nic_code" /></label>
-                        <input id="nic_code" value={form.nic_code} onChange={set('nic_code')} placeholder="25" />
+                        <input id="nic_code" value={form.nic_code} onChange={set('nic_code')} placeholder="2 to 5 digits, e.g. 25" />
                         <p className="hint">The 2-digit code from your Udyam certificate.</p>
                       </div>
                       <div>
                         <label htmlFor="employee_count">Number of employees <span className="req">*</span></label>
                         <input id="employee_count" type="number" min="1" max="100000"
-                          value={form.employee_count} onChange={set('employee_count')} placeholder="85" />
+                          value={form.employee_count} onChange={set('employee_count')} placeholder="Number of people, e.g. 85" />
                         <p className="hint">Helps us size your workspace and suggest a rollout plan.</p>
                       </div>
                       <div>
@@ -769,7 +771,7 @@ export default function SignupPage() {
                       <div>
                         <label htmlFor="year_established">Year established <span className="req">*</span></label>
                         <input id="year_established" type="number" min="1850" max={new Date().getFullYear()}
-                          value={form.year_established} onChange={set('year_established')} placeholder="2015" />
+                          value={form.year_established} onChange={set('year_established')} placeholder="YYYY" />
                       </div>
                     </div>
                   </fieldset>
@@ -784,11 +786,11 @@ export default function SignupPage() {
                       <div className="full">
                         <label htmlFor="address_line">Address <span className="req">*</span></label>
                         <input id="address_line" value={form.address_line} onChange={set('address_line')}
-                          placeholder="Plot 14, Phase II, Industrial Area" />
+                          placeholder="Building, street, area" />
                       </div>
                       <div>
                         <label htmlFor="city">City / town <span className="req">*</span></label>
-                        <input id="city" value={form.city} onChange={set('city')} placeholder="Bengaluru" />
+                        <input id="city" value={form.city} onChange={set('city')} placeholder="City or town" />
                       </div>
                       <div>
                         <label htmlFor="state">State <span className="req">*</span></label>
@@ -799,7 +801,7 @@ export default function SignupPage() {
                       </div>
                       <div>
                         <label htmlFor="pincode">PIN code <span className="req">*</span></label>
-                        <input id="pincode" value={form.pincode} onChange={set('pincode')} placeholder="560058" />
+                        <input id="pincode" value={form.pincode} onChange={set('pincode')} placeholder="6 digits" />
                       </div>
                       <div>
                         <label htmlFor="country">Country <span className="req">*</span></label>
@@ -832,6 +834,18 @@ export default function SignupPage() {
                   </label>
                 </>
               )}
+
+              {/*
+                Which fields are required, said once, where the eye already is
+                when somebody is about to press Continue. Every required field
+                is starred individually as well — this exists so the meaning of
+                the star does not have to be guessed at.
+              */}
+              <p className="reqnote">
+                <span className="req">*</span> Every field on this form is required. Your email
+                address and mobile number are both confirmed by a code before the application
+                can be sent, and a reviewer may contact you on either.
+              </p>
 
               <div className="row">
                 {step > 0
