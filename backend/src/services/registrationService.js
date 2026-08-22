@@ -342,20 +342,34 @@ export function validateApplication(body) {
    * step is still stored and still validated. What changed is that an absent
    * value is now an absent value rather than a rejection.
    */
+  /*
+   * MOM 29 Jul 2026 §13 sets this list, and it is deliberately shorter than it
+   * was.
+   *
+   * MANDATORY — who the business is, provably, plus the two statutory numbers a
+   * reviewer checks against the public registers. GSTIN and PAN came off the
+   * form for a while when the whole statutory step was removed; §13 puts them
+   * back, and they are the reason the domain rule is not the only check on
+   * whether an applicant is a real company.
+   *
+   * OPTIONAL — everything §13 calls "other details": designation, NIC code,
+   * turnover band, and the whole registered address. None of them decides
+   * whether an application can be assessed, and each one is another field
+   * between somebody deciding to try the product and actually doing so. They
+   * are still validated when supplied and still stored.
+   *
+   * Udyam and CIN stay off the form entirely: §13 does not ask for them, a
+   * proprietorship never has a CIN, and an MSME below the threshold has no
+   * Udyam registration to give.
+   */
   const required = [
     [companyName, 'registered company name'],
-    [designation, 'designation'],
     [phone, 'contact phone number'],
+    [gstin, 'GSTIN'],
+    [pan, 'business PAN'],
     [entityType, 'entity type'],
     [category, 'MSME category'],
     [str(body.sector), 'sector'],
-    [nic, 'NIC activity code'],
-    [turnover, 'annual turnover range'],
-    [addressLine, 'registered address'],
-    [city, 'city or town'],
-    [stateName, 'state'],
-    [pincode, 'PIN code'],
-    [country, 'country'],
   ];
   for (const [value, label] of required) {
     if (!value) throw badRequest(`Enter your ${label}.`);

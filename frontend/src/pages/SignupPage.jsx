@@ -263,7 +263,11 @@ export default function SignupPage() {
     proposed_slug: { label: 'preferred organization code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
                      hint: 'Lower-case letters, numbers, hyphen or underscore.' },
     contact_name:  { label: 'full name', min: 3 },
-    contact_designation: { label: 'designation', min: 2 },
+    gstin:         { label: 'GSTIN', re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
+                     hint: 'Fifteen characters, as printed on your GST certificate.' },
+    pan:           { label: 'business PAN', re: /^[A-Z]{5}\d{4}[A-Z]$/i,
+                     hint: 'Five letters, four digits, one letter.' },
+    contact_designation: { optional: true, label: 'designation', min: 2 },
     contact_email: { label: 'work email address', re: /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/ },
     contact_phone: { label: 'phone number', re: /^(\+?91[-\s]?)?[6-9]\d{9}$/,
                      hint: 'Ten digits, optionally with +91.' },
@@ -271,17 +275,17 @@ export default function SignupPage() {
     entity_type:         { label: 'entity type' },
     enterprise_category: { label: 'MSME category' },
     sector:              { label: 'sector' },
-    nic_code:            { label: 'NIC activity code', re: /^\d{2,5}$/,
+    nic_code:            { optional: true, label: 'NIC activity code', re: /^\d{2,5}$/,
                            hint: 'Two to five digits from your Udyam certificate.' },
     employee_count:      { label: 'number of employees', num: [1, 100000] },
-    annual_turnover_band:{ label: 'annual turnover' },
+    annual_turnover_band:{ optional: true, label: 'annual turnover' },
     year_established:    { label: 'year established', num: [1850, new Date().getFullYear()] },
 
-    address_line: { label: 'registered address', min: 6 },
-    city:         { label: 'city or town', min: 2 },
-    state:        { label: 'state' },
-    pincode:      { label: 'PIN code', re: /^[1-9]\d{5}$/, hint: 'Six digits.' },
-    country:      { label: 'country', min: 2 },
+    address_line: { optional: true, label: 'registered address', min: 6 },
+    city:         { optional: true, label: 'city or town', min: 2 },
+    state:        { optional: true, label: 'state' },
+    pincode:      { optional: true, label: 'PIN code', re: /^[1-9]\d{5}$/, hint: 'Six digits.' },
+    country:      { optional: true, label: 'country', min: 2 },
   };
 
   /*
@@ -294,19 +298,30 @@ export default function SignupPage() {
   const STEP_FIELDS = [
     ['company_name', 'proposed_slug',
      'contact_name', 'contact_designation', 'contact_email', 'contact_phone'],
-    ['entity_type', 'enterprise_category',
+    ['gstin', 'pan', 'entity_type', 'enterprise_category',
      'sector', 'nic_code', 'employee_count', 'annual_turnover_band', 'year_established'],
     ['address_line', 'city', 'state', 'pincode', 'country'],
   ];
 
-  /** The first problem on a step, or '' when the step is complete. */
+  /**
+   * The first problem on a step, or '' when the step is complete.
+   *
+   * A rule marked `optional` is checked for FORM but not for presence: a PIN
+   * code that is there must look like a PIN code, and one that is absent is
+   * simply absent. MOM §13 keeps only the business identity mandatory, so most
+   * of this form is now the second case.
+   */
   function checkStep(n) {
     for (const key of STEP_FIELDS[n]) {
       const rule = FIELD_RULES[key];
       if (!rule) continue;
       if (rule.onlyIf && !rule.onlyIf(form)) continue;
       const value = String(form[key] ?? '').trim();
-      if (!value) return `Enter your ${rule.label}.`;
+      // Optional fields are checked for shape, never for presence.
+      if (!value) {
+        if (rule.optional) continue;
+        return `Enter your ${rule.label}.`;
+      }
       if (rule.min && value.length < rule.min) return `That ${rule.label} looks too short.`;
       if (rule.re && !rule.re.test(value)) {
         return `That ${rule.label} does not look right. ${rule.hint || ''}`.trim();
@@ -483,7 +498,7 @@ export default function SignupPage() {
                           placeholder="XYZ Industries Pvt Ltd" required />
                       </div>
                       <div>
-                        <label htmlFor="proposed_slug">Preferred organization code <span className="req">*</span><InfoDot term="org_code" /></label>
+                        <label htmlFor="proposed_slug">Preferred organization code <span className="opt">optional</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="xyz" />
                         <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
@@ -500,7 +515,7 @@ export default function SignupPage() {
                           placeholder="First name Last name" required />
                       </div>
                       <div>
-                        <label htmlFor="contact_designation">Designation <span className="req">*</span></label>
+                        <label htmlFor="contact_designation">Designation <span className="opt">optional</span></label>
                         <input id="contact_designation" value={form.contact_designation}
                           onChange={set('contact_designation')} placeholder="e.g. Operations Head" />
                       </div>
@@ -728,7 +743,22 @@ export default function SignupPage() {
                 <>
                   <fieldset>
                     <legend>Business profile</legend>
+                    {/* MOM 13: the two statutory numbers a reviewer checks against
+                        the public registers. They came off the form when the whole
+                        statutory step went; 13 puts these two back and leaves Udyam
+                        and CIN out — a proprietorship never has a CIN, and an MSME
+                        below the threshold has no Udyam registration to give. */}
                     <div className="grid">
+                      <div>
+                        <label htmlFor="gstin">GSTIN <span className="req">*</span><InfoDot term="gstin" /></label>
+                        <input id="gstin" value={form.gstin} onChange={set('gstin')}
+                          placeholder="15 characters, e.g. 29ABCDE1234F1Z5" />
+                      </div>
+                      <div>
+                        <label htmlFor="pan">Business PAN <span className="req">*</span></label>
+                        <input id="pan" value={form.pan} onChange={set('pan')}
+                          placeholder="10 characters, e.g. ABCDE1234F" />
+                      </div>
                       <div>
                         <label htmlFor="entity_type">Entity type <span className="req">*</span></label>
                         <select id="entity_type" value={form.entity_type} onChange={set('entity_type')}>
@@ -751,7 +781,7 @@ export default function SignupPage() {
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="nic_code">NIC activity code <span className="req">*</span><InfoDot term="nic_code" /></label>
+                        <label htmlFor="nic_code">NIC activity code <span className="opt">optional</span><InfoDot term="nic_code" /></label>
                         <input id="nic_code" value={form.nic_code} onChange={set('nic_code')} placeholder="2 to 5 digits, e.g. 25" />
                         <p className="hint">The 2-digit code from your Udyam certificate.</p>
                       </div>
@@ -762,7 +792,7 @@ export default function SignupPage() {
                         <p className="hint">Helps us size your workspace and suggest a rollout plan.</p>
                       </div>
                       <div>
-                        <label htmlFor="annual_turnover_band">Annual turnover <span className="req">*</span></label>
+                        <label htmlFor="annual_turnover_band">Annual turnover <span className="opt">optional</span></label>
                         <select id="annual_turnover_band" value={form.annual_turnover_band} onChange={set('annual_turnover_band')}>
                           <option value="">Select…</option>
                           {TURNOVER_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -784,27 +814,27 @@ export default function SignupPage() {
                     <legend>Registered address</legend>
                     <div className="grid">
                       <div className="full">
-                        <label htmlFor="address_line">Address <span className="req">*</span></label>
+                        <label htmlFor="address_line">Address <span className="opt">optional</span></label>
                         <input id="address_line" value={form.address_line} onChange={set('address_line')}
                           placeholder="Building, street, area" />
                       </div>
                       <div>
-                        <label htmlFor="city">City / town <span className="req">*</span></label>
+                        <label htmlFor="city">City / town <span className="opt">optional</span></label>
                         <input id="city" value={form.city} onChange={set('city')} placeholder="City or town" />
                       </div>
                       <div>
-                        <label htmlFor="state">State <span className="req">*</span></label>
+                        <label htmlFor="state">State <span className="opt">optional</span></label>
                         <select id="state" value={form.state} onChange={set('state')}>
                           <option value="">Select…</option>
                           {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="pincode">PIN code <span className="req">*</span></label>
+                        <label htmlFor="pincode">PIN code <span className="opt">optional</span></label>
                         <input id="pincode" value={form.pincode} onChange={set('pincode')} placeholder="6 digits" />
                       </div>
                       <div>
-                        <label htmlFor="country">Country <span className="req">*</span></label>
+                        <label htmlFor="country">Country <span className="opt">optional</span></label>
                         <input id="country" value={form.country} onChange={set('country')} />
                       </div>
                     </div>
@@ -842,9 +872,10 @@ export default function SignupPage() {
                 the star does not have to be guessed at.
               */}
               <p className="reqnote">
-                <span className="req">*</span> Every field on this form is required. Your email
-                address and mobile number are both confirmed by a code before the application
-                can be sent, and a reviewer may contact you on either.
+                <span className="req">*</span> Required. Fields marked <span className="opt">optional</span> can
+                be left blank and added later — a reviewer would rather see an application with
+                gaps than not see it at all. Your email address and mobile number are both
+                confirmed by a code before the application can be sent.
               </p>
 
               <div className="row">
