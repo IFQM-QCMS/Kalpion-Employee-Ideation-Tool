@@ -492,7 +492,10 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   -- The attachment ceiling every organisation is bounded by (migration 028).
   -- Named apart from the tenant's own max_file_mb: this is the most any
   -- organisation may be allowed, that is what one has chosen for itself.
-  ('platform_max_file_mb', '10');
+  ('platform_max_file_mb', '10'),
+  -- How many months of ACCESS logs to keep (migration 029). Approval history
+  -- and billing records are never purged — see retentionService.
+  ('log_retention_months',  '24');
 
 -- ── SMS / DLT delivery (migration 019) ──────────────────────────────────────
 -- Migration 012 built one-time-code sign-in and seeded its policy, but nothing

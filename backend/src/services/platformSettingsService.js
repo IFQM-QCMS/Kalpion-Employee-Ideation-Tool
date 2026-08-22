@@ -85,6 +85,10 @@ const DEFAULTS_WHITELIST = [
    * of a ceiling.
    */
   'platform_max_file_mb',
+  // How many months of ACCESS logs to keep. Approval history and billing
+  // records are never purged — see retentionService for why that distinction
+  // is the whole point.
+  'log_retention_months',
 ];
 
 /**
@@ -136,6 +140,15 @@ function normaliseSetting(key, rawValue) {
   if (key === 'platform_max_file_mb') {
     const n = parseInt(value, 10);
     return String(Math.max(1, Math.min(config.maxFileMb, Number.isFinite(n) ? n : config.maxFileMb)));
+  }
+  /*
+   * Floored at six months. A window short enough to delete this quarter's
+   * sign-ins would take the lockout counters and the SMS delivery evidence with
+   * it, and somebody would only find that out while investigating an incident.
+   */
+  if (key === 'log_retention_months') {
+    const n = parseInt(value, 10);
+    return String(Math.max(6, Math.min(120, Number.isFinite(n) ? n : 24)));
   }
   if (key === 'review_sla_days' || key === 'escalation_days') {
     return String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));

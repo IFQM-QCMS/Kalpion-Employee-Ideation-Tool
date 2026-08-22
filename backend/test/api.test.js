@@ -2469,3 +2469,76 @@ test('a reset token is still valid by the database clock that judges it', async 
   assert.ok(Number(row.minutes_left) > 50 && Number(row.minutes_left) <= 60,
     `an emailed link lasts an hour, got ${row.minutes_left} minutes`);
 });
+
+// ── Log retention ────────────────────────────────────────────────────────────
+/*
+ * "Delete the audit logs after two or three years" reads as one instruction and
+ * is really two. Access records grow without bound and carry IP addresses;
+ * approval history and billing records are the audit trail and the accounting
+ * record, and deleting those would not tidy a log but erase the evidence that
+ * decisions were made properly.
+ */
+test('the purge deletes old access logs and never touches approval or billing history', async () => {
+  const retention = await import('../src/services/retentionService.js');
+
+  // Old and recent sign-in records, aged by the DATABASE's clock — the same
+  // clock the purge compares against.
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.platform_login_activity
+       (actor_type, actor_name, outcome, created_at)
+     VALUES ('tenant_user','Ancient','success', DATE_SUB(NOW(), INTERVAL 40 MONTH)),
+            ('tenant_user','AlsoOld','failure', DATE_SUB(NOW(), INTERVAL 30 MONTH)),
+            ('tenant_user','Recent','success',  DATE_SUB(NOW(), INTERVAL 2 MONTH))`);
+
+  // A dry run counts without deleting, so a change to the window can be sized
+  // before it is made.
+  const preview = await retention.purgeExpiredLogs({ dryRun: true });
+  assert.equal(preview.dry_run, true);
+  assert.equal(preview.months, 24, 'the seeded default is two years');
+  assert.ok(preview.per_table.platform_login_activity >= 2,
+    `both old rows must be counted, got ${preview.per_table.platform_login_activity}`);
+  const [[still]] = [await sql('ifqm_test_master',
+    "SELECT COUNT(*) AS n FROM ifqm_test_master.platform_login_activity WHERE actor_name = 'Ancient'")];
+  assert.equal(Number(still.n), 1, 'a dry run must delete nothing');
+
+  const done = await retention.purgeExpiredLogs();
+  assert.ok(done.deleted >= 2, `the purge must remove the old rows, got ${done.deleted}`);
+
+  const rows = await sql('ifqm_test_master',
+    `SELECT actor_name FROM ifqm_test_master.platform_login_activity
+      WHERE actor_name IN ('Ancient','AlsoOld','Recent')`);
+  const names = rows.map((r) => r.actor_name);
+  assert.ok(!names.includes('Ancient'), 'a 40-month-old sign-in is gone');
+  assert.ok(!names.includes('AlsoOld'), 'a 30-month-old sign-in is gone');
+  assert.ok(names.includes('Recent'), 'a 2-month-old sign-in is kept');
+
+  /*
+   * The half that must never happen. idea_workflow is the approval chain — it
+   * is Section H of the closure PDF — and it is not in the purge list at all.
+   */
+  const [wf] = await sql('ifqm_test_a',
+    'SELECT COUNT(*) AS n FROM ifqm_test_a.idea_workflow');
+  assert.ok(Number(wf.n) > 0, 'the suite has approval history to protect');
+  await retention.purgeExpiredLogs();
+  const [wfAfter] = await sql('ifqm_test_a',
+    'SELECT COUNT(*) AS n FROM ifqm_test_a.idea_workflow');
+  assert.equal(Number(wfAfter.n), Number(wf.n),
+    'the approval trail must survive any number of purges');
+
+  // The window is a setting, and is floored so it cannot be set somewhere that
+  // would take this quarter's lockout counters with it.
+  await api('PUT', '/api/platform/settings/defaults', {
+    token: PA, body: { log_retention_months: '1' },
+  });
+  assert.equal(await retention.retentionMonths(), 6,
+    'a window below the floor must be raised to it, not honoured');
+
+  await api('PUT', '/api/platform/settings/defaults', {
+    token: PA, body: { log_retention_months: '36' },
+  });
+  assert.equal(await retention.retentionMonths(), 36, 'three years is settable');
+
+  await api('PUT', '/api/platform/settings/defaults', {
+    token: PA, body: { log_retention_months: '24' },
+  });
+});

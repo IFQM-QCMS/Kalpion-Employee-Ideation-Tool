@@ -40,6 +40,7 @@ import { getTenantPool } from '../database/tenant.js';
 import { processEmailQueue } from '../services/mailerService.js';
 import { pruneOtps } from '../services/otpService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
+import { purgeExpiredLogs } from '../services/retentionService.js';
 
 const MINUTE = 60 * 1000;
 
@@ -88,6 +89,19 @@ async function housekeeping() {
     if (n) logger.info(`scheduler: pruned ${n} expired one-time code(s)`);
   } catch (e) {
     logger.warn('scheduler: OTP prune failed', e.message);
+  }
+  /*
+   * Access logs older than the retention window. Runs alongside the other
+   * housekeeping rather than on its own timer: it has no deadline, and a purge
+   * that misses a day simply catches up on the next one.
+   */
+  try {
+    const r = await purgeExpiredLogs();
+    if (r?.deleted) {
+      logger.info(`scheduler: purged ${r.deleted} access-log row(s) older than ${r.months} month(s)`);
+    }
+  } catch (e) {
+    logger.warn('scheduler: log retention purge failed', e.message);
   }
   try {
     const r = await subscriptionService.sweepLapsed();
