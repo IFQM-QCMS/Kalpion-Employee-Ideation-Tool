@@ -686,6 +686,19 @@ td{overflow-wrap:anywhere;word-break:break-word}
   border-color:var(--primary);
   box-shadow:0 0 0 3px var(--primary-dim);
 }
+/*
+ * Every <select>, not only the ones carrying .form-control.
+ *
+ * The caret used to be scoped to select.form-control, and ten selects in the
+ * app do not use that class — the whole registration form among them. Those
+ * fell back to the browser's own arrow, which against a custom background is
+ * somewhere between faint and invisible, so a field that opens a list looked
+ * exactly like a field you type into.
+ *
+ * Drawn from two gradients rather than an SVG so it inherits `currentColor`
+ * and is therefore correct in both themes without a second rule.
+ */
+select,
 select.form-control{
   appearance:none;-webkit-appearance:none;cursor:pointer;
   padding-right:32px;
@@ -695,6 +708,13 @@ select.form-control{
   background-size:5px 5px,5px 5px;
   background-repeat:no-repeat;
 }
+/*
+ * A select that sets its own `background` shorthand wipes the caret above,
+ * because the shorthand resets background-image. Anything styling a select
+ * must set background-COLOR instead; this re-asserts the arrow for the ones
+ * that get it wrong, so a missing caret cannot come back silently.
+ */
+select[class]{background-repeat:no-repeat}
 textarea.form-control{resize:vertical;min-height:88px}
 input[type=file].form-control{padding:7px 10px;cursor:pointer}
 input[type=file].form-control::file-selector-button{
@@ -1222,4 +1242,38 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
   .kpi-grid{grid-template-columns:1fr}
   .modal-overlay{padding:12px}
   .card{padding:16px}
+
+  /*
+   * 16px is the threshold below which iOS Safari zooms the page on focus and
+   * then leaves it zoomed. Every report of "the form jumps and I lose my
+   * place" on an iPhone is this, and the fix is a font size rather than a
+   * viewport lock — locking the viewport would also stop somebody zooming in
+   * deliberately, which is an accessibility regression.
+   */
+  input,select,textarea,.form-control{font-size:16px}
+
+  /*
+   * A finger is about 9mm across. Anything smaller than ~44px is a target
+   * people miss, and on this product the people missing it are on a shop floor,
+   * often with gloves on.
+   */
+  .btn,select,input,textarea,.form-control{min-height:44px}
+  .btn-sm{min-height:40px;padding-left:14px;padding-right:14px}
+
+  /* Buttons that sat in a row now stack and fill the width, instead of being
+     squeezed to a few unreadable characters each. */
+  .form-row{grid-template-columns:1fr}
+  .modal-footer{flex-direction:column-reverse;gap:8px}
+  .modal-footer .btn{width:100%}
+
+  /*
+   * Tables scroll sideways in their own container rather than forcing the whole
+   * page to. A page that scrolls horizontally makes every column hard to reach;
+   * a table that does is normal and expected.
+   */
+  .table-wrap,.table-responsive{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:560px}
+
+  /* A dialog on a small screen is the screen. */
+  .modal{max-width:100%;width:100%}
 }

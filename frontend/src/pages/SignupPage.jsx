@@ -395,7 +395,9 @@ export default function SignupPage() {
         .ifqm-signup .full{grid-column:1/-1}
         .ifqm-signup label{display:block;font-size:12.5px;font-weight:650;color:var(--subtext);margin-bottom:5px}
         .ifqm-signup label .opt{font-weight:500;color:var(--subtle);margin-left:5px}
-        .ifqm-signup input,.ifqm-signup select{width:100%;background:var(--input-bg);border:1px solid var(--input-border);
+        /* background-COLOR, not the background shorthand: the shorthand resets
+           background-image and would wipe the caret drawn on every select. */
+        .ifqm-signup input,.ifqm-signup select{width:100%;background-color:var(--input-bg);border:1px solid var(--input-border);
           border-radius:10px;padding:10px 12px;font-size:13.5px;color:var(--text);outline:none;
           transition:border-color .16s,box-shadow .16s;font-family:inherit}
         .ifqm-signup input:focus,.ifqm-signup select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-dim)}
