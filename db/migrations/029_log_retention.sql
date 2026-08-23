@@ -30,11 +30,19 @@
 --  deployment. The service floors it at 6 months regardless of what is stored.
 -- ============================================================================
 
+-- ── Portability note ────────────────────────────────────────────────────────
+-- Some MySQL deployments (Aiven's default among them) run with ANSI_QUOTES, in
+-- which "..." is an IDENTIFIER, not a string. The guarded statements below build
+-- SQL as text and would be read as column names there — the failure looks like
+-- `Unknown column 'ALTER TABLE ...'`, which is baffling until you know why.
+-- Dropped for this session only, so the file parses identically everywhere.
+SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
+
 SET @has := (SELECT COUNT(*) FROM information_schema.TABLES
               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'platform_settings');
 
 SET @sql := IF(@has > 0,
-  "INSERT INTO platform_settings (key_name, value) VALUES ('log_retention_months', '24')
-     ON DUPLICATE KEY UPDATE value = value",
+  'INSERT INTO platform_settings (key_name, value) VALUES (''log_retention_months'', ''24'')
+     ON DUPLICATE KEY UPDATE value = value',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

@@ -49,6 +49,14 @@
 
 -- ── Tenant databases ────────────────────────────────────────────────────────
 
+-- ── Portability note ────────────────────────────────────────────────────────
+-- Some MySQL deployments (Aiven's default among them) run with ANSI_QUOTES, in
+-- which "..." is an IDENTIFIER, not a string. The guarded statements below build
+-- SQL as text and would be read as column names there — the failure looks like
+-- `Unknown column 'ALTER TABLE ...'`, which is baffling until you know why.
+-- Dropped for this session only, so the file parses identically everywhere.
+SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
+
 SET @is_tenant := (SELECT COUNT(*) FROM information_schema.TABLES
                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users');
 
@@ -81,7 +89,9 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 -- address (nothing enforced a format on import). Empty string is not "no
 -- address" to a UNIQUE index — it is a value, and the second such account
 -- would collide with the first.
-SET @sql := IF(@is_tenant > 0, 'UPDATE users SET email = NULL WHERE email = ""', 'SELECT 1');
+SET @sql := IF(@is_tenant > 0,
+  'UPDATE users SET email = NULL WHERE email IS NOT NULL AND LENGTH(email) = 0',
+  'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- ── Master registry ─────────────────────────────────────────────────────────
@@ -90,6 +100,6 @@ SET @has_dir := (SELECT COUNT(*) FROM information_schema.TABLES
                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'login_directory');
 
 SET @sql := IF(@has_dir > 0,
-  "ALTER TABLE login_directory MODIFY COLUMN id_type ENUM('email','phone','username') NOT NULL",
+  'ALTER TABLE login_directory MODIFY COLUMN id_type ENUM(''email'',''phone'',''username'') NOT NULL',
   'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

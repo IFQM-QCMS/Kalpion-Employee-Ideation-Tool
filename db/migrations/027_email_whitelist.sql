@@ -42,6 +42,14 @@
 --  it.
 -- ============================================================================
 
+-- ── Portability note ────────────────────────────────────────────────────────
+-- Some MySQL deployments (Aiven's default among them) run with ANSI_QUOTES, in
+-- which "..." is an IDENTIFIER, not a string. The guarded statements below build
+-- SQL as text and would be read as column names there — the failure looks like
+-- `Unknown column 'ALTER TABLE ...'`, which is baffling until you know why.
+-- Dropped for this session only, so the file parses identically everywhere.
+SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
+
 CREATE TABLE IF NOT EXISTS email_whitelist (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   -- Lower-cased on write. Either 'name@provider.com' or 'provider.com'.
