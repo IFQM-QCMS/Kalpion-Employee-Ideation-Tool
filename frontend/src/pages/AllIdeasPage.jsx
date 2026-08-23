@@ -10,6 +10,7 @@ import InfoDot from '../components/InfoDot';
 import ScreenGuard from '../components/ScreenGuard';
 import BulkArchivePanel from '../components/BulkArchivePanel';
 import Pager, { usePager } from '../components/Pager';
+import VoteWidget from '../components/VoteWidget';
 import QcBadge from '../components/QcBadge';
 
 /* Escape for the print window — that HTML is built by string concatenation, so
@@ -17,31 +18,6 @@ import QcBadge from '../components/QcBadge';
 const esc = (v) => String(v ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
-
-function VoteWidget({ ideaId, isSelf, upvotes, downvotes, userVote, onVote }) {
-  return (
-    <div style={{ display:'inline-flex',alignItems:'center',gap:4 }}>
-      <button
-        className="btn btn-sm"
-        style={{ padding:'2px 6px',fontSize:11,borderRadius:6,
-          background:userVote==='up'?'#bbf7d0':'var(--chip-bg)',
-          color:userVote==='up'?'#10b981':'var(--text-muted)',
-          border:`1px solid ${userVote==='up'?'#bbf7d0':'var(--border)'}` }}
-        onClick={() => !isSelf && onVote(ideaId,'up')}
-        disabled={isSelf}
-      >▲ {upvotes}</button>
-      <button
-        className="btn btn-sm"
-        style={{ padding:'2px 6px',fontSize:11,borderRadius:6,
-          background:userVote==='down'?'#fee2e2':'var(--chip-bg)',
-          color:userVote==='down'?'#ef4444':'var(--text-muted)',
-          border:`1px solid ${userVote==='down'?'#fecaca':'var(--border)'}` }}
-        onClick={() => !isSelf && onVote(ideaId,'down')}
-        disabled={isSelf}
-      >▼ {downvotes}</button>
-    </div>
-  );
-}
 
 export default function AllIdeasPage() {
   const { user }      = useAuth();
@@ -246,7 +222,7 @@ export default function AllIdeasPage() {
               const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
               const cScore  = communityScore(i.ai_score, i.upvotes||0, i.downvotes||0);
               return (
-                <tr key={i.id}>
+                <tr key={i.id} data-status={i.status}>
                   <td><strong>{i.idea_code}</strong></td>
                   <td title={i.title}>
                     <div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div>
@@ -264,7 +240,7 @@ export default function AllIdeasPage() {
                   </td>
                   <td className="text-center">
                     {i.patentable_flag
-                      ? <span className="badge badge-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
+                      ? <span className="chip chip-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
                       : <span style={{ color:'var(--subtle)' }}>—</span>}
                   </td>
                   <td>{i.submitter_name}</td>

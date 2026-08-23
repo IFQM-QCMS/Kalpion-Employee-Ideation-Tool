@@ -69,7 +69,7 @@ export default function RejectedIdeasPage() {
               <tr><td colSpan="8" className="text-center">{t('dash.rejected_none')}</td></tr>
             )}
             {ideas.map((i) => (
-              <tr key={i.id}>
+              <tr key={i.id} data-status={i.status}>
                 <td><strong>{i.idea_code}</strong></td>
                 <td title={i.title}>{i.title.length > 60 ? i.title.substring(0, 60) + '…' : i.title}</td>
                 <td style={{ maxWidth: 260, color: 'var(--text-muted)', fontSize: 12.5 }}>

@@ -996,6 +996,7 @@ export default {
   'challenges.created':'Challenge created.',
   'challenges.closed':'Challenge closed.',
   'challenges.load_failed':'Failed to load challenges.',
+  'challenges.col_title':'Challenge',
 
   // ── Idea board ──
   'board.sort_votes':'Sort: Most Votes',
@@ -1003,6 +1004,9 @@ export default {
   'board.sort_score':'Sort: AI Score',
   'board.empty':'No ideas on the board yet.',
   'board.load_failed':'Failed to load board.',
+  'board.table_hint':'Grouped by stage. Use the board view to drag ideas between stages.',
+  'board.view_board':'Board',
+  'board.view_table':'Table',
 
   // ── Profile ──
   'profile.edit':'Edit details',
@@ -1581,6 +1585,12 @@ export default {
   'pa.wl_confirm_remove':'Remove {entry}? Applications from it will be refused again.',
   'msgb.send_invoices':'Send Monthly Invoices',
   'table.datetime':'Date and time',
+  'table.impact_areas':'Impact Areas',
+  'table.engagement':'Engagement',
+  'table.stage':'Stage',
+  'table.net':'Net',
+  'table.deadline':'Deadline',
+  'table.created_by':'Created By',
   'anl.ai_breakdown':'Evaluation Breakdown',
   'anl.categories_split':'Categories Split',
   'bill.go_billing':'Go to billing',

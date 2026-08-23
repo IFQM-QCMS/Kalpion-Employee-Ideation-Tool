@@ -818,6 +818,38 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
 }
 .impact-grid{display:flex;flex-wrap:wrap;gap:8px}
 
+/* ── Static chips ──────────────────────────────────────────────────────────
+   The chips above are FILTER controls: they have a pointer cursor and a hover
+   state because clicking them does something.
+
+   Inside a table cell a chip is a label — "overdue", "escalated to L2" — and
+   nothing happens when you click it. Inheriting the interactive styling would
+   promise an action the row does not have, which is worse than plain text.
+   These carry the tone and drop the affordance.
+
+   Sizing is tightened too: a filter chip is a tap target, a cell chip sits
+   inline with 12px table text and must not set the row height. */
+.chip.chip-info,.chip.chip-warning,.chip.chip-danger,
+.chip.chip-primary,.chip.chip-success{
+  display:inline-block;cursor:default;
+  padding:2px 8px;font-size:11px;font-weight:600;
+}
+.chip.chip-info:hover{background:var(--info-light);border-color:var(--info-dim);color:var(--info)}
+.chip.chip-info{background:var(--info-light);border-color:var(--info-dim);color:var(--info)}
+.chip.chip-warning:hover{background:var(--warning-light);border-color:var(--warning-dim);color:var(--warning)}
+.chip.chip-warning{background:var(--warning-light);border-color:var(--warning-dim);color:var(--warning)}
+.chip.chip-danger:hover{background:var(--danger-light);border-color:var(--danger-dim);color:var(--danger)}
+.chip.chip-danger{background:var(--danger-light);border-color:var(--danger-dim);color:var(--danger)}
+.chip.chip-primary:hover{background:var(--primary-light);border-color:var(--primary-dim);color:var(--primary)}
+.chip.chip-primary{background:var(--primary-light);border-color:var(--primary-dim);color:var(--primary)}
+.chip.chip-success:hover{background:var(--success-light);border-color:var(--success-dim);color:var(--success)}
+.chip.chip-success{background:var(--success-light);border-color:var(--success-dim);color:var(--success)}
+
+/* A due date with no tone: still a chip, still not a button. */
+.table .chip:not([class*="chip-"]){cursor:default;padding:2px 8px;font-size:11px}
+
+
+
 .tag{
   display:inline-block;margin:2px;padding:2px 9px;
   background:var(--tag-bg);color:var(--primary);
@@ -878,38 +910,27 @@ input[type=checkbox],input[type=radio]{accent-color:var(--primary);cursor:pointe
   border-color:var(--primary);background:var(--primary-light);color:var(--primary);
 }
 
-/* ── IDEA CARDS ─────────────────────────────────────────────────────────── */
-.idea-card{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--r-lg);padding:18px;margin-bottom:12px;
-  cursor:pointer;box-shadow:var(--shadow-xs);
-  transition:border-color var(--t) var(--ease),box-shadow var(--t) var(--ease);
-}
-.idea-card:hover{border-color:var(--border-strong);box-shadow:var(--shadow-sm)}
-.idea-card-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.idea-card-id{
-  font-size:10.5px;font-weight:650;letter-spacing:.04em;
-  text-transform:uppercase;color:var(--subtle);
-  font-variant-numeric:tabular-nums;
-}
-.idea-card-title{
-  font-size:14.5px;font-weight:600;color:var(--heading);
-  margin-top:3px;letter-spacing:-.015em;line-height:1.4;
-}
-.idea-card-meta{font-size:12px;color:var(--text-muted);margin-top:6px}
-.idea-card-footer{
-  display:flex;align-items:center;justify-content:space-between;
-  gap:10px;margin-top:14px;padding-top:12px;
-  border-top:1px solid var(--border);
-}
-/* Status is carried by a left rail — readable at a glance, no extra chrome. */
-.idea-card[data-status]{border-left:3px solid var(--border)}
-.idea-card[data-status="Approved"]{border-left-color:var(--success)}
-.idea-card[data-status="Rejected"]{border-left-color:var(--danger)}
-.idea-card[data-status="Implemented"]{border-left-color:var(--primary)}
-.idea-card[data-status="Under Review"]{border-left-color:var(--warning)}
-.idea-card[data-status="Submitted"]{border-left-color:var(--info)}
-.idea-card[data-status="Draft"]{border-left-color:var(--border-strong)}
+/* ── STATUS RAIL ────────────────────────────────────────────────────────────
+   The idea-card rules that stood here are gone: the review queue, my ideas and
+   the board all render rows now, and nothing referenced them any more.
+
+   One thing in them was worth carrying across. Cards marked their status with
+   a coloured left rail, which is read without reading — you see a block of
+   amber and know the queue is backed up before parsing a single word. A table
+   with a Status column alone loses that, because a column of words has to be
+   read one row at a time.
+
+   So the rail moves to the row. It goes on the first cell rather than the <tr>:
+   a table row is not a box that can take a border under any layout the browser
+   picks for it, and a border set on the row itself is quietly dropped when the
+   table is border-collapse — which .table is. */
+tr[data-status] > td:first-child{border-left:3px solid var(--border)}
+tr[data-status="Approved"]     > td:first-child{border-left-color:var(--success)}
+tr[data-status="Rejected"]     > td:first-child{border-left-color:var(--danger)}
+tr[data-status="Implemented"]  > td:first-child{border-left-color:var(--primary)}
+tr[data-status="Under Review"] > td:first-child{border-left-color:var(--warning)}
+tr[data-status="Submitted"]    > td:first-child{border-left-color:var(--info)}
+tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-strong)}
 
 /* ── TIMELINE ───────────────────────────────────────────────────────────── */
 .timeline{padding:8px 0}

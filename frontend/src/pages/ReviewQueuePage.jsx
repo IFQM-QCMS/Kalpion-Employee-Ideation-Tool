@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { ideasApi } from '../services/api';
-import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate, engagementIndex, isPrivileged } from '../utils/helpers';
+import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, fmtDate, fmtDateTime, parseServerDate, engagementIndex } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import ReviewActionModal from '../components/ReviewActionModal';
 import AssignReviewersModal from '../components/AssignReviewersModal';
@@ -93,6 +93,11 @@ export default function ReviewQueuePage() {
   // but rendering every row was the browser's cost, not the server's.
   const pager = usePager(ideas);
 
+  // Org admins may not act on ideas, so they get no selection column at all -
+  // and the column count has to follow it, or every empty-state row runs short.
+  const canSelect = user?.role !== 'admin';
+  const colCount  = canSelect ? 11 : 10;
+
   return (
     <ScreenGuard>
       {user?.role === 'admin' && (
@@ -124,137 +129,147 @@ export default function ReviewQueuePage() {
         </div>
       )}
 
-      {/* Select all row */}
-      {user?.role !== 'admin' && (
-        <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:14 }}>
-          <input type="checkbox" id="bulk-select-all" checked={selectAll} style={{ accentColor:'var(--primary)' }}
-            onChange={e => handleSelectAll(e.target.checked)} />
-          <label htmlFor="bulk-select-all" style={{ fontSize:13,color:'var(--subtle)',cursor:'pointer' }}>
-            {t('review.select_all')}
-          </label>
-        </div>
-      )}
-
       {loading && <div className="empty-state"><div className="spinner"></div> {t('msg.loading')}</div>}
       {error   && <div className="alert alert-danger">{error}</div>}
-      {!loading && !error && !ideas.length && <div className="empty-state">{t('msg.no_review')}</div>}
 
-      <div id="review-list">
-        {pager.slice.map(i => {
-          const isSelf       = parseInt(i.submitter_id) === parseInt(user?.id);
-          const isMultiRv    = i.workflow_type === 'multi_reviewer';
-          const isMyPending  = i.my_reviewer_decision === 'pending';
-          const pending      = Math.max(0, (parseInt(i.reviewer_count)||0)-(parseInt(i.approved_count)||0)-(parseInt(i.rejected_count)||0));
-          const dueDate      = i.review_due_date ? new Date(i.review_due_date) : null;
-          const isOverdue    = dueDate && dueDate < new Date();
-          const showCheckbox = !isSelf && !isMultiRv && user?.role !== 'admin';
-
-          return (
-            <div key={i.id} className="idea-card" data-status={i.status} data-id={i.id}>
-              <div className="idea-card-header">
-                <div style={{ display:'flex',alignItems:'flex-start',gap:10 }}>
-                  {showCheckbox && (
-                    <input type="checkbox" className="bulk-chk" data-id={i.id}
-                      checked={selected.has(i.id)}
-                      style={{ marginTop:4,accentColor:'var(--primary)' }}
-                      onChange={() => toggleSelect(i.id)} />
-                  )}
-                  <div>
-                    <div className="idea-card-id">#{i.idea_code}</div>
-                    <div className="idea-card-title">{i.title}</div>
-                  </div>
-                </div>
-                <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4 }}>
-                  <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} />
-                  {i.ai_score > 0 && <span className={scoreBadgeClass(i.ai_score)}>AI: {i.ai_score}/100</span>}
-                </div>
-              </div>
-
-              <div className="idea-card-meta">
-                {t('detail.submitted_by')}: {i.submitter_name} · {i.department||'–'} · {i.submitted_at ? fmtDate(i.submitted_at) : '–'}
-              </div>
-
-              {(dueDate || parseInt(i.escalation_level) > 0) && (
-                <div style={{ display:'flex',gap:6,flexWrap:'wrap',marginTop:6 }}>
-                  {dueDate && (
-                    <span style={{ fontSize:11,padding:'2px 8px',borderRadius:20,fontWeight:600,
-                      border:`1px solid ${isOverdue?'var(--danger-dim)':'var(--border)'}`,
-                      background:isOverdue?'var(--danger-light)':'var(--chip-bg)',
-                      color:isOverdue?'var(--danger)':'var(--text-muted)' }}>
-                      {isOverdue ? `⚠ ${t('review.overdue')}` : `⏱ ${t('review.due')}`} {fmtDate(i.review_due_date)}
-                    </span>
-                  )}
-                  {parseInt(i.escalation_level) > 0 && (
-                    <span style={{ fontSize:11,padding:'2px 8px',borderRadius:20,fontWeight:600,
-                      border:'1px solid var(--primary-dim)',background:'var(--primary-light)',color:'var(--primary)' }}>
-                      ↑ L{i.escalation_level}
-                    </span>
-                  )}
-                </div>
+      {/*
+        A table, not a stack of cards.
+        A reviewer's question here is comparative — which of these is oldest,
+        which is overdue, which is high impact — and cards force that comparison
+        to be made from memory, because the same fact sits at a different height
+        in every card. Down a column it is one glance.
+        Select-all moved into the header cell, where it governs the column it
+        stands on instead of floating above the list.
+      */}
+      <div className="card" style={{ overflowX:'auto' }}>
+        <table className="table">
+          <thead>
+            <tr>
+              {canSelect && (
+                <th style={{ width:34 }}>
+                  <input type="checkbox" id="bulk-select-all" checked={selectAll}
+                    style={{ accentColor:'var(--primary)' }}
+                    title={t('review.select_all')}
+                    onChange={e => handleSelectAll(e.target.checked)} />
+                </th>
               )}
+              <th>{t('table.code')}</th>
+              <th>{t('table.title')}</th>
+              <th>{t('table.submitter')}</th>
+              <th>{t('table.dept')}</th>
+              <th>{t('table.impact')}</th>
+              <th>{t('table.score')}</th>
+              <th>{t('table.status')}</th>
+              <th>{t('review.due')}</th>
+              <th>{t('audit.when')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="review-list">
+            {loading && <tr><td colSpan={colCount} className="text-center"><div className="spinner"></div></td></tr>}
+            {!loading && !error && !ideas.length && (
+              <tr><td colSpan={colCount} className="text-center">{t('msg.no_review')}</td></tr>
+            )}
+            {pager.slice.map(i => {
+              const isSelf       = parseInt(i.submitter_id) === parseInt(user?.id);
+              const isMultiRv    = i.workflow_type === 'multi_reviewer';
+              const isMyPending  = i.my_reviewer_decision === 'pending';
+              const pending      = Math.max(0, (parseInt(i.reviewer_count)||0)-(parseInt(i.approved_count)||0)-(parseInt(i.rejected_count)||0));
+              const dueDate      = parseServerDate(i.review_due_date);
+              const isOverdue    = dueDate && dueDate < new Date();
+              const showCheckbox = !isSelf && !isMultiRv && canSelect;
 
-              {isMultiRv && (
-                <div style={{ marginTop:6,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap' }}>
-                  <span style={{ fontSize:11,background:'var(--info-light)',color:'var(--info)',padding:'2px 9px',borderRadius:'var(--r-full)',fontWeight:600,border:'1px solid var(--info-dim)' }}>
-                    {t('review.committee_badge')}
-                  </span>
-                  <span style={{ fontSize:11,color:'var(--subtle)' }}>
-                    {i.approved_count||0} {t('committee.approved_count')} · {i.rejected_count||0} {t('committee.rejected_count')} · {pending} {t('committee.pending_count')}
-                  </span>
-                  {isMyPending && (
-                    <span style={{ fontSize:11,background:'var(--warning-light)',color:'var(--warning)',padding:'2px 9px',borderRadius:'var(--r-full)',fontWeight:600,border:'1px solid var(--warning-dim)' }}>
-                      {t('review.vote_needed')}
-                    </span>
+              return (
+                <tr key={i.id} data-status={i.status} data-id={i.id}>
+                  {canSelect && (
+                    <td>
+                      {showCheckbox && (
+                        <input type="checkbox" className="bulk-chk" data-id={i.id}
+                          checked={selected.has(i.id)}
+                          style={{ accentColor:'var(--primary)' }}
+                          onChange={() => toggleSelect(i.id)} />
+                      )}
+                    </td>
                   )}
-                </div>
-              )}
-
-              {(i.avg_rating > 0 || i.vote_count > 0) && (
-                <div style={{ marginTop:4,fontSize:11,color:'var(--subtle)',display:'flex',gap:6 }}>
-                  {i.avg_rating > 0 && <span>Rating {parseFloat(i.avg_rating).toFixed(1)}</span>}
-                  {i.vote_count > 0 && <span>Votes {i.vote_count}</span>}
-                </div>
-              )}
-
-              <div className="idea-card-footer">
-                <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-                  <span className={`badge ${impactBadge(i.impact_level)}`}>
-                    {translateImpact(i.impact_level,t)||'–'} {t('idea.impact_suffix')}
-                  </span>
-                  <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />
-                </div>
-                <div style={{ display:'flex',gap:8,alignItems:'center' }}>
-                  {isSelf && (
-                    <>
-                      <span style={{ fontSize:11,color:'#f59e0b' }}>{t('review.own_idea')}</span>
-                      <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
-                    </>
-                  )}
-                  {!isSelf && isMultiRv && isMyPending && (
-                    <>
-                      <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
-                      <button className="btn btn-primary btn-sm" onClick={() => { setOpenRvDecId(i.id); setOpenRvDecCode(i.idea_code); }}>{t('review.my_review')}</button>
-                    </>
-                  )}
-                  {!isSelf && isMultiRv && !isMyPending && (
-                    <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('review.view_details')}</button>
-                  )}
-                  {!isSelf && !isMultiRv && (
-                    <>
-                      <button className="btn btn-outline btn-sm" onClick={() => { setOpenAssignId(i.id); setOpenAssignCode(i.idea_code); }}>
-                        {t('review.route_committee')}
-                      </button>
-                      <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('review.view_details')}</button>
-                      <button className="btn btn-success btn-sm" onClick={() => { setOpenReviewId(i.id); setOpenReviewCode(i.idea_code); }}>{t('review.review_btn')}</button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+                  <td><strong>{i.idea_code}</strong></td>
+                  <td title={i.title}>
+                    <div className="cell-clamp" style={{ maxWidth:260 }}>{i.title}</div>
+                    {/* Committee tallies and this reviewer's own outstanding vote
+                        ride under the title: they qualify one idea rather than
+                        being facts anyone would scan a whole column of. */}
+                    {isMultiRv && (
+                      <div style={{ marginTop:3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap' }}>
+                        <span className="chip chip-info">{t('review.committee_badge')}</span>
+                        <span style={{ fontSize:11,color:'var(--subtle)' }}>
+                          {i.approved_count||0} {t('committee.approved_count')} · {i.rejected_count||0} {t('committee.rejected_count')} · {pending} {t('committee.pending_count')}
+                        </span>
+                        {isMyPending && <span className="chip chip-warning">{t('review.vote_needed')}</span>}
+                      </div>
+                    )}
+                  </td>
+                  <td>
+                    {i.submitter_name}
+                    {isSelf && <div style={{ fontSize:11,color:'var(--warning)' }}>{t('review.own_idea')}</div>}
+                  </td>
+                  <td>{i.department||'–'}</td>
+                  <td>
+                    <span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'–'}</span>
+                  </td>
+                  <td style={{ whiteSpace:'nowrap' }}>
+                    {i.ai_score > 0
+                      ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
+                      : <span className="score-none score-badge">—</span>}
+                    <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />
+                  </td>
+                  <td>
+                    <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
+                    <QcBadge status={i.qcms_push_status} />
+                    {parseInt(i.escalation_level) > 0 && (
+                      <div style={{ marginTop:3 }}>
+                        <span className="chip chip-primary">↑ L{i.escalation_level}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ whiteSpace:'nowrap' }}>
+                    {dueDate
+                      ? <span className={`chip ${isOverdue ? 'chip-danger' : ''}`}>
+                          {isOverdue ? `⚠ ${t('review.overdue')} ` : ''}{fmtDate(i.review_due_date)}
+                        </span>
+                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                  </td>
+                  <td style={{ whiteSpace:'nowrap' }}>{i.submitted_at ? fmtDateTime(i.submitted_at) : '–'}</td>
+                  <td>
+                    <div style={{ display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end' }}>
+                      {isSelf && (
+                        <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
+                      )}
+                      {!isSelf && isMultiRv && isMyPending && (
+                        <>
+                          <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
+                          <button className="btn btn-primary btn-sm" onClick={() => { setOpenRvDecId(i.id); setOpenRvDecCode(i.idea_code); }}>{t('review.my_review')}</button>
+                        </>
+                      )}
+                      {!isSelf && isMultiRv && !isMyPending && (
+                        <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
+                      )}
+                      {!isSelf && !isMultiRv && (
+                        <>
+                          <button className="btn btn-outline btn-sm" onClick={() => { setOpenAssignId(i.id); setOpenAssignCode(i.idea_code); }}>
+                            {t('review.route_committee')}
+                          </button>
+                          <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
+                          <button className="btn btn-success btn-sm" onClick={() => { setOpenReviewId(i.id); setOpenReviewCode(i.idea_code); }}>{t('review.review_btn')}</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <Pager {...pager} noun="ideas" />
       </div>
-      <Pager {...pager} noun="ideas" />
 
       {openDetailId && <IdeaDetailModal ideaId={openDetailId} onClose={() => { setOpenDetailId(null); load(); }} />}
       {openReviewId && <ReviewActionModal ideaId={openReviewId} ideaCode={openReviewCode} onClose={() => { setOpenReviewId(null); load(); }} />}

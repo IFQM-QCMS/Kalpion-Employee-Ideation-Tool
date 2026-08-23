@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
-import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas, fmtDate, engagementIndex } from '../utils/helpers';
+import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas, fmtDateTime, engagementIndex } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import QcBadge from '../components/QcBadge';
+import Pager, { usePager } from '../components/Pager';
 
 function EngBadge({ aiScore, avgRating, voteCount, t }) {
   const ei = engagementIndex(aiScore, avgRating, voteCount);
@@ -37,6 +38,7 @@ export default function MyIdeasPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [openId,  setOpenId]  = useState(null);
+  const pager = usePager(ideas);
 
   useEffect(() => { load(); }, []);
 
@@ -81,44 +83,81 @@ export default function MyIdeasPage() {
         </select>
       </div>
 
-      {loading && <div className="empty-state"><div className="spinner"></div></div>}
-      {error   && <div className="alert alert-danger">{error}</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
 
-      {!loading && !error && !ideas.length && (
-        <div className="empty-state">{t('msg.no_ideas')}</div>
-      )}
-
-      <div id="my-ideas-list">
-        {ideas.map(i => (
-          <div key={i.id} className="idea-card" data-status={i.status} onClick={() => setOpenId(i.id)}>
-            <div className="idea-card-header">
-              <div>
-                <div className="idea-card-id">#{i.idea_code}</div>
-                <div className="idea-card-title">{i.title}</div>
-              </div>
-              <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4 }}>
-                <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span><QcBadge status={i.qcms_push_status} />
-                {i.ai_score > 0 && <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>}
-                {i.status !== 'Draft' && <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />}
-              </div>
-            </div>
-            <div className="idea-card-meta">
-              {translateAreas(i.impact_areas, t) || '—'} · {i.submitted_at ? fmtDate(i.submitted_at) : translateStatus('Draft', t)}
-            </div>
-            {i.status !== 'Draft' && <div style={{ marginTop:4 }}><EngMiniStats avgRating={i.avg_rating} voteCount={i.vote_count} /></div>}
-            <div className="idea-card-footer">
-              <span className={`badge ${impactBadge(i.impact_level)}`}>
-                {translateImpact(i.impact_level, t)||'–'} {t('idea.impact_suffix')}
-              </span>
-              <div style={{ display:'flex',gap:8,alignItems:'center' }}>
-                {i.points_awarded > 0 && <span className="points-badge">+{i.points_awarded} {t('unit.pts')}</span>}
-                <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); setOpenId(i.id); }}>
-                  {t('btn.view')}
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
+      {/*
+        One row per idea.
+        As cards, an author scanning for "which of mine is still sitting in
+        review" had to read every card in full, because status lived in a
+        different spot depending on how long the title was. In a column the
+        answer is found without reading anything.
+      */}
+      <div className="card" style={{ overflowX:'auto' }}>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('table.code')}</th>
+              <th>{t('table.title')}</th>
+              <th>{t('table.impact_areas')}</th>
+              <th>{t('table.impact')}</th>
+              <th>{t('table.score')}</th>
+              <th>{t('table.engagement')}</th>
+              <th>{t('table.status')}</th>
+              <th>{t('table.points')}</th>
+              <th>{t('audit.when')}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="my-ideas-list">
+            {loading && <tr><td colSpan="10" className="text-center"><div className="spinner"></div></td></tr>}
+            {!loading && !error && !ideas.length && (
+              <tr><td colSpan="10" className="text-center">{t('msg.no_ideas')}</td></tr>
+            )}
+            {pager.slice.map(i => (
+              <tr key={i.id} data-status={i.status} style={{ cursor:'pointer' }} onClick={() => setOpenId(i.id)}>
+                <td><strong>{i.idea_code}</strong></td>
+                <td title={i.title}><div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div></td>
+                <td style={{ color:'var(--text-muted)',fontSize:12.5 }}>
+                  <div className="cell-clamp" style={{ maxWidth:200 }}>{translateAreas(i.impact_areas, t) || '—'}</div>
+                </td>
+                <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'–'}</span></td>
+                <td>
+                  {i.ai_score > 0
+                    ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
+                    : <span className="score-none score-badge">—</span>}
+                </td>
+                {/* A draft has been seen by nobody, so it has no engagement to
+                    report - an empty cell here means "not yet", not "zero". */}
+                <td style={{ whiteSpace:'nowrap' }}>
+                  {i.status !== 'Draft'
+                    ? <div style={{ display:'flex',alignItems:'center',gap:6,flexWrap:'wrap' }}>
+                        <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />
+                        <EngMiniStats avgRating={i.avg_rating} voteCount={i.vote_count} />
+                      </div>
+                    : <span style={{ color:'var(--subtle)' }}>—</span>}
+                </td>
+                <td>
+                  <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span>
+                  <QcBadge status={i.qcms_push_status} />
+                </td>
+                <td>
+                  {i.points_awarded > 0
+                    ? <span className="points-badge">+{i.points_awarded} {t('unit.pts')}</span>
+                    : <span style={{ color:'var(--subtle)' }}>—</span>}
+                </td>
+                <td style={{ whiteSpace:'nowrap' }}>
+                  {i.submitted_at ? fmtDateTime(i.submitted_at) : translateStatus('Draft', t)}
+                </td>
+                <td>
+                  <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); setOpenId(i.id); }}>
+                    {t('btn.view')}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <Pager {...pager} noun="ideas" />
       </div>
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}

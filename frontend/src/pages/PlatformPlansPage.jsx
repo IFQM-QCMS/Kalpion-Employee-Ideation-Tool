@@ -610,10 +610,10 @@ export default function PlatformPlansPage() {
                   )}
                 </td>
                 <td>
-                  <span className="badge badge-info">{p.subscriber_count || 0} org(s)</span>
+                  <span className="chip chip-info">{p.subscriber_count || 0} org(s)</span>
                 </td>
                 <td>
-                  <span className={`badge ${p.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
+                  <span className={`chip ${p.status === 'active' ? 'chip-success' : 'chip-warning'}`}>
                     {p.status === 'active' ? 'Active' : 'Deleted'}
                   </span>
                 </td>
