@@ -49,7 +49,24 @@ function ToastContainer({ toasts }) {
             fontFamily: 'Inter,system-ui,sans-serif',
           }}>
             <span style={{ fontSize: 16, color }}>{icons[t.type] || icons.info}</span>
-            <span dangerouslySetInnerHTML={{ __html: t.msg }} />
+            {/*
+              Plain text, deliberately.
+
+              This was dangerouslySetInnerHTML with no sanitiser. Toast text is
+              populated all over the app straight from backend response strings
+              — err.response?.data?.error, err.message, ordinary API text — and
+              validation errors routinely echo back a value the user submitted.
+              Anything reflected that way was being parsed as markup, which is a
+              cross-site scripting vector with an unusually wide mouth: every
+              toast in the product was an opt-OUT of escaping rather than an
+              opt-in.
+
+              Nothing in the codebase actually needed markup here. If a toast
+              ever does, give it an explicitly-named `html` field sanitised
+              where it is constructed, so the unsafe path is auditable rather
+              than the default for every message.
+            */}
+            <span>{t.msg}</span>
           </div>
         );
       })}

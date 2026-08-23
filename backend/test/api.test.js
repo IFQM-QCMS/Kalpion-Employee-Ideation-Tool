@@ -2703,3 +2703,48 @@ test('pay as you go meters distinct sign-ins, and a closed month stops moving', 
   assert.ok(Array.isArray(sub.data.subscription.usage), 'usage must travel with the subscription');
   assert.ok(sub.data.subscription.usage.some((u) => u.period === period));
 });
+
+// ── Tenant connection pools are capped ───────────────────────────────────────
+/*
+ * Pools were created lazily and never evicted, so open connections grew
+ * monotonically with the number of distinct organisations touched since the
+ * last restart. Nothing capped it and nothing reclaimed it, so a process that
+ * had served enough customers eventually exhausted the server's max_connections
+ * and every tenant started failing to get a connection — including ones already
+ * working, and triggered by an organisation that was not the cause.
+ */
+test('the tenant pool cache is capped and evicts the least recently used', async () => {
+  const { getTenantPool, poolStats } = await import('../src/database/tenant.js');
+
+  const before = poolStats();
+  assert.ok(before.max >= 4, 'there must be a cap at all');
+  assert.ok(before.open <= before.max, 'and it must already be respected');
+
+  /*
+   * Ask for more distinct pools than the cap allows. They point at databases
+   * that do not exist, which is fine: mysql2 creates a pool lazily and does not
+   * connect until a query is run, and what is under test is the CACHE, not the
+   * connections.
+   */
+  for (let i = 0; i < before.max + 12; i++) {
+    getTenantPool({ db_host: '127.0.0.1', db_name: `ifqm_pool_probe_${i}` });
+  }
+
+  const after = poolStats();
+  assert.ok(after.open <= after.max,
+    `the cache must not exceed its cap — ${after.open} open against a cap of ${after.max}`);
+
+  /*
+   * The point of LRU rather than "evict anything": a tenant asked for
+   * repeatedly must survive a flood of one-off tenants. Touch one on every
+   * iteration and it must still be resident at the end.
+   */
+  const hot = { db_host: '127.0.0.1', db_name: 'ifqm_pool_probe_hot' };
+  const first = getTenantPool(hot);
+  for (let i = 0; i < after.max + 5; i++) {
+    getTenantPool({ db_host: '127.0.0.1', db_name: `ifqm_pool_flood_${i}` });
+    getTenantPool(hot);   // keeps it at the most-recent end
+  }
+  assert.equal(getTenantPool(hot), first,
+    'a pool touched on every iteration must not have been evicted');
+});

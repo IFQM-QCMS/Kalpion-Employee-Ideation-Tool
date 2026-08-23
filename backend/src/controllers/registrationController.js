@@ -96,3 +96,16 @@ export const whitelistAdd = asyncHandler(async (req, res) =>
 export const whitelistRemove = asyncHandler(async (req, res) =>
   respond(res, await registrations.removeWhitelistEntry(req.params.id))
 );
+
+/*
+ * Every other controller in this directory ends with a default export listing
+ * its handlers, and both routers here import this one with `import * as`, so
+ * nothing was broken — but a module that is the single exception to a
+ * twenty-two-file convention is a module somebody will eventually copy as a
+ * template.
+ */
+export default {
+  submit, checkEmail, sendOtp, verifyOtp, sendPhoneOtp, verifyPhoneOtp,
+  channels, list, approve, reject,
+  whitelist, whitelistAdd, whitelistRemove,
+};

@@ -165,6 +165,55 @@ export async function resolveTenantBySlug(slug, host = 'localhost') {
  * @param {object} tenant  a tenant row from resolveTenant()
  * @returns {import('mysql2/promise').Pool}
  */
+/**
+ * The most tenant pools this process will hold open at once.
+ *
+ * ── The ceiling this removes ───────────────────────────────────────────────
+ *
+ * Pools were created lazily and never evicted, so open connections grew
+ * monotonically with the number of DISTINCT organisations touched since the
+ * last restart. Nothing capped it and nothing reclaimed it: at DB_POOL_SIZE
+ * connections per organisation, a process that had served enough customers
+ * eventually exhausted the server's max_connections and every tenant — including
+ * ones already working — started failing to get a connection.
+ *
+ * It is a slow failure and an unfair one. The organisation that finally trips
+ * the limit is not the one that caused it, and a restart appears to "fix" it,
+ * which is exactly the shape of problem that gets rebooted for months instead
+ * of diagnosed.
+ *
+ * ── Why LRU, and why an idle pool is safe to close ────────────────────────
+ *
+ * A tenant nobody has touched recently is the cheapest thing to give up: the
+ * cost of eviction is one pool re-creation on their next request, which is a
+ * few milliseconds, against a hard failure for everybody otherwise.
+ *
+ * Closing is deliberately NOT awaited here. pool.end() waits for in-flight
+ * queries to finish, and awaiting it would block whoever triggered the eviction
+ * behind a stranger's slow query. The pool object is dropped from the cache
+ * immediately, so nothing new can be handed out from it while it drains.
+ */
+const MAX_POOLS = Math.max(4, parseInt(process.env.DB_MAX_POOLS, 10) || 50);
+
+/**
+ * Drop the least recently used pools until the cache is within its cap.
+ *
+ * Map preserves insertion order, and getTenantPool re-inserts on every hit, so
+ * the first key is always the least recently used one.
+ */
+function evictIfOverCap() {
+  while (poolCache.size > MAX_POOLS) {
+    const oldestKey = poolCache.keys().next().value;
+    const pool = poolCache.get(oldestKey);
+    poolCache.delete(oldestKey);
+    logger.info(`db: evicted least-recently-used pool ${oldestKey} (cap ${MAX_POOLS})`);
+    // Not awaited — see the note above. Draining happens in the background.
+    Promise.resolve()
+      .then(() => pool.end())
+      .catch((e) => logger.warn(`db: evicted pool did not close cleanly — ${e.message}`));
+  }
+}
+
 export function getTenantPool(tenant) {
   // Credentials come from config, NOT from the tenant row. The registry used to
   // hold a plaintext db_user/db_pass per tenant — in practice root for all of
@@ -175,7 +224,14 @@ export function getTenantPool(tenant) {
   const host = tenant.db_host || config.masterDb.host;
 
   const key = `${host}|${tenant.db_name}|${user}`;
-  if (poolCache.has(key)) return poolCache.get(key);
+  if (poolCache.has(key)) {
+    // Re-insert so this key moves to the end: Map keeps insertion order, which
+    // is what makes the first key the least recently used one.
+    const existing = poolCache.get(key);
+    poolCache.delete(key);
+    poolCache.set(key, existing);
+    return existing;
+  }
 
   const pool = mysql.createPool({
     host,
@@ -196,7 +252,13 @@ export function getTenantPool(tenant) {
     multipleStatements: false,
   });
   poolCache.set(key, pool);
+  evictIfOverCap();
   return pool;
+}
+
+/** How many tenant pools are open, and the cap. Read by the health endpoint. */
+export function poolStats() {
+  return { open: poolCache.size, max: MAX_POOLS, per_pool: config.dbPoolSize };
 }
 
 /** Close every cached pool — used for graceful shutdown. */
@@ -207,6 +269,6 @@ export async function closeAllPools() {
 }
 
 export default {
-  resolveTenant, resolveTenantBySlug, getTenantPool, fallbackTenant, sanitizeSlug,
+  resolveTenant, resolveTenantBySlug, getTenantPool, poolStats, fallbackTenant, sanitizeSlug,
   heldForNonPayment, closeAllPools,
 };

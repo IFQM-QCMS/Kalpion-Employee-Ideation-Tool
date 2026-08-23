@@ -21,6 +21,7 @@ import { decoratePlan, priceBreakdown, CYCLE_DAYS, isLifetime, isPayg } from './
 import { usageHistory } from './usageBillingService.js';
 import { getPlatformSetting } from './platformSettingsService.js';
 import logger from '../utils/logger.js';
+import config from '../config/index.js';
 import { invalidateQuotaCache, usageFor } from '../middleware/tenantQuota.js';
 import { heldForNonPayment } from '../database/tenant.js';
 
@@ -835,6 +836,29 @@ async function sendHeldNotice(tenant) {
   }
 }
 
+/**
+ * Where "Pay Monthly Invoice Now" should actually take somebody.
+ *
+ * The invoice email hard-coded http://localhost:5173/billing — the Vite dev
+ * server on the DEVELOPER's machine. Sent to every org admin of every active
+ * plan-assigned tenant, so the primary call to action on every monthly invoice
+ * in production pointed at a port on the recipient's own computer.
+ *
+ * config.frontendBaseUrl is the variable password-reset emails already use,
+ * and config validation already refuses to start a production deployment where
+ * it still points at localhost — so reusing it puts this link under a check
+ * that already exists, rather than inventing a second variable nobody guards.
+ *
+ * Falls back to a relative path when no public URL is configured. A relative
+ * href in an email is useless too, but it is visibly broken rather than
+ * plausibly broken — a link to localhost looks like it works right up until
+ * somebody clicks it.
+ */
+function billingUrl() {
+  const base = String(config.frontendBaseUrl || '').replace(/\/+$/, '');
+  return base ? `${base}/billing` : '/billing';
+}
+
 export async function sendMonthlyInvoices() {
   const [rows] = await masterDb().query(
     `SELECT t.id, t.name, t.slug, t.plan_id, t.billing_status, t.period_end, p.name AS plan_name, p.total_rupees
@@ -860,7 +884,7 @@ export async function sendMonthlyInvoices() {
   <b>Monthly Amount:</b> ${amountStr}<br>
   <b>Due Date:</b> ${dueDate}</p>
   <p>Please complete your payment directly from your admin panel under <b>Settings &rarr; Billing</b> or via Razorpay.</p>
-  <p style="margin-top:16px"><a href="http://localhost:5173/billing" style="background:#4f46e5;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">Pay Monthly Invoice Now</a></p>
+  <p style="margin-top:16px"><a href="${billingUrl()}" style="background:#4f46e5;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-weight:bold;display:inline-block">Pay Monthly Invoice Now</a></p>
 </div>`;
 
     if (cfg.zepto_enabled) {

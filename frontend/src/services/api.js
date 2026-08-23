@@ -185,8 +185,20 @@ export const ideasApi = {
   assignReviewers: (data) => api.post('/ideas/assign-reviewers', data),
   checkDuplicate: (params) => api.get('/ideas/check-duplicate', { params }),
   reviewQueue: () => api.get('/ideas/review'),
-  updateRoi: (data) => api.post('/ideas/update-roi', data),
-  updateImplementation: (data) => api.post('/ideas/update-implementation', data),
+  /*
+   * These are '/ideas/roi' and '/ideas/implementation' — NOT '/ideas/update-*'.
+   *
+   * They were the longer names for a while and nothing was registered under
+   * them, so every ROI entry and every implementation-status update fell
+   * through Express to the 404 handler. Both flows were broken end to end and
+   * silently: the caller saw a failed request, not a missing route.
+   *
+   * Renamed here rather than in the router because the backend names are the
+   * ones consistent with the rest of the /ideas/* table, which is verb-only
+   * throughout.
+   */
+  updateRoi: (data) => api.post('/ideas/roi', data),
+  updateImplementation: (data) => api.post('/ideas/implementation', data),
 };
 
 // ── Votes ─────────────────────────────────────────────────────────
