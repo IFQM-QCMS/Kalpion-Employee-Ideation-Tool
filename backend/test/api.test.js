@@ -2552,3 +2552,63 @@ test('the purge deletes old access logs and never touches approval or billing hi
     token: PA, body: { log_retention_months: '24' },
   });
 });
+
+// ── MOM 22: the implementation metrics count what reached QC ─────────────────
+/*
+ * Implementation Rate reported counts['Implemented'] under the label "Ideas
+ * forwarded to QC". Those are different populations: an idea reaches the QC
+ * tool when it is pushed and QCMS accepts it, while its status can sit at
+ * Approved for weeks afterwards. The figure moved when somebody marked an idea
+ * implemented — not when it actually went across.
+ */
+test('analytics reports what reached QC, separately from what is marked Implemented', async () => {
+  const before = await api('GET', '/api/reports/analytics', { token: AADMIN });
+  assert.equal(before.status, 200);
+  assert.ok(before.data.qcms, 'the payload must carry QC counters — the browser cannot derive them');
+  const basePushed = Number(before.data.qcms.pushed) || 0;
+  // Earlier cases in this file have already forwarded ideas, so both figures
+  // are asserted as DELTAS. An absolute expectation would encode the order of
+  // the whole suite into this one test.
+  const baseVelocity = Number(before.data.qcms.pushed_30d) || 0;
+
+  // An idea marked Implemented but never pushed. Under the old metric this
+  // alone moved Implementation Rate; it must now move nothing.
+  const submit = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Reclaim swarf from the lathe bay',
+      present_situation: 'Swarf is skipped with general waste and the metal value is lost.',
+      proposed_solution: 'Segregate at the machine and sell it back to the foundry.',
+      investment_required: '20000',
+    },
+  });
+  await sql('ifqm_test_a',
+    `UPDATE ifqm_test_a.ideas SET status='Implemented' WHERE id=${submit.data.idea_id}`);
+
+  let now = await api('GET', '/api/reports/analytics', { token: AADMIN });
+  assert.equal(Number(now.data.qcms.pushed), basePushed,
+    'marking an idea Implemented must not change what reached QC');
+
+  // Actually forwarding it does.
+  await sql('ifqm_test_a',
+    `UPDATE ifqm_test_a.ideas SET qcms_push_status='imported', qcms_pushed_at=NOW()
+      WHERE id=${submit.data.idea_id}`);
+  now = await api('GET', '/api/reports/analytics', { token: AADMIN });
+  assert.equal(Number(now.data.qcms.pushed), basePushed + 1,
+    'an idea that reached QC must be counted');
+  assert.equal(Number(now.data.qcms.pushed_30d), baseVelocity + 1,
+    'and must appear in the 30-day velocity window');
+
+  /*
+   * Velocity is a pace, so it only counts the recent window. An idea pushed
+   * long ago still counts toward the rate and must not count toward velocity.
+   */
+  await sql('ifqm_test_a',
+    `UPDATE ifqm_test_a.ideas SET qcms_pushed_at = DATE_SUB(NOW(), INTERVAL 90 DAY)
+      WHERE id=${submit.data.idea_id}`);
+  now = await api('GET', '/api/reports/analytics', { token: AADMIN });
+  assert.equal(Number(now.data.qcms.pushed), basePushed + 1,
+    'an old push still counts toward the overall rate');
+  assert.equal(Number(now.data.qcms.pushed_30d), baseVelocity,
+    'but a 90-day-old push drops back out of the velocity window');
+});

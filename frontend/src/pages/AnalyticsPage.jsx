@@ -65,7 +65,10 @@ export default function AnalyticsPage() {
   (data.status_summary||[]).forEach(s => { counts[s.status] = s.cnt; });
   const total   = Object.values(counts).reduce((a,b)=>a+b,0);
   const approved = (counts['Approved']||0) + (counts['Implemented']||0);
-  const impl     = counts['Implemented']||0;
+  // counts['Implemented'] is deliberately NOT read here any more: MOM 22
+  // defines both implementation metrics against ideas forwarded to QC, and
+  // leaving the old variable in place is how the wrong number finds its way
+  // back into a label.
   const ss       = data.score_stats || {};
   const hq = parseInt(ss.high_quality||0);
   const mq = parseInt(ss.medium_quality||0);
@@ -81,10 +84,33 @@ export default function AnalyticsPage() {
     .map(s => ({ label: translateStatus(s.status, t), value: Number(s.cnt), color: STATUS_COLORS[s.status] || '#94a3b8' }))
     .filter(d => d.value > 0);
 
+  /*
+   * MOM §22 defines both of these against ideas FORWARDED TO QC, not against
+   * the status column.
+   *
+   * They are different populations and the difference is not cosmetic. An idea
+   * reaches the QC tool when it is pushed and QCMS accepts it; its status may
+   * sit at Approved for weeks afterwards while the work is scheduled. This used
+   * to report `counts['Implemented']` under the label "Ideas forwarded to QC",
+   * which was a label over the wrong number — the figure moved when somebody
+   * marked an idea implemented, not when it actually went across.
+   *
+   *   Implementation Rate      what share of all ideas reached QC
+   *   Implementation Velocity  how many reached it in the last 30 days
+   *
+   * Velocity is a COUNT, not a percentage: "18 ideas pushed this month" is a
+   * pace, which is what velocity means, and a percentage of a moving total is
+   * not.
+   */
+  const qcms = data.qcms || {};
+  const pushed = Number(qcms.pushed) || 0;
+  const pushed30 = Number(qcms.pushed_30d) || 0;
+
   const kpis = [
     [t('dash.total'), total, '', paletteIcon('bulb'), 'Total Ideas Submitted'],
     [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check'), 'Approved & Implemented Rate'],
-    [t('analytics.impl_rate'), total ? Math.round(impl/total*100) : 0, '%', paletteIcon('rocket'), t('analytics.impl_rate_sub')],
+    [t('analytics.impl_rate'), total ? Math.round(pushed/total*100) : 0, '%', paletteIcon('rocket'), t('analytics.impl_rate_sub')],
+    [t('analytics.impl_velocity'), pushed30, '', paletteIcon('rocket'), t('analytics.impl_velocity_sub')],
     [t('analytics.avg_score'), ss.overall_avg||0, '', paletteIcon('star'), t('analytics.avg_score_sub')],
   ];
 

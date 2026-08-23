@@ -949,7 +949,7 @@ export default {
   // ── Analytics ──
   'analytics.approval_rate':'Approval Rate',
   'analytics.impl_rate':'Implementation Rate',
-  'analytics.impl_rate_sub':'Ideas taken through to implementation',
+  'analytics.impl_rate_sub':'Ideas forwarded to QC',
   'analytics.avg_score_sub':'Average across all submitted ideas',
   'analytics.avg_score':'Avg Quality Score',
   'analytics.status_dist':'Status Distribution',
@@ -1535,6 +1535,8 @@ export default {
   'analytics.impact_dist':'Impact Area Distribution',
   'analytics.monthly_trend':'Monthly Submission Trend',
   'analytics.score_dist':'Quality Score Distribution',
+  'analytics.impl_velocity':'Implementation Velocity',
+  'analytics.impl_velocity_sub':'Ideas pushed to QC in the last 30 days',
   'login.otp_id_ph':'Username, registered email or mobile number',
   'login.reset_code_sent':'If that is registered with us, a code has been sent. Enter it on the sign-in screen to set a new password.',
   'login.reset_code_sent_to':'A code has been sent to {where}. Enter it on the sign-in screen to set a new password.',

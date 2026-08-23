@@ -3,6 +3,7 @@
  * api/users.php (the JSON data feeding the in-app analytics dashboard and the
  * audit log). The printable HTML analytics report lives in exportService.
  */
+import logger from '../utils/logger.js';
 
 // ── analytics (JSON) ────────────────────────────────────────────────
 export async function analytics(db) {
@@ -39,12 +40,42 @@ export async function analytics(db) {
      FROM ideas WHERE status != 'Draft'`
   );
 
+  /*
+   * MOM §22 defines Implementation Rate and Implementation Velocity in terms of
+   * ideas FORWARDED TO QC, not ideas whose status happens to read Implemented.
+   *
+   * Those are different populations. An idea reaches the QC tool when it is
+   * pushed there and QCMS accepts it ('imported') or already has it
+   * ('duplicate'); its status may sit at Approved for weeks afterwards while
+   * the work is scheduled. Reporting the status column and calling it
+   * "forwarded to QC" would have been a label over the wrong number.
+   *
+   * Counted here rather than derived in the browser, because the browser only
+   * receives the status split — it has no way to know what reached QCMS.
+   */
+  let qcms = { pushed: 0, pushed_30d: 0 };
+  try {
+    const [[row]] = await db.query(
+      `SELECT
+         SUM(qcms_push_status IN ('imported','duplicate')) AS pushed,
+         SUM(qcms_push_status IN ('imported','duplicate')
+             AND qcms_pushed_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)) AS pushed_30d
+       FROM ideas WHERE status != 'Draft'`
+    );
+    qcms = { pushed: Number(row.pushed) || 0, pushed_30d: Number(row.pushed_30d) || 0 };
+  } catch (e) {
+    // The columns predate migration 007 on an un-migrated tenant. A missing
+    // figure reads as zero rather than blanking the whole dashboard.
+    logger.warn('analytics: QCMS counters unavailable', e.message);
+  }
+
   return {
     success: true,
     trend,
     impact_distribution: impactDistribution,
     status_summary: statusSummary,
     score_stats: scoreRows[0] || {},
+    qcms,
   };
 }
 
