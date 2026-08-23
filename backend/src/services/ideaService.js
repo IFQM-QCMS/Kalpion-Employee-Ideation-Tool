@@ -431,7 +431,23 @@ export async function review(db, user) {
     return { success: true, ideas };
   }
 
-  // Admin / exec / super_admin — see all non-draft ideas in the queue
+  /*
+   * The org-wide queue, for the people whose remit actually is org-wide.
+   *
+   * This used to be a bare `else`, so any role that was not in reviewer_roles
+   * landed here — including roles the organisation had deliberately left out of
+   * its chain. A team lead excluded from a manager-and-above chain did not get
+   * an empty queue; they got EVERY idea in the organisation, which is both more
+   * than they should see and the reason they were able to act on them.
+   *
+   * Someone outside the chain now gets an empty queue, which is the honest
+   * answer: there is nothing waiting on them.
+   */
+  const orgWideRoles = [...new Set([...ADMIN_ROLES, ...cfg.final_roles])];
+  if (!orgWideRoles.includes(user.role)) {
+    return { success: true, ideas: [] };
+  }
+
   const [ideas] = await db.execute(
     `SELECT DISTINCT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
             (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
@@ -907,9 +923,51 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
   const escalationRoles = cfg.reviewer_roles;
   const finalApproverRoles = cfg.final_roles;
 
+  /*
+   * ── Is this person in the chain at all? ──────────────────────────────────
+   *
+   * They were not being asked. The route guard uses a STATIC list of every
+   * role that could plausibly review anything, and the logic below then took
+   * one of two paths: a role in escalationRoles escalated to their manager,
+   * and anything else fell straight through to the final-decision code at the
+   * bottom of this function.
+   *
+   * So a role the organisation had deliberately left OUT of its chain did not
+   * get refused — it skipped the escalation branch and closed the idea
+   * outright. An organisation whose chain started at Manager found its team
+   * leads approving ideas with full authority, which is the exact opposite of
+   * what configuring a chain is for, and it looked like the setting was being
+   * ignored rather than inverted.
+   *
+   * The chain is the authority on who may act. The static route list only says
+   * who may reach this endpoint.
+   */
+  const chainRoles = [...new Set([...escalationRoles, ...finalApproverRoles])];
+  if (!chainRoles.includes(user.role)) {
+    const names = chainRoles.length ? chainRoles.join(', ') : 'nobody';
+    throw forbidden(
+      'Your role is not part of this organisation\'s approval chain, so you cannot '
+      + `approve or reject ideas. The chain is: ${names}.`
+    );
+  }
+
+  /*
+   * Only the LAST step closes an idea.
+   *
+   * A reviewer in the middle of the chain approves and passes it upward; if
+   * there is nobody above them in the reporting tree the escalation branch
+   * below falls through to the final decision, which is the documented
+   * dead-end guarantee — an idea must never be able to stick.
+   *
+   * Rejection is deliberately not restricted this way: any step in the chain
+   * may reject, because sending an idea up the tree to collect more approvals
+   * before somebody says no wastes everybody's time.
+   */
+  const isFinalApprover = finalApproverRoles.includes(user.role);
+
   if (decision === 'Approved'
     && (idea.workflow_type ?? 'hierarchical') !== 'multi_reviewer'
-    && escalationRoles.includes(user.role)
+    && !isFinalApprover
   ) {
     const [mrows] = await db.execute(
       `SELECT u2.id, u2.name, u2.role, u2.email

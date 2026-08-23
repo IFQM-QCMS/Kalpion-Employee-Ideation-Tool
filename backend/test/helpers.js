@@ -101,6 +101,17 @@ export async function setupSuite() {
     charset: 'utf8mb4',
   });
 
+  /*
+   * The harness reads and writes timestamps on its own connection, so it has to
+   * keep the same clock as the app — whose pools pin every session to UTC.
+   *
+   * Left unpinned, a test comparing TIMESTAMPDIFF(MINUTE, NOW(), expires_at)
+   * measures a row the app stamped in UTC against a NOW() in the developer's
+   * local zone, and a token with an hour of life reports -270 minutes on a
+   * machine in India. The row was correct; the two clocks were not.
+   */
+  await adminConn.query("SET time_zone = '+00:00'");
+
   // Start from nothing every run — half-torn-down state must not leak between runs.
   for (const db of TEST_DBS) await adminConn.query(`DROP DATABASE IF EXISTS \`${db}\``);
 

@@ -247,10 +247,38 @@ export function getTenantPool(tenant) {
     idleTimeout: 60000,
     namedPlaceholders: false,
     dateStrings: true,
+    /*
+     * Every connection runs in UTC.
+     *
+     * DATETIME columns carry no zone, so NOW() and every stored timestamp mean
+     * whatever the server's clock happens to be — UTC on the production host,
+     * IST on a developer's laptop. The API then hands those naive strings to a
+     * browser that reads them as LOCAL time, so the same row rendered "6h ago"
+     * in production and correctly in development. Pinning the session makes the
+     * contract true everywhere: naive datetimes from this API are UTC, which is
+     * what helpers.parseServerDate assumes.
+     */
+    timezone: 'Z',
     // Real prepared statements (mysql2 default for execute()) — the PDO
     // ATTR_EMULATE_PREPARES=false equivalent. Keeps parameter binding honest.
     multipleStatements: false,
   });
+
+  /*
+   * `timezone: 'Z'` above only tells mysql2 how to CONVERT Date objects, and
+   * with dateStrings it converts nothing at all. What actually makes NOW() and
+   * CURRENT_TIMESTAMP return UTC is the session variable, set on every new
+   * connection the pool opens.
+   *
+   * Without it the pinning above is decorative: rows would still be stamped in
+   * whatever zone the database host happens to run in.
+   */
+  pool.on('connection', (conn) => {
+    conn.query("SET time_zone = '+00:00'", (err) => {
+      if (err) logger.warn(`db: could not pin session to UTC — ${err.message}`);
+    });
+  });
+
   poolCache.set(key, pool);
   evictIfOverCap();
   return pool;

@@ -1422,6 +1422,7 @@ export default {
   'analytics.title':'பகுப்பாய்வுக் கண்ணோட்டம்',
   'analytics.impl_velocity':'செயல்படுத்தும் வேகம்',
   'analytics.impl_velocity_sub':'கடந்த 30 நாட்களில் QC-க்கு அனுப்பப்பட்ட கருத்துகள்',
+  'analytics.approval_rate_sub':'அங்கீகரிக்கப்பட்ட கருத்துகள், செயல்படுத்தப்பட்டவை உட்பட',
   'lb.weekly':'வாராந்திர',
   'lb.share_email':'மின்னஞ்சல் அனுப்பு',
   'lb.ideas_word':'கருத்துகள்',
@@ -1497,4 +1498,5 @@ export default {
   'manual.preparing':'தயாராகிறது…',
   'manual.missing':'இந்த வரிசைப்படுத்தலில் பயனர் கையேடு கிடைக்கவில்லை.',
   'manual.failed':'இப்போது கையேட்டைப் பதிவிறக்க முடியவில்லை.',
+  'audit.when':'எப்போது',
 };

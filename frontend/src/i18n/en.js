@@ -1543,6 +1543,7 @@ export default {
   'analytics.score_dist':'Quality Score Distribution',
   'analytics.impl_velocity':'Implementation Velocity',
   'analytics.impl_velocity_sub':'Ideas pushed to QC in the last 30 days',
+  'analytics.approval_rate_sub':'Ideas approved, including those since implemented',
   'login.otp_id_ph':'Username, registered email or mobile number',
   'login.reset_code_sent':'If that is registered with us, a code has been sent. Enter it on the sign-in screen to set a new password.',
   'login.reset_code_sent_to':'A code has been sent to {where}. Enter it on the sign-in screen to set a new password.',
@@ -1613,4 +1614,5 @@ export default {
   'manual.preparing':'Preparing…',
   'manual.missing':'The user manual is not available on this deployment.',
   'manual.failed':'The manual could not be downloaded just now.',
+  'audit.when':'When',
 };

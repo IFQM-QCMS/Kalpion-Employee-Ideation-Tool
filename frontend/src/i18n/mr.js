@@ -1422,6 +1422,7 @@ export default {
   'analytics.title':'विश्लेषण आढावा',
   'analytics.impl_velocity':'अंमलबजावणी वेग',
   'analytics.impl_velocity_sub':'गेल्या 30 दिवसांत QC कडे पाठवलेल्या कल्पना',
+  'analytics.approval_rate_sub':'मंजूर कल्पना, आता अंमलात आणलेल्यांसह',
   'lb.weekly':'साप्ताहिक',
   'lb.share_email':'ईमेल करा',
   'lb.ideas_word':'कल्पना',
@@ -1497,4 +1498,5 @@ export default {
   'manual.preparing':'तयार करत आहे…',
   'manual.missing':'या डिप्लॉयमेंटवर वापरकर्ता पुस्तिका उपलब्ध नाही.',
   'manual.failed':'सध्या पुस्तिका डाउनलोड होऊ शकली नाही.',
+  'audit.when':'केव्हा',
 };

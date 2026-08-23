@@ -108,7 +108,15 @@ export default function AnalyticsPage() {
 
   const kpis = [
     [t('dash.total'), total, '', paletteIcon('bulb'), 'Total Ideas Submitted'],
-    [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check'), 'Approved & Implemented Rate'],
+    /*
+     * The caption said "Approved & Implemented Rate" while the card beside it
+     * reports implementation separately — two cards claiming the same ground,
+     * and a reader could not tell whether implemented ideas were counted once
+     * or twice. The figure DOES include implemented ideas, because an idea that
+     * was implemented was necessarily approved first; the caption now says that
+     * rather than naming the other card's metric.
+     */
+    [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check'), t('analytics.approval_rate_sub')],
     [t('analytics.impl_rate'), total ? Math.round(pushed/total*100) : 0, '%', paletteIcon('rocket'), t('analytics.impl_rate_sub')],
     [t('analytics.impl_velocity'), pushed30, '', paletteIcon('rocket'), t('analytics.impl_velocity_sub')],
     [t('analytics.avg_score'), ss.overall_avg||0, '', paletteIcon('star'), t('analytics.avg_score_sub')],

@@ -2771,3 +2771,84 @@ test('the tenant pool cache is capped and evicts the least recently used', async
   assert.equal(getTenantPool(hot), first,
     'a pool touched on every iteration must not have been evicted');
 });
+
+// ── The approval chain decides who may approve ───────────────────────────────
+/*
+ * An organisation set its chain to start at Manager, and its team leads went on
+ * approving ideas with full authority.
+ *
+ * The route guard is a STATIC list of every role that could plausibly review
+ * anything, and reviewAction then took one of two paths: a role in
+ * reviewer_roles escalated to its manager, and ANYTHING ELSE fell through to
+ * the final-decision code. So a role deliberately left out of the chain was not
+ * refused — it skipped escalation and closed the idea outright. The setting was
+ * not being ignored; it was being inverted.
+ */
+test('a role outside the configured approval chain cannot approve, and sees an empty queue', async () => {
+  // A chain that starts at Department Manager — no team lead in it.
+  let res = await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,department_manager,plant_head' },
+  });
+  assert.equal(res.data.success, true);
+
+  const mk = async (email, role, phone) => {
+    const created = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: { name: `Chain ${role}`, email, password: 'ChainPass1234', role,
+        employee_id: email.split('@')[0].toUpperCase(), phone, department: 'Ops' },
+    });
+    assert.equal(created.data.success, true,
+      `${role} must be creatable — ${JSON.stringify(created.data)}`);
+    return (await login(email, 'ChainPass1234', 'orga')).token;
+  };
+  const teamLead = await mk('chain.tl@orga.test', 'team_lead', '+919812345801');
+  const deptMgr  = await mk('chain.dm@orga.test', 'department_manager', '+919812345802');
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Bund the solvent store',
+      present_situation: 'Drums are stored unbunded next to a floor drain.',
+      proposed_solution: 'Install a bunded pallet and a spill kit at the door.',
+      investment_required: '30000',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  // The team lead is not in the chain. Refused, and told why.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: teamLead, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.status, 403,
+    `a team lead outside the chain must not approve — got ${res.status}`);
+  assert.match(res.data.error, /approval chain/i, 'and must be told that is the reason');
+
+  // The idea must be untouched — not merely un-notified.
+  const [row] = await sql('ifqm_test_a',
+    `SELECT status FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.notEqual(row.status, 'Approved', 'the idea must not have been approved');
+
+  /*
+   * And the queue. A bare `else` used to send every out-of-chain role to the
+   * org-wide branch, so an excluded team lead saw EVERY idea in the
+   * organisation — more than they should see, and how they reached them.
+   */
+  const queue = await api('GET', '/api/ideas/review', { token: teamLead });
+  assert.equal(queue.status, 200);
+  assert.equal((queue.data.ideas || []).length, 0,
+    'somebody outside the chain has nothing waiting on them');
+
+  // Somebody who IS in the chain still works.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: deptMgr, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.data.success, true,
+    `a department manager is in the chain and must be able to act — ${JSON.stringify(res.data)}`);
+
+  // Put the default chain back for the cases that follow.
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,immediate_manager,department_manager,plant_head' },
+  });
+});

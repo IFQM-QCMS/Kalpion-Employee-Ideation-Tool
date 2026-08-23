@@ -1426,6 +1426,7 @@ export default {
   'analytics.title':'ವಿಶ್ಲೇಷಣಾ ಅವಲೋಕನ',
   'analytics.impl_velocity':'ಅನುಷ್ಠಾನ ವೇಗ',
   'analytics.impl_velocity_sub':'ಕಳೆದ 30 ದಿನಗಳಲ್ಲಿ QC ಗೆ ಕಳುಹಿಸಿದ ಆಲೋಚನೆಗಳು',
+  'analytics.approval_rate_sub':'ಅನುಮೋದಿತ ಆಲೋಚನೆಗಳು, ಈಗ ಅನುಷ್ಠಾನಗೊಂಡವು ಸೇರಿದಂತೆ',
   'lb.weekly':'ಸಾಪ್ತಾಹಿಕ',
   'lb.share_email':'ಇಮೇಲ್ ಮಾಡಿ',
   'lb.ideas_word':'ಆಲೋಚನೆಗಳು',
@@ -1501,4 +1502,5 @@ export default {
   'manual.preparing':'ಸಿದ್ಧಪಡಿಸಲಾಗುತ್ತಿದೆ…',
   'manual.missing':'ಈ ನಿಯೋಜನೆಯಲ್ಲಿ ಬಳಕೆದಾರ ಕೈಪಿಡಿ ಲಭ್ಯವಿಲ್ಲ.',
   'manual.failed':'ಸದ್ಯಕ್ಕೆ ಕೈಪಿಡಿ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ.',
+  'audit.when':'ಯಾವಾಗ',
 };

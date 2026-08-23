@@ -1422,6 +1422,7 @@ export default {
   'analytics.title':'విశ్లేషణ అవలోకనం',
   'analytics.impl_velocity':'అమలు వేగం',
   'analytics.impl_velocity_sub':'గత 30 రోజుల్లో QCకు పంపిన ఆలోచనలు',
+  'analytics.approval_rate_sub':'ఆమోదించిన ఆలోచనలు, ఇప్పుడు అమలైనవి కలిపి',
   'lb.weekly':'వారపు',
   'lb.share_email':'ఇమెయిల్ చేయండి',
   'lb.ideas_word':'ఆలోచనలు',
@@ -1497,4 +1498,5 @@ export default {
   'manual.preparing':'సిద్ధం చేస్తోంది…',
   'manual.missing':'ఈ డిప్లాయ్‌మెంట్‌లో వినియోగదారు మాన్యువల్ అందుబాటులో లేదు.',
   'manual.failed':'ప్రస్తుతం మాన్యువల్ డౌన్‌లోడ్ చేయలేకపోయాము.',
+  'audit.when':'ఎప్పుడు',
 };

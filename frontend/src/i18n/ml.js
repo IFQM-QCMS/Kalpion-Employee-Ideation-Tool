@@ -1422,6 +1422,7 @@ export default {
   'analytics.title':'വിശകലന അവലോകനം',
   'analytics.impl_velocity':'നടപ്പാക്കൽ വേഗത',
   'analytics.impl_velocity_sub':'കഴിഞ്ഞ 30 ദിവസത്തിൽ QC-ലേക്ക് അയച്ച ആശയങ്ങൾ',
+  'analytics.approval_rate_sub':'അംഗീകരിച്ച ആശയങ്ങൾ, ഇപ്പോൾ നടപ്പാക്കിയവയും ഉൾപ്പെടെ',
   'lb.weekly':'പ്രതിവാര',
   'lb.share_email':'ഇമെയിൽ ചെയ്യുക',
   'lb.ideas_word':'ആശയങ്ങൾ',
@@ -1497,4 +1498,5 @@ export default {
   'manual.preparing':'തയ്യാറാക്കുന്നു…',
   'manual.missing':'ഈ ഡിപ്ലോയ്‌മെന്റിൽ ഉപയോക്തൃ മാനുവൽ ലഭ്യമല്ല.',
   'manual.failed':'ഇപ്പോൾ മാനുവൽ ഡൗൺലോഡ് ചെയ്യാനായില്ല.',
+  'audit.when':'എപ്പോൾ',
 };

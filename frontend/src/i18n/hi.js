@@ -1426,6 +1426,7 @@ export default {
   'analytics.title':'विश्लेषण अवलोकन',
   'analytics.impl_velocity':'कार्यान्वयन गति',
   'analytics.impl_velocity_sub':'पिछले 30 दिनों में QC को भेजे गए विचार',
+  'analytics.approval_rate_sub':'स्वीकृत विचार, उनमें वे भी जो अब कार्यान्वित हो चुके हैं',
   'lb.weekly':'साप्ताहिक',
   'lb.share_email':'ईमेल करें',
   'lb.ideas_word':'विचार',
@@ -1501,4 +1502,5 @@ export default {
   'manual.preparing':'तैयार किया जा रहा है…',
   'manual.missing':'इस परिनियोजन पर उपयोगकर्ता पुस्तिका उपलब्ध नहीं है।',
   'manual.failed':'अभी पुस्तिका डाउनलोड नहीं हो सकी।',
+  'audit.when':'कब',
 };

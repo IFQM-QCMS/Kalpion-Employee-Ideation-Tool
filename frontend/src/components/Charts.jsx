@@ -154,7 +154,9 @@ export function Gauge({ value = 0, max = 100, size = 132, thickness = 13, color 
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={thickness}
           strokeLinecap="round" strokeDasharray={`${frac * c} ${c}`} />
       </g>
-      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.26} fontWeight="800" fill="var(--heading)">{value}</text>
+      {/* 0.26 of the gauge width made a two-digit score the loudest thing on the
+          analytics page — louder than the KPI figures it is a detail of. */}
+      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.19} fontWeight="800" fill="var(--heading)">{value}</text>
       {label && <text x="50%" y="65%" textAnchor="middle" fontSize={size * 0.1} fill="var(--subtle)"
         style={{ textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</text>}
     </svg>

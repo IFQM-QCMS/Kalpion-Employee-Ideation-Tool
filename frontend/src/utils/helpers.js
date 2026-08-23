@@ -9,10 +9,42 @@ export function escHtml(str) {
     .replace(/"/g,'&quot;');
 }
 
+/**
+ * Parse a timestamp the API sent.
+ *
+ * ── The bug this fixes ─────────────────────────────────────────────────────
+ *
+ * The API returns MySQL DATETIMEs as naive strings — "2026-08-24 10:30:00",
+ * with no zone on them. `new Date()` reads that as LOCAL time, and the server
+ * stores UTC, so every timestamp in the product appeared 5 hours 30 minutes in
+ * the past for a user in India: an idea submitted seconds ago read "6h ago",
+ * and the activity feed told people things had happened before they did.
+ *
+ * It was invisible in development, because the local database runs on the same
+ * clock as the browser. It only appears once the database is somewhere else —
+ * which is to say, in production and nowhere else.
+ *
+ * The API's contract is now explicit: naive datetime strings are UTC. The
+ * server forces its session to UTC so that stays true wherever it is deployed.
+ *
+ * Anything already carrying a zone — an ISO string ending in Z or an offset —
+ * is passed through untouched, so this is safe on values that were already
+ * unambiguous.
+ */
+export function parseServerDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  const s = String(value).trim();
+  // "YYYY-MM-DD HH:MM:SS" (optionally with fractional seconds) and nothing else.
+  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(s);
+  const d = naive ? new Date(`${naive[1]}T${naive[2]}Z`) : new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export function fmtDate(dateStr) {
   if (!dateStr) return '–';
   try {
-    return new Date(dateStr).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'});
+    return parseServerDate(dateStr).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'});
   } catch { return dateStr; }
 }
 
@@ -22,7 +54,7 @@ export function fmtDate(dateStr) {
 export function fmtDateTime(dateStr) {
   if (!dateStr) return '–';
   try {
-    return new Date(dateStr).toLocaleString('en-IN', {
+    return parseServerDate(dateStr).toLocaleString('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric',
       hour: '2-digit', minute: '2-digit', hour12: true,
     });
@@ -31,7 +63,11 @@ export function fmtDateTime(dateStr) {
 
 export function timeAgo(dateStr, t) {
   if (!dateStr) return '';
-  const diff = Date.now() - new Date(dateStr).getTime();
+  const when = parseServerDate(dateStr);
+  if (!when) return '';
+  const diff = Date.now() - when.getTime();
+  // A clock a few seconds ahead of the server must not read as "in 1 minute".
+  if (diff < 0) return t ? t('time.just_now') : 'just now';
   const mins = Math.floor(diff / 60000);
   if (!t) return `${mins}m ago`;
   if (mins < 2)  return t('time.just_now');

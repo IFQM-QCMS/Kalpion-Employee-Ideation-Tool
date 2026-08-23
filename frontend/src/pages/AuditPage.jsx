@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { usersApi } from '../services/api';
-import { fmtDate, statusBadge, translateStatus, formatRole, isPrivileged } from '../utils/helpers';
+import { fmtDateTime, statusBadge, translateStatus, formatRole, isPrivileged } from '../utils/helpers';
 import Pager, { usePager } from '../components/Pager';
 
 export default function AuditPage() {
@@ -39,7 +39,7 @@ export default function AuditPage() {
       <table className="table">
         <thead>
           <tr>
-            <th>{t('table.date')}</th>
+            <th>{t('audit.when')}</th>
             <th>{t('table.idea')}</th>
             <th>{t('table.action')}</th>
             <th>{t('table.actor')}</th>
@@ -60,7 +60,12 @@ export default function AuditPage() {
           )}
           {pager.slice.map((w, i) => (
             <tr key={i}>
-              <td>{fmtDate(w.created_at)}</td>
+              {/*
+                Date AND time. An audit trail that says only "23 Aug" cannot
+                order two decisions made on the same day, which is the question
+                it exists to answer — and on a busy idea that is most of them.
+              */}
+              <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(w.created_at)}</td>
               <td>
                 <strong>{w.idea_code}</strong>
                 <br /><small>{(w.idea_title||'').substring(0,40)}</small>

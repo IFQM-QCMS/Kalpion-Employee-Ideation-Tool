@@ -322,14 +322,37 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
 }
 
 /* ── TOPBAR ─────────────────────────────────────────────────────────────── */
+/*
+ * ── Why the blur lives on a pseudo-element ─────────────────────────────────
+ *
+ * backdrop-filter (like transform and filter) makes an element a CONTAINING
+ * BLOCK for its position:fixed descendants. With the filter on #topbar itself,
+ * a fixed child stopped resolving against the viewport and resolved against the
+ * topbar instead — a 60px strip.
+ *
+ * The notification bell opens an idea in a modal, and that modal is rendered
+ * inside the topbar so it can be opened from any page. So `inset:0` on the
+ * overlay meant "the 60px strip", the dialog was squeezed into the header and
+ * everything above the fold was cut off. The CSS looked right, the JSX looked
+ * right, and the cause was a line neither of them mentions.
+ *
+ * Moving the filter to ::before keeps the frosted glass — the pseudo-element
+ * blurs what is behind it just the same — while #topbar goes back to being an
+ * ordinary positioned box. This protects every modal, dropdown and popover
+ * hung off the header, not just the one that exposed it.
+ */
 #topbar{
   height:60px;flex-shrink:0;padding:0 24px;
   display:flex;align-items:center;justify-content:space-between;
-  background:var(--topbar-bg);
+  background:transparent;
   border-bottom:1px solid var(--topbar-border);
+  position:relative;z-index:50;
+}
+#topbar::before{
+  content:'';position:absolute;inset:0;z-index:-1;
+  background:var(--topbar-bg);
   backdrop-filter:blur(12px) saturate(180%);
   -webkit-backdrop-filter:blur(12px) saturate(180%);
-  position:relative;z-index:50;
 }
 .topbar-left{display:flex;align-items:center;gap:14px}
 .topbar-right{display:flex;align-items:center;gap:8px}
