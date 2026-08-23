@@ -33,6 +33,9 @@ router.get('/tenants/:id/subscription', billing.subscription);
 router.post('/tenants/:id/plan', billing.assignPlan);
 router.post('/tenants/:id/trial', billing.setTrial);
 router.post('/tenants/:id/mark-paid', billing.markPaid);
+// Pay as you go: what a month metered, and closing it so the figure stops moving.
+router.get('/tenants/:id/usage', billing.usage);
+router.post('/tenants/:id/usage/close', billing.closeUsageMonth);
 // Every organisation's billing state on one screen — the payments dashboard.
 router.get('/billing/overview', billing.overview);
 // The Razorpay merchant account. Platform-wide: IFQM holds one, every

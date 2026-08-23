@@ -2612,3 +2612,94 @@ test('analytics reports what reached QC, separately from what is marked Implemen
   assert.equal(Number(now.data.qcms.pushed_30d), baseVelocity,
     'but a 90-day-old push drops back out of the velocity window');
 });
+
+// ── Pay as you go ────────────────────────────────────────────────────────────
+/*
+ * Billed for the people who actually signed in, not for the accounts that
+ * exist. An organisation that provisions four hundred employees and has thirty
+ * using the tool is billed for thirty, or the plan is a seat licence wearing a
+ * different name.
+ */
+test('pay as you go meters distinct sign-ins, and a closed month stops moving', async () => {
+  const usage = await import('../src/services/usageBillingService.js');
+  const period = usage.periodOf();
+
+  const plans = await api('GET', '/api/platform/plans', { token: PA });
+  const payg = (plans.data.plans || []).find((p) => p.code === 'PAYG');
+  assert.ok(payg, 'the seeded PAYG plan must exist');
+  assert.equal(payg.billing_cycle, 'payg');
+  assert.equal(payg.is_payg, true);
+  assert.ok(payg.unit_label, 'a PAYG amount is a RATE, and must be labelled as one');
+
+  await api('POST', `/api/platform/tenants/${tenantAId}/plan`, {
+    token: PA, body: { plan_id: payg.id },
+  });
+
+  // Three sign-ins from two people, in this month. One active user signing in
+  // repeatedly is one active user — that is the whole point of DISTINCT.
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.platform_login_activity
+       (actor_type, actor_id, actor_name, tenant_id, outcome, created_at)
+     VALUES ('tenant_user','901','Meter One',${tenantAId},'success',NOW()),
+            ('tenant_user','901','Meter One',${tenantAId},'success',NOW()),
+            ('tenant_user','902','Meter Two',${tenantAId},'success',NOW())`);
+
+  const live = await usage.activeUsersIn(tenantAId, period);
+  assert.ok(live >= 2, `two distinct people must be counted, got ${live}`);
+
+  // A failed sign-in is not use of the product and must not be billed for.
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.platform_login_activity
+       (actor_type, actor_id, actor_name, tenant_id, outcome, created_at)
+     VALUES ('tenant_user','903','Never In',${tenantAId},'failure',NOW())`);
+  assert.equal(await usage.activeUsersIn(tenantAId, period), live,
+    'a failed sign-in must not be metered');
+
+  // ── Closing the month ──
+  const closed = await api('POST', `/api/platform/tenants/${tenantAId}/usage/close`, {
+    token: PA, body: { period },
+  });
+  assert.equal(closed.data.success, true,
+    `the month must close — server said: ${JSON.stringify(closed.data)}`);
+  assert.equal(closed.data.active_users, live);
+  assert.equal(closed.data.amount_paise, live * Number(payg.amount_paise),
+    'the charge is active users times the unit rate');
+
+  /*
+   * The guarantee the snapshot exists for. More sign-ins arrive, and the closed
+   * month does not move — because the log behind it is purged on a retention
+   * window, and an invoice that quietly shrinks when re-opened is worse than
+   * one that is wrong: nobody can tell which figure was charged.
+   */
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.platform_login_activity
+       (actor_type, actor_id, actor_name, tenant_id, outcome, created_at)
+     VALUES ('tenant_user','904','Latecomer',${tenantAId},'success',NOW())`);
+
+  const again = await api('POST', `/api/platform/tenants/${tenantAId}/usage/close`, {
+    token: PA, body: { period },
+  });
+  assert.equal(again.data.active_users, live,
+    'a closed month must report what was stored, not a fresh count');
+  assert.equal(again.data.recomputed, false, 'and must say it did not recount');
+
+  // Revising is possible, but only when asked for explicitly.
+  const revised = await api('POST', `/api/platform/tenants/${tenantAId}/usage/close`, {
+    token: PA, body: { period, recount: true },
+  });
+  assert.ok(revised.data.active_users > live, 'an explicit recount picks up the latecomer');
+
+  // Renewal by fixed period is refused: a PAYG month is settled against what it
+  // metered, and extending it would move the period end with nobody having
+  // decided what was owed.
+  const renew = await api('POST', `/api/platform/tenants/${tenantAId}/mark-paid`, {
+    token: PA, body: { periods: 1 },
+  });
+  assert.notEqual(renew.status, 200, 'mark-paid must not apply to a metered plan');
+  assert.match(renew.data.error, /pay as you go/i);
+
+  // The console reads usage from the subscription payload it already fetches.
+  const sub = await api('GET', `/api/platform/tenants/${tenantAId}/subscription`, { token: PA });
+  assert.ok(Array.isArray(sub.data.subscription.usage), 'usage must travel with the subscription');
+  assert.ok(sub.data.subscription.usage.some((u) => u.period === period));
+});

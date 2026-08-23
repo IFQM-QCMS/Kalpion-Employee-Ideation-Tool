@@ -407,7 +407,7 @@ CREATE TABLE IF NOT EXISTS plans (
   amount_paise   BIGINT       NOT NULL DEFAULT 0,
   -- 'lifetime' (migration 026) is the only cycle with no end date at all.
   -- 'one_time' is a long fixed term, not a perpetual one: it still expires.
-  billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time','lifetime')
+  billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time','lifetime','payg')
                  NOT NULL DEFAULT 'yearly',
   gst_percent    DECIMAL(5,2) NOT NULL DEFAULT 18.00,
   -- Whether the stored amount already contains the tax or the tax is added to
@@ -454,7 +454,12 @@ VALUES
   -- Assigning it marks the tenant exempt with no period end, so the nightly
   -- lapse sweep never examines it.
   ('LIFETIME','Lifetime (Free)','Permanent access at no charge. Never expires and is never billed.',
-   'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active');
+   'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active'),
+  -- Pay as you go (migration 030). amount_paise here is the price of ONE active
+  -- user for ONE month, not the price of the plan — usageBillingService
+  -- multiplies it by however many people actually signed in.
+  ('PAYG',    'Pay As You Go','Billed monthly for the people who actually signed in. No seat count to manage.',
+   'custom',       4900,     'payg',      18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active');
 
 -- Who changed an organisation's plan, when, from what to what, and why. A
 -- billing dispute is answered from a record or it is answered from memory.
@@ -517,6 +522,26 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
 -- Every send attempt. Never the message body — it carries the code — and the
 -- recipient is masked to its last four digits before it is written, so this
 -- cannot become a phone directory either.
+-- What each organisation on pay as you go was metered, month by month
+-- (migration 030).
+--
+-- Written once when a month closes and never recomputed. It is derived from
+-- platform_login_activity, which is purged on a retention window — recomputing
+-- an old month would silently return a smaller number once its sign-in rows had
+-- gone, and an invoice that quietly shrinks when re-opened is worse than one
+-- that is wrong, because nobody can tell which figure was charged.
+CREATE TABLE IF NOT EXISTS tenant_active_users (
+  tenant_id     INT      NOT NULL,
+  period        CHAR(7)  NOT NULL,
+  active_users  INT      NOT NULL DEFAULT 0,
+  -- The rate in force when the month closed. A price rise must not rewrite
+  -- what an earlier month was charged.
+  unit_paise    BIGINT   NOT NULL DEFAULT 0,
+  computed_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (tenant_id, period),
+  KEY idx_tau_period (period)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS sms_delivery_log (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   provider      VARCHAR(32)  NOT NULL,

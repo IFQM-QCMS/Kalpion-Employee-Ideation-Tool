@@ -17,7 +17,8 @@
  */
 import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
-import { decoratePlan, priceBreakdown, CYCLE_DAYS, isLifetime } from './planService.js';
+import { decoratePlan, priceBreakdown, CYCLE_DAYS, isLifetime, isPayg } from './planService.js';
+import { usageHistory } from './usageBillingService.js';
 import { getPlatformSetting } from './platformSettingsService.js';
 import logger from '../utils/logger.js';
 import { invalidateQuotaCache, usageFor } from '../middleware/tenantQuota.js';
@@ -373,6 +374,12 @@ export async function subscriptionFor(tenantId) {
       // handed in explicitly. Without it an exempt lifetime organisation would
       // read "Not billed" here while reading "Lifetime" on the overview list.
       ...billingState({ ...tenant, plan_cycle: plan?.billing_cycle }, { graceDays: grace }),
+      // Metered months, newest first, with the current one marked open. Absent
+      // for every other kind of plan rather than sent as an empty list, so a
+      // screen can tell "nothing yet" from "not applicable".
+      ...(isPayg(plan?.billing_cycle)
+        ? { usage: (await usageHistory(tenant.id)).usage }
+        : {}),
     },
     plan,
     history: events,
@@ -404,6 +411,7 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
   if (!plan) throw badRequest('That plan no longer exists.');
 
   const lifetimePlan = isLifetime(plan.billing_cycle);
+  const paygPlan = isPayg(plan.billing_cycle);
 
   /*
    * A lifetime plan takes no trial, and that is not an error worth stopping for.
@@ -414,7 +422,16 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
    * operator to first notice and clear a trial default they never chose. It is
    * ignored, and the reply says so rather than leaving them to spot it.
    */
-  const days = lifetimePlan ? 0 : (
+  /*
+   * Pay as you go takes no trial either, for a different reason from lifetime.
+   * A metered month with nobody signing in already costs nothing, so a free
+   * period buys the customer exactly what they had — while making the
+   * organisation look like it is evaluating when it is in fact live and being
+   * counted. Ignored rather than refused, for the same reason as lifetime: an
+   * operator should not have to clear a default they never chose in order to
+   * put somebody on a plan.
+   */
+  const days = (lifetimePlan || paygPlan) ? 0 : (
     trialDays === undefined || trialDays === null || trialDays === ''
       ? await defaultTrialDays()
       : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0)));
@@ -507,7 +524,9 @@ export async function assignPlan(tenantId, { planId, trialDays, note } = {}, act
 
   return {
     success: true,
-    message: lifetime
+    message: paygPlan
+      ? `${tenant.name} is on ${plan.name}. Each month is billed for the people who signed in.`
+      : lifetime
       ? `${tenant.name} is on ${plan.name}. It never expires and will not be billed again.`
       : (days
         ? `${tenant.name} is on ${plan.name} with a ${days}-day trial.`
@@ -602,6 +621,18 @@ export async function markPaid(tenantId, { periods = 1, note = '' } = {}, actor 
    */
   if (isLifetime(plan?.billing_cycle)) {
     throw badRequest(`${tenant.name} is on a lifetime plan. There is nothing to renew.`);
+  }
+  /*
+   * Pay as you go is settled per month against a metered figure, so "extend by
+   * N periods" is the wrong shape of action: it would move the period end
+   * without anybody having decided what was owed. Recording a PAYG payment goes
+   * through the usage screen, where the number of active users is visible.
+   */
+  if (isPayg(plan?.billing_cycle)) {
+    throw badRequest(
+      `${tenant.name} is on pay as you go — a month is settled against its metered `
+      + 'usage, not extended by a fixed period. Close the month from the usage view.'
+    );
   }
   const cycleDays = CYCLE_DAYS[plan?.billing_cycle] || 365;
   const n = Math.max(1, Math.min(12, parseInt(periods, 10) || 1));

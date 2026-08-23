@@ -10,6 +10,7 @@ import { respond } from '../utils/respond.js';
 import * as planService from '../services/planService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
 import * as razorpayService from '../services/razorpayService.js';
+import * as usageBilling from '../services/usageBillingService.js';
 
 // ── Plan catalogue ──────────────────────────────────────────────────
 export const listPlans = asyncHandler(async (req, res) =>
@@ -189,3 +190,26 @@ export default {
   subscription, assignPlan, setTrial, markPaid, sweep, overview, mySubscription,
   myBilling, payStart, payVerify, gatewayGet, gatewayUpdate, gatewayTest, sendMonthlyInvoices,
 };
+
+/* ── Pay as you go ──────────────────────────────────────────────────────── */
+
+/** GET /api/platform/tenants/:id/usage — metered months, newest first. */
+export const usage = asyncHandler(async (req, res) =>
+  respond(res, await usageBilling.usageHistory(req.params.id, { months: req.query.months }))
+);
+
+/**
+ * POST /api/platform/tenants/:id/usage/close — fix a month's figures.
+ *
+ * Idempotent: closing an already-closed month returns what was stored rather
+ * than recounting, because the sign-in log behind it is purged on a retention
+ * window and a recount would quietly shrink an old invoice. `recount: true`
+ * revises a month deliberately.
+ */
+export const closeUsageMonth = asyncHandler(async (req, res) =>
+  respond(res, await usageBilling.closeMonth(
+    req.params.id,
+    req.body?.period || usageBilling.periodOf(),
+    { recount: !!req.body?.recount }
+  ))
+);

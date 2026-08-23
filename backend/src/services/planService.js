@@ -12,7 +12,7 @@ import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
 
 const TIERS = ['trial', 'starter', 'professional', 'enterprise', 'custom'];
-const CYCLES = ['monthly', 'quarterly', 'half_yearly', 'yearly', 'one_time', 'lifetime'];
+const CYCLES = ['monthly', 'quarterly', 'half_yearly', 'yearly', 'one_time', 'lifetime', 'payg'];
 const GST_MODES = ['included', 'excluded'];
 const SUPPORT = ['basic', 'standard', 'priority', 'dedicated'];
 
@@ -35,10 +35,21 @@ export const CYCLE_DAYS = {
    * arrives.
    */
   lifetime: null,
+  /*
+   * Pay as you go bills every month, so the period is a month — but the AMOUNT
+   * is not the plan's amount. amount_paise on a PAYG plan is the price of one
+   * active user for one month, and what is owed is that times however many
+   * people signed in. usageBillingService owns that arithmetic; this constant
+   * only says how long a period lasts.
+   */
+  payg: 30,
 };
 
 /** Does this plan ever need paying again? */
 export const isLifetime = (cycle) => cycle === 'lifetime';
+
+/** Billed on what was used, so the plan's amount is a UNIT price. */
+export const isPayg = (cycle) => cycle === 'payg';
 
 const CYCLE_LABEL = {
   monthly: 'Monthly',
@@ -47,6 +58,7 @@ const CYCLE_LABEL = {
   yearly: 'Yearly',
   one_time: 'One-time',
   lifetime: 'Lifetime',
+  payg: 'Pay as you go',
 };
 
 /**
@@ -114,6 +126,10 @@ export function decoratePlan(row) {
   // screens read this to decide whether to show a renewal date at all.
   cycle_days: isLifetime(row.billing_cycle) ? null : (CYCLE_DAYS[row.billing_cycle] || 365),
   is_lifetime: isLifetime(row.billing_cycle),
+  is_payg: isPayg(row.billing_cycle),
+  // Reads as a price on every other plan and as a RATE on this one, so the
+  // screens can label it without knowing the cycle rules.
+  unit_label: isPayg(row.billing_cycle) ? 'per active user / month' : null,
     // "Unlimited" is NULL, not 0. Zero would be a real limit meaning nobody may
     // join, which is never what an operator means by leaving a box empty.
     max_users_label: row.max_users == null ? 'Unlimited' : String(row.max_users),
@@ -344,5 +360,5 @@ export async function retirePlan(id) {
 
 export default {
   listPlans, getPlan, createPlan, updatePlan, retirePlan,
-  toPaise, toRupees, priceBreakdown, decoratePlan, suggestQuota, CYCLE_DAYS, isLifetime,
+  toPaise, toRupees, priceBreakdown, decoratePlan, suggestQuota, CYCLE_DAYS, isLifetime, isPayg,
 };
