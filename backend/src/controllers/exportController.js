@@ -68,42 +68,66 @@ export const ideaPdf = asyncHandler(async (req, res) => {
 });
 
 /**
- * GET /api/export/user-guide — the product manual, as a PDF.
+ * GET /api/export/user-guide — the manual for whoever is asking.
  *
- * The guide has existed in docs/ since it was written and nothing in the
- * product pointed at it, so the only people who ever saw it were the ones sent
- * a copy by hand.
+ * ── Why the role decides the file ──────────────────────────────────────────
  *
- * Behind requireAuth like every other export. It documents screens that only a
- * signed-in person can reach, and there is no reason to serve it to the open
- * internet — but it is not tenant data either, so any authenticated role may
- * have it.
+ * There are three manuals, and handing an employee the platform-admin one is
+ * not a small mistake. It describes screens they cannot open, a console they
+ * have no account for, and other organisations they must never learn exist —
+ * so the wrong manual is both useless to them and a disclosure of how the
+ * vendor side works.
  *
- * Streamed from disk rather than read into memory: it is a few megabytes and
- * several people may ask at once.
+ * The role comes from the SESSION, never from the request. A `?role=` would be
+ * a way for anybody to ask for the platform-admin manual by typing it.
+ *
+ * ── Falling back rather than failing ───────────────────────────────────────
+ *
+ * A role with no manual of its own gets the employee one, because every role
+ * here submits and tracks ideas as well as whatever else they do. Only a
+ * deployment shipped without the folder at all gets a 404, and it says so
+ * plainly rather than serving a broken download.
  */
+const MANUALS = {
+  // Platform staff — the vendor console.
+  platform_admin: {
+    file: 'Manual_PlatformAdmin.pdf',
+    name: 'IFQM-Platform-Admin-Manual.pdf',
+  },
+  // Whoever runs one organisation: users, approval chain, analytics, billing.
+  admin: { file: 'Manual_OrgAdmin.pdf', name: 'IFQM-Organisation-Admin-Manual.pdf' },
+  super_admin: { file: 'Manual_OrgAdmin.pdf', name: 'IFQM-Organisation-Admin-Manual.pdf' },
+  // Everybody else. Reviewers included: they submit and track like anyone else,
+  // and the approval queue is covered in the employee manual.
+  employee: { file: 'Manual_Employee.pdf', name: 'IFQM-Employee-Manual.pdf' },
+};
+
 export const userGuide = asyncHandler(async (req, res) => {
   const { createReadStream } = await import('node:fs');
   const fsp = await import('node:fs/promises');
   const path = await import('node:path');
   const { fileURLToPath } = await import('node:url');
 
+  const role = String(req.user?.role || 'employee');
+  const pick = MANUALS[role] || MANUALS.employee;
+
   const here = path.dirname(fileURLToPath(import.meta.url));
-  const file = path.resolve(here, '..', '..', '..', 'docs', 'EIT_User_Guide.pdf');
+  const root = path.resolve(here, '..', '..', '..');
+  const file = path.join(root, 'User manuals', pick.file);
 
   try {
     await fsp.access(file);
   } catch {
-    // A deployment that ships without docs/ is a packaging choice, not a crash.
-    // Say so plainly rather than returning a broken download.
     return res.status(404).json({
       success: false,
-      error: 'The user guide is not available on this deployment.',
+      error: 'The user manual is not available on this deployment.',
     });
   }
 
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', 'attachment; filename="IFQM-Employee-Ideation-Tool-User-Guide.pdf"');
+  res.setHeader('Content-Disposition', `attachment; filename="${pick.name}"`);
+  // Streamed rather than read into memory: each is a few hundred kilobytes and
+  // several people may ask at once.
   return createReadStream(file).pipe(res);
 });
 

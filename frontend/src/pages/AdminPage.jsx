@@ -12,6 +12,7 @@ import BulkImportModal from '../components/BulkImportModal';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 import QcBadge from '../components/QcBadge';
+import ManualButton from '../components/ManualButton';
 
 /*
  * React's `style` prop takes an object, not a CSS string. These were strings
@@ -233,10 +234,14 @@ export default function AdminPage() {
 
   return (
     <>
-      <div className="tab-bar">
-        {TAB_KEYS.map((key, i) => (
-          <div key={key} className={`tab${tab===i?' active':''}`} onClick={() => setTab(i)}>{t(key)}</div>
-        ))}
+      <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap' }}>
+        <div className="tab-bar" style={{ flex:1,minWidth:0 }}>
+          {TAB_KEYS.map((key, i) => (
+            <div key={key} className={`tab${tab===i?' active':''}`} onClick={() => setTab(i)}>{t(key)}</div>
+          ))}
+        </div>
+        {/* The org-admin manual, for whoever runs this organisation. */}
+        <ManualButton />
       </div>
 
       {/* Overview */}

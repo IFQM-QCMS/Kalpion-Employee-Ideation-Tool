@@ -1609,4 +1609,8 @@ export default {
   'qc.in_qc_hint':'Approved and forwarded to the QC tool, where it is tracked as work.',
   'qc.failed':'QC send failed',
   'qc.failed_hint':'Approved, but the last attempt to send it to the QC tool did not succeed. It can be sent again.',
+  'manual.download':'Download user manual',
+  'manual.preparing':'Preparing…',
+  'manual.missing':'The user manual is not available on this deployment.',
+  'manual.failed':'The manual could not be downloaded just now.',
 };

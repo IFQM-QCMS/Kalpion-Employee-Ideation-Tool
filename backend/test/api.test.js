@@ -2263,26 +2263,49 @@ test('only a resolved ticket can be archived, one at a time or in bulk', async (
   assert.ok(!byId[b], 'the open one is left alone');
 });
 
-// ── The user guide, and the approval chain on the closure PDF ────────────────
-test('the user guide downloads for any signed-in role, and not anonymously', async () => {
+// ── The user manual, chosen by role ─────────────────────────────────────────
+/*
+ * There are three manuals and handing an employee the platform-admin one is
+ * not a small mistake: it describes a console they have no account for and
+ * other organisations they must never learn exist. The role therefore comes
+ * from the SESSION, never from the request — a ?role= would be a way for
+ * anybody to ask for the vendor manual by typing it.
+ */
+test('each role is served its own manual, and none is served anonymously', async () => {
   const anon = await api('GET', '/api/export/user-guide');
   assert.ok(anon.status === 401 || anon.status === 403,
-    `the guide must not be served anonymously — got ${anon.status}`);
+    `no manual may be served anonymously — got ${anon.status}`);
+
+  // Filename is how the caller can tell WHICH manual arrived: the body is a
+  // PDF either way, and asserting on bytes would prove nothing about routing.
+  const nameOf = (res) => String(res.headers?.['content-disposition'] || '');
+
+  const asEmployee = await api('GET', '/api/export/user-guide', { token: AUSER });
+  const asOrgAdmin = await api('GET', '/api/export/user-guide', { token: AADMIN });
+  const asPlatform = await api('GET', '/api/export/user-guide', { token: PA });
+
+  for (const [who, res] of [['employee', asEmployee], ['org admin', asOrgAdmin],
+    ['platform admin', asPlatform]]) {
+    assert.ok(res.status === 200 || res.status === 404,
+      `${who} must get a manual or an honest 404, got ${res.status}`);
+  }
+
+  // Skipped rather than failed on a deployment shipped without the folder —
+  // that is a packaging choice, and the 404 path is asserted above.
+  if (asEmployee.status === 404) return;
+
+  assert.match(nameOf(asEmployee), /Employee/i, 'an employee gets the employee manual');
+  assert.match(nameOf(asOrgAdmin), /Organisation-Admin/i, 'an org admin gets the org-admin manual');
+  assert.match(nameOf(asPlatform), /Platform-Admin/i, 'a platform admin gets the platform manual');
 
   /*
-   * Any authenticated role, including an ordinary employee. It documents the
-   * software rather than anybody's data, so scoping it to admins would only
-   * keep it from the people most likely to need it.
+   * The disclosure that matters. An employee must not receive the vendor
+   * console's manual by any route.
    */
-  const res = await api('GET', '/api/export/user-guide', { token: AUSER });
-  assert.ok(res.status === 200 || res.status === 404,
-    `an employee must get the guide or an honest 404, got ${res.status}`);
-  if (res.status === 404) {
-    // A deployment shipped without docs/ is a packaging choice, not a crash —
-    // but it must say so rather than serving a broken file.
-    assert.equal(res.data.success, false);
-    assert.match(res.data.error, /not available/i);
-  }
+  assert.ok(!/Platform-Admin/i.test(nameOf(asEmployee)),
+    'an employee must never be handed the platform-admin manual');
+  assert.ok(!/Platform-Admin/i.test(nameOf(asOrgAdmin)),
+    'nor must an organisation admin');
 });
 
 /*

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
 import { animateCounter, actionLabel, timeAgo, isPrivileged, translateStatus } from '../utils/helpers';
+import ManualButton from '../components/ManualButton';
 
 const STATUS_COLORS = {
   'Submitted':'#2563eb','Under Review':'#d97706','Approved':'#16a34a',
@@ -99,6 +100,9 @@ export default function DashboardPage() {
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/submit')}>
             {t('dash.go_submit')}
           </button>
+          {/* Which manual arrives is decided by the server from the session
+              role, so this is the same component on all three dashboards. */}
+          <ManualButton />
         </div>
       </div>
 

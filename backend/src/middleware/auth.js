@@ -400,6 +400,14 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     const tenantFree = path.startsWith('/api/platform')
       || path.startsWith('/api/auth')
       || path === '/api/health' || path === '/api/ready'
+      /*
+       * The user manual. It opens no tenant database at all — it reads a PDF
+       * from disk and picks WHICH one from the session role, and the platform
+       * admin's own manual is one of the three. Refusing it here left the
+       * vendor as the only account that could not download the document
+       * describing the vendor console.
+       */
+      || path === '/api/export/user-guide'
       || handlesMissingTenant.some((p) => path.startsWith(p));
 
     if (!tenantFree) {

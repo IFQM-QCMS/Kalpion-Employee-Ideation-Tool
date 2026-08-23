@@ -83,6 +83,55 @@ async function drainEmailQueues() {
   }
 }
 
+/**
+ * Nightly database backup, off by default.
+ *
+ * ── Why this exists ────────────────────────────────────────────────────────
+ *
+ * `npm run backup` has always worked and nothing ever ran it. A backup script
+ * that exists but is never invoked provides the feeling of having backups
+ * without any of the property, which is worse than having none — nobody goes
+ * looking for a safety net they believe is already there.
+ *
+ * ── Why it is opt-in, and why it spawns ────────────────────────────────────
+ *
+ * A real scheduler (cron, systemd timer, Task Scheduler) is still the better
+ * answer and DEPLOYMENT.md says so: it survives the app crashing, which is
+ * exactly when the last backup matters most. This is for deployments that have
+ * no such facility — a managed host with no cron — and it is off unless
+ * BACKUP_EVERY_HOURS is set, so no developer machine starts dumping databases
+ * because it pulled a branch.
+ *
+ * Spawned as a child process rather than imported: backup.js runs its work at
+ * module scope, and a dump that throws must not take the scheduler — or the
+ * server — down with it.
+ */
+const BACKUP_EVERY_HOURS = Math.max(0, parseInt(process.env.BACKUP_EVERY_HOURS, 10) || 0);
+
+async function runBackup() {
+  const { spawn } = await import('node:child_process');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const script = path.resolve(here, '..', '..', 'scripts', 'backup.js');
+
+  await new Promise((resolve) => {
+    const child = spawn(process.execPath, [script], { stdio: 'ignore' });
+    child.on('exit', (code) => {
+      if (code === 0) logger.info('scheduler: database backup completed');
+      // Logged loudly rather than thrown. A failed backup is not a reason to
+      // stop serving, but it IS the thing somebody must notice.
+      else logger.error(`scheduler: database backup FAILED (exit ${code}) — check BACKUP_DIR and mysqldump`);
+      resolve();
+    });
+    child.on('error', (e) => {
+      logger.error(`scheduler: could not start the backup script — ${e.message}`);
+      resolve();
+    });
+  });
+}
+
 async function housekeeping() {
   try {
     const n = await pruneOtps();
@@ -144,9 +193,15 @@ export function startScheduler() {
 
   every(EMAIL_EVERY, 'email queue', drainEmailQueues);
   every(HOUSEKEEPING_EVERY, 'housekeeping', housekeeping);
+  if (BACKUP_EVERY_HOURS > 0) {
+    every(BACKUP_EVERY_HOURS * 60 * MINUTE, 'database backup', runBackup);
+  }
 
   logger.info(`scheduler: email queue every ${Math.round(EMAIL_EVERY / 1000)}s, `
-    + `housekeeping every ${Math.round(HOUSEKEEPING_EVERY / MINUTE)}m`);
+    + `housekeeping every ${Math.round(HOUSEKEEPING_EVERY / MINUTE)}m`
+    + (BACKUP_EVERY_HOURS > 0
+      ? `, backup every ${BACKUP_EVERY_HOURS}h`
+      : ', backup NOT scheduled (set BACKUP_EVERY_HOURS, or use cron)'));
 }
 
 export function stopScheduler() {
@@ -155,4 +210,4 @@ export function stopScheduler() {
   running = false;
 }
 
-export default { startScheduler, stopScheduler, drainEmailQueues, housekeeping };
+export default { startScheduler, stopScheduler, drainEmailQueues, housekeeping, runBackup };
