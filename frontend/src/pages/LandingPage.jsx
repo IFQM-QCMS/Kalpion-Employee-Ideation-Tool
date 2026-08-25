@@ -149,7 +149,7 @@ export default function LandingPage() {
          * the corporate site it read as an unrelated product.
          *
          * Every rule below this block already draws its colour from a token, so
-         * the whole page is restyled by redefining the tokens for `.ifqm-lp`
+         * the whole page is restyled by redefining the tokens for .ifqm-lp
          * alone. Nothing outside this component changes, and none of the 600
          * lines of layout underneath had to be touched to do it.
          *
