@@ -53,10 +53,18 @@ CREATE TABLE IF NOT EXISTS users (
   -- ── from migration 002 (bulk user import) ──
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   date_of_birth        DATE NULL DEFAULT NULL,
-  -- MOM 29 Jul 2026 §13.4: bulk import captures a birth YEAR, not a full date —
-  -- the derived temporary password only ever used the year, so the rest was
-  -- personal data held for no purpose. date_of_birth is retained for existing
-  -- rows and is no longer written.
+  -- Neither of these is written any more (migration 031).
+  --
+  -- MOM 29 Jul 2026 §13.4 first narrowed this from a full date to a birth YEAR,
+  -- because the derived temporary password only ever used the year and the rest
+  -- was personal data held for no purpose. The same argument then applied to the
+  -- year: it was required of every employee in order to build one throwaway
+  -- credential, and nothing else in the product read it. The password is built
+  -- from the phone number now, which every account already has.
+  --
+  -- Both columns are kept, not dropped: organisations onboarded under the old
+  -- rule have real values here, and erasing them is a decision for the customer
+  -- to ask for rather than something to do quietly in an unrelated release.
   salutation           VARCHAR(10) NULL DEFAULT NULL,
   first_name           VARCHAR(60) NULL DEFAULT NULL,
   last_name            VARCHAR(60) NULL DEFAULT NULL,
@@ -375,6 +383,13 @@ CREATE TABLE IF NOT EXISTS user_import_jobs (
   total_rows      INT NOT NULL DEFAULT 0,
   processed_rows  INT NOT NULL DEFAULT 0,
   created_count   INT NOT NULL DEFAULT 0,
+  -- ── from migration 031 ──
+  -- An import sends welcome emails, and mail fails in ways an INSERT does not.
+  -- Those accounts are created and valid, so the job must not report failure —
+  -- but an admin still has to be able to find out that fifty people never got
+  -- the password they are waiting for.
+  emailed_count      INT NOT NULL DEFAULT 0,
+  email_failed_count INT NOT NULL DEFAULT 0,
   skipped_count   INT NOT NULL DEFAULT 0,
   error_message   TEXT NULL,
   started_at      DATETIME NULL,

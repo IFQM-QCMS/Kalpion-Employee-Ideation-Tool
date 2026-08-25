@@ -180,7 +180,20 @@ export default function BulkImportModal({ onClose, onImported }) {
                           <td>{s.employee_id}</td>
                           <td>{s.name}</td>
                           <td>{s.role}</td>
-                          <td><code>{s.temp_password}</code></td>
+                          {/*
+                            Two different things can be in this column, and
+                            conflating them would mislead in the worst
+                            direction: an admin who sees a blank where a
+                            password should be assumes the import is broken,
+                            and an admin shown a password for a row that was
+                            emailed one goes and reads out a string that was
+                            never set. Rows with an address say so instead.
+                          */}
+                          <td>
+                            {s.password_emailed
+                              ? <span style={{ fontSize:11,color:'var(--text-muted)' }}>{t('imp.pw_emailed')}</span>
+                              : <code>{s.temp_password}</code>}
+                          </td>
                         </tr>
                       ))}
                     </tbody>

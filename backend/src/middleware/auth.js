@@ -203,9 +203,11 @@ const PASSWORD_CHANGE_ALLOWED = [
 ];
 
 /**
- * Bulk-imported employees start with a derived temporary password
- * ("asha1994" — first 4 letters of the name + birth year). That is guessable by
- * any colleague, so it is only ever a bootstrap credential.
+ * A newly onboarded employee starts on a temporary password: a random one that
+ * was emailed to them, or — when there is no address to email — the derived
+ * formula "yash5881", the first 4 letters of the name plus the last 4 digits of
+ * the phone number. The derived one is guessable by any colleague who knows
+ * both, so it is only ever a bootstrap credential.
  *
  * This gate is what makes that acceptable: until the password is replaced, the
  * session can do nothing except change it. Enforcing it here rather than with a

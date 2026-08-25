@@ -603,6 +603,9 @@ export default function AdminPage() {
           currentUserId={user?.id}
           onClose={() => setShowUserForm(false)}
           onSaved={() => { setShowUserForm(false); loadUsers(); }}
+          // Refresh the list behind a modal that is staying open to show a
+          // credential — the new employee should already be in it.
+          onRefresh={loadUsers}
           showToast={showToast}
           t={t}
         />
@@ -1324,13 +1327,22 @@ function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onRe
   );
 }
 
-function UserFormModal({ user: editUser, managers, currentUserRole, currentUserId, onClose, onSaved, showToast, t }) {
+function UserFormModal({ user: editUser, managers, currentUserRole, currentUserId, onClose, onSaved, onRefresh, showToast, t }) {
   const isEdit = !!editUser;
   const [name,    setName]    = useState(editUser?.name||'');
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
   const [email,   setEmail]   = useState(editUser?.email||'');
   const [uname,   setUname]   = useState(editUser?.username||'');
-  const [dob,     setDob]     = useState('');
+  /*
+   * What became of the first-login credential, held until acknowledged.
+   *
+   * This used to be a toast, which was wrong for the case that matters: a
+   * derived password is something the administrator has to write down and pass
+   * on, and a toast takes it away after a few seconds whether they read it or
+   * not. There is no second chance — the password is hashed on the server and
+   * cannot be shown again. So it stays on screen until they dismiss it.
+   */
+  const [issued,  setIssued]  = useState(null);
   const [phone,   setPhone]   = useState(editUser?.phone||'');
   const [role,    setRole]    = useState(editUser?.role||'employee');
   const [mgr,     setMgr]     = useState(editUser?.manager_id||'');
@@ -1355,24 +1367,48 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
      * they cannot get in. Checked on the server too — this is only so the
      * admin is told before a round trip.
      */
-    const digits = phone.replace(/D/g, '');
+    // \D, not D. This stripped literal capital Ds and counted everything else,
+    // so "abcdefghij" was accepted as a ten-digit mobile number. It matters more
+    // now than it did: the first-login password is built from these digits.
+    const digits = phone.replace(/\D/g, '');
     if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
     if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
     setSaving(true);
     const payload = { name, email, username: uname.trim().toLowerCase(), employee_id: empId,
       role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
     if (isEdit) { payload.id = editUser.id; payload.status = status; }
-    else payload.date_of_birth = dob; // first-login password = first 4 letters of name + birth year
     try {
       const res = await usersApi[isEdit ? 'updateUser' : 'createUser'](payload);
       if (res.data.success) {
-        // Show the derived first-login password so the admin can pass it on.
-        if (!isEdit && res.data.temp_password) {
-          showToast(`${t('admin.user_created')} · ${t('admin.uf_temp_pw')}: ${res.data.temp_password}`, 'success');
+        /*
+         * Three outcomes, and the admin has to be able to tell them apart —
+         * the difference decides whether they now have a job to do.
+         *
+         *   emailed         nothing to pass on; the employee has it already.
+         *   derived         they must read it out, so it is shown.
+         *   send failed     the account exists with a password nobody knows,
+         *                   so it is shown too, with the failure said plainly.
+         *                   Silently hiding it here would strand the employee.
+         *
+         * The last one is a warning rather than a success: the account was
+         * created, but something still needs doing about it.
+         */
+        const d = res.data;
+        const panel = isEdit ? null
+          : d.password_emailed ? { kind:'emailed', to: d.emailed_to }
+            : d.email_failed ? { kind:'email_failed', to: email, password: d.temp_password }
+              : d.temp_password ? { kind:'derived', password: d.temp_password }
+                : null;
+
+        if (panel) {
+          // Stay open. The list behind refreshes so the new employee is
+          // already there when the panel is dismissed.
+          setIssued(panel);
+          onRefresh?.();
         } else {
-          showToast(t(isEdit ? 'admin.user_updated' : 'admin.user_created'),'success');
+          showToast(t(isEdit ? 'admin.user_updated' : 'admin.user_created'), 'success');
+          onSaved();
         }
-        onSaved();
       }
       else { setError(res.data.error||t('admin.user_save_failed')); }
     } catch (err) { setError(err.response?.data?.error || t('msg.server_error')); }
@@ -1386,6 +1422,49 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           <span id="user-form-title">{t(isEdit ? 'admin.edit_user' : 'admin.add_user_title')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
+        {issued ? (
+          <>
+            <div className="modal-body" id="uf-issued">
+              {issued.kind === 'emailed' && (
+                <div className="alert alert-success" style={{ fontSize:13 }}>
+                  {t('admin.uf_pw_emailed', { email: issued.to })}
+                </div>
+              )}
+              {issued.kind === 'email_failed' && (
+                <div className="alert alert-danger" style={{ fontSize:13 }}>
+                  {t('admin.uf_pw_email_failed', { email: issued.to })}
+                </div>
+              )}
+              {issued.password && (
+                <>
+                  <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:6 }}>
+                    {t('admin.uf_temp_pw')}
+                  </div>
+                  <div style={{ display:'flex',alignItems:'center',gap:10,flexWrap:'wrap' }}>
+                    <code style={{ fontSize:20,fontWeight:700,letterSpacing:'.06em',
+                      background:'var(--surface-2)',border:'1px solid var(--border)',
+                      borderRadius:8,padding:'10px 16px',userSelect:'all' }}>
+                      {issued.password}
+                    </code>
+                    <button className="btn btn-outline btn-sm"
+                      onClick={() => { navigator.clipboard?.writeText(issued.password); showToast(t('admin.uf_pw_copied'), 'success'); }}>
+                      {t('btn.copy')}
+                    </button>
+                  </div>
+                  {/* Said plainly, because it is the part people assume is not
+                      true: there is no way to look this up again later. */}
+                  <div className="alert alert-warning" style={{ fontSize:12,marginTop:14 }}>
+                    {t('admin.uf_pw_once')}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-primary" onClick={onSaved}>{t('btn.done')}</button>
+            </div>
+          </>
+        ) : (
+        <>
         <div className="modal-body">
           {error && <div className="alert alert-danger" id="user-form-error">{error}</div>}
           <div className="form-row">
@@ -1411,11 +1490,18 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
             <div className="form-group"><label>{t('admin.uf_phone')} <span style={{color:'var(--danger)'}}>*</span></label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} required /></div>
             <div className="form-group" />
           </div>
+          {/*
+            Date of birth used to be here, and it was required.
+            It fed one thing — the first-login password — and nothing else in
+            the product ever read it. That password is built from the phone
+            number above now, so the field has no reason to exist and asking
+            for it would be collecting a personal identifier for nothing.
+            What happens to the credential is explained below instead, since
+            it depends on whether an address was given.
+          */}
           {!isEdit && (
-            <div className="form-group" id="uf-dob-group">
-              <label>{t('admin.uf_dob')} *<InfoDot term="year_of_birth" /></label>
-              <input className="form-control" type="date" value={dob} onChange={e=>setDob(e.target.value)} id="uf-dob" />
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_dob_hint')}</div>
+            <div className="alert alert-info" style={{ fontSize:12,marginBottom:12 }}>
+              {email.trim() ? t('admin.uf_pw_will_email') : t('admin.uf_pw_will_derive')}
             </div>
           )}
           <div className="form-row">
@@ -1451,6 +1537,8 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
             {saving ? t('btn.saving') : t(isEdit ? 'admin.uf_save_changes' : 'admin.uf_save_user')}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

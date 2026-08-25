@@ -13,7 +13,7 @@
 import bcrypt from 'bcryptjs';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
-import { tempPasswordFor } from './userImportService.js';
+import { tempPasswordFor, randomTempPassword } from './userImportService.js';
 import {
   indexUser, deindexUser, isUsername, claimUsername, usernameAvailable, releaseUsername,
 } from './directoryService.js';
@@ -243,12 +243,6 @@ export async function createUser(db, actor, body, tenant = null) {
   const role = body.role || 'employee';
   const managerId = body.manager_id ? parseInt(body.manager_id, 10) : null;
 
-  // Date of birth drives the first-login password (first 4 letters of the name +
-  // birth year), exactly like the bulk import — so every new account, however it
-  // is created, starts on the same derived temporary credential and is forced to
-  // change it. A plain YYYY or a full YYYY-MM-DD are both accepted.
-  const dobRaw = String(body.date_of_birth || '').trim();
-  const birthYear = (dobRaw.match(/\d{4}/) || [])[0] || '';
   const explicitPassword = body.password || ''; // legacy/optional override
 
   if (!name || !employeeId) {
@@ -286,9 +280,6 @@ export async function createUser(db, actor, body, tenant = null) {
   if (!isValidPhone(phone)) {
     throw badRequest('Enter a valid mobile number, including the country or area code.');
   }
-  if (!birthYear && !explicitPassword) {
-    throw badRequest('Date of birth is required — the first-login password is built from it.');
-  }
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
 
   const [dup] = await db.execute(
@@ -307,21 +298,41 @@ export async function createUser(db, actor, body, tenant = null) {
 
   const initials = avatarInitials(name) || firstCharUpper(name);
 
-  // Derived temp password (must be changed on first login) unless the admin
-  // explicitly supplied a real one.
-  const usingDerived = !!birthYear && !explicitPassword;
-  const tempPassword = usingDerived ? tempPasswordFor(name, birthYear, employeeId) : explicitPassword;
-  if (!usingDerived) assertPasswordStrength(explicitPassword);
-  const hash = await bcrypt.hash(tempPassword, usingDerived ? 10 : 12);
-  const dob = /^\d{4}-\d{2}-\d{2}$/.test(dobRaw) ? dobRaw : null;
+  /*
+   * ── The first-login credential ─────────────────────────────────────────
+   *
+   * Three cases, and the same three the bulk import uses — deliberately, so an
+   * employee's experience does not depend on which screen an administrator
+   * happened to add them from.
+   *
+   *   an explicit password   an admin typed one; it is a real password and is
+   *                          held to the real policy.
+   *   an email address       a random password, mailed to them directly. There
+   *                          is a private channel, so there is no reason to
+   *                          issue a guessable credential.
+   *   neither                the derived formula: first 4 letters of the name
+   *                          plus the last 4 digits of the phone. Guessable,
+   *                          and the only option when there is nowhere to send
+   *                          anything and it has to be read out loud.
+   *
+   * The first two are hashed at 12 and 12; the derived one at 10, because
+   * stretching a password that is guessable by design buys nothing.
+   */
+  const usingExplicit = !!explicitPassword;
+  const willEmail = !usingExplicit && !!email;
+  const tempPassword = usingExplicit ? explicitPassword
+    : willEmail ? randomTempPassword()
+      : tempPasswordFor(name, phone, employeeId);
+  if (usingExplicit) assertPasswordStrength(explicitPassword);
+  const hash = await bcrypt.hash(tempPassword, usingExplicit ? 12 : willEmail ? 12 : 10);
 
   const [result] = await db.execute(
-    `INSERT INTO users (employee_id, username, name, email, password_hash, phone, date_of_birth,
+    `INSERT INTO users (employee_id, username, name, email, password_hash, phone,
                         department, business_unit, location, role, manager_id, avatar_initials,
                         status, must_change_password, password_changed_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,NOW())`,
-    [employeeId, username || null, name, email || null, hash, phone || null, dob,
-      department, businessUnit, location, role, managerId, initials, usingDerived ? 1 : 0]
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'active',?,NOW())`,
+    [employeeId, username || null, name, email || null, hash, phone || null,
+      department, businessUnit, location, role, managerId, initials, usingExplicit ? 0 : 1]
   );
 
   /*
@@ -342,12 +353,50 @@ export async function createUser(db, actor, body, tenant = null) {
   // email or phone and no org code (best-effort; login self-heals otherwise).
   if (tenant) indexUser(tenant, { id: result.insertId, email, phone }).catch(() => {});
 
+  /*
+   * Send it, if there is anywhere to send it.
+   *
+   * Deliberately awaited, unlike the directory indexing above. That is
+   * best-effort because login self-heals without it; this is the only copy of a
+   * password that is about to exist nowhere else, and the administrator has to
+   * be told NOW whether it arrived — if it did not, they need to fall back to
+   * reading a credential out, and they cannot do that after the response has
+   * gone.
+   */
+  let emailed = false;
+  if (willEmail) {
+    const { sendTemporaryPassword } = await import('./mailerService.js');
+    emailed = await sendTemporaryPassword({
+      email,
+      name,
+      orgName: tenant?.name || tenant?.org_name || '',
+      slug: tenant?.slug || '',
+      password: tempPassword,
+      reason: 'onboard',
+    }).catch(() => false);
+  }
+
   return {
     success: true,
     user_id: result.insertId,
-    // Surfaced so the admin can hand the credential to the employee. Only the
-    // derived temporary password is returned — never an admin-set real one.
-    ...(usingDerived ? { temp_password: tempPassword } : {}),
+    /*
+     * What the admin is shown, and why it differs per case.
+     *
+     * A derived password is MEANT to be shown: nobody else can deliver it, so
+     * the administrator reads it out. A random one that was emailed is not
+     * shown, because showing it would put a live credential on a screen and in
+     * a browser's history for no reason — it already reached its owner.
+     *
+     * Unless it did not. If the send failed, the account exists with a password
+     * nobody knows, and hiding it would strand the employee behind a reset they
+     * have no reason to attempt. So a failed send returns the password with the
+     * failure, and the admin can fall back to handing it over.
+     */
+    ...(willEmail
+      ? (emailed
+        ? { password_emailed: true, emailed_to: email }
+        : { password_emailed: false, temp_password: tempPassword, email_failed: true })
+      : usingExplicit ? {} : { temp_password: tempPassword }),
   };
 }
 

@@ -37,6 +37,7 @@ import ExcelJS from 'exceljs';
 import { Readable } from 'node:stream';
 import { assignableRoles } from './userService.js';
 import { hashMany } from './hashPool.js';
+import { randomBytes } from 'node:crypto';
 import { badRequest, notFound, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 import { isUsername, claimUsername, indexUser } from './directoryService.js';
@@ -51,9 +52,10 @@ const STALE_JOB_MINUTES = 30;
 export const COLUMNS = [
   { key: 'employee_id', header: 'employee_id', required: true,  max: 20,  width: 16,
     note: 'Unique ID for the employee. Required. This is the key the import de-duplicates on.' },
-  // MOM §13.4 — salutation / first name / last name, and a birth YEAR rather
-  // than a full date. The temporary password only ever used the year, so the
-  // day and month were personal data collected for no purpose.
+  // MOM §13.4 — salutation / first name / last name. Date of birth used to sit
+  // in this list, first as a full date and then narrowed to a year, because the
+  // first-login password was built from it. Nothing is built from it any more
+  // and nothing else ever read it, so it is not collected at all.
   { key: 'salutation',  header: 'salutation',  required: false, max: 10,  width: 11,
     note: 'Optional. Mr / Ms / Mrs / Dr / Prof.' },
   { key: 'first_name',  header: 'first_name',  required: true,  max: 60,  width: 18,
@@ -67,8 +69,6 @@ export const COLUMNS = [
     note: 'Sign-in name, e.g. yashas123. Give this OR an email. Unique across the whole platform.' },
   { key: 'email',       header: 'email',       required: false, max: 150, width: 28,
     note: 'Work email. Give this OR a username. Must be unique.' },
-  { key: 'year_of_birth', header: 'year_of_birth', required: true, max: 4, width: 14,
-    note: 'Four-digit year, e.g. 1994. Required — the first-login password is built from it.' },
   { key: 'role',        header: 'role',        required: false, max: 20,  width: 16,
     note: 'Leave blank for "employee". Pick from the dropdown.' },
   { key: 'department',  header: 'department',  required: false, max: 100, width: 18, note: 'Optional.' },
@@ -92,16 +92,20 @@ for (const c of COLUMNS) {
 }
 // A few forgiving spellings, so a hand-edited header doesn't fail the upload.
 [['emp id', 'employee_id'], ['empid', 'employee_id'], ['employee code', 'employee_id'],
- // 'name' and 'date_of_birth' are the pre-MOM headers. Kept as aliases so a
- // sheet an organisation already has on disk still imports: first_name absorbs
- // a full name and is split below, and a full date is reduced to its year.
+ // 'name' is a pre-MOM header. Kept as an alias so a sheet an organisation
+ // already has on disk still imports — first_name absorbs a full name and is
+ // split below.
+ //
+ // Birth columns are deliberately aliased to NOTHING. takeHeader() keeps only
+ // the columns it recognises, so a year_of_birth or date_of_birth column left
+ // in a sheet an organisation already has is dropped where it stands. That is
+ // the behaviour we want: an old template must keep uploading, and the column
+ // must not come back in through a side door.
  ['full name', 'first_name'], ['employee name', 'first_name'], ['name', 'first_name'],
  ['first name', 'first_name'], ['last name', 'last_name'], ['surname', 'last_name'],
  ['title', 'salutation'],
  ['email address', 'email'], ['e mail', 'email'],
   ['user name', 'username'], ['login', 'username'], ['login id', 'username'], ['userid', 'username'],
- ['dob', 'year_of_birth'], ['birth date', 'year_of_birth'], ['date of birth', 'year_of_birth'],
- ['date_of_birth', 'year_of_birth'], ['birth year', 'year_of_birth'], ['yob', 'year_of_birth'],
  ['designation', 'role'], ['manager', 'manager_employee_id'], ['manager id', 'manager_employee_id'],
  ['reports to', 'manager_employee_id'], ['mobile', 'phone'], ['contact', 'phone'],
  ['dept', 'department'], ['bu', 'business_unit'],
@@ -116,21 +120,38 @@ function normaliseHeader(s) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * First 4 letters of the name + year of birth, e.g. "Yashas" + 1998 -> "yash1998".
+ * First 4 letters of the name + the last 4 digits of the phone number.
+ * "Yashas" / 7975495881 -> "yash5881".
  *
- * This is deliberately a low-entropy, DERIVED credential: any colleague who
- * knows someone's name and birth year can compute it. That is acceptable only
- * because it is a bootstrap credential — `must_change_password` is set, and the
- * auth middleware refuses to serve any other endpoint until it has been
- * replaced. It is exempt from the normal password policy (MIN_PASSWORD_LENGTH)
- * for the same reason; the password the employee then chooses is not.
+ * ── Why this replaced the birth year ───────────────────────────────────────
+ *
+ * The old formula was name + year of birth. That made a date of birth a
+ * REQUIRED field on every onboarding path, for no purpose other than feeding
+ * this function — nothing else in the product ever read it. Collecting a
+ * personal identifier that is used once, to build a password that is thrown
+ * away at first login, is not a trade worth making.
+ *
+ * A phone number is already required of every account (it carries sign-in
+ * codes and password resets), so this needs nothing new from anybody.
+ *
+ * ── This is still a bootstrap credential ───────────────────────────────────
+ *
+ * It is guessable, deliberately: a colleague who knows the name and the number
+ * can compute it. That is tolerable ONLY because `must_change_password` is set
+ * and the auth middleware refuses every other endpoint until it is replaced.
+ * It is exempt from the password policy for the same reason; what the employee
+ * then chooses is not.
  *
  * It is hashed at cost 10 rather than 12. Stretching a password that is
- * guessable by design buys nothing — the protection here is the forced change,
- * not the hash cost — and cost 12 would double the import time for no security
- * gain. Real, user-chosen passwords are still hashed at 12.
+ * guessable by design buys nothing, and cost 12 would double the time of a
+ * 20,000-row import for no security gain.
+ *
+ * Note that an account WITH an email address never sees this function — it is
+ * mailed a random password instead. This is the fallback for the shop-floor
+ * case the product is built for, where there is no address to send anything to
+ * and the credential has to be readable down a phone line.
  */
-export function tempPasswordFor(name, birthYear, employeeId) {
+export function tempPasswordFor(name, phone, employeeId) {
   const letters = String(name ?? '').normalize('NFKD').replace(/[^A-Za-z]/g, '').toLowerCase();
   let base = letters.slice(0, 4);
   if (!base) {
@@ -139,7 +160,39 @@ export function tempPasswordFor(name, birthYear, employeeId) {
     base = String(employeeId ?? '').replace(/[^A-Za-z0-9]/g, '').toLowerCase().slice(0, 4);
   }
   if (!base) base = 'user';
-  return `${base.padEnd(4, 'x')}${birthYear}`;
+
+  /*
+   * The LAST four digits, after stripping everything that is not a digit, so
+   * +91 79754 95881 and 07975495881 and 7975495881 all land on the same four.
+   * Taking them from the end is what makes that true — a country code changes
+   * the front of the string and never the back.
+   */
+  const digits = String(phone ?? '').replace(/\D/g, '');
+  const tail = digits.slice(-4);
+
+  // A number too short to yield four digits should not silently produce a
+  // shorter password that the admin then reads out wrongly.
+  const suffix = tail.length === 4 ? tail : tail.padStart(4, '0');
+
+  return `${base.padEnd(4, 'x')}${suffix}`;
+}
+
+/**
+ * A password nobody can derive, for accounts we can actually deliver one to.
+ *
+ * Where there is an address, the credential travels privately, so there is no
+ * reason to hand out a guessable one — the derived formula exists only because
+ * a shop-floor account has no channel and someone has to read it aloud.
+ *
+ * Ambiguous characters are left out on purpose. This gets retyped by hand from
+ * an email, and O/0 and l/1/I are where that goes wrong.
+ */
+export function randomTempPassword() {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = randomBytes(12);
+  let out = '';
+  for (let i = 0; i < 12; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,7 +224,6 @@ export async function buildTemplate(actorRole) {
     last_name: 'Rao',
     username: 'asha.rao',
     email: 'asha.rao@yourcompany.com',
-    year_of_birth: '1994',
     role: 'employee',
     department: 'Production',
     business_unit: 'Plant 1',
@@ -194,8 +246,17 @@ export async function buildTemplate(actorRole) {
       errorTitle: 'Invalid role',
       error: `Choose one of: ${roles.join(', ')}`,
     };
-    // Dates as text, so "1994-08-21" is not silently reformatted by Excel.
-    ws.getCell(`D${r}`).numFmt = '@';
+    /*
+     * Phone numbers as TEXT.
+     *
+     * This pin used to be here for the birth date. It matters at least as much
+     * for a phone number, and for a nastier reason: Excel reads 9876543210 as a
+     * number, and a leading zero on 07975495881 is dropped on sight. The last
+     * four digits still survive that, but the number itself no longer reaches
+     * the employee's handset — which is where their sign-in codes go.
+     */
+    const phoneCol = COLUMNS.findIndex((c) => c.key === 'phone') + 1;
+    ws.getCell(`${ws.getColumn(phoneCol).letter}${r}`).numFmt = '@';
   }
 
   // A second sheet with the rules, so the admin does not have to guess.
@@ -210,8 +271,12 @@ export async function buildTemplate(actorRole) {
   h('', '');
   h('How it works', 'Fill in one row per employee on the "Employees" sheet, then upload this file in Admin → User List → Bulk Import. Delete the grey example row before uploading (or leave it — EMP001 will simply be reported as invalid if the data is not real).');
   h('', '');
-  h('First-time password', 'Each employee is given a temporary password: the first 4 letters of their name, lowercased, followed by their year of birth. Example: "Asha Rao" born 1994 → asha1994. They MUST change it the first time they sign in — until they do, they cannot use any other part of the app.');
-  h('Important', 'This temporary password is guessable by anyone who knows the person\'s name and birth year. Ask employees to sign in and change it promptly, and treat the account as not-yet-secure until they have.');
+  h('First-time password', 'It depends on whether the row has an email address, and you do not have to do anything either way.');
+  h('  With an email', 'A random password is generated and emailed to them directly. You never see it and do not need to pass anything on. Tell them to check their inbox.');
+  h('  Without an email', 'The password is the first 4 letters of their name, lowercased, followed by the LAST 4 DIGITS of their phone number. Example: "Yashas" on 7975495881 → yash5881. This one is shown to you after the import, because you have to pass it on yourself.');
+  h('Either way', 'They MUST change it the first time they sign in — until they do, they cannot use any other part of the app.');
+  h('Important', 'A password built from a name and a phone number can be worked out by any colleague who knows both. Ask those employees to sign in and change it promptly, and treat the account as not-yet-secure until they have.');
+  h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored — you do not need to delete it before uploading.');
   h('', '');
   h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe — it will not touch anyone who already has an account.');
   h('Roles', `You may assign: ${roles.join(', ')}. Anything else will be rejected. Leave the cell blank for "employee".`);
@@ -332,35 +397,6 @@ async function parseSheet(buffer, filename) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CURRENT_YEAR = new Date().getFullYear();
-
-/** Accept a real date cell, an ISO date, or a bare 4-digit year. Nothing ambiguous. */
-function parseBirth(raw) {
-  const s = cellToString(raw);
-  if (!s) return { error: 'year_of_birth is required (the first-login password is built from it).' };
-
-  let year = null;
-
-  if (/^\d{4}$/.test(s)) {
-    year = Number(s);
-  } else {
-    // A full ISO date is still accepted so a sheet written against the old
-    // template imports unchanged — only the year is kept. Anything else is
-    // refused rather than guessed: 03/04/1994 is ambiguous, and guessing wrong
-    // hands the employee a temporary password that does not work.
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!m) {
-      return { error: 'year_of_birth must be a 4-digit year (e.g. 1994).' };
-    }
-    year = Number(m[1]);
-  }
-
-  if (year < 1900 || year > CURRENT_YEAR - 14) {
-    return { error: `year_of_birth ${year} is out of range (1900–${CURRENT_YEAR - 14}).` };
-  }
-  return { year };
-}
-
 /**
  * Validate every row against the DB, the sheet itself, and the actor's rights.
  * Pure: touches no state, writes nothing. Used by both the dry run and the
@@ -439,9 +475,25 @@ export async function validateRows(db, actor, records) {
 
     if (email && !EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
 
-    // ── date of birth / temp password ──
-    const birth = parseBirth(rec.year_of_birth);
-    if (birth.error) { reject(rec, birth.error); continue; }
+    /*
+     * ── The first-login credential, decided once, here ────────────────────
+     *
+     * It used to be recomputed from the row in three separate places (preview,
+     * insert, and the result report). That was safe only while the formula was
+     * a pure function of the sheet. It no longer is: an account with an address
+     * gets a RANDOM password, so recomputing it would produce a different one
+     * in each of those places — the admin would be shown a password that was
+     * never actually set.
+     *
+     * So it is decided on the row and carried. `temp_password_derived` records
+     * WHICH rule produced it, because that is what decides whether the value is
+     * safe to show the admin: a derived password they must read out to somebody
+     * is meant to be shown, and a random one that was emailed privately is not.
+     */
+    const phoneDigits = (rec.phone || '').replace(/\D/g, '');
+    const hasEmail = !!email;
+    const tempPassword = hasEmail ? randomTempPassword()
+      : tempPasswordFor(name, phoneDigits, employeeId);
 
     // ── role: the RBAC gate ──
     const role = (rec.role || '').trim().toLowerCase() || 'employee';
@@ -502,8 +554,8 @@ export async function validateRows(db, actor, records) {
       salutation: salutation || null,
       first_name: firstName,
       last_name: lastName || null,
-      year_of_birth: birth.year,
-      birth_year: birth.year,
+      temp_password: tempPassword,
+      temp_password_derived: !hasEmail,
       role,
       department:    (rec.department || '').trim() || null,
       business_unit: (rec.business_unit || '').trim() || null,
@@ -609,7 +661,7 @@ function avatarInitials(name) {
  */
 async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
   const hashes = await hashMany(
-    rows.map((r) => ({ key: r.employee_id, password: tempPasswordFor(r.name, r.birth_year, r.employee_id) })),
+    rows.map((r) => ({ key: r.employee_id, password: r.temp_password })),
     TEMP_PASSWORD_ROUNDS,
     onProgress
   );
@@ -626,12 +678,12 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
       const values = chunk.map((r) => [
         r.employee_id, r.username, r.name, r.email, hashes.get(r.employee_id),
         r.phone, r.department, r.business_unit, r.location, r.role,
-        avatarInitials(r.name), r.salutation, r.first_name, r.last_name, r.year_of_birth,
+        avatarInitials(r.name), r.salutation, r.first_name, r.last_name,
       ]);
       await conn.query(
         `INSERT INTO users
            (employee_id, username, name, email, password_hash, phone, department, business_unit,
-            location, role, avatar_initials, salutation, first_name, last_name, year_of_birth,
+            location, role, avatar_initials, salutation, first_name, last_name,
             status, points, must_change_password, password_changed_at)
          VALUES ?`,
         // The trailing constants are appended per-row below via map, so keep the
@@ -724,9 +776,19 @@ export async function preview(db, actor, buffer, filename) {
     valid_count: valid.length,
     invalid_count: errors.length,
     // enough to show a table without shipping 20k rows to the browser
+    /*
+     * Enough to show a table without shipping 20k rows to the browser.
+     *
+     * The password shown here is the DERIVED one only. A preview is a separate
+     * parse from the import that follows it, so a random password generated now
+     * is not the one the import will set — showing it would be showing a
+     * credential that never existed. Emailed accounts are reported as emailed
+     * instead, which is the fact the admin actually needs.
+     */
     sample: valid.slice(0, 10).map((r) => ({
       employee_id: r.employee_id, name: r.name, email: r.email, role: r.role,
-      temp_password: tempPasswordFor(r.name, r.birth_year, r.employee_id),
+      temp_password: r.temp_password_derived ? r.temp_password : null,
+      password_emailed: !r.temp_password_derived,
     })),
     errors: errors.slice(0, 200),
   };
@@ -760,7 +822,16 @@ export async function startImport(db, actor, buffer, filename, tenant = null) {
   if (errors.length) await saveErrors(db, jobId, errors);
 
   // Run detached. Never await: the HTTP response must not wait minutes.
-  runJob(db, jobId, valid).catch(async (err) => {
+  /*
+   * `tenant` is passed explicitly.
+   *
+   * runJob already referred to it and never received it — in an ES module that
+   * is a ReferenceError, thrown the moment the job reached insertUsers, so the
+   * import failed every time with a message that named a variable rather than
+   * anything an administrator could act on. It failed into the .catch below, so
+   * the job was marked failed and the HTTP request had already returned 200.
+   */
+  runJob(db, jobId, valid, tenant).catch(async (err) => {
     logger.error(`user import job ${jobId} failed`, err);
     await db.execute(
       "UPDATE user_import_jobs SET status='failed', finished_at=NOW(), error_message=? WHERE id=?",
@@ -777,7 +848,7 @@ export async function startImport(db, actor, buffer, filename, tenant = null) {
   };
 }
 
-async function runJob(db, jobId, valid) {
+async function runJob(db, jobId, valid, tenant = null) {
   if (!valid.length) {
     await db.execute(
       "UPDATE user_import_jobs SET status='completed', phase=NULL, created_count=0, finished_at=NOW() WHERE id=?",
@@ -800,11 +871,60 @@ async function runJob(db, jobId, valid) {
 
   const created = await insertUsers(db, valid, onProgress, onPhase, tenant);
 
+  /*
+   * ── Hand out the credentials we can hand out ourselves ──────────────────
+   *
+   * Everybody in `valid` with an address was given a random password that is
+   * deliberately not reported back to the admin, because it goes to the person
+   * it belongs to instead. If this step did not run, those accounts would exist
+   * with a password nobody alive knows — unopenable, and only recoverable
+   * through a password reset the employee has no reason to think of.
+   *
+   * It runs AFTER the insert and outside its transaction. Sending mail inside
+   * the transaction would hold locks open for the length of an SMTP
+   * conversation per row, and a failed send would roll back accounts that were
+   * created perfectly well.
+   *
+   * A send that fails is logged and counted, never thrown: the accounts are
+   * already real, and failing the whole job here would tell the admin their
+   * import did not work when it did. The count is reported on the job so the
+   * failure is visible rather than silent.
+   */
+  await onPhase?.('emailing');
+  const emailedRows = valid.filter((r) => r.email && !r.temp_password_derived);
+  let emailedOk = 0;
+  if (emailedRows.length) {
+    const { sendTemporaryPassword } = await import('./mailerService.js');
+    // A few at a time. One at a time is needlessly slow over a few hundred
+    // rows; all at once opens a few hundred sockets and gets us rate-limited.
+    const BATCH = 5;
+    for (let i = 0; i < emailedRows.length; i += BATCH) {
+      const results = await Promise.all(emailedRows.slice(i, i + BATCH).map((r) =>
+        sendTemporaryPassword({
+          email: r.email,
+          name: r.name,
+          orgName: tenant?.name || tenant?.org_name || '',
+          slug: tenant?.slug || '',
+          password: r.temp_password,
+          reason: 'onboard',
+        }).catch(() => false)
+      ));
+      emailedOk += results.filter(Boolean).length;
+    }
+    if (emailedOk < emailedRows.length) {
+      logger.warn(
+        `user import job ${jobId}: ${emailedRows.length - emailedOk} of ${emailedRows.length} `
+        + 'welcome emails could not be delivered; those employees must use a password reset.'
+      );
+    }
+  }
+
   await db.execute(
     `UPDATE user_import_jobs
-        SET status='completed', phase=NULL, processed_rows=?, created_count=?, finished_at=NOW()
+        SET status='completed', phase=NULL, processed_rows=?, created_count=?,
+            emailed_count=?, email_failed_count=?, finished_at=NOW()
       WHERE id=?`,
-    [created, created, jobId]
+    [created, created, emailedOk, Math.max(0, emailedRows.length - emailedOk), jobId]
   );
   logger.info(`user import job ${jobId}: created ${created} accounts`);
 }

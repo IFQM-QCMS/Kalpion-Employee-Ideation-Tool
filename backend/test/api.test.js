@@ -12,6 +12,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import ExcelJS from 'exceljs';
 import {
   getBaseUrl,
   setupSuite, teardownSuite, api, login, sql, signToken,
@@ -2851,4 +2852,141 @@ test('a role outside the configured approval chain cannot approve, and sees an e
     token: AADMIN,
     body: { approval_stages: 'originator,immediate_manager,department_manager,plant_head' },
   });
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  Onboarding without a date of birth
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+test('an employee with no email gets the name+phone password, and no DOB is asked for', async () => {
+  const empId = `NODOB${Date.now() % 100000}`;
+  const res = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      action: 'create_user',
+      name: 'Yashas Kumar',
+      employee_id: empId,
+      username: `yashas${Date.now() % 100000}`,
+      phone: '7975495881',
+      role: 'employee',
+      // Deliberately no date_of_birth. It used to be mandatory here.
+    },
+  });
+
+  assert.equal(res.data.success, true,
+    `creating a user without a date of birth must work — ${JSON.stringify(res.data)}`);
+
+  // first 4 letters of the name + last 4 digits of the phone
+  assert.equal(res.data.temp_password, 'yash5881',
+    'the derived password is name(4) + phone(last 4)');
+
+  const [u] = await sql('ifqm_test_a',
+    `SELECT username, must_change_password, date_of_birth, year_of_birth
+       FROM ifqm_test_a.users WHERE employee_id = '${empId}'`);
+  assert.ok(u, 'the user exists');
+  assert.equal(Number(u.must_change_password), 1,
+    'and must be forced to replace the bootstrap credential');
+  assert.equal(u.date_of_birth, null, 'no date of birth was stored');
+  assert.equal(u.year_of_birth, null, 'and no birth year either');
+
+  // It must actually BE the password, not merely a string in the response.
+  // The account has a username and no address, so it signs in the way it can.
+  const login = await api('POST', '/api/auth/login', {
+    body: { email: u.username, password: 'yash5881', org_slug: 'orga' },
+  });
+  assert.equal(login.data.success, true,
+    `the derived password must actually sign in — ${JSON.stringify(login.data)}`);
+});
+
+test('a country code does not change the derived password', async () => {
+  // The last four digits are taken from the END precisely so that +91, a
+  // leading zero, and spaces all land on the same four.
+  const empId = `CC${Date.now() % 100000}`;
+  const res = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      action: 'create_user',
+      name: 'Yashas Kumar',
+      employee_id: empId,
+      username: `ycc${Date.now() % 100000}`,
+      phone: '+91 79754 95881',
+      role: 'employee',
+    },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.temp_password, 'yash5881',
+    'formatting of the number must not change the password');
+});
+
+test('an employee WITH an email is mailed a password instead of being handed one', async () => {
+  const empId = `MAIL${Date.now() % 100000}`;
+  const res = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      action: 'create_user',
+      name: 'Asha Rao',
+      employee_id: empId,
+      email: `asha.${Date.now() % 100000}@orga.test`,
+      phone: '9876500011',
+      role: 'employee',
+    },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+
+  /*
+   * The important half of this assertion is the ABSENCE.
+   *
+   * When the mail goes out, the password must not also come back in the
+   * response — it has reached its owner, and putting it on the admin's screen
+   * would be a live credential sitting in a browser for no reason.
+   *
+   * When the mail fails, it MUST come back, because otherwise the account
+   * exists with a password nobody knows. The test suite has no mail provider
+   * configured, so this is the branch it exercises; both are asserted so
+   * neither can quietly change.
+   */
+  if (res.data.password_emailed) {
+    assert.equal(res.data.temp_password, undefined,
+      'a delivered password must not also be shown to the admin');
+  } else {
+    assert.equal(res.data.email_failed, true,
+      'if it was not emailed, the admin must be told the send failed');
+    assert.ok(res.data.temp_password,
+      'and must be given the password, or the employee is stranded');
+    assert.ok(!/^asha/.test(res.data.temp_password),
+      'the emailed credential is random, not derived from the name');
+  }
+
+  const [u] = await sql('ifqm_test_a',
+    `SELECT must_change_password FROM ifqm_test_a.users WHERE employee_id = '${empId}'`);
+  assert.equal(Number(u.must_change_password), 1,
+    'an emailed password is still a bootstrap credential');
+});
+
+test('the import template no longer has a birth column', async () => {
+  /*
+   * Fetched directly rather than through the api() helper.
+   *
+   * The helper reads every response with res.text(), which decodes as UTF-8.
+   * That is exactly right for JSON and exactly wrong for a zip: any byte that
+   * is not valid UTF-8 becomes U+FFFD and never comes back, so the workbook
+   * arrives corrupt no matter which encoding it is re-encoded with afterwards.
+   */
+  const raw = await fetch(`${getBaseUrl()}/api/users/import/template`, {
+    headers: { Authorization: `Bearer ${AADMIN}` },
+  });
+  assert.equal(raw.status, 200, 'the template downloads');
+  const bytes = Buffer.from(await raw.arrayBuffer());
+  assert.ok(bytes.length > 0, 'and is not empty');
+
+  // An .xlsx is a zip, so its strings are compressed — searching the bytes
+  // proves nothing either way. Open it properly and read the header row.
+  const zip = new ExcelJS.Workbook();
+  await zip.xlsx.load(bytes);
+  const sheet = zip.worksheets[0];
+  const headers = (sheet.getRow(1).values || []).map((v) => String(v ?? '').toLowerCase());
+  assert.ok(!headers.some((h) => /birth|dob/.test(h)),
+    `no birth column may remain in the template — got ${headers.join(', ')}`);
+  assert.ok(headers.includes('phone'),
+    'and phone must still be there, since the password is built from it');
 });
