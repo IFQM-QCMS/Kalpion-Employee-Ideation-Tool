@@ -262,9 +262,6 @@ export default function LandingPage() {
         .ifqm-lp .glow-b{top:-160px;left:20%;width:420px;height:820px;transform:translateX(-50%) rotate(-38deg);
           background:radial-gradient(50% 50% at 50% 50%,rgba(168,85,247,.10),transparent 78%)}
         .ifqm-lp .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center}
-        .ifqm-lp .pill{display:inline-flex;align-items:center;gap:8px;background:var(--primary-light);color:var(--primary);
-          border:1px solid var(--primary-dim);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:650}
-        .ifqm-lp .pill .dot{width:6px;height:6px;border-radius:50%;background:var(--primary)}
         .ifqm-lp h1{font-size:clamp(34px,4.6vw,53px);line-height:1.06;margin:20px 0 0;font-weight:820}
         .ifqm-lp h1 .em{background:linear-gradient(96deg,var(--primary),#a855f7);-webkit-background-clip:text;
           background-clip:text;color:transparent}
@@ -427,7 +424,7 @@ export default function LandingPage() {
          * apparent weight, so the same size reads smaller and thinner than it
          * does on white. The headline and lede both go up a step to compensate.
          */
-        .ifqm-lp h1{font-size:clamp(38px,5.4vw,62px);line-height:1.08;font-weight:750;letter-spacing:-.02em}
+        .ifqm-lp h1{font-size:clamp(38px,5.4vw,62px);line-height:1.08;font-weight:750;letter-spacing:-.02em;margin:0}
         .ifqm-lp .lede{font-size:18.5px;line-height:1.66}
         .ifqm-lp .nav-links{font-size:14.5px}
         .ifqm-lp h2{font-size:clamp(26px,3.2vw,38px);font-weight:720}
@@ -515,7 +512,6 @@ export default function LandingPage() {
         <div className="glow glow-b" aria-hidden="true" />
         <div className="wrap hero-grid">
           <div className="rv in">
-            <span className="pill"><i className="dot" />Built for Indian MSMEs</span>
             <h1>The best ideas in your business are already <span className="em">inside your team</span>.</h1>
             <p className="lede">
               Your machine operator knows which changeover wastes an hour. Your billing
