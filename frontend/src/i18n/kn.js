@@ -1179,6 +1179,7 @@ export default {
   'notif.open':'ತೆರೆಯಿರಿ',
   'notif.showing':'{total} ರಲ್ಲಿ {shown} ತೋರಿಸಲಾಗಿದೆ',
   'nav.billing':'ಬಿಲ್ಲಿಂಗ್',
+  'nav.user_guide':'ಬಳಕೆದಾರ ಮಾರ್ಗದರ್ಶಿ',
   'ps.tab_messaging':'ಸಂದೇಶ',
   'ps.default_chain':'ಡೀಫಾಲ್ಟ್ ಅನುಮೋದನಾ ಸರಪಳಿ',
   'ps.default_chain_hint':'ಪ್ರತಿ ಹೊಸ ಸಂಸ್ಥೆಯೂ ಈ ಕ್ರಮದಿಂದ ಆರಂಭವಾಗುತ್ತದೆ ಮತ್ತು ತನ್ನ ಸಂಸ್ಥೆಯ ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಅದನ್ನು ಬದಲಾಯಿಸಬಹುದು.',
@@ -1519,4 +1520,7 @@ export default {
   'manual.missing':'ಈ ನಿಯೋಜನೆಯಲ್ಲಿ ಬಳಕೆದಾರ ಕೈಪಿಡಿ ಲಭ್ಯವಿಲ್ಲ.',
   'manual.failed':'ಸದ್ಯಕ್ಕೆ ಕೈಪಿಡಿ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ.',
   'audit.when':'ಯಾವಾಗ',
+  'guide.contents':'ಪರಿವಿಡಿ',
+  'guide.search_ph':'ಕೈಪಿಡಿಯಲ್ಲಿ ಹುಡುಕಿ...',
+  'guide.no_match':'ಕೈಪಿಡಿಯಲ್ಲಿ "{query}" ಗೆ ಏನೂ ಹೊಂದಿಕೆಯಾಗುವುದಿಲ್ಲ.',
 };

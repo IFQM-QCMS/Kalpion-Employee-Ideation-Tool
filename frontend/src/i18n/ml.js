@@ -1175,6 +1175,7 @@ export default {
   'notif.open':'തുറക്കുക',
   'notif.showing':'{total} ൽ {shown} കാണിക്കുന്നു',
   'nav.billing':'ബില്ലിംഗ്',
+  'nav.user_guide':'ഉപയോക്തൃ ഗൈഡ്',
   'ps.tab_messaging':'സന്ദേശങ്ങൾ',
   'ps.default_chain':'ഡിഫോൾട്ട് അംഗീകാര ശൃംഖല',
   'ps.default_chain_hint':'ഓരോ പുതിയ സ്ഥാപനവും ഈ ക്രമത്തിൽ ആരംഭിക്കുന്നു, സ്വന്തം സ്ഥാപന ക്രമീകരണങ്ങളിൽ അത് മാറ്റാം.',
@@ -1515,4 +1516,7 @@ export default {
   'manual.missing':'ഈ ഡിപ്ലോയ്‌മെന്റിൽ ഉപയോക്തൃ മാനുവൽ ലഭ്യമല്ല.',
   'manual.failed':'ഇപ്പോൾ മാനുവൽ ഡൗൺലോഡ് ചെയ്യാനായില്ല.',
   'audit.when':'എപ്പോൾ',
+  'guide.contents':'ഉള്ളടക്കം',
+  'guide.search_ph':'മാനുവലിൽ തിരയുക...',
+  'guide.no_match':'മാനുവലിൽ "{query}" എന്നതിന് ഒന്നും പൊരുത്തപ്പെടുന്നില്ല.',
 };

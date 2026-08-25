@@ -36,6 +36,7 @@ import PlatformPlansPage from './pages/PlatformPlansPage';
 import SupportPage from './pages/SupportPage';
 import NotFoundPage from './pages/NotFoundPage';
 import HelpPage from './pages/HelpPage';
+import UserGuidePage from './pages/UserGuidePage';
 import PageMeta from './components/PageMeta';
 
 function PrivateRoute({ children }) {
@@ -115,6 +116,9 @@ function AppRoutes() {
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
       <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
+      {/* One route for all three manuals — the page picks by role, so nobody
+          has to work out which of them is theirs. */}
+      <Route path="/user-guide"      element={<PrivateRoute><AppShell><UserGuidePage /></AppShell></PrivateRoute>} />
       <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
       <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />

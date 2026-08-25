@@ -1534,6 +1534,7 @@ export default {
 
   'analytics.title':'Analytics Overview',
   'nav.billing':'Billing',
+  'nav.user_guide':'User Guide',
   'lb.weekly':'Weekly',
   'lb.share_email':'Email it',
   'lb.ideas_word':'ideas',
@@ -1631,4 +1632,7 @@ export default {
   'manual.missing':'The user manual is not available on this deployment.',
   'manual.failed':'The manual could not be downloaded just now.',
   'audit.when':'When',
+  'guide.contents':'Contents',
+  'guide.search_ph':'Search the manual...',
+  'guide.no_match':'Nothing in the manual matches "{query}".',
 };

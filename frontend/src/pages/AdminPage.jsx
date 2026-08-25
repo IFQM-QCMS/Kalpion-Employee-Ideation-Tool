@@ -12,7 +12,6 @@ import BulkImportModal from '../components/BulkImportModal';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 import QcBadge from '../components/QcBadge';
-import ManualButton from '../components/ManualButton';
 
 /*
  * React's `style` prop takes an object, not a CSS string. These were strings
@@ -241,7 +240,6 @@ export default function AdminPage() {
           ))}
         </div>
         {/* The org-admin manual, for whoever runs this organisation. */}
-        <ManualButton />
       </div>
 
       {/* Overview */}

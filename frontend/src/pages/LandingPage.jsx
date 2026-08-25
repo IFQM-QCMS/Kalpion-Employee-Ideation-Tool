@@ -139,11 +139,82 @@ export default function LandingPage() {
   return (
     <div className="ifqm-lp" ref={rootRef}>
       <style>{`
+        /*
+         * ── The marketing page wears IFQM's brand, not the product's theme ──
+         *
+         * This page is the front door, and it sits next to ifqm.org.in in a
+         * visitor's mind — the same organisation, reached two ways. It looked
+         * like neither: it inherited the APP's palette, which is a light
+         * working surface designed to be stared at for eight hours, and next to
+         * the corporate site it read as an unrelated product.
+         *
+         * Every rule below this block already draws its colour from a token, so
+         * the whole page is restyled by redefining the tokens for `.ifqm-lp`
+         * alone. Nothing outside this component changes, and none of the 600
+         * lines of layout underneath had to be touched to do it.
+         *
+         * ── Why it does not follow dark mode ───────────────────────────────
+         *
+         * The tokens are set unconditionally, so this page is navy in both
+         * themes. That is deliberate: a brand does not have a light variant,
+         * and the signed-in app on the other side of the Sign In button still
+         * honours the visitor's preference completely. Only the front door is
+         * fixed, the way the corporate site is fixed.
+         */
         .ifqm-lp{
-          background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;
+          min-height:100vh;overflow-x:hidden;
           font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
           --lp-max:1120px;
+
+          /* Ground. The gradient is what stops a large flat navy reading as a
+             blank browser window on a big monitor. */
+          --bg:#0b2545;
+          --panel-bg:#0e2c53;
+          --surface:#12325c;
+          --surface-3:#1d4173;
+
+          /* Type. Pure white for headings and a desaturated blue for body: on a
+             navy this dark, white body text at 17px vibrates, and pulling it
+             down to #c5d3e4 costs nothing legible and settles the page. */
+          --heading:#ffffff;
+          --text:#dbe5f1;
+          --subtext:#c5d3e4;
+          --text-muted:#9db1cb;
+          --subtle:#7f95b3;
+
+          /* Edges, at low contrast — a navy panel on a navy ground needs a
+             seam, not a frame. */
+          --border:rgba(255,255,255,.13);
+          --border-strong:rgba(255,255,255,.26);
+
+          /* The accent is IFQM's gold, and it is the ONLY warm thing here, so
+             it takes the eye wherever it is put. Which means it is put only on
+             the thing the page is asking the visitor to do. */
+          --primary:#c9a961;
+          --primary-light:rgba(201,169,97,.14);
+          --primary-dim:rgba(201,169,97,.38);
+          --primary-glow:rgba(201,169,97,.34);
+          /* Dark ink on gold. Gold is a light colour: white text on it fails
+             contrast badly, and it is the most-clicked element on the page. */
+          --on-primary:#0b2545;
+
+          --topbar-bg:rgba(9,31,58,.86);
+          --topbar-border:rgba(255,255,255,.10);
+
+          /* Status colours lifted for a dark ground. The originals are chosen
+             against white and go muddy here. */
+          --info:#6ba7e8;
+          --success:#5fcf94;
+          --warning:#e8b563;
+          --danger:#f08a86;
+
+          background:
+            radial-gradient(1200px 620px at 72% -10%,#164079 0%,transparent 62%),
+            linear-gradient(180deg,#0b2545 0%,#0a2140 58%,#081c37 100%);
+          background-attachment:fixed;
+          color:var(--text);
         }
+
         .ifqm-lp *{box-sizing:border-box}
         .ifqm-lp section{position:relative}
         .ifqm-lp .wrap{max-width:var(--lp-max);margin:0 auto;padding:0 22px}
@@ -341,6 +412,80 @@ export default function LandingPage() {
           .ifqm-lp .logo small{display:none}
           .ifqm-lp .calc-out{grid-template-columns:1fr}
         }
+
+        /* ── Brand overrides ───────────────────────────────────────────────
+           These come LAST on purpose. The token block at the top of this sheet
+           works from anywhere, because a custom property is resolved where it
+           is used. These are ordinary declarations competing with rules of the
+           same specificity further up, so the only thing that decides them is
+           document order. Put them next to the tokens and they lose. */
+        /*
+         * Sizes, matched to the corporate site.
+         *
+         * Its hero runs considerably larger than this page's did, and on a dark
+         * ground that is not decoration: light type on dark carries less
+         * apparent weight, so the same size reads smaller and thinner than it
+         * does on white. The headline and lede both go up a step to compensate.
+         */
+        .ifqm-lp h1{font-size:clamp(38px,5.4vw,62px);line-height:1.08;font-weight:750;letter-spacing:-.02em}
+        .ifqm-lp .lede{font-size:18.5px;line-height:1.66}
+        .ifqm-lp .nav-links{font-size:14.5px}
+        .ifqm-lp h2{font-size:clamp(26px,3.2vw,38px);font-weight:720}
+
+        /*
+         * The headline's gradient span.
+         *
+         * It was indigo-to-purple, which on navy is nearly invisible — two dark
+         * blues on a dark blue. Gold against white type is the contrast the
+         * corporate site uses, so it is what the emphasis uses here.
+         */
+        .ifqm-lp h1 .em{
+          background:linear-gradient(96deg,#e0c383,#c9a961);
+          -webkit-background-clip:text;background-clip:text;color:transparent;
+        }
+
+        /* The two indigo glows behind the hero were tuned for a white page and
+           are invisible on navy. Warmed and lifted so they read as light. */
+        .ifqm-lp .glow-a{background:radial-gradient(50% 50% at 50% 50%,rgba(201,169,97,.16),transparent 78%)}
+        .ifqm-lp .glow-b{background:radial-gradient(50% 50% at 50% 50%,rgba(90,140,210,.20),transparent 78%)}
+
+        /* The secondary button was a light surface with light text — invisible
+           on both counts once the surface went dark. Outlined instead. */
+        .ifqm-lp .b-ghost{background:rgba(255,255,255,.06);color:var(--heading);border-color:var(--border-strong)}
+        .ifqm-lp .b-ghost:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.4)}
+
+        /* The logo keeps its white plate: the mark is navy-and-magenta and
+           disappears against this background without one. */
+        .ifqm-lp .logo img{box-shadow:0 6px 20px rgba(0,0,0,.35)}
+
+        /*
+         * The closing call-to-action band.
+         *
+         * It was a white-on-indigo panel: an indigo-to-purple gradient, white
+         * heading, and a white button with --primary text. Swapping --primary
+         * to gold broke all three at once — the gradient ran gold into purple,
+         * the white heading sat on gold at roughly 1.9:1, and the white button
+         * had gold text on it at about the same. Contrast that low is not a
+         * matter of taste; it is unreadable in daylight on a phone, which is
+         * where this button gets pressed.
+         *
+         * So the band becomes what it should be on this palette: a deeper navy
+         * panel, edged in gold, with the gold saved for the one button that
+         * matters. White type stays — it was always right, just on the wrong
+         * ground.
+         */
+        .ifqm-lp .cta{
+          background:linear-gradient(135deg,#0e2c53 0%,#164079 100%);
+          border:1px solid var(--primary-dim);
+          box-shadow:0 24px 60px -30px rgba(0,0,0,.7);
+        }
+        .ifqm-lp .cta h2{color:#fff}
+        .ifqm-lp .cta p{color:rgba(255,255,255,.86)}
+        /* The one gold thing in the band, so it is the thing you see. */
+        .ifqm-lp .cta .b-white{background:var(--primary);color:var(--on-primary)}
+        .ifqm-lp .cta .b-white:hover{filter:brightness(1.07)}
+        .ifqm-lp .cta .b-line{color:#fff;border-color:rgba(255,255,255,.45)}
+        .ifqm-lp .cta small{color:rgba(255,255,255,.74)}
       `}</style>
 
       {/* ── NAV ──────────────────────────────────────────────────────────── */}

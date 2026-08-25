@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { isPrivileged, isAdmin } from '../utils/helpers';
 import { exportApi } from '../services/api';
-import ManualButton from '../components/ManualButton';
+import { useNavigate } from 'react-router-dom';
 
 /*
  * Help, written for the person using the product rather than the person who
@@ -175,6 +175,7 @@ const SECTIONS = [
 export default function HelpPage() {
   const { user } = useAuth();
   const { t } = useLang();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
 
   const role = user?.role;
@@ -217,7 +218,11 @@ export default function HelpPage() {
         </div>
         {/* The same component the dashboards use, so there is one download
             path and one set of failure messages rather than two. */}
-        <ManualButton variant="primary" />
+        {/* Was a PDF download. The manual is a page now, so this points at it
+            — somebody who came to Help looking for the manual still finds it. */}
+        <button className="btn btn-primary" onClick={() => navigate('/user-guide')}>
+          {t('nav.user_guide')}
+        </button>
       </div>
 
       {/* The promise, stated rather than implied. */}

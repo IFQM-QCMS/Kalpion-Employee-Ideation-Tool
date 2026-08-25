@@ -1175,6 +1175,7 @@ export default {
   'notif.open':'उघडा',
   'notif.showing':'{total} पैकी {shown} दाखवत आहे',
   'nav.billing':'बिलिंग',
+  'nav.user_guide':'वापरकर्ता मार्गदर्शक',
   'ps.tab_messaging':'संदेश',
   'ps.default_chain':'डीफॉल्ट मान्यता साखळी',
   'ps.default_chain_hint':'प्रत्येक नवीन संस्था याच क्रमाने सुरू होते आणि आपल्या संस्था सेटिंग्जमध्ये तो बदलू शकते.',
@@ -1515,4 +1516,7 @@ export default {
   'manual.missing':'या डिप्लॉयमेंटवर वापरकर्ता पुस्तिका उपलब्ध नाही.',
   'manual.failed':'सध्या पुस्तिका डाउनलोड होऊ शकली नाही.',
   'audit.when':'केव्हा',
+  'guide.contents':'अनुक्रमणिका',
+  'guide.search_ph':'पुस्तिकेत शोधा...',
+  'guide.no_match':'पुस्तिकेत "{query}" शी काहीही जुळत नाही.',
 };

@@ -1282,6 +1282,13 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
   .login-left{display:none}
   .login-right{padding:24px}
 }
+/* The user guide's contents rail.
+   Hidden rather than stacked below 900px: stacked, it pushes the manual itself
+   a full screen down on a phone, and the search box above the guide already
+   does the same job in less space. */
+@media (max-width:900px){
+  .guide-toc{display:none}
+}
 @media (max-width:640px){
   .kpi-grid{grid-template-columns:1fr}
   .modal-overlay{padding:12px}

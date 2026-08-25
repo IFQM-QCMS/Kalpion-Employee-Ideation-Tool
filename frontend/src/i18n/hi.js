@@ -1179,6 +1179,7 @@ export default {
   'notif.open':'खोलें',
   'notif.showing':'{total} में से {shown} दिखाए जा रहे हैं',
   'nav.billing':'बिलिंग',
+  'nav.user_guide':'उपयोगकर्ता गाइड',
   'ps.tab_messaging':'संदेश',
   'ps.default_chain':'डिफ़ॉल्ट अनुमोदन शृंखला',
   'ps.default_chain_hint':'हर नया संगठन इसी क्रम से शुरू होता है और अपनी संगठन सेटिंग्स में इसे बदल सकता है।',
@@ -1519,4 +1520,7 @@ export default {
   'manual.missing':'इस परिनियोजन पर उपयोगकर्ता पुस्तिका उपलब्ध नहीं है।',
   'manual.failed':'अभी पुस्तिका डाउनलोड नहीं हो सकी।',
   'audit.when':'कब',
+  'guide.contents':'विषय-सूची',
+  'guide.search_ph':'मैनुअल में खोजें...',
+  'guide.no_match':'मैनुअल में "{query}" से कुछ भी मेल नहीं खाता।',
 };

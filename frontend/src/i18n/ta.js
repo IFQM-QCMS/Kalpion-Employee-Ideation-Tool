@@ -1175,6 +1175,7 @@ export default {
   'notif.open':'திற',
   'notif.showing':'{total} இல் {shown} காட்டப்படுகிறது',
   'nav.billing':'கட்டணம்',
+  'nav.user_guide':'பயனர் வழிகாட்டி',
   'ps.tab_messaging':'செய்திகள்',
   'ps.default_chain':'இயல்பு ஒப்புதல் வரிசை',
   'ps.default_chain_hint':'ஒவ்வொரு புதிய நிறுவனமும் இந்த வரிசையுடன் தொடங்குகிறது, தனது நிறுவன அமைப்புகளில் அதை மாற்றலாம்.',
@@ -1515,4 +1516,7 @@ export default {
   'manual.missing':'இந்த வரிசைப்படுத்தலில் பயனர் கையேடு கிடைக்கவில்லை.',
   'manual.failed':'இப்போது கையேட்டைப் பதிவிறக்க முடியவில்லை.',
   'audit.when':'எப்போது',
+  'guide.contents':'பொருளடக்கம்',
+  'guide.search_ph':'கையேட்டில் தேடு...',
+  'guide.no_match':'கையேட்டில் "{query}" உடன் எதுவும் பொருந்தவில்லை.',
 };

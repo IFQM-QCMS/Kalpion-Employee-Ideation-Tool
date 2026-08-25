@@ -1175,6 +1175,7 @@ export default {
   'notif.open':'తెరవండి',
   'notif.showing':'{total} లో {shown} చూపబడుతున్నాయి',
   'nav.billing':'బిల్లింగ్',
+  'nav.user_guide':'వినియోగదారు గైడ్',
   'ps.tab_messaging':'సందేశాలు',
   'ps.default_chain':'డిఫాల్ట్ ఆమోద క్రమం',
   'ps.default_chain_hint':'ప్రతి కొత్త సంస్థ ఈ క్రమంతో ప్రారంభమవుతుంది, తన సంస్థ సెట్టింగ్‌లలో దాన్ని మార్చుకోవచ్చు.',
@@ -1515,4 +1516,7 @@ export default {
   'manual.missing':'ఈ డిప్లాయ్‌మెంట్‌లో వినియోగదారు మాన్యువల్ అందుబాటులో లేదు.',
   'manual.failed':'ప్రస్తుతం మాన్యువల్ డౌన్‌లోడ్ చేయలేకపోయాము.',
   'audit.when':'ఎప్పుడు',
+  'guide.contents':'విషయసూచిక',
+  'guide.search_ph':'మాన్యువల్‌లో వెతకండి...',
+  'guide.no_match':'మాన్యువల్‌లో "{query}" తో ఏదీ సరిపోలలేదు.',
 };

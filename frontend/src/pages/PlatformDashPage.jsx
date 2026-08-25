@@ -6,7 +6,6 @@ import { useToast } from '../context/ToastContext';
 import { platformApi, saveBlob } from '../services/api';
 import { Donut, Legend, colorAt, STATUS_COLORS } from '../components/Charts';
 import InfoDot from '../components/InfoDot';
-import ManualButton from '../components/ManualButton';
 
 /*
  * Platform → Organizations (tenant management).
@@ -193,7 +192,6 @@ export default function PlatformDashPage() {
         </div>
         {/* The platform-admin manual — the vendor console, which nobody inside
             a customer organisation should ever be handed. */}
-        <ManualButton />
       </div>
 
       {/* KPI strip */}
