@@ -919,13 +919,42 @@ async function runJob(db, jobId, valid, tenant = null) {
     }
   }
 
+  /*
+   * ── Two writes, and the order matters ──────────────────────────────────
+   *
+   * The job is marked complete FIRST, using only columns that have always
+   * existed. The email counters go in a second statement that is allowed to
+   * fail.
+   *
+   * This is about deploy order, which this project has been bitten by before.
+   * Code reaches production the moment it is pushed — Render deploys from main
+   * — while a migration is applied by hand, so for some window the new code is
+   * running against the old schema. If the completion UPDATE named
+   * emailed_count, that window would be one where a bulk import created every
+   * account, sent every welcome email, and then reported itself FAILED because
+   * of a column that exists only to report a number.
+   *
+   * Splitting them means the worst case is a job that succeeded and cannot say
+   * how much mail it sent, which is a missing detail rather than a lie. Once
+   * migration 031 is applied the second statement starts working with no code
+   * change and no restart.
+   */
   await db.execute(
     `UPDATE user_import_jobs
-        SET status='completed', phase=NULL, processed_rows=?, created_count=?,
-            emailed_count=?, email_failed_count=?, finished_at=NOW()
+        SET status='completed', phase=NULL, processed_rows=?, created_count=?, finished_at=NOW()
       WHERE id=?`,
-    [created, created, emailedOk, Math.max(0, emailedRows.length - emailedOk), jobId]
+    [created, created, jobId]
   );
+
+  await db.execute(
+    'UPDATE user_import_jobs SET emailed_count=?, email_failed_count=? WHERE id=?',
+    [emailedOk, Math.max(0, emailedRows.length - emailedOk), jobId]
+  ).catch((e) => {
+    logger.warn(
+      `user import job ${jobId}: could not record email counts (${e.message}). `
+      + 'The import itself completed; apply migration 031 to record these.'
+    );
+  });
   logger.info(`user import job ${jobId}: created ${created} accounts`);
 }
 
