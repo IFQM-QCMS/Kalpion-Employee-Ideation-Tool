@@ -351,6 +351,17 @@ export const exportApi = {
     'IFQM-Employee-Ideation-Tool-User-Guide.pdf'),
   ideasCsv: () => downloadBlob('/export/ideas', 'ideas.csv'),
   leaderboardCsv: () => downloadBlob('/export/leaderboard', 'leaderboard.csv'),
+  /*
+   * The leaderboard as a filable document. The period travels with it so the
+   * PDF says which one it covers — a ranking with no period on it is unusable
+   * a month later, which is exactly when R&R looks at it.
+   */
+  leaderboardPdf: (period = 'all') =>
+    downloadBlob(`/export/leaderboard-pdf?period=${encodeURIComponent(period)}`,
+      `leaderboard_${period}.pdf`),
+  // Server-side send, with the PDF attached. Restricted to the roles that may
+  // already export organisation-wide reports.
+  sendLeaderboard: (body) => api.post('/export/leaderboard/send', body),
   analyticsHtml: () => downloadBlob('/export/analytics', 'analytics.html'),
   // Single idea → pre-formatted Closure Summary PDF (reviewer/hierarchy only,
   // enforced server-side). Downloads a fresh PDF each time.

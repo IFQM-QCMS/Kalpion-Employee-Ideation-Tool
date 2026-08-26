@@ -144,7 +144,13 @@ const isConnectionFailure = (err) => {
  * unreachable. Returns false rather than throwing — every caller has its own
  * idea of what to do next.
  */
-async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
+/**
+ * @param {Array} attachments  [{ filename, content: Buffer, contentType }]
+ *   ZeptoMail wants base64 in `content`, the MIME type in `mime_type` and the
+ *   display name in `name`. Different spelling from nodemailer's, which is why
+ *   the callers pass one shape and each transport translates it.
+ */
+async function sendViaZeptoApi({ to, toName, subject, bodyHtml, attachments = [] }) {
   const { user, pass, from, fromName, apiKey: configured } = config.platformMail;
   /*
    * The API token, NOT the SMTP password. This used to be `pass || user`, which
@@ -170,6 +176,13 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
         to: [{ email_address: { address: safeTo, ...(toName ? { name: headerSafe(toName) } : {}) } }],
         subject: headerSafe(subject),
         htmlbody: bodyHtml,
+        ...(attachments.length ? {
+          attachments: attachments.map((a) => ({
+            content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : String(a.content),
+            mime_type: a.contentType || 'application/octet-stream',
+            name: headerSafe(a.filename || 'attachment'),
+          })),
+        } : {}),
       }),
       signal: AbortSignal.timeout(15000),
     });
@@ -193,7 +206,7 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml }) {
   }
 }
 
-export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
+export async function sendViaPlatform(toEmail, toName, subject, bodyHtml, attachments = []) {
   /*
    * No address is a normal state, not an error. Since migration 025 an account
    * may exist with a username and a mobile number and nothing else, and every
@@ -217,7 +230,7 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
    * known. Being told is better than being made to find out on a timer.
    */
   if (transport === 'api') {
-    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
+    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
     throw new Error(
       'Platform mail could not be sent. PLATFORM_MAIL_TRANSPORT is "api", so SMTP '
       + 'was not attempted - check PLATFORM_MAIL_API_KEY holds the provider\'s API '
@@ -228,7 +241,7 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
   // SMTP is known unreachable — go straight over HTTPS rather than making the
   // caller wait out the connection timeout again.
   if (platformMailReady() && Date.now() < smtpDeadUntil) {
-    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
+    if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
     throw new Error(
       'Platform mail could not be sent: SMTP is unreachable from this host and the '
       + 'HTTPS API was refused. Set PLATFORM_MAIL_API_KEY to the ZeptoMail '
@@ -244,6 +257,7 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
         to: toName ? { name: headerSafe(toName), address: safeTo } : safeTo,
         subject: headerSafe(subject),
         html: bodyHtml,
+        ...(attachments.length ? { attachments } : {}),
       });
       logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
       smtpDeadUntil = 0; // it works after all — stop skipping it
@@ -258,7 +272,7 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml) {
         );
       }
       logger.warn(`platform SMTP failed (${err.message}) — attempting ZeptoMail HTTP REST API fallback on port 443...`);
-      if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml })) return true;
+      if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
       throw err;
     }
   }

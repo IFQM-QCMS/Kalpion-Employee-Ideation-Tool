@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useLang } from '../context/LangContext';
-import { leaderboardApi } from '../services/api';
-import { scoreBadgeClass, engagementIndex } from '../utils/helpers';
+import { leaderboardApi, exportApi } from '../services/api';
+import { scoreBadgeClass, engagementIndex, isPrivileged } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 import { drawPersonalCard, drawPodiumCard, canvasToBlob, shareImage } from '../utils/shareCard';
 
@@ -157,6 +157,51 @@ export default function LeaderboardPage() {
    */
   const shareRef = useRef(null);
 
+  /*
+   * Forwarding to HR is a dialog rather than a one-click button.
+   *
+   * It sends real mail to an address somebody types, so there has to be a step
+   * where they can read what they typed before it goes. A single button that
+   * fires on click has no such step, and the mistake it invites — a wrong
+   * address — cannot be taken back.
+   */
+  const [hrOpen, setHrOpen] = useState(false);
+  const [hrTo, setHrTo] = useState('');
+  const [hrNote, setHrNote] = useState('');
+  const [hrSending, setHrSending] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+
+  const canForward = isPrivileged(user?.role);
+
+  async function downloadPdf() {
+    setPdfBusy(true);
+    try {
+      await exportApi.leaderboardPdf(period);
+    } catch {
+      showToast(t('lb.pdf_failed'), 'danger');
+    }
+    setPdfBusy(false);
+  }
+
+  async function sendToHr() {
+    if (!hrTo.trim()) return;
+    setHrSending(true);
+    try {
+      const res = await exportApi.sendLeaderboard({ to: hrTo.trim(), period, note: hrNote.trim() });
+      if (res.data?.success) {
+        showToast(t('lb.hr_sent', { email: res.data.sent_to }), 'success');
+        setHrOpen(false);
+        setHrTo('');
+        setHrNote('');
+      } else {
+        showToast(res.data?.error || t('msg.error'), 'danger');
+      }
+    } catch (e) {
+      showToast(e.response?.data?.error || t('msg.server_error'), 'danger');
+    }
+    setHrSending(false);
+  }
+
   const periodLabel = () =>
     t(PERIODS.find((p) => p.val === period)?.label || 'lb.all');
 
@@ -262,6 +307,40 @@ export default function LeaderboardPage() {
 
   return (
     <>
+      {hrOpen && (
+        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setHrOpen(false)}>
+          <div className="modal" style={{ maxWidth:460 }}>
+            <div className="modal-header">
+              <span>{t('lb.send_hr')}</span>
+              <button className="modal-close" onClick={() => setHrOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ fontSize:12.5,color:'var(--text-muted)',marginBottom:14 }}>
+                {t('lb.send_hr_hint', { period: periodLabel() })}
+              </div>
+              <div className="form-group">
+                <label>{t('lb.hr_email')} <span style={{ color:'var(--danger)' }}>*</span></label>
+                <input className="form-control" type="email" value={hrTo} autoFocus
+                  placeholder="hr@yourcompany.com"
+                  onChange={e => setHrTo(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label>{t('lb.hr_note')}</label>
+                <textarea className="form-control" rows={3} value={hrNote}
+                  placeholder={t('lb.hr_note_ph')}
+                  onChange={e => setHrNote(e.target.value)} />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setHrOpen(false)}>{t('btn.cancel')}</button>
+              <button className="btn btn-primary" disabled={hrSending || !hrTo.trim()} onClick={sendToHr}>
+                {hrSending ? t('btn.saving') : t('lb.send_hr')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Period chips + share. */}
       <div style={{ display:'flex',alignItems:'center',gap:12,flexWrap:'wrap',marginBottom:20 }}>
       <div className="chip-filter" style={{ marginBottom:0 }}>
@@ -296,6 +375,24 @@ export default function LeaderboardPage() {
             onClick={emailLeaderboard} disabled={!indivs.length}>
             {t('lb.share_email')}
           </button>
+
+          {/* MOM 24/08 §8 — a document, not a spreadsheet and not a picture.
+              It carries the organisation, the period and the date, which is
+              what makes it filable months after the fact. */}
+          <button className="btn btn-outline btn-sm"
+            onClick={downloadPdf} disabled={!indivs.length || pdfBusy}>
+            {pdfBusy ? t('btn.saving') : t('lb.download_pdf')}
+          </button>
+
+          {/* MOM 24/08 §1 — forward to HR for Rewards & Recognition. Sent by
+              the server with the PDF attached, because a mailto: cannot carry
+              an attachment and what HR needs is the document. */}
+          {canForward && (
+            <button className="btn btn-primary btn-sm"
+              onClick={() => setHrOpen(true)} disabled={!indivs.length}>
+              {t('lb.send_hr')}
+            </button>
+          )}
         </div>
       </div>
 
