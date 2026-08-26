@@ -142,7 +142,7 @@ export default function PlatformTenantsPage() {
         <>
           <div className="kpi-grid">
             {[
-              [t('pa.kpi_users'), data.user_count, '#4f46e5'],
+              [t('pa.kpi_users'), data.user_count, '#1a5299'],
               [t('pa.kpi_ideas'), totalIdeas, '#0891b2'],
               [t('pa.kpi_implemented'), implemented, '#10b981'],
               [t('pa.kpi_roles'), roles.length, '#f59e0b'],

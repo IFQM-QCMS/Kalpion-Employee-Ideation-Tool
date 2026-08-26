@@ -145,7 +145,7 @@ export default function ProfilePage() {
   return (
     <div style={{ maxWidth:600 }}>
       <div className="card" style={{ textAlign:'center',padding:32 }}>
-        <div id="profile-avatar" className="avatar" style={{ width:64,height:64,fontSize:24,margin:'0 auto 12px',background:'linear-gradient(135deg,var(--primary),#6366f1)' }}>
+        <div id="profile-avatar" className="avatar" style={{ width:64,height:64,fontSize:24,margin:'0 auto 12px',background:'linear-gradient(135deg,var(--primary),#0b2545)' }}>
           {user.avatar_initials || user.name?.[0] || '?'}
         </div>
         <div id="profile-name" style={{ fontSize:20,fontWeight:700,color:'var(--heading)' }}>{user.name}</div>

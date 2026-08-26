@@ -14,13 +14,22 @@
  *
  * ── Where this deliberately differs from the PDF ──────────────────────────
  *
- * Two passages in the Organisation Admin manual described the date of birth
- * field on the Add User form and the "first 4 letters of the name + birth year"
- * password rule. Neither exists any more. Reproducing them faithfully would
- * have meant shipping a manual that tells an administrator to fill in a field
- * that is not on the screen in front of them, which is worse than not shipping
- * one — so those two passages describe what the form actually does now. Every
- * other line is the PDF's.
+ * A manual that describes a screen the reader is not looking at is worse than
+ * no manual, so where the product has moved since the PDFs were written, this
+ * follows the product. Everything else is the PDFs' own wording.
+ *
+ * What differs, and why:
+ *
+ *   Date of birth / password rule   the field is gone and the formula is now
+ *                                   username + phone (MOM 24/08 §6).
+ *   Approval Path                   was "Escalation preview"; the "only for
+ *                                   large companies" note is gone (§9).
+ *   Ideas Sent to QC                one name for what was "forwarded" and
+ *                                   "pushed" (§11).
+ *   Leaderboard                     gained a PDF export and forwarding to HR
+ *                                   (§1, §8), so both are described.
+ *   User Guide                      this page exists, so it is in the menus it
+ *                                   lists.
  *
  * ── Shape ────────────────────────────────────────────────────────────────────
  *
@@ -182,6 +191,10 @@ const EMPLOYEE = {
             + 'having ideas approved. You can filter by All Time, Monthly, Quarterly, or Yearly, and share your rank '
             + 'or the top 5 using the share buttons at the top.',
         },
+        {
+          p: '**Download PDF** saves the whole ranking for the period you are looking at as a document, with your '
+            + 'organisation\'s name and the date on it.',
+        },
       ],
     },
     {
@@ -230,6 +243,7 @@ const EMPLOYEE = {
               ['See why an idea was rejected', 'Rejected Ideas → View'],
               ["Vote on a colleague's idea", 'Idea Board'],
               ["See who's leading the rankings", 'Leaderboard'],
+              ['Save the rankings as a PDF', 'Leaderboard → Download PDF'],
               ['Ask IFQM for help', 'Support → + Raise a Ticket'],
               ['Update my contact details', 'My Profile'],
               ['Change my forgotten password', 'Sign Out → Forgot your password?'],
@@ -309,7 +323,9 @@ const ORG_ADMIN = {
           steps: [
             'Click **+ Add User**.',
             'Fill in **Full Name**, **Employee ID**, **Phone** (required — used to send codes), and either a **Username** or **Email** (at least one is needed to sign in).',
-            'Choose their **Role**, **Manager**, **Department**, **Business Unit**, and **Location**.',
+            'Choose their **Role**, **Manager**, **Department**, **Business Unit**, and **Location**. The role list '
+            + 'includes every stage your approval path can use — Team Lead, Project Lead, Manager, Department Manager, '
+            + 'Senior Manager, Plant Head and Executive — so make sure somebody actually holds each role your chain relies on.',
             'Click **Save User**.',
           ],
         },
@@ -320,11 +336,11 @@ const ORG_ADMIN = {
         {
           bullets: [
             { term: 'With an email address', text: 'a temporary password is generated and emailed to them directly. You never see it and have nothing to pass on — just tell them to check their inbox.' },
-            { term: 'Without an email address', text: 'the temporary password is the first 4 letters of their name plus the last 4 digits of their phone number — "Yashas" on 7975495881 becomes yash5881. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information — avoid sending it in an unprotected email).' },
+            { term: 'Without an email address', text: 'the temporary password is the first 4 characters of their username plus the last 4 digits of their phone number — username "yashas123" on 7975495881 becomes yash5881. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information — avoid sending it in an unprotected email).' },
           ],
         },
         {
-          note: 'A password built from a name and a phone number can be worked out by any colleague who knows both. '
+          note: 'A password built from a username and a phone number can be worked out by any colleague who knows both. '
             + 'It only lasts until the employee signs in — they are forced to replace it before they can use '
             + 'anything else — but ask them to do that promptly.',
         },
@@ -371,6 +387,7 @@ const ORG_ADMIN = {
             { term: 'Use + Add a stage', text: 'to add an approval step (Immediate Manager, Team Lead, Project Lead, Department Manager, Senior Manager, Plant Head, Executive), and the up/down arrows to reorder them.' },
             { term: 'The last stage in your list', text: 'makes the final decision.' },
             { term: 'Click Save Workflow', text: "when you're happy with it, or **Reset to Platform Defaults** to go back to the standard chain." },
+            { term: 'Approval Path', text: 'below the list, reads the chain back to you as a single line — the order an idea will actually travel. If it does not say what you expected, the list above is wrong.' },
           ],
         },
         {
@@ -436,14 +453,34 @@ const ORG_ADMIN = {
           bullets: [
             { term: 'Go to Review Queue', text: 'to look at what\'s pending — use the **View** button only.' },
             { term: 'Go to All Ideas', text: 'to browse, search, and export every idea in your organisation (Export CSV or Export PDF), or to archive old ideas in bulk (Bulk Archive).' },
-            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (QCMS), if your organisation uses one. Click **Push all to QCMS**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your QCMS API key, and click Save)." },
+            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (QCMS), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to QC**. Click **Push all to QCMS**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your QCMS API key, and click Save)." },
           ],
         },
       ],
     },
     {
+      id: 'leaderboard',
+      title: '9. Leaderboard and Rewards & Recognition',
+      blocks: [
+        {
+          p: 'Go to **Leaderboard** to see how employees and departments rank by points earned from submitting '
+            + 'ideas and having them approved. Filter by All Time, Monthly, Quarterly, or Yearly.',
+        },
+        {
+          bullets: [
+            { term: 'Download PDF', text: 'saves the ranking for the period you are viewing as a document, with the organisation name, the period and the date printed on it. This is the one to file or attach.' },
+            { term: 'Send to HR', text: 'emails that PDF directly to an address you choose, with an optional note. Use this to hand the ranking to whoever runs Rewards & Recognition — they receive the full ranking as an attachment, not a summary.' },
+          ],
+        },
+        {
+          note: 'Send to HR is available to managers and administrators only. It sends mail from IFQM\'s own '
+            + 'address, so it is deliberately not open to everyone.',
+        },
+      ],
+    },
+    {
       id: 'analytics',
-      title: '9. Analytics',
+      title: '10. Analytics',
       blocks: [
         {
           p: "Go to **Analytics** to see your organisation's overall performance: total ideas, approval and "
@@ -454,7 +491,7 @@ const ORG_ADMIN = {
     },
     {
       id: 'billing',
-      title: '10. Billing',
+      title: '11. Billing',
       blocks: [
         {
           p: "Go to **Billing** to see your organisation's current plan, amount due, and next due date. If online "
@@ -466,7 +503,7 @@ const ORG_ADMIN = {
     },
     {
       id: 'profile',
-      title: '11. Your Profile',
+      title: '12. Your Profile',
       blocks: [
         {
           p: 'Click **My Profile** to view and edit your own Department, Business Unit, and Location, and to change '
@@ -477,7 +514,7 @@ const ORG_ADMIN = {
     },
     {
       id: 'help',
-      title: '12. Getting Help',
+      title: '13. Getting Help',
       blocks: [
         {
           p: 'Go to **Help** for frequently asked questions, or **Support** to raise a ticket directly with the '
@@ -487,7 +524,7 @@ const ORG_ADMIN = {
     },
     {
       id: 'signing-out',
-      title: '13. Signing Out',
+      title: '14. Signing Out',
       blocks: [{ p: 'Click **Logout** in the top bar, from anywhere in the app.' }],
     },
     {
@@ -507,6 +544,8 @@ const ORG_ADMIN = {
               ['Set our logo/name', 'Admin Panel → System → Organization Branding'],
               ['Send approved ideas to QCMS', 'Admin Panel → Approved Ideas'],
               ['See how the organisation is performing', 'Analytics'],
+              ['Send the leaderboard to HR for R&R', 'Leaderboard → Send to HR'],
+              ['Save the leaderboard as a document', 'Leaderboard → Download PDF'],
               ['Pay our subscription', 'Billing'],
               ['Change my forgotten password', 'Sign Out → Forgot your password?'],
             ],

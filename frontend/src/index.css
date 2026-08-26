@@ -21,14 +21,48 @@
 
 /* ── TOKENS ─────────────────────────────────────────────────────────────── */
 :root {
-  /* Accent. One colour, used for every interactive/active state. */
-  --primary:#4f46e5;
-  --primary-hover:#4338ca;
-  --primary-active:#3730a3;
-  --primary-light:#eef2ff;          /* tinted fill  */
-  --primary-dim:rgba(79,70,229,.10);/* focus ring   */
-  --primary-glow:rgba(79,70,229,.18);
+  /*
+   * Accent. One colour, used for every interactive/active state.
+   *
+   * ── IFQM navy, not indigo (MOM 24/08 §5) ─────────────────────────────────
+   *
+   * The product sits next to ifqm.org.in in a customer's mind and looked like a
+   * different company: the corporate site is navy chrome with gold on the
+   * things it wants clicked, and this was indigo throughout.
+   *
+   * Gold is deliberately NOT --primary, and the reason is measurable rather
+   * than aesthetic. This token is used as TEXT — links, active nav, small
+   * labels on white — as well as a fill under white type. Gold #c9a961 as text
+   * on white is 2.25:1, and white on a gold fill is the same 2.25:1. Both are
+   * unreadable; WCAG asks for 4.5. Gold only works carrying dark ink, which is
+   * how the corporate site uses it and how --accent below is used here.
+   *
+   * #1a5299 is 7.75:1 on white and 7.23:1 on the canvas — comfortably readable,
+   * and close enough to the indigo it replaces (6.29:1) that the interface
+   * keeps the visual weight it was designed around. A deeper navy would have
+   * scored higher and made every link and active tab noticeably heavier than
+   * the layout expects.
+   */
+  --primary:#1a5299;
+  --primary-hover:#15487f;
+  --primary-active:#123c6b;
+  --primary-light:#e9f0f9;          /* tinted fill  */
+  --primary-dim:rgba(26,82,153,.10);/* focus ring   */
+  --primary-glow:rgba(26,82,153,.18);
   --on-primary:#ffffff;
+
+  /*
+   * IFQM gold — the secondary accent.
+   *
+   * Reserved for things that mark rather than things that act: a highlight, a
+   * top-three rank, a "recognised" badge. It never carries white text, only
+   * --on-accent, for the contrast reason set out above.
+   */
+  --accent:#c9a961;
+  --accent-strong:#b08f45;
+  --accent-light:rgba(201,169,97,.16);
+  --accent-dim:rgba(201,169,97,.34);
+  --on-accent:#0b2545;
 
   /* Semantic. Muted enough to sit beside each other without shouting.
      The base tone is for TEXT/ICONS on a tinted background, so it flips light
@@ -53,7 +87,7 @@
   --surface-3:#eaecef;
   --panel-bg:#f8f9fb;
   --chip-bg:#f2f3f5;
-  --tag-bg:#eef2ff;
+  --tag-bg:#e9f0f9;
   --input-bg:#ffffff;
 
   /* Borders. Hairlines, not rules. */
@@ -79,10 +113,19 @@
   --progress-bg:#eceef1;
 
   /* Sidebar — the one deliberately dark surface. */
-  --sidebar-bg:#0d0f14;
-  --sidebar-border:rgba(255,255,255,.06);
-  --sidebar-text:rgba(255,255,255,.60);
-  --sidebar-active-bg:rgba(99,102,241,.16);
+  /*
+   * IFQM navy, not near-black.
+   *
+   * The sidebar is the biggest continuous block of colour in the product and
+   * the one thing on screen in every session, so it is what the app reads as.
+   * #0d0f14 read as "a dark admin tool"; this reads as IFQM.
+   */
+  --sidebar-bg:#0b2545;
+  --sidebar-border:rgba(255,255,255,.08);
+  --sidebar-text:rgba(255,255,255,.66);
+  /* The active item is marked in gold — the one place the corporate site's
+     accent belongs here, because it marks rather than acts. */
+  --sidebar-active-bg:rgba(201,169,97,.18);
   --sidebar-active-text:#ffffff;
   --sidebar-hover-bg:rgba(255,255,255,.05);
   --sidebar-section-text:rgba(255,255,255,.34);
@@ -107,13 +150,22 @@
 }
 
 [data-theme=dark] {
-  --primary:#818cf8;
-  --primary-hover:#a5b4fc;
-  --primary-active:#c7d2fe;
-  --primary-light:rgba(129,140,248,.14);
-  --primary-dim:rgba(129,140,248,.18);
-  --primary-glow:rgba(129,140,248,.22);
+  /* The same navy, lifted until it reads off a near-black canvas: #7fb0e8 is
+     8.52:1 there, where #1a5299 would be 1.8:1 and effectively invisible. */
+  --primary:#7fb0e8;
+  --primary-hover:#a3c8f0;
+  --primary-active:#c2dbf6;
+  --primary-light:rgba(127,176,232,.14);
+  --primary-dim:rgba(127,176,232,.18);
+  --primary-glow:rgba(127,176,232,.22);
   --on-primary:#0c0e14;
+
+  /* Gold lifts too — #c9a961 is only 3.9:1 on this canvas. */
+  --accent:#d8bd7e;
+  --accent-strong:#c9a961;
+  --accent-light:rgba(216,189,126,.16);
+  --accent-dim:rgba(216,189,126,.34);
+  --on-accent:#0c0e14;
 
   --success:#4ade80; --success-light:rgba(74,222,128,.14); --success-dim:rgba(74,222,128,.18);
   --danger:#f87171;  --danger-light:rgba(248,113,113,.14); --danger-dim:rgba(248,113,113,.18);
@@ -148,8 +200,8 @@
   --bar-track:#242932;
   --progress-bg:#242932;
 
-  --sidebar-bg:#080a0d;
-  --sidebar-border:rgba(255,255,255,.05);
+  --sidebar-bg:#081c37;   /* the same navy, a shade deeper for dark mode */
+  --sidebar-border:rgba(255,255,255,.06);
 
   /* Shadows in the dark need to be near-black and deeper, or they vanish. */
   --shadow-xs:0 1px 2px rgba(0,0,0,.32);
@@ -389,7 +441,7 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
 .avatar{
   width:30px;height:30px;border-radius:var(--r-full);flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#4f46e5,#7c3aed);
+  background:linear-gradient(135deg,var(--primary),#0b2545);
   color:#fff;font-weight:650;font-size:11.5px;letter-spacing:-.01em;
 }
 .role-badge{

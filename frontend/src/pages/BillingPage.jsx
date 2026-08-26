@@ -79,7 +79,9 @@ export default function BillingPage() {
         description: `${order.plan?.name || ''} × ${order.periods}`,
         order_id: order.order_id,
         prefill: { name: user?.name, email: user?.email },
-        theme: { color: '#4f46e5' },
+        // Razorpay renders its own window and cannot read our CSS
+        // variables, so the brand colour has to be handed over literally.
+        theme: { color: '#1a5299' },
         // Verified server-side against the signature. Nothing is extended on
         // the strength of the browser saying it went through.
         handler: async (resp) => {

@@ -113,7 +113,7 @@ export default function SuperAdminPage() {
     [t('sa.executives'),    s.executives||0,         'var(--info)',    t('sa.sub_exec_accounts')],
   ];
 
-  const statusColors = { 'Submitted':'#2563eb','Under Review':'#d97706','Approved':'#16a34a','Rejected':'#dc2626','Implemented':'#4f46e5' };
+  const statusColors = { 'Submitted':'#2563eb','Under Review':'#d97706','Approved':'#16a34a','Rejected':'#dc2626','Implemented':'#1a5299' };
 
   return (
     <>

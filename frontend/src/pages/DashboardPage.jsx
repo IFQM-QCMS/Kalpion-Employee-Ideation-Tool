@@ -7,7 +7,7 @@ import { animateCounter, actionLabel, timeAgo, isPrivileged, translateStatus } f
 
 const STATUS_COLORS = {
   'Submitted':'#2563eb','Under Review':'#d97706','Approved':'#16a34a',
-  'Rejected':'#dc2626','Implemented':'#4f46e5','Draft':'#94a3b8',
+  'Rejected':'#dc2626','Implemented':'#1a5299','Draft':'#94a3b8',
 };
 
 export default function DashboardPage() {

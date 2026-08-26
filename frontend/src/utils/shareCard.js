@@ -18,9 +18,11 @@ const W = 1080;
 const H = 1080;
 
 const INK = {
-  bg1: '#0f172a', bg2: '#1e293b',
+  bg1: '#0b2545', bg2: '#123157',
   gold: '#fbbf24', silver: '#cbd5e1', bronze: '#d97706',
-  text: '#f8fafc', dim: '#94a3b8', accent: '#818cf8',
+  // Drawn on a <canvas>, which cannot read CSS variables — the palette is
+  // duplicated here on purpose and has to be updated with the brand.
+  text: '#f8fafc', dim: '#94a3b8', accent: '#c9a961',
 };
 
 function roundRect(ctx, x, y, w, h, r) {
