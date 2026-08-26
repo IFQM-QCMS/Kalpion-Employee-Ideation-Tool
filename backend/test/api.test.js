@@ -1893,7 +1893,7 @@ test('an application needs its business identity, and nothing §13 calls optiona
     company_name: 'Nandi Precision Works', proposed_slug: 'nandi',
     contact_name: 'Rekha Prasad',
     contact_email: 'rekha@nandiprecision.com', contact_phone: '+919812345680',
-    gstin: '29ABCDE1234F1Z5', pan: 'ABCDE1234F',
+    gstin: '29ABCDE1234F1ZW', pan: 'ABCDE1234F',
     entity_type: 'private_limited', enterprise_category: 'small',
     sector: 'Manufacturing', employee_count: '85', year_established: '2015',
     accepted_terms: true,
@@ -1902,7 +1902,7 @@ test('an application needs its business identity, and nothing §13 calls optiona
   // The mandatory set, and nothing else at all.
   const row = validateApplication({ ...base });
   assert.ok(row, 'the §13 mandatory set alone must be enough to apply');
-  assert.equal(row.gstin, '29ABCDE1234F1Z5');
+  assert.equal(row.gstin, '29ABCDE1234F1ZW');
   assert.equal(row.pan, 'ABCDE1234F');
 
   // Each of the two statutory numbers is genuinely required now.
@@ -3007,4 +3007,55 @@ test('the import template no longer has a birth column', async () => {
     `no birth column may remain in the template — got ${headers.join(', ')}`);
   assert.ok(headers.includes('phone'),
     'and phone must still be there, since the password is built from it');
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  GSTIN verification (MOM 24/08 §2)
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+test('a GSTIN must pass its own check digit, not merely look like one', async () => {
+  const { verifyGstin, gstinCheckDigit } = await import('../src/utils/gstin.js');
+
+  // The GSTN's canonical documented example.
+  const canon = verifyGstin('27AAPFU0939F1ZV');
+  assert.equal(canon.ok, true, `the documented example must verify — ${canon.reason}`);
+  assert.equal(canon.pan, 'AAPFU0939F', 'and the PAN is read out of it');
+  assert.equal(canon.state_code, '27');
+
+  /*
+   * The exact string the old regex accepted. Correctly shaped, correct length,
+   * and not a GSTIN — this is the whole reason the check digit is worth
+   * computing.
+   */
+  const fake = verifyGstin('27AAAAA0000A1Z9');
+  assert.equal(fake.ok, false, 'a correctly shaped non-GSTIN must be refused');
+
+  /*
+   * The message must not quote the expected character back. Doing so turns the
+   * error into instructions for fabricating a number that passes.
+   */
+  assert.ok(!/expected/i.test(fake.reason),
+    'the failure must not hand back the character that would make it pass');
+
+  // Every single-character change to a valid number must break it.
+  const CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const good = '27AAPFU0939F1Z' + gstinCheckDigit('27AAPFU0939F1Z');
+  let missed = 0;
+  for (let i = 0; i < 15; i++) {
+    for (const c of CHARSET) {
+      if (c === good[i]) continue;
+      if (verifyGstin(good.slice(0, i) + c + good.slice(i + 1)).ok) missed++;
+    }
+  }
+  assert.equal(missed, 0, `${missed} single-character mutations were accepted`);
+
+  // The PAN inside the number and the PAN on the form must agree.
+  assert.equal(verifyGstin('27AAPFU0939F1ZV', 'AAPFU0939F').ok, true);
+  assert.equal(verifyGstin('27AAPFU0939F1ZV', 'ZZZZZ9999Z').ok, false,
+    'a PAN that disagrees with the one inside the GSTIN must be caught');
+
+  // State codes are a set with real gaps, not a range.
+  const s45 = '45AAPFU0939F1Z';
+  assert.equal(verifyGstin(s45 + gstinCheckDigit(s45)).ok, false,
+    'there is no state code 45, even with a correct check digit');
 });

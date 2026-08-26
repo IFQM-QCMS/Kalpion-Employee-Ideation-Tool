@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { registrationsApi } from '../services/api';
 import InfoDot from '../components/InfoDot';
+import { isValidGstin, panFromGstin } from '../utils/gstin';
 
 /*
   MSME self-registration.
@@ -255,8 +256,34 @@ export default function SignupPage() {
     proposed_slug: { label: 'preferred organization code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
                      hint: 'Lower-case letters, numbers, hyphen or underscore.' },
     contact_name:  { label: 'full name', min: 3 },
-    gstin:         { label: 'GSTIN', re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
-                     hint: 'Fifteen characters, as printed on your GST certificate.' },
+    gstin:         {
+      label: 'GSTIN',
+      re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
+      hint: 'Fifteen characters, as printed on your GST certificate.',
+      /*
+       * MOM 24/08 §2. The check digit is verified here so a mistyped number is
+       * caught at the field rather than three steps later — and the PAN inside
+       * the GSTIN is compared with the PAN field, because the GSTIN contains it
+       * and a form where they disagree has one of them wrong.
+       *
+       * The expected check character is deliberately not shown: quoting it back
+       * would turn this message into a recipe for fabricating a number that
+       * passes.
+       */
+      fn: (v, f) => {
+        if (!isValidGstin(v)) {
+          return 'That GSTIN fails its own check digit — please copy it exactly as printed '
+            + 'on your GST certificate.';
+        }
+        const inside = panFromGstin(v);
+        const typed = String(f.pan || '').trim().toUpperCase();
+        if (typed && inside && typed !== inside) {
+          return `The PAN inside this GSTIN is ${inside}, which does not match the PAN you entered. `
+            + 'One of the two is wrong.';
+        }
+        return '';
+      },
+    },
     pan:           { label: 'business PAN', re: /^[A-Z]{5}\d{4}[A-Z]$/i,
                      hint: 'Five letters, four digits, one letter.' },
     contact_designation: { optional: true, label: 'designation', min: 2 },
@@ -323,6 +350,19 @@ export default function SignupPage() {
       if (rule.min && value.length < rule.min) return `That ${rule.label} looks too short.`;
       if (rule.re && !rule.re.test(value)) {
         return `That ${rule.label} does not look right. ${rule.hint || ''}`.trim();
+      }
+      /*
+       * A check the shape cannot express.
+       *
+       * GSTIN is the case this exists for: it is the right length and the right
+       * pattern and still not a real number, because the last character is a
+       * checksum over the other fourteen. The regex has nothing to say about
+       * that. `fn` returns its own message, since "does not look right" is
+       * unhelpful when the thing being reported is arithmetic.
+       */
+      if (rule.fn) {
+        const problem = rule.fn(value, form);
+        if (problem) return problem;
       }
       if (rule.num) {
         const v = Number(value);

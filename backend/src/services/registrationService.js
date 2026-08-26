@@ -19,6 +19,7 @@ import { ApiError, badRequest, notFound } from '../utils/respond.js';
 import { assignPlan, defaultTrialDays } from './subscriptionService.js';
 import { defaultTrialPlan } from './planService.js';
 import logger from '../utils/logger.js';
+import { verifyGstin } from '../utils/gstin.js';
 import { createTenant } from './platformService.js';
 import bcrypt from 'bcryptjs';
 import * as verification from './verificationService.js';
@@ -112,7 +113,6 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /* Statutory identifier formats. Each is checked only when supplied — an MSME
    below the GST threshold genuinely has no GSTIN, and rejecting the form over a
    field the applicant cannot fill would be a bug, not diligence. */
-const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const UDYAM_RE = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
 const CIN_RE = /^[LUu][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
@@ -283,9 +283,28 @@ export function validateApplication(body) {
     throw badRequest('Enter a full mobile number, including the area or country code.');
   }
 
+  /*
+   * Verified, not merely shaped.
+   *
+   * GSTIN_RE accepted anything with the right pattern, so 27AAAAA0000A1Z9 —
+   * which is not a GSTIN — went straight through to a reviewer, who had no way
+   * to tell it from a real one.
+   *
+   * A GSTIN carries its own check digit, a state code, and the holder's PAN.
+   * verifyGstin() confirms all three agree, which costs nothing and catches
+   * every typo and every invented number. It cannot confirm the number was
+   * actually ISSUED — that needs a GSTN lookup through a GSP, which is a paid
+   * contract; see docs/GSTIN_VERIFICATION.md. The messages are careful not to
+   * claim more than was checked.
+   *
+   * The PAN is passed in so the two fields are checked against each other: the
+   * GSTIN contains the PAN, so a form where they disagree has one of them
+   * wrong, and that is worth catching before a human is asked to look.
+   */
   const gstin = upper(body.gstin);
-  if (gstin && !GSTIN_RE.test(gstin)) {
-    throw badRequest('GSTIN does not look valid. It is 15 characters, e.g. 29ABCDE1234F1Z5.');
+  if (gstin) {
+    const g = verifyGstin(gstin, upper(body.pan));
+    if (!g.ok) throw badRequest(g.reason);
   }
   const pan = upper(body.pan);
   if (pan && !PAN_RE.test(pan)) {
