@@ -1111,10 +1111,12 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                   <span style={{ fontSize:11,color:'var(--subtle)',minWidth:16,textAlign:'right' }}>{i+1}</span>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontSize:13,fontWeight:600,color:'var(--text)' }}>
+                      {/* "only for large companies" used to be appended here.
+                          MOM 24/08: removed. It was advice rather than fact —
+                          a five-person firm with one manager uses this stage
+                          perfectly well — and it read as a restriction on a
+                          stage that has none. */}
                       {t(`stage.${s}`)}
-                      {s === 'immediate_manager' && (
-                        <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}> ({t('stage.immediate_manager_note')})</span>
-                      )}
                     </div>
                     <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>
                       {isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}
@@ -1351,8 +1353,23 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
   const [error,   setError]   = useState('');
   const [saving,  setSaving]  = useState(false);
 
+  /*
+   * Mirrors ROLES_ADMIN_CAN_ASSIGN in backend/src/services/userService.js.
+   *
+   * department_manager and plant_head were missing from this list while the
+   * server accepted both, so neither could be handed out from the one screen
+   * that hands out roles. That was not a cosmetic gap: the DEFAULT approval
+   * chain is originator → immediate manager → department manager → plant head,
+   * so out of the box an organisation had two stages in its approval path that
+   * no employee could ever occupy. Ideas reaching either stage had nobody to
+   * escalate to.
+   *
+   * MOM 24/08 asked for Department Manager in the Approval Path; it was already
+   * a selectable STAGE, and this is what was actually missing.
+   */
   const roleOptions = [
-    'trainee','employee','team_lead','project_lead','manager','senior_manager','executive',
+    'trainee','employee','team_lead','project_lead','manager',
+    'department_manager','senior_manager','plant_head','executive',
     ...(currentUserRole==='super_admin' ? ['admin'] : []),
   ];
 

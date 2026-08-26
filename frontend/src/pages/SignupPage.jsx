@@ -42,14 +42,6 @@ const ENTITY_TYPES = [
   ['other', 'Other'],
 ];
 
-/* Micro / small / medium as an MSME self-declares them at Udyam. The limits are
-   shown because most applicants know their numbers but not their bracket. */
-const CATEGORIES = [
-  ['micro', 'Micro', 'investment ≤ ₹2.5 cr · turnover ≤ ₹10 cr'],
-  ['small', 'Small', 'investment ≤ ₹25 cr · turnover ≤ ₹100 cr'],
-  ['medium', 'Medium', 'investment ≤ ₹125 cr · turnover ≤ ₹500 cr'],
-];
-
 const TURNOVER_BANDS = [
   ['under_50l', 'Under ₹50 lakh'],
   ['50l_2cr', '₹50 lakh – ₹2 crore'],
@@ -88,7 +80,7 @@ const BLANK = {
    * the markup alone.
    */
   website: '', udyam_number: '', gstin: '', pan: '', cin: '',
-  entity_type: '', enterprise_category: '', sector: '', nic_code: '',
+  entity_type: '', sector: '', nic_code: '',
   employee_count: '', annual_turnover_band: '', year_established: '',
   address_line: '', city: '', state: '', pincode: '', country: 'India',
   accepted_terms: false,
@@ -273,7 +265,6 @@ export default function SignupPage() {
                      hint: 'Ten digits, optionally with +91.' },
 
     entity_type:         { label: 'entity type' },
-    enterprise_category: { label: 'MSME category' },
     sector:              { label: 'sector' },
     nic_code:            { optional: true, label: 'NIC activity code', re: /^\d{2,5}$/,
                            hint: 'Two to five digits from your Udyam certificate.' },
@@ -294,11 +285,18 @@ export default function SignupPage() {
    * is sent, so applications already submitted keep their numbers and the
    * platform screens go on showing them — they are simply not demanded of an
    * applicant who wants to start.
+   *
+   * MSME category (micro / small / medium) went the same way for a different
+   * reason. MOM 24/08: the platform does not differentiate between
+   * organisations by size, so asking every applicant to file themselves into a
+   * size band collected an answer nothing acts on — and implied a tiering that
+   * does not exist. Employee count is still asked, which is the part that
+   * actually informs a rollout.
    */
   const STEP_FIELDS = [
     ['company_name', 'proposed_slug',
      'contact_name', 'contact_designation', 'contact_email', 'contact_phone'],
-    ['gstin', 'pan', 'entity_type', 'enterprise_category',
+    ['gstin', 'pan', 'entity_type',
      'sector', 'nic_code', 'employee_count', 'annual_turnover_band', 'year_established'],
     ['address_line', 'city', 'state', 'pincode', 'country'],
   ];
@@ -767,13 +765,6 @@ export default function SignupPage() {
                         </select>
                       </div>
                       <div>
-                        <label htmlFor="enterprise_category">MSME category <span className="req">*</span></label>
-                        <select id="enterprise_category" value={form.enterprise_category} onChange={set('enterprise_category')}>
-                          <option value="">Select…</option>
-                          {CATEGORIES.map(([v, l, hint]) => <option key={v} value={v}>{l} — {hint}</option>)}
-                        </select>
-                      </div>
-                      <div>
                         <label htmlFor="sector">Sector <span className="req">*</span></label>
                         <select id="sector" value={form.sector} onChange={set('sector')}>
                           <option value="">Select…</option>
@@ -848,7 +839,6 @@ export default function SignupPage() {
                       <div>
                         Organization code: <b>{form.proposed_slug || 'derived from your email'}</b>
                         {form.employee_count ? ` · ${form.employee_count} employees` : ''}
-                        {form.enterprise_category ? ` · ${form.enterprise_category}` : ''}
                       </div>
                       {(form.city || form.state) && <div>{[form.city, form.state, form.pincode].filter(Boolean).join(', ')}</div>}
                     </div>

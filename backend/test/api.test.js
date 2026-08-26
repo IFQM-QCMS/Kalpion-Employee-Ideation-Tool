@@ -2022,15 +2022,30 @@ test('applications from personal mailboxes are refused unless allowed explicitly
   assert.notEqual(throwawayEntry.status, 201, 'a throwaway provider must not be allowable');
 
   /*
-   * Adding a corporate domain would be a no-op that reads as an action:
-   * somebody adds it, sees it listed, and believes they granted something that
-   * was never blocked. Refused with an explanation instead.
+   * MOM 24/08: no differentiation by organisation size or type — any
+   * organisation may be admitted through the whitelist, subject to IFQM
+   * approval. A company domain used to be REFUSED here on the reasoning that
+   * it was never blocked, so allowing it granted nothing.
+   *
+   * It is accepted now, and reported as redundant. That keeps the useful half
+   * of the old refusal — telling the operator the entry grants nothing new —
+   * without refusing a record somebody has a reason to keep.
    */
-  const pointless = await api('POST', '/api/platform/registrations/whitelist', {
-    token: PA, body: { entry: 'nandiprecision.com' },
+  const corporateEntry = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'nandiprecision.com', note: 'Approved by IFQM.' },
   });
-  assert.notEqual(pointless.status, 201, 'a domain that was never blocked must be refused');
-  assert.match(pointless.data.error, /already accepted/i);
+  assert.equal(corporateEntry.data.success, true,
+    `any organisation may be whitelisted — ${JSON.stringify(corporateEntry.data)}`);
+  assert.equal(corporateEntry.data.redundant, true,
+    'but the operator is told it grants nothing that was not already allowed');
+
+  // A free provider is the case the list exists for, and is NOT redundant.
+  const real = await api('POST', '/api/platform/registrations/whitelist', {
+    token: PA, body: { entry: 'outlook.com', note: 'Approved by IFQM.' },
+  });
+  assert.equal(real.data.success, true);
+  assert.equal(real.data.redundant, false,
+    'allowing a blocked provider does grant something, and must not be flagged redundant');
 
   // ── Removing puts the rule back ──
   const list = await api('GET', '/api/platform/registrations/whitelist', { token: PA });
@@ -2858,13 +2873,16 @@ test('a role outside the configured approval chain cannot approve, and sees an e
  *  Onboarding without a date of birth
  * ─────────────────────────────────────────────────────────────────────────── */
 
-test('an employee with no email gets the name+phone password, and no DOB is asked for', async () => {
+test('an employee with no email gets the username+phone password, and no DOB is asked for', async () => {
   const empId = `NODOB${Date.now() % 100000}`;
   const res = await api('POST', '/api/users', {
     token: AADMIN,
     body: {
       action: 'create_user',
-      name: 'Yashas Kumar',
+      // The display name deliberately does NOT start with "yash": the password
+      // must come from the username, and a name that also matched would let a
+      // regression pass unnoticed.
+      name: 'Kumar Rao',
       employee_id: empId,
       username: `yashas${Date.now() % 100000}`,
       phone: '7975495881',
@@ -2876,9 +2894,9 @@ test('an employee with no email gets the name+phone password, and no DOB is aske
   assert.equal(res.data.success, true,
     `creating a user without a date of birth must work — ${JSON.stringify(res.data)}`);
 
-  // first 4 letters of the name + last 4 digits of the phone
+  // MOM 24/08: first 4 characters of the USERNAME + last 4 digits of the phone
   assert.equal(res.data.temp_password, 'yash5881',
-    'the derived password is name(4) + phone(last 4)');
+    'the derived password is username(4) + phone(last 4)');
 
   const [u] = await sql('ifqm_test_a',
     `SELECT username, must_change_password, date_of_birth, year_of_birth
@@ -2906,9 +2924,9 @@ test('a country code does not change the derived password', async () => {
     token: AADMIN,
     body: {
       action: 'create_user',
-      name: 'Yashas Kumar',
+      name: 'Kumar Rao',
       employee_id: empId,
-      username: `ycc${Date.now() % 100000}`,
+      username: `yashas${(Date.now() + 1) % 100000}`,
       phone: '+91 79754 95881',
       role: 'employee',
     },
@@ -2954,7 +2972,7 @@ test('an employee WITH an email is mailed a password instead of being handed one
     assert.ok(res.data.temp_password,
       'and must be given the password, or the employee is stranded');
     assert.ok(!/^asha/.test(res.data.temp_password),
-      'the emailed credential is random, not derived from the name');
+      'the emailed credential is random, not derived from the username or name');
   }
 
   const [u] = await sql('ifqm_test_a',

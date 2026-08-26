@@ -41,7 +41,20 @@ import * as verification from './verificationService.js';
  * code that is never coming.
  */
 export async function sendRegistrationEmailOtp(email, meta = {}) {
-  const check = checkCorporateEmail(String(email || '').trim().toLowerCase());
+  /*
+   * AWAITED. It was not, and checkCorporateEmail is async.
+   *
+   * Without the await, `check` is a Promise. A Promise has no `.ok`, so the
+   * test read undefined, took the failure branch every single time, and threw
+   * badRequest(undefined) — a 400 with no message on it. Every organisation
+   * that tried to verify its email address at sign-up got that 400, whatever
+   * address they typed, and the response could not even say why.
+   *
+   * The one other caller of this function (approve(), further down) awaited it
+   * correctly, which is why the same rule worked there and only the sign-up
+   * form was broken.
+   */
+  const check = await checkCorporateEmail(String(email || '').trim().toLowerCase());
   if (!check.ok) throw badRequest(check.reason);
   return verification.sendCode({
     identifier: email, purpose: 'registration_verify', ip: meta.ip, announce: true,
@@ -620,18 +633,25 @@ export function parseWhitelistEntry(raw) {
       };
     }
     /*
-     * Allowing a corporate address is a no-op that reads as an action, which is
-     * worse than an error: somebody adds 'ravi@acme.com', sees it in the list,
-     * and believes they have granted something. acme.com was never blocked.
+     * A company address may be added, and the list says so.
+     *
+     * This used to be refused, on the reasoning that acme.com was never blocked
+     * so allowing it granted nothing. True at the time, and it stopped somebody
+     * adding an entry that did nothing. But it also made the list a
+     * personal-mailbox exception list rather than a record of who IFQM has
+     * approved, and an organisation of any size may now be admitted this way.
+     *
+     * `redundant` is returned so the caller can say plainly that the address
+     * would have been accepted anyway. That is the useful half of the old
+     * refusal — the information — without refusing an entry somebody has a
+     * reason to keep on file.
      */
-    if (!FREE_EMAIL_DOMAINS.has(emailDomain(v))) {
-      return {
-        ok: false,
-        reason: `${emailDomain(v)} is a company domain — applications from it are already accepted. `
-          + 'This list is only for personal-mailbox providers such as gmail.com.',
-      };
-    }
-    return { ok: true, entry: v, entry_type: 'address' };
+    return {
+      ok: true,
+      entry: v,
+      entry_type: 'address',
+      redundant: !FREE_EMAIL_DOMAINS.has(emailDomain(v)),
+    };
   }
 
   const labels = v.split('.');
@@ -645,13 +665,9 @@ export function parseWhitelistEntry(raw) {
         + 'An approved workspace whose only contact address is designed to stop existing helps nobody.',
     };
   }
-  if (!FREE_EMAIL_DOMAINS.has(v)) {
-    return {
-      ok: false,
-      reason: `${v} is not a blocked provider — applications from it are already accepted.`,
-    };
-  }
-  return { ok: true, entry: v, entry_type: 'domain' };
+  // Same as above: any domain may be recorded, and a domain that was never
+  // blocked is flagged as redundant rather than rejected.
+  return { ok: true, entry: v, entry_type: 'domain', redundant: !FREE_EMAIL_DOMAINS.has(v) };
 }
 
 export async function listWhitelist() {
@@ -679,7 +695,15 @@ export async function addWhitelistEntry({ entry, note = '' } = {}, actor = null)
     throw err;
   }
   logger.info(`registrations: allowed ${parsed.entry_type} "${parsed.entry}" past the corporate-email rule`);
-  return { success: true, entry: parsed.entry, entry_type: parsed.entry_type };
+  return {
+    success: true,
+    entry: parsed.entry,
+    entry_type: parsed.entry_type,
+    // The entry was accepted, but it grants nothing that was not already
+    // permitted. Worth saying so, or somebody adds a company domain believing
+    // they have unblocked something that was never blocked.
+    redundant: !!parsed.redundant,
+  };
 }
 
 export async function removeWhitelistEntry(id) {

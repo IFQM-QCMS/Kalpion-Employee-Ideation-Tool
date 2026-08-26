@@ -120,44 +120,53 @@ function normaliseHeader(s) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * First 4 letters of the name + the last 4 digits of the phone number.
- * "Yashas" / 7975495881 -> "yash5881".
+ * First 4 characters of the username + the last 4 digits of the phone number.
+ * "yashas123" / 7975495881 -> "yash5881".
  *
- * ── Why this replaced the birth year ───────────────────────────────────────
+ * ── Why the username and not the display name ──────────────────────────────
  *
- * The old formula was name + year of birth. That made a date of birth a
- * REQUIRED field on every onboarding path, for no purpose other than feeding
- * this function — nothing else in the product ever read it. Collecting a
- * personal identifier that is used once, to build a password that is thrown
- * away at first login, is not a trade worth making.
+ * This read the name for a while, and MOM 24/08 asked for the username. It is
+ * the better source for a reason worth writing down: the employee has to type
+ * this password, and the username is the other thing they type on the same
+ * screen. Deriving from a name means an employee called "Yashas Kumar" with the
+ * username "ykumar" gets yash5881 — the four characters they are told to type
+ * appear nowhere in what they are typing next to it, which is exactly the shape
+ * of a credential people mistype and then believe they were given wrong.
  *
- * A phone number is already required of every account (it carries sign-in
- * codes and password resets), so this needs nothing new from anybody.
+ * ── The username is always there when this is used ────────────────────────
+ *
+ * Every route that creates an account requires a username OR an email address,
+ * and an account WITH an address is mailed a random password instead of coming
+ * here at all. So a derived password implies no address, which implies a
+ * username. The name fallback below is genuine belt-and-braces rather than an
+ * expected path.
  *
  * ── This is still a bootstrap credential ───────────────────────────────────
  *
- * It is guessable, deliberately: a colleague who knows the name and the number
- * can compute it. That is tolerable ONLY because `must_change_password` is set
- * and the auth middleware refuses every other endpoint until it is replaced.
- * It is exempt from the password policy for the same reason; what the employee
- * then chooses is not.
+ * It is guessable, deliberately: a colleague who knows the username and the
+ * number can compute it. That is tolerable ONLY because `must_change_password`
+ * is set and the auth middleware refuses every other endpoint until it is
+ * replaced. It is exempt from the password policy for the same reason; what the
+ * employee then chooses is not.
  *
  * It is hashed at cost 10 rather than 12. Stretching a password that is
  * guessable by design buys nothing, and cost 12 would double the time of a
  * 20,000-row import for no security gain.
- *
- * Note that an account WITH an email address never sees this function — it is
- * mailed a random password instead. This is the fallback for the shop-floor
- * case the product is built for, where there is no address to send anything to
- * and the credential has to be readable down a phone line.
  */
-export function tempPasswordFor(name, phone, employeeId) {
-  const letters = String(name ?? '').normalize('NFKD').replace(/[^A-Za-z]/g, '').toLowerCase();
-  let base = letters.slice(0, 4);
+export function tempPasswordFor(username, phone, fallbackName, employeeId) {
+  /*
+   * Usernames are [a-z0-9._-], so the punctuation has to come out or a password
+   * could begin "y.ku" — and a dot read down a phone line is a word, not a
+   * character. Letters and digits only, in the order they appear.
+   */
+  const clean = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+
+  let base = clean(username).slice(0, 4);
+  if (!base) base = clean(fallbackName).slice(0, 4);
   if (!base) {
-    // Names in a non-Latin script leave us nothing to slice; fall back to the
-    // employee id so the password is still per-person rather than a shared one.
-    base = String(employeeId ?? '').replace(/[^A-Za-z0-9]/g, '').toLowerCase().slice(0, 4);
+    // A name in a non-Latin script with no username leaves nothing to slice;
+    // the employee id keeps the password per-person rather than shared.
+    base = clean(employeeId).slice(0, 4);
   }
   if (!base) base = 'user';
 
@@ -169,9 +178,6 @@ export function tempPasswordFor(name, phone, employeeId) {
    */
   const digits = String(phone ?? '').replace(/\D/g, '');
   const tail = digits.slice(-4);
-
-  // A number too short to yield four digits should not silently produce a
-  // shorter password that the admin then reads out wrongly.
   const suffix = tail.length === 4 ? tail : tail.padStart(4, '0');
 
   return `${base.padEnd(4, 'x')}${suffix}`;
@@ -493,7 +499,7 @@ export async function validateRows(db, actor, records) {
     const phoneDigits = (rec.phone || '').replace(/\D/g, '');
     const hasEmail = !!email;
     const tempPassword = hasEmail ? randomTempPassword()
-      : tempPasswordFor(name, phoneDigits, employeeId);
+      : tempPasswordFor(username, phoneDigits, name, employeeId);
 
     // ── role: the RBAC gate ──
     const role = (rec.role || '').trim().toLowerCase() || 'employee';
