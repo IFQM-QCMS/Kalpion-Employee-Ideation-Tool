@@ -67,11 +67,26 @@ const server = app.listen(config.port, () => {
     if (provider === 'kaleyra' && blocked.length) {
       logger.error(`sms: gateway is not usable — missing ${blocked.join(', ')}`);
     } else {
-      const ready = templateStatus().filter((t) => t.registered && t.id);
-      const pending = templateStatus().filter((t) => !t.registered || !t.id);
+      /*
+       * Split on SENDABLE, not on registered.
+       *
+       * A purpose awaiting its own id can still be delivered under a fallback
+       * registration, and reporting it as "will NOT be sent" was simply untrue
+       * — it named a working journey as broken, which is how a boot diagnostic
+       * trains people to ignore it.
+       */
+      const all = templateStatus();
+      const own = all.filter((t) => t.sendable && !t.using_fallback);
+      const borrowed = all.filter((t) => t.sendable && t.using_fallback);
+      const blocked = all.filter((t) => !t.sendable);
+
       logger.info(`sms: ${provider} via ${config.sms.senderId} — `
-        + `${ready.length} template(s) registered (${ready.map((t) => t.purpose).join(', ')})`);
-      for (const t of pending) {
+        + `${own.length} template(s) registered (${own.map((t) => t.purpose).join(', ')})`);
+      for (const t of borrowed) {
+        logger.info(`sms: "${t.label}" is sent under the ${t.using_fallback} registration `
+          + `until it has its own id — ${t.pending_reason || 'pending'}`);
+      }
+      for (const t of blocked) {
         logger.warn(`sms: "${t.label}" will NOT be sent — ${t.pending_reason || 'no template id'}`);
       }
     }

@@ -3328,3 +3328,63 @@ test('the registered sender header is accepted', async () => {
   assert.ok(kaleyraMissing({ ...base, senderId: 'WAYTOOLONG' }, 'login').length,
     'a malformed header must still be caught');
 });
+
+test('a template awaiting its id borrows a whole registration, never half of one', async () => {
+  const { resolveTemplate, DLT_TEMPLATES } = await import('../src/config/smsTemplates.js');
+  const { messageFor } = await import('../src/services/smsService.js');
+
+  /*
+   * Verifying a NEW number on an existing account has its own wording
+   * submitted but no id yet. It falls back to the Registration template.
+   *
+   * The rule being pinned is that the fallback supplies the id AND the text.
+   * Taking the id alone — the obvious shortcut — pairs a real registration with
+   * wording it was never approved for, which the carrier drops silently. That
+   * is the failure this entire module exists to prevent, so it gets a test
+   * rather than a comment.
+   */
+  const r = resolveTemplate('phone_verify');
+  assert.equal(r.sendable, true, 'the change-number flow must still be able to send');
+  assert.equal(r.usingFallback, 'registration_phone');
+
+  const carrier = DLT_TEMPLATES.registration_phone;
+  assert.equal(r.id, carrier.id, 'it borrows the fallback id');
+  assert.equal(r.text, carrier.text, 'and the fallback text, so the pair matches');
+
+  const m = messageFor('phone_verify', '482913', 5);
+  assert.equal(m.templateId, carrier.id);
+  assert.equal(m.text, carrier.text.replace('{#var#}', '482913'),
+    'the body must be the carrying registration wording, filled');
+
+  /*
+   * And the wording it will use once approved is ready and distinct — if these
+   * were the same string, the fallback would be pointless and somebody would
+   * eventually delete it as dead code.
+   */
+  assert.notEqual(DLT_TEMPLATES.phone_verify.text, carrier.text);
+  assert.match(DLT_TEMPLATES.phone_verify.text, /confirm your new mobile number/);
+  assert.equal((DLT_TEMPLATES.phone_verify.text.match(/\{#var#\}/g) || []).length, 1);
+});
+
+test('granting the pending id switches a template to its own wording', async () => {
+  const { resolveTemplate, DLT_TEMPLATES } = await import('../src/config/smsTemplates.js');
+
+  // The documented next step is "paste the id in, set registered true". This
+  // asserts that really is the whole change.
+  const spec = DLT_TEMPLATES.phone_verify;
+  const savedId = spec.id;
+  const savedFlag = spec.registered;
+  try {
+    spec.id = '1277170000000000000';
+    spec.registered = true;
+
+    const r = resolveTemplate('phone_verify');
+    assert.equal(r.sendable, true);
+    assert.equal(r.usingFallback, null, 'it stops borrowing');
+    assert.equal(r.id, '1277170000000000000');
+    assert.match(r.text, /confirm your new mobile number/);
+  } finally {
+    spec.id = savedId;
+    spec.registered = savedFlag;
+  }
+});

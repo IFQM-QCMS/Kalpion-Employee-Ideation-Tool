@@ -44,3 +44,54 @@ services:
         sync: false
       - key: APP_DB_PASS
         sync: false
+      # Aiven refuses an unverified connection. Without the CA the failure
+      # looks like a network timeout rather than a TLS problem.
+      - key: DB_SSL_CA
+        sync: false
+
+      # ── Mail ──
+      # Welcome emails for new employees, password resets and the leaderboard
+      # send all depend on this.
+      - key: PLATFORM_SMTP_HOST
+        value: smtp.zeptomail.in
+      - key: PLATFORM_SMTP_PORT
+        value: "587"
+      - key: PLATFORM_SMTP_USER
+        sync: false
+      - key: PLATFORM_SMTP_PASS
+        sync: false
+      - key: PLATFORM_MAIL_FROM
+        sync: false
+      - key: PLATFORM_MAIL_FROM_NAME
+        value: IFQM Ideation
+      # The "emailapikey" token, NOT the SMTP password — ZeptoMail issues the
+      # two separately and the wrong one earns a silent 401.
+      - key: PLATFORM_MAIL_API_KEY
+        sync: false
+      # Render's free tier blocks outbound SMTP. Going straight over HTTPS
+      # avoids waiting out a connection timeout on every send.
+      - key: PLATFORM_MAIL_TRANSPORT
+        value: api
+
+      # ── SMS (Kaleyra, Jio DLT) ──
+      # Template ids and their approved wording are deliberately NOT here: the
+      # carrier checks the two against each other, and keeping them in separate
+      # places is how they drift apart. They live together in
+      # backend/src/config/smsTemplates.js.
+      - key: OTP_ENABLED
+        value: "true"
+      - key: SMS_PROVIDER
+        value: kaleyra
+      - key: SMS_ENDPOINT
+        value: https://api.kaleyra.io
+      # Account identifiers, not secrets. The SID is a path segment in every
+      # request — without it Kaleyra answers 401 "Incorrect SID or API key",
+      # which reads as a bad key and sends people to regenerate a good one.
+      - key: SMS_SID
+        value: HXAP1678914824IN
+      - key: SMS_SENDER_ID
+        value: IFQMID-T
+      - key: SMS_PE_ID
+        value: "1201174858303838784"
+      - key: SMS_API_KEY
+        sync: false

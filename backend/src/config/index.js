@@ -6,7 +6,7 @@
  * PHP lives here, sourced from environment variables with the same defaults.
  */
 import dotenv from 'dotenv';
-import { DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID } from './smsTemplates.js';
+import { DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, resolveTemplate } from './smsTemplates.js';
 
 /** Collected at load, logged once at boot by smsService. */
 export const smsTemplateWarnings = [];
@@ -43,8 +43,15 @@ function smsTemplatePairs() {
           + `message without an error. Using the registered "${spec.label}" instead.`
         );
       }
-      templates[purpose] = spec.id;
-      text[purpose] = spec.text;
+      /*
+       * The resolver, not the raw spec: a purpose awaiting its own id may name
+       * a fallback, and the fallback has to supply the id AND the wording
+       * together. Reading spec.id here would hand out an empty id beside real
+       * text, which is the mismatch this whole module is built to avoid.
+       */
+      const r = resolveTemplate(purpose);
+      templates[purpose] = r.id;
+      text[purpose] = r.text;
     }
   }
 

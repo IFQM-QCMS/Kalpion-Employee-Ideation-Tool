@@ -89,29 +89,75 @@ export const DLT_TEMPLATES = {
   },
 
   /*
-   * Verifying a NEW number on an existing account.
+   * 5. Number Change OTP — verifying a NEW number on an existing account.
    *
-   * There is no template of its own for this, so it borrows the Registration
-   * one — which is deliverable, because the id and the text match, and which
-   * says "complete your registration" to somebody who is changing their phone
-   * number. That is confusing rather than harmful, and it is the better of the
-   * two available options: the alternative is not sending, which would break
-   * the change-number flow outright.
+   * SUBMITTED, awaiting a template id.
    *
-   * Worth registering a fifth template for. Suggested wording, in the same
-   * shape as the three that were approved:
+   * Until it is granted this falls back to the Registration template, and the
+   * fallback takes that template's TEXT as well as its id. Taking one without
+   * the other is the mistake this whole file exists to prevent: a body and an
+   * id that disagree are accepted by the gateway and dropped by the carrier.
    *
-   *   Dear Customer, use OTP {#number#} to confirm your new mobile number on
-   *   IFQM Ideation. Do not share this OTP with anyone.
+   * So today a person changing their number reads "complete your registration",
+   * which is confusing but arrives. The alternative — sending nothing until the
+   * id exists — would break the change-number flow outright, and unlike the
+   * security alert below there is no second channel to fall back on: the whole
+   * point is to prove they hold the new handset.
+   *
+   * When the id arrives: paste it in and set registered to true. The fallback
+   * stops being consulted and the wording below goes out instead. Nothing else
+   * changes.
    */
   phone_verify: {
-    id: '1277178671564743852',
-    text: 'Dear Customer, use OTP {#var#} to complete your registration on IFQM Ideation. Do not share this OTP with anyone.',
-    registered: true,
-    borrowsFrom: 'registration_phone',
-    label: 'Registration OTP (borrowed for number change)',
+    id: '',
+    text: 'Dear Customer, use OTP {#var#} to confirm your new mobile number on IFQM Ideation. Do not share this OTP with anyone.',
+    registered: false,
+    fallback: 'registration_phone',
+    label: 'Number Change OTP',
+    pendingReason: 'Submitted to Jio DLT; awaiting a template id.',
   },
 };
+
+/**
+ * What would actually be sent for a purpose, today.
+ *
+ * A template that is not yet registered may name a `fallback`. The fallback
+ * supplies BOTH its id and its text, never one of them — the carrier's only
+ * job is to check those two against each other, so borrowing half of a
+ * registration produces exactly the silent drop this module exists to avoid.
+ *
+ * @returns {{id:string, text:string, sendable:boolean, usingFallback:string|null,
+ *            label:string, pendingReason:string|null}}
+ */
+export function resolveTemplate(purpose) {
+  const spec = DLT_TEMPLATES[purpose];
+  if (!spec) return { id: '', text: '', sendable: false, usingFallback: null, label: purpose, pendingReason: null };
+
+  if (spec.registered && spec.id) {
+    return {
+      id: spec.id, text: spec.text, sendable: true,
+      usingFallback: null, label: spec.label, pendingReason: null,
+    };
+  }
+
+  const alt = spec.fallback ? DLT_TEMPLATES[spec.fallback] : null;
+  if (alt && alt.registered && alt.id) {
+    return {
+      id: alt.id,
+      text: alt.text,           // the fallback's own wording — the matched pair
+      sendable: true,
+      usingFallback: spec.fallback,
+      label: spec.label,
+      pendingReason: spec.pendingReason || null,
+    };
+  }
+
+  // Nothing deliverable. The caller must decline rather than send.
+  return {
+    id: '', text: spec.text, sendable: false,
+    usingFallback: null, label: spec.label, pendingReason: spec.pendingReason || null,
+  };
+}
 
 /** Sender header, as registered. */
 export const DLT_SENDER_ID = 'IFQMID-T';
@@ -134,14 +180,20 @@ export const SENDER_ID_RE = /^[A-Za-z0-9]{6}(-[TSP])?$/i;
 
 /** The purposes that can be delivered today, for status displays. */
 export function templateStatus() {
-  return Object.entries(DLT_TEMPLATES).map(([purpose, t]) => ({
-    purpose,
-    label: t.label,
-    id: t.id,
-    registered: t.registered,
-    borrows_from: t.borrowsFrom || null,
-    pending_reason: t.pendingReason || null,
-  }));
+  return Object.entries(DLT_TEMPLATES).map(([purpose, t]) => {
+    const r = resolveTemplate(purpose);
+    return {
+      purpose,
+      label: t.label,
+      id: r.id,
+      registered: t.registered && !!t.id,
+      sendable: r.sendable,
+      using_fallback: r.usingFallback,
+      pending_reason: r.pendingReason,
+    };
+  });
 }
 
-export default { DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, SENDER_ID_RE, templateStatus };
+export default {
+  DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, SENDER_ID_RE, templateStatus, resolveTemplate,
+};

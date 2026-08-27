@@ -34,7 +34,7 @@
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { masterDb } from '../database/master.js';
-import { DLT_TEMPLATES, SENDER_ID_RE } from '../config/smsTemplates.js';
+import { DLT_TEMPLATES, SENDER_ID_RE, resolveTemplate } from '../config/smsTemplates.js';
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
@@ -136,7 +136,10 @@ export async function sendSms(phone, message, { provider, purpose = 'login', ten
    * carrier and is how this path gets exercised in development at all.
    */
   const spec = DLT_TEMPLATES[purpose];
-  if (spec && !spec.registered && chosen !== 'log') {
+  // sendable, not registered: a purpose waiting on its own id can still be
+  // delivered under a fallback registration, and that fallback carries its own
+  // wording so the pair still matches.
+  if (spec && !resolveTemplate(purpose).sendable && chosen !== 'log') {
     const why = spec.pendingReason || 'awaiting DLT approval';
     logger.warn(
       `sms: not sending "${spec.label}" — its DLT template is not registered (${why}). `
@@ -164,9 +167,12 @@ export async function sendSms(phone, message, { provider, purpose = 'login', ten
 export function messageFor(purpose, code, minutes) {
   const key = config.sms.templates[purpose] !== undefined ? purpose : 'login';
   const spec = DLT_TEMPLATES[key];
+  const resolved = resolveTemplate(key);
   return {
     templateId: config.sms.templates[key] || '',
     text: fillTemplate(config.sms.text[key], [code, minutes]),
+    // Which registration is actually carrying this, when it is not its own.
+    usingFallback: resolved.usingFallback,
     /*
      * Whether the carrier will actually carry it.
      *
@@ -175,7 +181,7 @@ export function messageFor(purpose, code, minutes) {
      * the carrier. Reported here so the caller can decline to send rather than
      * report a success that did not happen.
      */
-    registered: spec ? spec.registered && !!config.sms.templates[key] : true,
+    registered: spec ? resolved.sendable && !!config.sms.templates[key] : true,
     label: spec ? spec.label : key,
     pendingReason: spec ? spec.pendingReason || null : null,
   };
