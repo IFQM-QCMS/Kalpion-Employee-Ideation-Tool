@@ -19,7 +19,7 @@
  */
 import config from '../config/index.js';
 import { computeAIScoreWithReason } from './aiService.js';
-import { getApprovalConfig } from './settingsService.js';
+import { getApprovalConfig, advanceStage, rolePlaysStages } from './settingsService.js';
 import { getOrgSettings, queueEmail } from './mailerService.js';
 import { generateIdeaCode, addNotification, addWorkflow, addPoints } from './coreHelpers.js';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
@@ -409,7 +409,26 @@ export async function review(db, user) {
   const uid = Number(user.id);
   const cfg = await getApprovalConfig(db);
 
-  if (cfg.reviewer_roles.includes(user.role)) {
+  /*
+   * ── What is waiting on me ───────────────────────────────────────────────
+   *
+   * The stages my role plays in THIS organisation's chain, and the ideas
+   * sitting at one of them.
+   *
+   * This used to match on `current_reviewer_id = me OR (unassigned AND I am the
+   * submitter's manager)`, which had two consequences. An idea assigned to one
+   * holder of a role was invisible to every other holder of the same role, so a
+   * reviewer on leave stopped the chain; and an unassigned idea was offered to
+   * the submitter's manager whatever role that manager held, which is the
+   * reporting tree deciding the approval sequence again.
+   *
+   * Matching on the stage fixes both. Anybody holding the role the idea is
+   * waiting on can act, and nobody else sees it.
+   */
+  const myStages = rolePlaysStages(cfg, user.role);
+
+  if (myStages.length) {
+    const placeholders = myStages.map(() => '?').join(',');
     const sql =
       `SELECT DISTINCT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
               ir.decision AS my_reviewer_decision,
@@ -423,11 +442,12 @@ export async function review(db, user) {
        JOIN users u ON u.id = i.submitter_id
        LEFT JOIN idea_reviewers ir ON ir.idea_id = i.id AND ir.reviewer_id = ?
        WHERE i.status IN ('Submitted','Under Review')
-         AND (i.workflow_type = 'hierarchical'
-              AND (i.current_reviewer_id = ? OR (i.current_reviewer_id IS NULL AND u.manager_id = ?))
-              OR i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending')
+         AND i.submitter_id <> ?
+         AND ((COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
+               AND i.current_stage IN (${placeholders}))
+              OR (i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending'))
        ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
-    const [ideas] = await db.execute(sql, [uid, uid, uid, uid]);
+    const [ideas] = await db.execute(sql, [uid, uid, uid, ...myStages]);
     return { success: true, ideas };
   }
 
@@ -702,6 +722,7 @@ export async function submitOrDraft(db, user, action, b) {
 
   let reviewDueDate = null;
   let currentReviewerId = null;
+  let currentStage = null;
   if (action === 'submit') {
     let slaDays = 7;
     try {
@@ -711,7 +732,38 @@ export async function submitOrDraft(db, user, action, b) {
       if (srows.length) slaDays = Math.max(1, parseInt(srows[0].value, 10) || 1);
     } catch { /* keep default */ }
     reviewDueDate = addDays(slaDays);
-    currentReviewerId = user.manager_id ?? null;
+
+    /*
+     * ── The idea enters the chain at stage one ────────────────────────────
+     *
+     * This used to set current_reviewer_id to the submitter's own manager and
+     * nothing else, which is how the whole approval sequence came to be driven
+     * by the reporting tree: the first reviewer was whoever the submitter
+     * reported to, whatever role they held and wherever that sat in the
+     * configured chain.
+     *
+     * The chain decides now. The idea starts at the first approver stage, and
+     * a person is chosen because they HOLD THAT STAGE'S ROLE — preferring the
+     * submitter's own manager when the manager happens to hold it, since an
+     * idea is better read by somebody who knows the work.
+     *
+     * A stage with nobody in it leaves current_reviewer_id NULL. That is not a
+     * failure: the review queue offers ideas to everyone holding the stage
+     * role, so the idea is still actionable the moment somebody is given it.
+     */
+    const cfg = await getApprovalConfig(db);
+    currentStage = cfg.first_stage ? cfg.first_stage.stage : null;
+
+    if (cfg.first_stage) {
+      const [cands] = await db.execute(
+        `SELECT id FROM users
+          WHERE role = ? AND status = 'active' AND id <> ?
+          ORDER BY (id = ?) DESC, id ASC
+          LIMIT 1`,
+        [cfg.first_stage.role, user.id, user.manager_id ?? 0]
+      );
+      currentReviewerId = cands[0]?.id ?? null;
+    }
   }
 
   let wasAlreadySubmitted = false;
@@ -736,6 +788,7 @@ export async function submitOrDraft(db, user, action, b) {
         status=?,submitted_at=COALESCE(submitted_at,?),
         review_due_date=COALESCE(review_due_date,?),
         current_reviewer_id=COALESCE(current_reviewer_id,?),
+        current_stage=COALESCE(current_stage,?),
         ai_score=?,ai_reason=?,
         updated_at=NOW()
        WHERE id=? AND submitter_id=?`,
@@ -744,7 +797,7 @@ export async function submitOrDraft(db, user, action, b) {
         co1, co2, isAnon, challengeId, templateType,
         timeRequired, solutionTags,
         patentableFlag, patentableFlag ? user.id : null,
-        status, submittedAt, reviewDueDate, currentReviewerId,
+        status, submittedAt, reviewDueDate, currentReviewerId, currentStage,
         aiScore, aiReason,
         editId, user.id]
     );
@@ -762,15 +815,15 @@ export async function submitOrDraft(db, user, action, b) {
               expected_implementation_date,benefits_expected,support_required,
               co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
               time_required,solution_tags,patentable_flag,patentable_flagged_by,
-              status,submitter_id,submitted_at,review_due_date,current_reviewer_id,
+              status,submitter_id,submitted_at,review_due_date,current_reviewer_id,current_stage,
               ai_score,ai_reason)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [code, title, sit, sol, impacts, impLvl, tangible, intang,
             investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
             co1, co2, isAnon, challengeId, templateType,
             timeRequired, solutionTags,
             patentableFlag, patentableFlag ? user.id : null,
-            status, user.id, submittedAt, reviewDueDate, currentReviewerId,
+            status, user.id, submittedAt, reviewDueDate, currentReviewerId, currentStage,
             aiScore, aiReason]
         );
         break;
@@ -896,6 +949,36 @@ export async function reviewAction(db, user, b) {
   return withIdeaDecisionLock(db, ideaId, () => reviewActionLocked(db, user, ideaId, decision, comment));
 }
 
+/**
+ * Tell the submitter their idea advanced a stage.
+ *
+ * ── Why this is worth a notification ──────────────────────────────────────
+ *
+ * Under the old engine an idea was usually decided by the first person who
+ * touched it, so there was nothing to report between "submitted" and
+ * "approved". Now it can sit through four approvals, and without this the
+ * submitter sees an idea marked "Under Review" for a fortnight with no sign
+ * that anything is happening — which is exactly how a suggestion scheme stops
+ * being used.
+ *
+ * It says the position, not just the name: "2 of 4" tells somebody how much
+ * further there is to go, which the stage name alone does not.
+ *
+ * Best-effort. A notification that fails must never roll back an approval that
+ * succeeded — the decision is the thing that matters, and it is already
+ * committed by the time this runs.
+ */
+async function notifySubmitterProgress(db, idea, fromLabel, toLabel, position, total) {
+  try {
+    await addNotification(db, idea.submitter_id, 'Your idea moved forward',
+      `Idea ${idea.idea_code} — "${idea.title}" — was approved at ${fromLabel} `
+      + `and is now with ${toLabel} (step ${position} of ${total}).`,
+      idea.id);
+  } catch (e) {
+    logger.warn(`idea ${idea.idea_code}: could not notify submitter of progress — ${e.message}`);
+  }
+}
+
 async function reviewActionLocked(db, user, ideaId, decision, comment) {
   if (user.role === 'admin') {
     throw forbidden('Org Admins are strictly prohibited from approving or acting on submitted ideas.');
@@ -920,83 +1003,156 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
   }
 
   const cfg = await getApprovalConfig(db);
-  const escalationRoles = cfg.reviewer_roles;
-  const finalApproverRoles = cfg.final_roles;
 
   /*
-   * ── Is this person in the chain at all? ──────────────────────────────────
+   * ── Where is this idea, and may this person act on it? ──────────────────
    *
-   * They were not being asked. The route guard uses a STATIC list of every
-   * role that could plausibly review anything, and the logic below then took
-   * one of two paths: a role in escalationRoles escalated to their manager,
-   * and anything else fell straight through to the final-decision code at the
-   * bottom of this function.
+   * The chain is an ordered list of stages and the idea records which one it
+   * is waiting at. Both questions are answered from that, not from the
+   * reporting tree.
    *
-   * So a role the organisation had deliberately left OUT of its chain did not
-   * get refused — it skipped the escalation branch and closed the idea
-   * outright. An organisation whose chain started at Manager found its team
-   * leads approving ideas with full authority, which is the exact opposite of
-   * what configuring a chain is for, and it looked like the setting was being
-   * ignored rather than inverted.
-   *
-   * The chain is the authority on who may act. The static route list only says
-   * who may reach this endpoint.
+   * What this replaced: approving looked up the approver's OWN manager_id and
+   * escalated to them if their role happened to appear somewhere in the chain,
+   * falling through to Approved otherwise. So a team lead with no manager on
+   * file approved outright, and one whose manager was a department manager
+   * skipped a stage. The configured chain described a journey the engine never
+   * took.
    */
-  const chainRoles = [...new Set([...escalationRoles, ...finalApproverRoles])];
+  const stageKey = idea.current_stage || cfg.first_stage?.stage || null;
+  const stageSpec = cfg.approvers.find((a) => a.stage === stageKey);
+  const stageRole = stageSpec ? stageSpec.role : null;
+  const label = (k) => cfg.labels[k] || k;
+
+  const chainRoles = [...new Set(cfg.approvers.map((a) => a.role))];
   if (!chainRoles.includes(user.role)) {
-    const names = chainRoles.length ? chainRoles.join(', ') : 'nobody';
+    const names = cfg.approvers.map((a) => label(a.stage)).join(' → ') || 'nobody';
     throw forbidden(
       'Your role is not part of this organisation\'s approval chain, so you cannot '
       + `approve or reject ideas. The chain is: ${names}.`
     );
   }
 
+  const isCommittee = (idea.workflow_type ?? 'hierarchical') === 'multi_reviewer';
+
   /*
-   * Only the LAST step closes an idea.
+   * ── Approving out of turn ───────────────────────────────────────────────
    *
-   * A reviewer in the middle of the chain approves and passes it upward; if
-   * there is nobody above them in the reporting tree the escalation branch
-   * below falls through to the final decision, which is the documented
-   * dead-end guarantee — an idea must never be able to stick.
+   * Only the role the idea is currently waiting on may APPROVE it. A plant
+   * head cannot reach down and approve something still sitting with the team
+   * lead — that is precisely the skipping this work exists to stop, and it
+   * would also rob the intermediate approvers of a decision the chain says is
+   * theirs.
    *
-   * Rejection is deliberately not restricted this way: any step in the chain
-   * may reject, because sending an idea up the tree to collect more approvals
-   * before somebody says no wastes everybody's time.
+   * REJECTING is deliberately open to anyone in the chain. Sending an idea up
+   * three more stages to collect approvals before somebody says no wastes
+   * everybody's time, and a rejection is visible and reversible by
+   * resubmission in a way a wrongly-granted approval is not.
    */
-  const isFinalApprover = finalApproverRoles.includes(user.role);
-
-  if (decision === 'Approved'
-    && (idea.workflow_type ?? 'hierarchical') !== 'multi_reviewer'
-    && !isFinalApprover
-  ) {
-    const [mrows] = await db.execute(
-      `SELECT u2.id, u2.name, u2.role, u2.email
-       FROM users u1 JOIN users u2 ON u2.id = u1.manager_id
-       WHERE u1.id = ? LIMIT 1`,
-      [user.id]
-    );
-    const nextReviewer = mrows[0];
-    const reviewerPool = [...escalationRoles, ...finalApproverRoles];
-
-    if (nextReviewer && reviewerPool.includes(nextReviewer.role)) {
-      const lvl = Number(idea.escalation_level ?? 0) + 1;
-      await db.execute(
-        "UPDATE ideas SET status='Under Review', current_reviewer_id=?, escalation_level=?, updated_at=NOW() WHERE id=?",
-        [nextReviewer.id, lvl, ideaId]
-      );
-      await addWorkflow(db, ideaId, user.id, 'Approved',
-        `${comment ? comment + ' ' : ''}[L${lvl} Approved — escalated to ${nextReviewer.name}]`.trim());
-      await addNotification(db, nextReviewer.id, 'Idea Escalated for Review',
-        `Idea ${idea.idea_code} — "${idea.title}" — approved at level ${lvl} and escalated to you for final decision.`,
-        ideaId);
-      if (nextReviewer.email) {
-        await queueEmail(db, nextReviewer.email, nextReviewer.name,
-          `Action Required: Idea ${idea.idea_code} Escalated to You`,
-          `Dear ${nextReviewer.name},\n\nIdea "${idea.title}" (${idea.idea_code}) has been approved at level ${lvl} and escalated to you for final decision.\n\nPlease log in to take action.`);
-      }
-      return { success: true, decision: 'Escalated', escalated_to: nextReviewer.name, points_awarded: 0 };
+  if (decision === 'Approved' && !isCommittee) {
+    if (!stageRole) {
+      throw new ApiError(409,
+        'This idea is not waiting at any approval stage. Its chain may have changed; '
+        + 'ask an administrator to check the approval path.');
     }
-    // No higher reviewer — fall through to final Approved
+    if (user.role !== stageRole) {
+      throw forbidden(
+        `This idea is waiting for ${label(stageKey)} approval. `
+        + 'It will reach you when the stages before yours have approved it.'
+      );
+    }
+  }
+
+  /*
+   * ── Approve: advance one stage, or close ────────────────────────────────
+   */
+  if (decision === 'Approved' && !isCommittee) {
+    const next = advanceStage(cfg, stageKey);
+
+    if (next) {
+      /*
+       * Who gets it next.
+       *
+       * A named person if one can be found — preferring the submitter's own
+       * line of report so the idea travels through people who know the work —
+       * but the queue does NOT depend on this. Ideas are offered to everyone
+       * holding the stage's role, so a stage with nobody assigned is still
+       * actionable, and a stage with nobody in the role at all is visibly
+       * stuck rather than silently skipped.
+       */
+      const [cands] = await db.execute(
+        `SELECT id, name, email FROM users
+          WHERE role = ? AND status = 'active' AND id <> ?
+          ORDER BY (id = (SELECT manager_id FROM users WHERE id = ?)) DESC, id ASC
+          LIMIT 1`,
+        [next.role, idea.submitter_id, idea.submitter_id]
+      );
+      const assignee = cands[0] || null;
+      const position = cfg.approvers.findIndex((a) => a.stage === next.stage) + 1;
+
+      await db.execute(
+        `UPDATE ideas
+            SET status = 'Under Review', current_stage = ?, current_reviewer_id = ?,
+                escalation_level = ?, updated_at = NOW()
+          WHERE id = ?`,
+        [next.stage, assignee ? assignee.id : null, position, ideaId]
+      );
+
+      await addWorkflow(db, ideaId, user.id, 'Approved',
+        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — now with ${label(next.stage)}]`.trim());
+
+      if (assignee) {
+        await addNotification(db, assignee.id, 'Idea Awaiting Your Approval',
+          `Idea ${idea.idea_code} — "${idea.title}" — was approved at ${label(stageKey)} and is now with you as ${label(next.stage)}.`,
+          ideaId);
+        if (assignee.email) {
+          await queueEmail(db, assignee.email, assignee.name,
+            `Action Required: Idea ${idea.idea_code} awaiting your approval`,
+            `Dear ${assignee.name},\n\nIdea "${idea.title}" (${idea.idea_code}) was approved at the ${label(stageKey)} stage and now needs your approval as ${label(next.stage)}.\n\nPlease log in to take action.`);
+        }
+      } else {
+        /*
+         * Nobody holds the next role. The idea waits there rather than being
+         * skipped or auto-approved: an approval nobody gave must never be
+         * recorded. Administrators are told, because they are the only ones
+         * who can fix it — by giving somebody that role, or by removing the
+         * stage from the chain.
+         */
+        logger.warn(
+          `idea ${idea.idea_code}: no active user holds "${next.role}" for stage `
+          + `"${next.stage}" — the idea is waiting there until somebody does.`);
+        const [admins] = await db.execute(
+          "SELECT id FROM users WHERE role IN ('admin','super_admin') AND status='active'");
+        for (const a of admins) {
+          await addNotification(db, a.id, 'Approval chain has a gap',
+            `Idea ${idea.idea_code} reached the ${label(next.stage)} stage, but nobody in this organisation holds that role. `
+            + 'Assign the role to someone, or remove the stage from the approval path.', ideaId);
+        }
+      }
+
+      await notifySubmitterProgress(db, idea, label(stageKey), label(next.stage), position, cfg.approvers.length);
+      return {
+        success: true,
+        decision: 'Escalated',
+        stage: next.stage,
+        stage_label: label(next.stage),
+        escalated_to: assignee ? assignee.name : null,
+        points_awarded: 0,
+      };
+    }
+
+    // No next stage — this was the last one, so the idea is approved outright.
+    await db.execute(
+      "UPDATE ideas SET current_stage = NULL, current_reviewer_id = NULL WHERE id = ?", [ideaId]);
+  }
+
+  /*
+   * Anything that closes the idea — a final approval, any rejection, an
+   * implementation — takes it off the chain. Leaving a stage key on a closed
+   * idea would put it back in somebody's queue.
+   */
+  if (decision !== 'Approved' || !isCommittee) {
+    await db.execute(
+      'UPDATE ideas SET current_stage = NULL, current_reviewer_id = NULL WHERE id = ?', [ideaId]);
   }
 
   await db.execute('UPDATE ideas SET status=?,updated_at=NOW() WHERE id=?', [decision, ideaId]);
@@ -1264,29 +1420,37 @@ export async function bulkReview(db, user, b) {
     throw badRequest('idea_ids array and valid decision (Approved/Rejected) required.');
   }
 
+  /*
+   * ── Bulk goes through the same door as one-at-a-time ────────────────────
+   *
+   * This used to write `status = decision` straight onto every row. That
+   * bypassed the approval chain completely: a team lead selecting twenty ideas
+   * and clicking "Approve all" marked all twenty Approved outright — past every
+   * remaining stage, and eligible to be pushed to QCMS, which is gated on
+   * exactly that status.
+   *
+   * It was also the quieter of the two ways to skip the chain, because the
+   * single-idea path at least walked the reporting tree. There is no reason for
+   * bulk to have its own rules; it is the same decision, taken repeatedly. So
+   * it calls reviewAction() per idea and inherits every check — out-of-turn
+   * approval, own-idea, the advance, the notifications.
+   *
+   * One idea failing does not abandon the rest. A selection usually contains a
+   * mix, and refusing the whole batch because one of them was the reviewer's
+   * own idea would be worse than skipping that one and saying so.
+   */
   let processed = 0;
+  const skipped = [];
   for (const ideaId of ideaIds) {
-    const [irows] = await db.execute("SELECT * FROM ideas WHERE id=? AND status IN ('Submitted','Under Review')", [ideaId]);
-    const idea = irows[0];
-    if (!idea || Number(idea.submitter_id) === Number(user.id)) continue;
-
-    await db.execute('UPDATE ideas SET status=?, updated_at=NOW() WHERE id=?', [decision, ideaId]);
-    await addWorkflow(db, ideaId, user.id, decision, comment || null);
-
-    const pts = decision === 'Approved' ? POINTS.approved : 0;
-    if (pts > 0) {
-      await addPoints(db, idea.submitter_id, pts);
-      await db.execute('UPDATE ideas SET points_awarded = points_awarded + ? WHERE id=?', [pts, ideaId]);
+    try {
+      await reviewAction(db, user, { idea_id: ideaId, decision, comment });
+      processed++;
+    } catch (e) {
+      skipped.push({ idea_id: ideaId, reason: e?.message || 'could not be actioned' });
     }
-
-    const msg = decision === 'Approved'
-      ? `Your idea ${idea.idea_code} was Approved (bulk). +${pts} points awarded.`
-      : `Your idea ${idea.idea_code} was Rejected (bulk).${comment ? ` Feedback: ${comment}` : ''}`;
-    await addNotification(db, idea.submitter_id, `Idea ${decision}`, msg, ideaId);
-    processed++;
   }
 
-  return { success: true, processed };
+  return { success: true, processed, skipped_count: skipped.length, skipped };
 }
 
 // ── UPDATE ROI ──────────────────────────────────────────────────────

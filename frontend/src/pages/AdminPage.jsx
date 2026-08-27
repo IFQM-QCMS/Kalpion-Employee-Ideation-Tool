@@ -929,10 +929,10 @@ const CHAIN_LADDER = ['team_lead','project_lead','manager','senior_manager','pla
  * removed: an approval step cannot precede the idea existing.
  */
 const STAGE_OPTIONS = [
-  'immediate_manager','team_lead','project_lead',
+  'team_lead','immediate_manager','project_lead',
   'department_manager','senior_manager','plant_head','executive',
 ];
-const DEFAULT_STAGES = ['originator','immediate_manager','department_manager','plant_head'];
+const DEFAULT_STAGES = ['originator','team_lead','immediate_manager','department_manager','plant_head'];
 
 /* Section headings inside the settings form: a rule and a weight change, so a
    heading is distinguishable from the field labels beneath it. */
@@ -961,6 +961,16 @@ function HierarchyTab({ t, showToast, currentUserId }) {
 
   // Approval workflow state
   const [stages,    setStages]    = useState(DEFAULT_STAGES);
+  /*
+   * What this organisation calls each stage.
+   *
+   * Keyed by stage key, and only the stages actually renamed are held here —
+   * an empty box means "use the built-in name", which is also how a rename is
+   * undone. The KEY never changes, so a rename cannot strand an idea that is
+   * sitting at that stage when it happens.
+   */
+  const [labels,    setLabels]    = useState({});
+  const [renaming,  setRenaming]  = useState(false);
   const [addStage,  setAddStage]  = useState('');
   const [wfSaving,  setWfSaving]  = useState(false);
   const [wfMsg,     setWfMsg]     = useState(null); // { ok, text }
@@ -992,6 +1002,14 @@ function HierarchyTab({ t, showToast, currentUserId }) {
       // normalisation the server applies on read.
       const stored = parse(s.approval_stages, DEFAULT_STAGES)
         .filter(x => x === 'originator' || STAGE_OPTIONS.includes(x));
+
+      // Bad JSON must not take the whole screen down — the built-in names are
+      // always a correct answer, so fall back to them and let the admin retype.
+      try {
+        const raw = s.approval_stage_labels;
+        const obj = raw && typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
+        setLabels(obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {});
+      } catch { setLabels({}); }
       setStages(['originator', ...new Set(stored.filter(x => x !== 'originator'))]);
     } catch { setError(t('msg.fail_load')); }
     setLoading(false);
@@ -1028,7 +1046,17 @@ function HierarchyTab({ t, showToast, currentUserId }) {
     setWfSaving(true);
     setWfMsg(null);
     try {
-      const res = await settingsApi.update({ approval_stages: stages.join(',') });
+      // Blank entries are dropped here as well as on the server, so a cleared
+      // box is stored as "no override" rather than as an empty name.
+      const cleanLabels = {};
+      for (const [k, v] of Object.entries(labels)) {
+        const name = String(v ?? '').trim();
+        if (name) cleanLabels[k] = name;
+      }
+      const res = await settingsApi.update({
+        approval_stages: stages.join(','),
+        approval_stage_labels: JSON.stringify(cleanLabels),
+      });
       if (res.data.success) { setWfMsg({ ok:true, text: t('hier.saved') }); showToast(t('hier.saved'),'success'); }
       else setWfMsg({ ok:false, text: res.data.error || t('admin.settings_failed') });
     } catch { setWfMsg({ ok:false, text: t('msg.server_error') }); }
@@ -1069,10 +1097,14 @@ function HierarchyTab({ t, showToast, currentUserId }) {
    * in force, which is how an admin could read a chain the engine never walked.
    */
   const approverStages = stages.filter(s => s !== 'originator');
+  // The Approval Path reads back what an idea will actually do, in this
+  // organisation's own words — so a renamed stage must appear renamed here, or
+  // the one line meant to confirm the chain describes a different one.
+  const stageName = (k) => labels[k]?.trim() || t(`stage.${k}`);
   const chainPreview =
-    [t('stage.originator'), ...approverStages.map(s => t(`stage.${s}`))].join('  →  ')
+    [stageName('originator'), ...approverStages.map(stageName)].join('  →  ')
     + (approverStages.length
-        ? `  (${t('hier.stage_final')}: ${t(`stage.${approverStages[approverStages.length - 1]}`)})`
+        ? `  (${t('hier.stage_final')}: ${stageName(approverStages[approverStages.length - 1])})`
         : '');
 
   // Build the reporting tree.
@@ -1116,7 +1148,26 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                           a five-person firm with one manager uses this stage
                           perfectly well — and it read as a restriction on a
                           stage that has none. */}
-                      {t(`stage.${s}`)}
+                      {renaming && !isOriginator ? (
+                        <input
+                          className="form-control"
+                          style={{ maxWidth:230, height:30, fontSize:12.5 }}
+                          value={labels[s] ?? ''}
+                          placeholder={t(`stage.${s}`)}
+                          maxLength={60}
+                          aria-label={`${t('hier.rename_stage')} — ${t(`stage.${s}`)}`}
+                          onChange={e => setLabels(prev => ({ ...prev, [s]: e.target.value }))}
+                        />
+                      ) : (
+                        <>
+                          {labels[s]?.trim() || t(`stage.${s}`)}
+                          {labels[s]?.trim() && (
+                            <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}>
+                              {' '}({t(`stage.${s}`)})
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
                     <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>
                       {isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}
@@ -1136,6 +1187,22 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                 </div>
               );
             })}
+          </div>
+
+          {/*
+            Renaming is a mode rather than always-on boxes. The common visit to
+            this screen is to check or reorder the chain, and a column of text
+            inputs invites an accidental edit to something an organisation
+            depends on.
+          */}
+          <div style={{ display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap' }}>
+            <button type="button" className="btn btn-outline btn-sm"
+              onClick={() => setRenaming(v => !v)}>
+              {renaming ? t('hier.rename_done') : t('hier.rename_stage')}
+            </button>
+            {renaming && (
+              <span style={{ fontSize:11,color:'var(--subtle)' }}>{t('hier.rename_hint')}</span>
+            )}
           </div>
 
           {STAGE_OPTIONS.some(s => !stages.includes(s)) ? (

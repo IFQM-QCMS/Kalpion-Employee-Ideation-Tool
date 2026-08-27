@@ -1530,4 +1530,8 @@ export default {
   'guide.contents':'विषय-सूची',
   'guide.search_ph':'मैनुअल में खोजें...',
   'guide.no_match':'मैनुअल में "{query}" से कुछ भी मेल नहीं खाता।',
+  'hier.rename_stage':'चरणों का नाम बदलें',
+  'hier.rename_done':'नाम बदलना पूर्ण',
+  'hier.rename_hint':'अंतर्निहित नाम उपयोग करने के लिए बॉक्स खाली छोड़ें। नाम बदलने से केवल दिखने वाला नाम बदलता है, चेन का काम नहीं।',
+  'hier.stage_waiting':'प्रतीक्षारत',
 };

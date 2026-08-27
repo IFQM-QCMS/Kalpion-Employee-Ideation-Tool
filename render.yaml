@@ -89,8 +89,10 @@ services:
       # which reads as a bad key and sends people to regenerate a good one.
       - key: SMS_SID
         value: HXAP1678914824IN
+      # Six characters. The registration reads IFQMID-T; the -T is Jio's
+      # category annotation, and sending it earns "Invalid or In-Correct sender".
       - key: SMS_SENDER_ID
-        value: IFQMID-T
+        value: IFQMID
       - key: SMS_PE_ID
         value: "1201174858303838784"
       - key: SMS_API_KEY

@@ -125,10 +125,16 @@ CREATE TABLE IF NOT EXISTS ideas (
   -- Historical only (migration 024). Committee decisions are unanimous; nothing
   -- reads or writes this. Kept so the record of how already-decided ideas were
   -- judged is not rewritten.
-  approval_threshold       TINYINT NOT NULL DEFAULT 100,
   upvotes                  INT NOT NULL DEFAULT 0,
   downvotes                INT NOT NULL DEFAULT 0,
   escalation_level         INT NOT NULL DEFAULT 0,
+  -- ── from migration 032 ──
+  -- The approval stage this idea is waiting at ('team_lead', 'plant_head'...),
+  -- NULL for drafts, closed ideas and committee ideas — none of which travel
+  -- the chain. The KEY, not an index: an admin may reorder or remove stages
+  -- while ideas are in flight, and a stored index would silently come to mean
+  -- a different stage.
+  current_stage            VARCHAR(40) NULL DEFAULT NULL,
   current_reviewer_id      INT NULL,
   review_due_date          DATE NULL,
   is_anonymous             TINYINT(1) NOT NULL DEFAULT 0,
@@ -336,7 +342,11 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   -- approval_mode / approval_reviewer_roles / approval_final_approver_roles /
   -- approval_threshold, which described this same chain three different ways
   -- and disagreed with each other.
-  ('approval_stages',           'originator,immediate_manager,department_manager,plant_head'),
+  -- Migration 032: the default chain includes the team lead, and the labels
+  -- are a per-tenant override so an organisation can call a stage whatever it
+  -- calls it without the stored keys changing.
+  ('approval_stages',           'originator,team_lead,immediate_manager,department_manager,plant_head'),
+  ('approval_stage_labels',     '{}'),
   -- MOM 29 Jul 2026. solution_visibility replaces what used to be a constant in
   -- ideaService: authors_reviewers | managers_only | everyone.
   ('solution_visibility',       'authors_reviewers'),
@@ -447,6 +457,15 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND INDEX_NAME = 'idx_ideas_current_reviewer') = 0,
   'CREATE INDEX idx_ideas_current_reviewer ON ideas(current_reviewer_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- The review queue asks "which ideas are waiting at my stage" on every load.
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_current_stage') = 0,
+  'CREATE INDEX idx_ideas_current_stage ON ideas(current_stage, status)',
   'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

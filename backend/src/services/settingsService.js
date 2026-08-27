@@ -8,6 +8,8 @@
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import {
   parseStages, stagesToChain, STAGE_CATALOG, DEFAULT_STAGES, DEFAULT_CHAIN,
+  resolveLabels, approverStages, firstStage, finalStage, nextStage, isFinalStage,
+  stagesForRole,
 } from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
 import config from '../config/index.js';
@@ -34,6 +36,16 @@ const SETTINGS_WHITELIST = [
   // descriptions of this same chain that were removed, and accepting a write to
   // any of them would let a stale client resurrect one.
   'approval_stages',
+  /*
+   * What this organisation calls each stage.
+   *
+   * JSON, keyed by stage. Separate from `approval_stages` because the KEY is
+   * what is stored on every idea row and in the chain itself: renaming
+   * "Team Lead" to "Shift Incharge" must change a label and nothing else, and
+   * must not strand an idea that is sitting at team_lead when the rename
+   * happens. Validated on write — see normaliseStageLabels below.
+   */
+  'approval_stage_labels',
   // MOM §13.1 — who may read a full proposed solution. This was a constant in
   // ideaService; the org admin now owns it.
   'solution_visibility', 'idea_tags_enabled', 'patentability_enabled',
@@ -45,6 +57,38 @@ const SETTINGS_WHITELIST = [
   // Which parts of somebody else's idea an ordinary colleague may read.
   'employee_visible_sections',
 ];
+
+/**
+ * Clean a submitted label map before it is stored.
+ *
+ * Unknown stage keys are dropped rather than kept: they would be invisible in
+ * the UI and would sit in the row for ever. Blank names are dropped too, which
+ * is how a stage is reset to its built-in name — there is no separate "reset"
+ * to implement.
+ *
+ * Length-capped because this renders inside table cells and a pasted paragraph
+ * would break the layout of every queue in the product.
+ */
+export function normaliseStageLabels(raw) {
+  let input = raw;
+  if (typeof raw === 'string') {
+    try {
+      input = JSON.parse(raw);
+    } catch {
+      return null;   // unparseable — reject the write rather than store junk
+    }
+  }
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+
+  const out = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (!STAGE_CATALOG[key]) continue;
+    const name = String(value ?? '').trim().slice(0, 60);
+    // A name identical to the built-in one is not an override.
+    if (name && name !== STAGE_CATALOG[key].label) out[key] = name;
+  }
+  return JSON.stringify(out);
+}
 
 /** Accepted values for solution_visibility, loosest last. */
 export const SOLUTION_VISIBILITY_MODES = ['authors_reviewers', 'managers_only', 'everyone'];
@@ -64,19 +108,51 @@ const isAdmin = (role) => role === 'admin' || role === 'super_admin';
  * A stored list with no approver in it falls back to the built-in sequence
  * rather than leaving submitted ideas with nobody able to action them.
  */
+/**
+ * This tenant's approval chain, read fresh on every request.
+ *
+ * Deliberately not cached. An administrator changing the chain expects the next
+ * idea to follow it, and a cache would mean "the next idea, on whichever server
+ * process happens to serve it, some minutes from now". The read is one indexed
+ * lookup against the tenant's own org_settings.
+ *
+ * Everything here comes from the tenant's OWN database, so one organisation's
+ * chain is invisible to every other, and applies to all of that organisation's
+ * users at once.
+ */
 export async function getApprovalConfig(db) {
   const settings = await getOrgSettings(db);
   const stages = parseStages(settings.approval_stages);
-  const chain = stagesToChain(stages);
+  const usable = stages.length && approverStages(stages).length ? stages : [...DEFAULT_STAGES];
+  const chain = stagesToChain(usable) || DEFAULT_CHAIN;
 
-  if (!chain) {
-    return {
-      stages: [...DEFAULT_STAGES],
-      reviewer_roles: [...DEFAULT_CHAIN.reviewer_roles],
-      final_roles: [...DEFAULT_CHAIN.final_roles],
-    };
-  }
-  return { stages, reviewer_roles: chain.reviewer_roles, final_roles: chain.final_roles };
+  return {
+    stages: usable,
+    // The ordered walk. This is what the engine follows.
+    approvers: approverStages(usable),
+    first_stage: firstStage(usable),
+    final_stage: finalStage(usable),
+    labels: resolveLabels(settings.approval_stage_labels),
+    // Flattened role sets, kept for read-only callers that only ask "who is
+    // involved at all" — never for deciding what comes next.
+    reviewer_roles: chain.reviewer_roles,
+    final_roles: chain.final_roles,
+  };
+}
+
+/** The stage after `key` in this tenant's chain, or null when `key` is last. */
+export function advanceStage(cfg, key) {
+  return nextStage(cfg.stages, key);
+}
+
+/** Does approving at `key` close the idea? */
+export function closesIdea(cfg, key) {
+  return isFinalStage(cfg.stages, key);
+}
+
+/** The stages this role may act at. */
+export function rolePlaysStages(cfg, role) {
+  return stagesForRole(cfg.stages, role);
 }
 
 // ── GET all settings (with SMTP-password masking) ──────────────────
@@ -133,6 +209,18 @@ export async function updateSettings(db, body) {
     let value = rawValue;
     // An unrecognised visibility mode must not silently become "everyone" —
     // that would publish every solution in the org on a typo.
+    /*
+     * Stage names are normalised before storage: unknown keys dropped, blanks
+     * dropped (which is how a stage returns to its built-in name), length
+     * capped. Unparseable input is refused rather than stored — a broken JSON
+     * blob here would make every stage fall back to its default name with no
+     * indication why.
+     */
+    if (key === 'approval_stage_labels') {
+      const cleaned = normaliseStageLabels(value);
+      if (cleaned === null) throw badRequest('Stage names could not be read. Please try again.');
+      value = cleaned;
+    }
     if (key === 'solution_visibility' && !SOLUTION_VISIBILITY_MODES.includes(String(value))) continue;
     if (key === 'prediction_visibility' && !PREDICTION_VISIBILITY_MODES.includes(String(value))) continue;
     // Bounded by the platform maximum: an organisation may lower its own limit
@@ -219,4 +307,7 @@ function escapeHtml(s) {
   );
 }
 
-export default { getApprovalConfig, getSettings, updateSettings, sendTestEmail };
+export default {
+  getApprovalConfig, advanceStage, closesIdea, rolePlaysStages,
+  getSettings, updateSettings, sendTestEmail,
+};

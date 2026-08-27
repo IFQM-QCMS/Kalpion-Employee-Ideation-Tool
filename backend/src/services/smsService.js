@@ -34,7 +34,7 @@
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { masterDb } from '../database/master.js';
-import { DLT_TEMPLATES, SENDER_ID_RE, resolveTemplate } from '../config/smsTemplates.js';
+import { DLT_TEMPLATES, SENDER_ID_RE, senderHeader, resolveTemplate } from '../config/smsTemplates.js';
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
@@ -255,7 +255,9 @@ async function sendViaKaleyra(to, message, purpose) {
   const url = `${cfg.endpoint}/v1/${encodeURIComponent(cfg.sid)}/messages`;
   const body = new URLSearchParams({
     to: toE164(to),
-    sender: cfg.senderId,
+    // Six characters. A configured "IFQMID-T" is the header plus its category
+    // annotation, and the gateway refuses the annotated form outright.
+    sender: senderHeader(cfg.senderId),
     body: message,
     type: 'OTP',
     template_id: cfg.templates[purpose] || cfg.templates.login,

@@ -1526,4 +1526,8 @@ export default {
   'guide.contents':'अनुक्रमणिका',
   'guide.search_ph':'पुस्तिकेत शोधा...',
   'guide.no_match':'पुस्तिकेत "{query}" शी काहीही जुळत नाही.',
+  'hier.rename_stage':'टप्प्यांची नावे बदला',
+  'hier.rename_done':'नाव बदलणे पूर्ण',
+  'hier.rename_hint':'अंगभूत नाव वापरण्यासाठी बॉक्स रिकामा ठेवा. नाव बदलल्याने लोकांना दिसणारे नाव बदलते, साखळीचे कार्य नाही.',
+  'hier.stage_waiting':'प्रतीक्षेत',
 };

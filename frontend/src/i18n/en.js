@@ -1642,4 +1642,8 @@ export default {
   'guide.contents':'Contents',
   'guide.search_ph':'Search the manual...',
   'guide.no_match':'Nothing in the manual matches "{query}".',
+  'hier.rename_stage':'Rename stages',
+  'hier.rename_done':'Done renaming',
+  'hier.rename_hint':'Leave a box empty to use the built-in name. Renaming changes what people see, never how the chain works.',
+  'hier.stage_waiting':'Waiting at',
 };

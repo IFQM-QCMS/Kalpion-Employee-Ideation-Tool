@@ -3305,7 +3305,7 @@ test('a template awaiting DLT approval is not sent', async () => {
 
 test('the registered sender header is accepted', async () => {
   const { kaleyraMissing } = await import('../src/services/smsService.js');
-  const { DLT_SENDER_ID, SENDER_ID_RE } = await import('../src/config/smsTemplates.js');
+  const { DLT_SENDER_ID, SENDER_ID_RE, senderHeader } = await import('../src/config/smsTemplates.js');
 
   /*
    * IFQMID-T is a six-character DLT header plus the transactional category
@@ -3313,8 +3313,22 @@ test('the registered sender header is accepted', async () => {
    * rejected the header the platform is actually registered under and reported
    * a working gateway as misconfigured.
    */
-  assert.equal(DLT_SENDER_ID, 'IFQMID-T');
-  assert.ok(SENDER_ID_RE.test('IFQMID-T'), 'the registered header must be valid');
+  /*
+   * Six characters go on the wire. The registration is written "IFQMID-T" and
+   * that was taken literally at first; the "-T" is Jio's category annotation,
+   * not part of the header, and Kaleyra answers 400 "Invalid or In-Correct
+   * sender" to the annotated form. The production delivery log recorded
+   * exactly that for every attempt made with it.
+   *
+   * Both spellings are ACCEPTED as configuration — somebody copying the
+   * registration will type the annotated one — and senderHeader() strips the
+   * annotation so the transmitted value is the same either way.
+   */
+  assert.equal(DLT_SENDER_ID, 'IFQMID');
+  assert.equal(DLT_SENDER_ID.length, 6, 'a DLT header is exactly six characters');
+  assert.equal(senderHeader('IFQMID-T'), 'IFQMID', 'the category annotation is stripped');
+  assert.equal(senderHeader('IFQMID'), 'IFQMID', 'and a bare header is left alone');
+  assert.ok(SENDER_ID_RE.test('IFQMID-T'), 'the annotated form is accepted as config');
   assert.ok(SENDER_ID_RE.test('IFQMID'), 'a bare six-character header is still valid');
   assert.ok(!SENDER_ID_RE.test('IFQMIDENT'), 'nine characters is not a header');
   assert.ok(!SENDER_ID_RE.test('IFQM-T'), 'the header itself must be six characters');
@@ -3323,8 +3337,10 @@ test('the registered sender header is accepted', async () => {
     apiKey: 'k', sid: 'HXAP1678914824IN', peId: '1201174858303838784',
     templates: { login: '1277178730169418603' },
   };
-  assert.deepEqual(kaleyraMissing({ ...base, senderId: 'IFQMID-T' }, 'login'), [],
+  assert.deepEqual(kaleyraMissing({ ...base, senderId: 'IFQMID' }, 'login'), [],
     'a fully configured gateway must report nothing missing');
+  assert.deepEqual(kaleyraMissing({ ...base, senderId: 'IFQMID-T' }, 'login'), [],
+    'and the annotated spelling must not be reported as a misconfiguration');
   assert.ok(kaleyraMissing({ ...base, senderId: 'WAYTOOLONG' }, 'login').length,
     'a malformed header must still be caught');
 });
@@ -3387,4 +3403,309 @@ test('granting the pending id switches a template to its own wording', async () 
     spec.id = savedId;
     spec.registered = savedFlag;
   }
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  The approval chain is walked one stage at a time
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** Create a user with a known password and return their token. */
+async function makeReviewer(email, role, phone, empId) {
+  const created = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      name: `Seq ${role}`, email, password: 'SeqPass12345', role,
+      employee_id: empId, phone, department: 'Ops',
+    },
+  });
+  assert.equal(created.data.success, true,
+    `${role} must be creatable — ${JSON.stringify(created.data)}`);
+  const { token } = await login(email, 'SeqPass12345', 'orga');
+  assert.ok(token, `${role} must be able to sign in`);
+  return token;
+}
+
+const stageOf = async (ideaId) => {
+  const [row] = await sql('ifqm_test_a',
+    `SELECT status, current_stage FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  return row;
+};
+
+test('an idea travels every stage of the chain and is Approved only at the last', async () => {
+  /*
+   * The bug this pins.
+   *
+   * The chain was stored as an ordered list and the engine ignored the order,
+   * walking manager_id instead: approving escalated to your own manager if
+   * their role appeared anywhere in the chain, and otherwise fell through to
+   * Approved. A team lead with no manager on file approved outright — and
+   * since the QCMS push is gated on status='Approved', that single approval
+   * also made the idea eligible to be sent to the external quality system.
+   */
+  let res = await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+  assert.equal(res.data.success, true);
+
+  const tl = await makeReviewer('seq.tl@orga.test', 'team_lead', '+919812345901', 'SEQTL');
+  const im = await makeReviewer('seq.im@orga.test', 'manager', '+919812345902', 'SEQIM');
+  const dm = await makeReviewer('seq.dm@orga.test', 'department_manager', '+919812345903', 'SEQDM');
+  const ph = await makeReviewer('seq.ph@orga.test', 'plant_head', '+919812345904', 'SEQPH');
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Interlock the guard on press 3',
+      present_situation: 'The guard can be lifted while the press is cycling, which is how hands get hurt.',
+      proposed_solution: 'Fit a key interlock so the cycle cannot start with the guard raised.',
+      impact_level: 'High', impact_areas: 'Safety', action: 'submit',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  // It enters at stage one, not at the submitter's manager.
+  let st = await stageOf(ideaId);
+  assert.equal(st.current_stage, 'team_lead', 'a new idea starts at the first stage');
+
+  /*
+   * Out of turn is refused. The plant head is the FINAL approver and could,
+   * under the old engine, simply approve — closing the idea past three stages
+   * whose holders never saw it.
+   */
+  res = await api('POST', '/api/ideas/review-action', {
+    token: ph, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.status, 403, 'the last stage cannot approve while the first is pending');
+  assert.match(res.data.error, /waiting for/i, 'and must say who it is waiting for');
+
+  // Stage 1 → 2.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: tl, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  st = await stageOf(ideaId);
+  assert.notEqual(st.status, 'Approved',
+    'a team-lead approval must NOT approve the idea — this is the whole bug');
+  assert.equal(st.current_stage, 'immediate_manager', 'it moves to the next stage');
+
+  // Stage 2 → 3.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: im, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  st = await stageOf(ideaId);
+  assert.notEqual(st.status, 'Approved');
+  assert.equal(st.current_stage, 'department_manager');
+
+  // Stage 3 → 4.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: dm, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  st = await stageOf(ideaId);
+  assert.notEqual(st.status, 'Approved');
+  assert.equal(st.current_stage, 'plant_head');
+
+  // The last stage closes it.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: ph, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  st = await stageOf(ideaId);
+  assert.equal(st.status, 'Approved', 'only the final stage approves the idea');
+  assert.equal(st.current_stage, null, 'and it comes off the chain');
+});
+
+test('an idea is only pushable to QCMS after the final stage', async () => {
+  /*
+   * The QCMS list is gated on status='Approved'. That gate was correct all
+   * along; what was wrong was how easily an idea reached that status. This
+   * asserts the two are joined up: an idea mid-chain must not appear in the
+   * pushable list, and must appear once the last stage has approved it.
+   */
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,team_lead,plant_head' },
+  });
+
+  const tl = await makeReviewer('qc.tl@orga.test', 'team_lead', '+919812345911', 'QCTL');
+  const ph = await makeReviewer('qc.ph@orga.test', 'plant_head', '+919812345912', 'QCPH');
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Label the emergency stops',
+      present_situation: 'The stops are unlabelled and operators hesitate before hitting them.',
+      proposed_solution: 'Apply standard yellow-on-red labels to every stop on the line.',
+      impact_level: 'Medium', impact_areas: 'Safety', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  const pushable = async () => {
+    const r = await api('GET', '/api/integrations/approved-ideas', { token: AADMIN });
+    return (r.data.ideas || []).some((i) => Number(i.id) === Number(ideaId));
+  };
+
+  await api('POST', '/api/ideas/review-action', { token: tl, body: { idea_id: ideaId, decision: 'Approved' } });
+  assert.equal(await pushable(), false,
+    'an idea approved by one stage of two is NOT ready for the quality system');
+
+  await api('POST', '/api/ideas/review-action', { token: ph, body: { idea_id: ideaId, decision: 'Approved' } });
+  assert.equal(await pushable(), true, 'and is ready once the final stage has approved it');
+});
+
+test('bulk approve obeys the chain instead of writing the status directly', async () => {
+  /*
+   * bulkReview used to run `UPDATE ideas SET status = 'Approved'` over every
+   * selected row. A team lead selecting twenty ideas and clicking "Approve
+   * all" closed all twenty outright, past every remaining stage — the quieter
+   * of the two ways to skip the chain, because it did not even walk the
+   * reporting tree.
+   */
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,team_lead,plant_head' },
+  });
+  const tl = await makeReviewer('blk.tl@orga.test', 'team_lead', '+919812345921', 'BLKTL');
+
+  const ids = [];
+  for (const n of [1, 2]) {
+    const r = await api('POST', '/api/ideas/submit', {
+      token: AUSER,
+      body: {
+        title: `Bulk chain check ${n}`,
+        present_situation: 'A situation described at sufficient length to pass validation.',
+        proposed_solution: 'A proposed solution, likewise long enough to be accepted.',
+        impact_level: 'Low', impact_areas: 'Quality', action: 'submit',
+      },
+    });
+    ids.push(r.data.idea_id);
+  }
+
+  const res = await api('POST', '/api/ideas/bulk-review', {
+    token: tl, body: { idea_ids: ids, decision: 'Approved', comment: 'Looks sound.' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+
+  for (const id of ids) {
+    const [row] = await sql('ifqm_test_a',
+      `SELECT status, current_stage FROM ifqm_test_a.ideas WHERE id = ${id}`);
+    assert.notEqual(row.status, 'Approved',
+      'a bulk approval by a non-final stage must not close the idea');
+    assert.equal(row.current_stage, 'plant_head', 'it advances, exactly as a single approval would');
+  }
+});
+
+test('changing the chain affects that tenant only, and every user in it', async () => {
+  /*
+   * The chain lives in the tenant's own org_settings, inside the tenant's own
+   * database, and getApprovalConfig() reads it per request with no cache. This
+   * asserts both halves of what that buys:
+   *
+   *   isolation   org B's chain is unaffected by org A's, because they are
+   *               different rows in different schemas;
+   *   immediacy   a change is in force for the next idea, for every user of
+   *               that organisation, without a restart or a cache expiry.
+   *
+   * Org B's chain is set with SQL rather than through its API. Earlier tests in
+   * this file reset that admin's password and suspend the organisation, so a
+   * login here is not reliable — and the claim being tested is about where the
+   * setting is READ from, which the API call does not make any clearer.
+   */
+  const svc = await import('../src/services/settingsService.js');
+  // getTenantPool, not getTenantDb — the latter does not exist.
+  const { getTenantPool } = await import('../src/database/tenant.js');
+
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  assert.ok(aTok, 'org A admin must be able to sign in');
+
+  let res = await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead,plant_head' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+
+  await sql('ifqm_test_b',
+    `INSERT INTO ifqm_test_b.org_settings (key_name, value)
+          VALUES ('approval_stages', 'originator,senior_manager,executive')
+     ON DUPLICATE KEY UPDATE value = VALUES(value)`);
+
+  const dbA = getTenantPool({ id: 1, slug: 'orga', db_name: 'ifqm_test_a' });
+  const dbB = getTenantPool({ id: 2, slug: 'orgb', db_name: 'ifqm_test_b' });
+  const cfgA = await svc.getApprovalConfig(dbA);
+  const cfgB = await svc.getApprovalConfig(dbB);
+
+  assert.equal(cfgA.first_stage.stage, 'team_lead');
+  assert.equal(cfgA.final_stage.stage, 'plant_head');
+  assert.equal(cfgB.first_stage.stage, 'senior_manager',
+    "org B's chain must be its own");
+  assert.equal(cfgB.final_stage.stage, 'executive');
+
+  // Changed again, and in force on the very next read — no cache to expire.
+  res = await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,department_manager,executive' },
+  });
+  assert.equal(res.data.success, true);
+  const cfgA2 = await svc.getApprovalConfig(dbA);
+  assert.equal(cfgA2.first_stage.stage, 'department_manager',
+    'a saved chain applies immediately');
+  const cfgB2 = await svc.getApprovalConfig(dbB);
+  assert.equal(cfgB2.first_stage.stage, 'senior_manager',
+    'and still leaves the other organisation alone');
+
+  // Put org A back, so nothing after this inherits a chain it did not choose.
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+test('an organisation can rename a stage without changing what it means', async () => {
+  /*
+   * Not every organisation has a "Team Lead". The label is a per-tenant
+   * override; the KEY is what is stored on the idea and in the chain, so a
+   * rename cannot strand an idea mid-flight or rewrite history.
+   */
+  const { resolveLabels } = await import('../src/services/approvalStages.js');
+
+  const plain = resolveLabels(null);
+  assert.equal(plain.team_lead, 'Team Lead', 'the built-in name is the fallback');
+
+  const renamed = resolveLabels('{"team_lead":"Shift Incharge","plant_head":"Works Manager"}');
+  assert.equal(renamed.team_lead, 'Shift Incharge');
+  assert.equal(renamed.plant_head, 'Works Manager');
+  assert.equal(renamed.department_manager, 'Department Manager',
+    'stages that were not renamed keep their built-in name');
+
+  // Junk must not take the review queue down with it.
+  assert.equal(resolveLabels('{not json').team_lead, 'Team Lead');
+  assert.equal(resolveLabels('null').team_lead, 'Team Lead');
+  assert.equal(resolveLabels({ team_lead: '   ' }).team_lead, 'Team Lead',
+    'a blank override is not a name');
+});
+
+test('removing a stage an idea is sitting at does not skip the rest of the chain', async () => {
+  /*
+   * An administrator can edit the chain while ideas are in flight. The idea
+   * stores a stage KEY, so a removed stage has to be recovered from the
+   * catalogue order — and the recovery must move the idea FORWARD to the next
+   * surviving stage, never to Approved.
+   */
+  const { nextStage, isFinalStage } = await import('../src/services/approvalStages.js');
+
+  const chain = ['originator', 'team_lead', 'department_manager', 'plant_head'];
+  assert.equal(nextStage(chain, 'team_lead').stage, 'department_manager');
+  assert.equal(nextStage(chain, 'plant_head'), null, 'the last stage has no next');
+  assert.equal(isFinalStage(chain, 'plant_head'), true);
+  assert.equal(isFinalStage(chain, 'team_lead'), false);
+
+  // immediate_manager was removed while an idea sat there.
+  const after = nextStage(chain, 'immediate_manager');
+  assert.ok(after, 'a removed stage must still resolve to something');
+  assert.equal(after.stage, 'department_manager',
+    'it continues at the next surviving stage, not at the end');
+  assert.equal(isFinalStage(chain, 'immediate_manager'), false,
+    'and removing a stage must not make it final');
 });

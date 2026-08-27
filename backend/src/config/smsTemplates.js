@@ -159,24 +159,57 @@ export function resolveTemplate(purpose) {
   };
 }
 
-/** Sender header, as registered. */
-export const DLT_SENDER_ID = 'IFQMID-T';
+/**
+ * The sender header, as it goes on the wire: six characters.
+ *
+ * ── IFQMID, not IFQMID-T ──────────────────────────────────────────────────
+ *
+ * The registration was handed to us as "IFQMID-T" and that string was taken
+ * literally. It is not the header. An Indian DLT header is exactly six
+ * characters; the "-T" is the CATEGORY annotation Jio's portal appends to show
+ * the header is approved for Transactional traffic, in the same way another
+ * listing might read -S for service or -P for promotional.
+ *
+ * Sending the annotated form is rejected outright — Kaleyra answers
+ * 400 "Invalid or In-Correct sender", which is exactly what the delivery log
+ * recorded for every attempt made with it.
+ *
+ * The failure with the OLD header was quieter and worse. IFQMSK is a valid
+ * sender on the same Kaleyra account (it belongs to IFQM Skills), so the
+ * gateway ACCEPTED those messages with a 202 — while the template ids being
+ * sent alongside are registered against IFQMID. A template that does not
+ * belong to the header it is sent under is discarded by the carrier. So the
+ * log showed "accepted by gateway" and no handset ever rang.
+ */
+export const DLT_SENDER_ID = 'IFQMID';
 
 /** Kaleyra account SID — a path segment in every request, not a header. */
 export const KALEYRA_SID = 'HXAP1678914824IN';
 
 /**
- * Header validity.
+ * Header validity — liberal in what is accepted, strict in what is sent.
  *
- * A DLT header is six characters, optionally followed by a category suffix:
- * -T transactional, -S service, -P promotional. IFQMID-T is the six-character
- * header IFQMID registered for transactional traffic.
+ * The annotated form (IFQMID-T) is ACCEPTED here, because that is how the
+ * registration is written down and how somebody copying it from an email or a
+ * portal will type it into a dashboard. Rejecting it would turn a
+ * transcription of the truth into a configuration error.
  *
- * The check this replaces demanded exactly six characters and would have
- * rejected the header we actually hold, reporting a correctly configured
- * gateway as misconfigured.
+ * It is never TRANSMITTED in that form. senderHeader() below strips the
+ * category suffix, so whichever way it was entered, six characters go on the
+ * wire — which is the only thing the gateway will accept.
  */
 export const SENDER_ID_RE = /^[A-Za-z0-9]{6}(-[TSP])?$/i;
+
+/**
+ * The six characters to put in the `sender` field.
+ *
+ * Anything after the header — the -T/-S/-P category — is annotation and is
+ * removed. This is the single place that decision is made, so a value entered
+ * either way behaves identically.
+ */
+export function senderHeader(value) {
+  return String(value ?? '').trim().replace(/-[TSP]$/i, '');
+}
 
 /** The purposes that can be delivered today, for status displays. */
 export function templateStatus() {
@@ -195,5 +228,6 @@ export function templateStatus() {
 }
 
 export default {
-  DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, SENDER_ID_RE, templateStatus, resolveTemplate,
+  DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, SENDER_ID_RE, senderHeader,
+  templateStatus, resolveTemplate,
 };
