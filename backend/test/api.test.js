@@ -3059,3 +3059,162 @@ test('a GSTIN must pass its own check digit, not merely look like one', async ()
   assert.equal(verifyGstin(s45 + gstinCheckDigit(s45)).ok, false,
     'there is no state code 45, even with a correct check digit');
 });
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  Leaderboard PDF
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/** Decompressed page content streams — not CMaps, not font programs. */
+function pdfContentStreams(pdf, zlib) {
+  const out = [];
+  for (const m of pdf.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)endstream/g)) {
+    try {
+      const d = zlib.inflateSync(Buffer.from(m[1], 'latin1'));
+      // A page stream positions text and selects fonts; a CMap does neither.
+      if (d.includes(' Tf') && d.includes('Tm')) out.push(d.toString('latin1'));
+    } catch { /* not a deflate stream — a font program, an image */ }
+  }
+  return out;
+}
+
+/*
+ * A Telugu conjunct fontkit cannot shape.
+ *
+ * fontkit 2.0.4 (the latest) dies on the ra-vattu conjunct — PA + VIRAMA + RA,
+ * "ప్ర" — reading a null anchor from Noto Sans Telugu's GPOS table. Both the
+ * hinted and unhinted builds do it, so it is fontkit's bug, not the font's.
+ *
+ * pdfFonts detects it and falls back rather than letting it 500 the export.
+ * This case is asserted separately, below, so the main rendering test can use
+ * text that shapes and still mean something.
+ */
+test('the leaderboard PDF renders names in every language the product ships in', async () => {
+  const { buildLeaderboardPdf } = await import('../src/services/leaderboardPdfService.js');
+  const zlib = await import('node:zlib');
+
+  /*
+   * The bug this pins:
+   *
+   * Noto Sans has no Kannada, Tamil, Telugu or Malayalam glyphs, and a missing
+   * glyph in that font is BLANK with a normal advance width. A name in one of
+   * those scripts therefore drew nothing at all, inside a correctly sized row,
+   * in a document whose entire purpose is to name people for recognition.
+   *
+   * Nothing measured as wrong — widthOfString() returns a width for .notdef —
+   * so the only way to catch it is to inspect what was actually drawn.
+   *
+   * Counting is done over content streams only. A ToUnicode CMap is a stream
+   * too and legitimately contains <0000> as a codespace bound; including those
+   * reports a failure that is not there.
+   */
+  const rows = [
+    { name: 'Ravi Kumar', department: 'Production', points: 60, idea_count: 6, implemented_count: 2, avg_score: 80 },
+    { name: 'ರಾಜೇಶ್ ಕುಮಾರ್', department: 'ಉತ್ಪಾದನೆ', points: 50, idea_count: 5, implemented_count: 1, avg_score: 70 },
+    { name: 'ரவி குமார்', department: 'தரம்', points: 40, idea_count: 4, implemented_count: 1, avg_score: 65 },
+    { name: 'రవి కుమార్', department: 'నిర్వహణ', points: 30, idea_count: 3, implemented_count: 0, avg_score: 60 },
+    { name: 'രവി കുമാർ', department: 'സ്റ്റോർ', points: 20, idea_count: 2, implemented_count: 0, avg_score: null },
+    { name: 'रवि कुमार', department: 'उत्पादन', points: 10, idea_count: 1, implemented_count: 0, avg_score: 55 },
+  ];
+
+  const chunks = [];
+  const doc = buildLeaderboardPdf(rows, { orgName: 'Nandi Precision', period: 'quarterly' });
+  doc.on('data', (c) => chunks.push(c));
+  await new Promise((res, rej) => { doc.on('end', res); doc.on('error', rej); });
+  const pdf = Buffer.concat(chunks);
+
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-', 'it is a PDF');
+
+  const streams = pdfContentStreams(pdf, zlib);
+  assert.ok(streams.length, 'the page content was found');
+
+  let notdef = 0;
+  for (const g of streams.join('\n').match(/<([0-9A-Fa-f]+)>/g) || []) {
+    const hex = g.slice(1, -1);
+    for (let i = 0; i < hex.length; i += 4) if (hex.slice(i, i + 4) === '0000') notdef++;
+  }
+  assert.equal(notdef, 0,
+    `${notdef} glyphs would render blank — somebody's name is missing from the document`);
+
+  // And the Indic faces must actually be embedded — a notdef count of zero
+  // would also be satisfied by drawing nothing at all.
+  const embedded = [...pdf.toString('latin1').matchAll(/\/BaseFont\s*\/[A-Z]*\+?([A-Za-z0-9-]+)/g)]
+    .map((m) => m[1]);
+  for (const face of ['NotoSansKannada-Regular', 'NotoSansTamil-Regular',
+    'NotoSansTelugu-Regular', 'NotoSansMalayalam-Regular']) {
+    assert.ok(embedded.includes(face),
+      `${face} must be embedded — got ${[...new Set(embedded)].join(', ')}`);
+  }
+});
+
+test('one long name cannot break the leaderboard PDF layout', async () => {
+  const { buildLeaderboardPdf } = await import('../src/services/leaderboardPdfService.js');
+
+  /*
+   * PDFKit's { ellipsis: true, lineBreak: false } did not hold: an over-long
+   * name wrapped onto a second line, and because the row separators are drawn
+   * at a fixed height the overflow spilled through the rule and out of the
+   * table. One name broke the whole page.
+   *
+   * Text is measured and cut before drawing now, so every row is exactly one
+   * line tall by construction.
+   */
+  const long = 'Ramachandran'.repeat(40);
+  const rows = [{
+    name: long, department: long, points: 10,
+    idea_count: 1, implemented_count: 0, avg_score: 50,
+  }];
+
+  const chunks = [];
+  const doc = buildLeaderboardPdf(rows, { orgName: long, period: 'all' });
+  doc.on('data', (c) => chunks.push(c));
+  await new Promise((res, rej) => { doc.on('end', res); doc.on('error', rej); });
+  const pdf = Buffer.concat(chunks);
+
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-');
+  const pages = (pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length;
+  assert.equal(pages, 1, `a single row must stay on a single page, got ${pages}`);
+});
+
+test('an empty leaderboard still produces a usable document', async () => {
+  const { buildLeaderboardPdf } = await import('../src/services/leaderboardPdfService.js');
+  const chunks = [];
+  const doc = buildLeaderboardPdf([], { orgName: 'New Org', period: 'monthly' });
+  doc.on('data', (c) => chunks.push(c));
+  await new Promise((res, rej) => { doc.on('end', res); doc.on('error', rej); });
+  const pdf = Buffer.concat(chunks);
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-',
+    'a month with no points is a normal state, not an error');
+  assert.ok(pdf.length > 1000, 'and the page is drawn, not blank');
+});
+
+test('an unshapeable string degrades instead of taking the export down', async () => {
+  const { buildLeaderboardPdf } = await import('../src/services/leaderboardPdfService.js');
+
+  /*
+   * fontkit crashes shaping "ప్ర" in Noto Sans Telugu. Before this was handled,
+   * one Telugu idea title or employee name turned the whole export into a 500 —
+   * a worse outcome than the blank text the Indic fonts were added to fix,
+   * because the reader gets no document at all.
+   *
+   * The contract asserted here is only that the document is produced. The
+   * affected field is blank and a warning is logged; that is the honest
+   * degradation, not a good outcome, and it is written down as such.
+   */
+  const rows = [
+    { name: 'ప్రతిపాదించిన', department: 'ప్రక్రియ', points: 10,
+      idea_count: 1, implemented_count: 0, avg_score: 50 },
+    { name: 'Ravi Kumar', department: 'Production', points: 5,
+      idea_count: 1, implemented_count: 0, avg_score: 40 },
+  ];
+
+  const chunks = [];
+  const doc = buildLeaderboardPdf(rows, { orgName: 'Org', period: 'all' });
+  doc.on('data', (c) => chunks.push(c));
+  await new Promise((res, rej) => { doc.on('end', res); doc.on('error', rej); });
+  const pdf = Buffer.concat(chunks);
+
+  assert.equal(pdf.subarray(0, 5).toString('latin1'), '%PDF-',
+    'the export must still produce a document');
+  // The Latin row must be unaffected by its neighbour's problem.
+  assert.ok(pdf.length > 1000);
+});

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { usersApi } from '../services/api';
-import { fmtDateTime, statusBadge, translateStatus, formatRole, isPrivileged } from '../utils/helpers';
+import { fmtDateTime, statusBadge, translateStatus, formatRole, canViewReports } from '../utils/helpers';
 import Pager, { usePager } from '../components/Pager';
 
 export default function AuditPage() {
@@ -15,7 +15,7 @@ export default function AuditPage() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    if (!isPrivileged(user?.role)) {
+    if (!canViewReports(user?.role)) {
       setError(t('msg.audit_restricted'));
       setLoading(false);
       return;

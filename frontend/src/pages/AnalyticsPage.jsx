@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { usersApi } from '../services/api';
-import { isPrivileged, translateStatus, translateArea } from '../utils/helpers';
+import { canViewReports, translateStatus, translateArea } from '../utils/helpers';
 import { Donut, Legend, AreaChart, Gauge, STATUS_COLORS, colorAt } from '../components/Charts';
 
 // Distinct accent per KPI card — colourful but each hue is validated.
@@ -18,7 +18,7 @@ export default function AnalyticsPage() {
   useEffect(() => { load(); }, []);
 
   async function load() {
-    if (!isPrivileged(user?.role)) {
+    if (!canViewReports(user?.role)) {
       setError(t('msg.analytics_restricted'));
       setLoading(false);
       return;

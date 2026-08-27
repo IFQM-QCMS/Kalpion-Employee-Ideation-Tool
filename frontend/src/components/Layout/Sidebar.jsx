@@ -2,7 +2,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useBranding } from '../../context/BrandingContext';
 import { useLang } from '../../context/LangContext';
-import { isPrivileged, isAdmin, isSuperAdmin, isPlatformAdmin, formatRole } from '../../utils/helpers';
+import { isPrivileged, canViewReports, isAdmin, isSuperAdmin, isPlatformAdmin, formatRole } from '../../utils/helpers';
 
 const NAV_ICONS = {
   dashboard: <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
@@ -40,6 +40,9 @@ export default function Sidebar({ collapsed, onToggle }) {
   const isSA   = isSuperAdmin(role);
   const isAdm  = isAdmin(role);
   const isPriv = isPrivileged(role);
+  // Narrower than isPriv — see canViewReports. A menu item that leads to a
+  // 403 is worse than no menu item.
+  const canReport = canViewReports(role);
 
   const active = (path) => location.pathname === path;
 
@@ -99,11 +102,11 @@ export default function Sidebar({ collapsed, onToggle }) {
               nobody thinks to apply. */}
           <NavItem path="/rejected"   icon={NAV_ICONS.allIdeas}   label={t('nav.rejected')} />
           <NavItem path="/board"      icon={NAV_ICONS.board}      label={t('nav.board')}     />
-          <NavItem path="/audit"      icon={NAV_ICONS.audit}      label={t('nav.audit')}     hidden={!isPriv} />
+          <NavItem path="/audit"      icon={NAV_ICONS.audit}      label={t('nav.audit')}     hidden={!canReport} />
 
           <div className="nav-section">{t('section.insights')}</div>
           <NavItem path="/leaderboard" icon={NAV_ICONS.leaderboard} label={t('nav.leaderboard')} />
-          <NavItem path="/analytics"   icon={NAV_ICONS.analytics}   label={t('nav.analytics')}   hidden={!isPriv} />
+          <NavItem path="/analytics"   icon={NAV_ICONS.analytics}   label={t('nav.analytics')}   hidden={!canReport} />
 
           {isAdm && (
             <>

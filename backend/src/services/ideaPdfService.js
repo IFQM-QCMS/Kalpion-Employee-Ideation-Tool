@@ -20,6 +20,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
+import { registerFonts, makeTextScriptAware } from './pdfFonts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
@@ -298,8 +299,16 @@ export function buildIdeaGistPdf(idea, res, viewer = null) {
     size: 'A4', bufferPages: true,
     margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 12 },
   });
-  doc.registerFont('R', FONT_REG);
-  doc.registerFont('B', FONT_BOLD);
+  /*
+   * Noto Sans alone covers Latin, Devanagari and the Rupee sign — and NOT
+   * Kannada, Tamil, Telugu or Malayalam, whose glyphs resolve to a blank
+   * .notdef with a normal advance width. An idea titled in Kannada therefore
+   * printed as empty space of the right size, and nothing measured as wrong.
+   */
+  registerFonts(doc, { regular: 'R', bold: 'B' });
+  // Roughly forty doc.text() calls in this file pick their font before they
+  // know the value they will draw, so the face is chosen at the draw itself.
+  makeTextScriptAware(doc, { regular: 'R' });
   doc.font('R');
   doc.pipe(res);
 
@@ -377,8 +386,16 @@ export function buildIdeaPdf(idea, res) {
     size: 'A4', bufferPages: true,
     margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 12 },
   });
-  doc.registerFont('R', FONT_REG);
-  doc.registerFont('B', FONT_BOLD);
+  /*
+   * Noto Sans alone covers Latin, Devanagari and the Rupee sign — and NOT
+   * Kannada, Tamil, Telugu or Malayalam, whose glyphs resolve to a blank
+   * .notdef with a normal advance width. An idea titled in Kannada therefore
+   * printed as empty space of the right size, and nothing measured as wrong.
+   */
+  registerFonts(doc, { regular: 'R', bold: 'B' });
+  // Roughly forty doc.text() calls in this file pick their font before they
+  // know the value they will draw, so the face is chosen at the draw itself.
+  makeTextScriptAware(doc, { regular: 'R' });
   doc.font('R');
   doc.pipe(res);
 
@@ -537,13 +554,30 @@ export function buildIdeaPdf(idea, res) {
   y = approvalChain(doc, y, idea.workflow);
 
   // Footer on every page — generation stamp, no external branding.
+  /*
+   * The bottom margin is dropped while the footer is written.
+   *
+   * PDFKit starts a new page whenever text would cross the bottom margin, and
+   * it judges that from the y PLUS the line height. footerY sits below the
+   * margin by design, so writing there ADDED a page and then drew the footer
+   * on the new one — every export gained a trailing blank page, and the
+   * numbering described pages other than the ones it was printed on.
+   *
+   * The total is captured before the loop so the count cannot drift while the
+   * loop is running.
+   */
   const range = doc.bufferedPageRange();
+  const total = range.count;
   const footerY = doc.page.height - 26;
-  for (let i = range.start; i < range.start + range.count; i++) {
-    doc.switchToPage(i);
+  const stamp = fmtDate(new Date());
+  for (let i = 0; i < total; i++) {
+    doc.switchToPage(range.start + i);
+    const bottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     doc.font('R').fontSize(7).fillColor(MUTED).text(
-      `${s(idea.idea_code)}  ·  Generated ${fmtDate(new Date())}  ·  Page ${i + 1} of ${range.count}`,
+      `${s(idea.idea_code)}  ·  Generated ${stamp}  ·  Page ${i + 1} of ${total}`,
       MARGIN, footerY, { width: CONTENT_W, align: 'center', lineBreak: false });
+    doc.page.margins.bottom = bottom;
   }
 
   doc.end();

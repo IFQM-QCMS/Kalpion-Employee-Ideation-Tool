@@ -720,7 +720,7 @@ function BrandingCard({ t, showToast }) {
   return (
     <div className="card" style={{ maxWidth:600,marginTop:16 }}>
       <div className="card-title">{t('admin.branding_heading')}</div>
-      <div style={{ fontSize:12,color:'var(--muted)',marginBottom:16,lineHeight:1.6 }}>
+      <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:16,lineHeight:1.6 }}>
         {t('admin.branding_desc')}
       </div>
 
@@ -744,7 +744,7 @@ function BrandingCard({ t, showToast }) {
 
       <div className="form-group">
         <label>{t('admin.org_logo')}</label>
-        <div style={{ fontSize:12,color:'var(--muted)',marginBottom:10 }}>{t('admin.logo_hint')}</div>
+        <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:10 }}>{t('admin.logo_hint')}</div>
 
         <div style={{ display:'flex',alignItems:'center',gap:14,marginBottom:12 }}>
           <div style={{
@@ -758,7 +758,7 @@ function BrandingCard({ t, showToast }) {
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>
-          <div style={{ fontSize:12,color:'var(--muted)' }}>
+          <div style={{ fontSize:12,color:'var(--text-muted)' }}>
             {preview
               ? t('admin.logo_preview')
               : hasCustomLogo ? t('admin.logo_current') : t('admin.logo_none')}
@@ -856,7 +856,7 @@ function CategoriesTab({ t, showToast }) {
   return (
     <div className="card" style={{ maxWidth:640,marginTop:16 }}>
       <div className="card-title">{t('cat.title')}</div>
-      <div style={{ fontSize:12,color:'var(--muted)',marginBottom:16,lineHeight:1.6 }}>{t('cat.desc')}</div>
+      <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:16,lineHeight:1.6 }}>{t('cat.desc')}</div>
 
       {error && <div className="alert alert-danger" style={{ marginBottom:12 }}>{error}</div>}
 

@@ -195,6 +195,30 @@ export function animateCounter(el, target, duration = 900) {
 
 export const ROLE_PRIV = ['team_lead','project_lead','manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
 export function isPrivileged(role) { return ROLE_PRIV.includes(role); }
+
+/*
+ * Who may read organisation-wide reports.
+ *
+ * ── Why this is not isPrivileged ─────────────────────────────────────────
+ *
+ * It is a SHORTER list, and the difference is team_lead and project_lead.
+ *
+ * The sidebar offered Analytics and Audit Trail to anyone isPrivileged() was
+ * true for, and both pages used the same test before fetching. The server does
+ * not agree: /api/reports/analytics and /api/reports/audit are guarded by a
+ * role list that excludes those two. So a team lead saw both items in the
+ * menu, clicked one, and got a 403 that the page reported as a failure to load
+ * — an error with no explanation, on a screen they were invited to open.
+ *
+ * The server list is the authority here, because it is the one deciding what
+ * data leaves the building. This mirrors it exactly. Kept next to
+ * isPrivileged() so the difference between the two is visible rather than
+ * discovered.
+ *
+ * Mirrors: backend/src/routes/reportRoutes.js
+ */
+export const ROLE_REPORTS = ['manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
+export function canViewReports(role) { return ROLE_REPORTS.includes(role); }
 export function isAdmin(role) { return role === 'admin'; }
 export function isSuperAdmin(role) { return role === 'super_admin'; }
 export function isPlatformAdmin(role) { return role === 'platform_admin'; }
