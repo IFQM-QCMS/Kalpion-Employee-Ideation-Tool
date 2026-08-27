@@ -425,15 +425,35 @@ async function recordDelivery({ provider, purpose, to, tenantSlug, result }) {
      * which id was in force at the time rather than reading it back.
      */
     let templateId = null;
-    if (provider === 'jio_dlt') templateId = (await dltConfig()).template_id || null;
-    else if (provider === 'kaleyra') {
+    let sender = null;
+    if (provider === 'jio_dlt') {
+      const cfg = await dltConfig();
+      templateId = cfg.template_id || null;
+      sender = senderHeader(cfg.sender_id) || null;
+    } else if (provider === 'kaleyra') {
       templateId = config.sms.templates[purpose] || config.sms.templates.login || null;
+      /*
+       * The other half of the pair.
+       *
+       * template_id alone could not answer the question it was added for.
+       * Codes stopped arriving with the gateway returning 202 and every row
+       * logged ok=1: the ids were registered against IFQMID while the
+       * deployment transmitted IFQMSK, a valid sender on the same account but
+       * the wrong one for those templates. Kaleyra accepts it and the carrier
+       * discards it, silently.
+       *
+       * "Accepted but never arrived" is always about the id and the header
+       * AGREEING, so both belong on the row. As sent, not as configured — the
+       * category annotation is stripped before transmission and the log should
+       * show what actually went out.
+       */
+      sender = senderHeader(config.sms.senderId) || null;
     }
     await masterDb().execute(
       `INSERT INTO sms_delivery_log
-         (provider, purpose, recipient, tenant_slug, template_id, ok, http_status, gateway_ref, detail)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
-      [provider, purpose, maskPhone(to), tenantSlug, templateId,
+         (provider, sender, purpose, recipient, tenant_slug, template_id, ok, http_status, gateway_ref, detail)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [provider, sender, purpose, maskPhone(to), tenantSlug, templateId,
         result.sent ? 1 : 0, result.status ?? null,
         result.ref ?? null, (result.detail || '').slice(0, 255) || null]
     );

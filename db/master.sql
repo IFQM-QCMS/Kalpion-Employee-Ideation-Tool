@@ -545,6 +545,11 @@ CREATE TABLE IF NOT EXISTS tenant_active_users (
 CREATE TABLE IF NOT EXISTS sms_delivery_log (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   provider      VARCHAR(32)  NOT NULL,
+  -- The DLT header the message actually went out under (migration 033).
+  -- template_id alone could not answer "accepted but never arrived": that is
+  -- always about the id and the header agreeing, and the row held only one of
+  -- the two. Stored as sent, with any category annotation already stripped.
+  sender        VARCHAR(16)  NULL DEFAULT NULL,
   purpose       VARCHAR(32)  NOT NULL DEFAULT 'login',
   recipient     VARCHAR(32)  NOT NULL,
   tenant_slug   VARCHAR(64)  NULL,
