@@ -5,23 +5,35 @@ Render does not take an uploaded file. The variables live in the service's
 pasted `KEY=value` lines — that is the closest thing to an upload, and it is
 what the blocks below are formatted for.
 
+**Paste `.env.render` from the repository root.** It is complete, ordered, and
+commented, and it is gitignored — it holds live credentials and is never
+committed. Everything below explains what is in it.
+
 Your local `backend/.env` is **not** the file to paste. It points at a local
 MySQL, uses `root`, allows `localhost` as an origin, and the server refuses to
-start in production with any of those. The paste block at the bottom is the
-production shape.
+start in production with any of those.
+
+`.env.render` has been verified by booting the real server against it in
+production mode: it starts without tripping the config guard, connects to
+Aiven, reports mail ready over the HTTPS API, and reports the three registered
+SMS templates. `/api/health` answers 200.
 
 ---
 
-## If the service is already deployed: only three things changed
+## What changed in `.env.render` (already applied to the file)
 
 The August SMS work moved the DLT template IDs and their wording out of the
 environment and into `backend/src/config/smsTemplates.js`, because the carrier
 checks the two against each other and keeping them in separate places is how
 they drift apart.
 
-**1. Delete these six.** They still hold the IFQM *Skills* registration. Left in
-place they override the correct values, and every OTP is dropped by the carrier
-for not matching its template.
+If you are updating the Render dashboard by hand rather than re-pasting the
+whole file, these are the only differences.
+
+**1. Delete these six.** They held the IFQM *Skills* registration. An
+environment value overrides the code, so left in place every OTP goes out under
+a template id whose registered wording it does not match — accepted by the
+gateway, discarded by the carrier, silently.
 
 ```
 SMS_TEMPLATE_LOGIN
@@ -40,7 +52,18 @@ SMS_SENDER_ID=IFQMID-T
 
 (It is currently `IFQMSK` — the Skills header.)
 
-**3. Leave these exactly as they are.** They are correct and are the only SMS
+**3. Add `DB_SSL_CA`** — the contents of `ca.pem`, newlines written as `\n`.
+Without it the database connection is encrypted but *not authenticated*: the
+driver cannot prove the server is Aiven. Render ends a value at the first real
+newline, so an unflattened PEM truncates at `-----BEGIN CERTIFICATE-----` and
+fails with an issuer error that says nothing about the actual mistake.
+
+**4. Also added**, none of them secret: `LOG_TO_FILE=0` (Render's disk is
+ephemeral and production defaults to file logging, so logs would be written
+where nobody can read them and lost on deploy), `RUN_BACKGROUND_JOBS=true`,
+`EMAIL_QUEUE_INTERVAL_MS`, `DB_MAX_POOLS`.
+
+**5. Leave these exactly as they are.** They are correct and are the only SMS
 values still read from the environment:
 
 ```
@@ -64,92 +87,49 @@ deletions was missed.
 
 ---
 
-## Still outstanding on the database
+## Database — done
 
-**Migration 031 has not been applied to Aiven.** Nothing is broken while it
-waits — both birth columns were always nullable, so user creation works, and the
-bulk-import email counters are written in a separate statement that is allowed
-to fail. Apply it when convenient:
+Migrations **024–031 are applied to Aiven** (27 Aug 2026), across all six
+tenant schemas plus the registry.
+
+They had been applied by hand and never recorded, so the ledger in
+`ifqm_master.schema_migrations` showed nothing and the runner re-applied all
+eight. That is safe — every one is guarded on `information_schema`, and 024's
+only writes are a `DELETE` of settings keys the single-chain model replaced and
+an `INSERT … ON DUPLICATE KEY UPDATE value = value`, which preserves a
+customised chain. Verified afterwards: `ifqm_vp`'s custom chain
+(`originator,team_lead,immediate_manager,department_manager,plant_head`)
+survived intact, and user and idea counts are unchanged in all six.
+
+The ledger now has the rows, so this will not repeat.
+
+### Running migrations against a remote database
 
 ```bash
 cd backend
-MASTER_DB_HOST=… MASTER_DB_USER=… MASTER_DB_PASS=… MASTER_DB_NAME=ifqm_master \
-DB_SSL=true DB_SSL_CA="$(cat aiven-ca.pem)" \
-npm run migrate
+node scripts/migrate-remote.mjs ../.env.render ../ca.pem --dry   # plan only
+node scripts/migrate-remote.mjs ../.env.render ../ca.pem         # apply
 ```
 
-The runner keeps a ledger in `ifqm_master.schema_migrations`, so re-running it
-is safe and applies only what is missing.
+It reads credentials from the file rather than the command line, so no database
+password lands in shell history or in the process list. `--dry` prints exactly
+what would run and writes nothing.
+
+`npm run migrate` still exists and still reads `backend/.env`, which points at
+your local MySQL — that is the one to use for local work.
 
 ---
 
-## Full production block
+## The full list
 
-For a fresh service, or to check the existing one against. Replace every `…`.
+`.env.render` in the repository root is the list, with a comment above every
+block explaining what it is for and what breaks without it. It is gitignored,
+so it holds the real values rather than placeholders.
 
-```bash
-NODE_ENV=production
-PORT=10000
-
-# Render sets PORT itself; the value above is a fallback. CORS_ORIGIN and
-# FRONTEND_BASE_URL must be your real https frontend — the server refuses to
-# start in production if either still mentions localhost, because password-reset
-# links would be generated pointing at a machine nobody can reach.
-CORS_ORIGIN=https://your-frontend.vercel.app
-FRONTEND_BASE_URL=https://your-frontend.vercel.app
-
-# ── Database (Aiven) ──
-# Not root, and not empty: the server refuses to start on either. Use an account
-# limited to the ifqm_% schemas.
-MASTER_DB_HOST=….aivencloud.com
-MASTER_DB_PORT=…
-MASTER_DB_USER=…
-MASTER_DB_PASS=…
-MASTER_DB_NAME=ifqm_master
-DB_SSL=true
-# The whole CA certificate, newlines and all. Aiven rejects an unverified
-# connection, and without this the failure reads as a network timeout.
-DB_SSL_CA="-----BEGIN CERTIFICATE-----\n…\n-----END CERTIFICATE-----"
-
-# ── Sessions ──
-# At least 32 characters, and never the example value — anyone holding it can
-# forge a token for any user in any tenant. Generate with:
-#   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-JWT_SECRET=…
-JWT_EXPIRES_IN=28800
-
-# ── Mail (ZeptoMail) ──
-# Welcome emails to new employees, password resets and the leaderboard send all
-# depend on this. PLATFORM_MAIL_API_KEY is the "emailapikey" token, NOT the SMTP
-# password — they are issued separately and the wrong one earns a silent 401.
-PLATFORM_SMTP_HOST=smtp.zeptomail.in
-PLATFORM_SMTP_PORT=587
-PLATFORM_SMTP_USER=…
-PLATFORM_SMTP_PASS=…
-PLATFORM_MAIL_FROM=…
-PLATFORM_MAIL_FROM_NAME=IFQM Ideation
-PLATFORM_MAIL_API_KEY=…
-# Render blocks outbound SMTP on the free tier. Set this so mail goes over
-# HTTPS immediately instead of waiting out a connection timeout on every send.
-PLATFORM_MAIL_TRANSPORT=api
-
-# ── SMS (Kaleyra / Jio DLT) ──
-# Template IDs and wording are NOT here — see smsTemplates.js.
-OTP_ENABLED=true
-SMS_PROVIDER=kaleyra
-SMS_ENDPOINT=https://api.kaleyra.io
-SMS_SID=HXAP1678914824IN
-SMS_SENDER_ID=IFQMID-T
-SMS_PE_ID=1201174858303838784
-SMS_API_KEY=…
-
-# ── Optional ──
-MAX_FILE_MB=15
-AI_PROVIDER=
-OPENAI_API_KEY=
-GEMINI_API_KEY=
-QCMS_BASE_URL=
-```
+For a **fresh** service, `render.yaml` in the root is a Render blueprint that
+declares the same variables — identifiers as literals, every key and password
+as `sync: false` so a blueprint deploy prompts for them instead of storing them
+in git.
 
 ---
 
