@@ -756,7 +756,7 @@ export async function confirmPhoneChange(db, actor, body, tenant = null) {
 /** Tell the old address and the old number that the number changed. */
 async function notifyPhoneChanged(actor, previous, next) {
   const { sendViaPlatform } = await import('./mailerService.js');
-  const { sendSms } = await import('./smsService.js');
+  const { sendSms, messageFor } = await import('./smsService.js');
   const tail = String(next).replace(/\D/g, '').slice(-4);
 
   if (actor.email) {
@@ -773,9 +773,22 @@ async function notifyPhoneChanged(actor, previous, next) {
     ).catch(() => {});
   }
   if (previous) {
-    await sendSms(previous,
-      `Your IFQM sign-in number was changed to one ending ${tail}. If this was not you, contact your administrator.`,
-      { purpose: 'phone_verify' }).catch(() => {});
+    /*
+     * purpose 'phone_changed', with the wording that was submitted for it.
+     *
+     * This used to send under 'phone_verify' — the REGISTRATION template's id —
+     * with text that matches no registration at all. On a DLT gateway that
+     * combination is accepted and then dropped by the carrier, so this security
+     * alert has never once reached a handset while every layer above reported
+     * it sent.
+     *
+     * Its own template is still awaiting approval, so sendSms declines it and
+     * says why. That is a visible gap rather than an invisible one, and the
+     * email alert above still goes out. It starts working the moment the id is
+     * filled in.
+     */
+    const { text } = messageFor('phone_changed', tail);
+    await sendSms(previous, text, { purpose: 'phone_changed' }).catch(() => {});
   }
 }
 

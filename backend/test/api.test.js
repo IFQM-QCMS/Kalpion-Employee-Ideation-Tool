@@ -3218,3 +3218,113 @@ test('an unshapeable string degrades instead of taking the export down', async (
   // The Latin row must be unaffected by its neighbour's problem.
   assert.ok(pdf.length > 1000);
 });
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  DLT SMS templates (registered 26 Aug 2026, header IFQMID-T)
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+test('every OTP journey sends exactly the wording its template was approved under', async () => {
+  const { messageFor } = await import('../src/services/smsService.js');
+  const { DLT_TEMPLATES } = await import('../src/config/smsTemplates.js');
+
+  /*
+   * Why this is worth a test.
+   *
+   * On a DLT gateway the carrier checks the body against the template id sent
+   * with it. Disagree by one word and the gateway ACCEPTS the message, the
+   * carrier DROPS it, and there is no error and no delivery report anywhere.
+   * The only symptom is users reporting that codes never arrive.
+   *
+   * So the exact approved strings are asserted here. If somebody improves the
+   * wording without re-registering it, this fails instead of production going
+   * quiet.
+   */
+  const APPROVED = {
+    registration_phone: ['1277178671564743852',
+      'Dear Customer, use OTP 482913 to complete your registration on IFQM Ideation. Do not share this OTP with anyone.'],
+    login: ['1277178730169418603',
+      'Dear Customer, use OTP 482913 to complete your sign-in on IFQM Ideation. Do not share this OTP with anyone.'],
+    password_reset: ['1277178730612100625',
+      'Dear Customer, use OTP 482913 to reset your password on IFQM Ideation. Do not share this OTP with anyone.'],
+  };
+
+  for (const [purpose, [id, body]] of Object.entries(APPROVED)) {
+    const m = messageFor(purpose, '482913', 5);
+    assert.equal(m.templateId, id, `${purpose} must carry its registered template id`);
+    assert.equal(m.text, body, `${purpose} body has drifted from its registration`);
+    assert.equal(m.registered, true, `${purpose} should be sendable`);
+
+    /*
+     * One segment. These are transactional codes; a body that runs past 160
+     * characters is billed and delivered as two, and a concatenated OTP is
+     * exactly the kind of message that arrives out of order or half-missing.
+     */
+    assert.ok(m.text.length <= 160,
+      `${purpose} is ${m.text.length} characters — over one SMS segment`);
+  }
+
+  // The template must carry exactly one variable: the approved wording has no
+  // expiry in it, and a second {#var#} would leave a literal in the message.
+  for (const [purpose, spec] of Object.entries(DLT_TEMPLATES)) {
+    const count = (spec.text.match(/\{#var#\}/g) || []).length;
+    assert.equal(count, 1, `${purpose} must have exactly one variable, found ${count}`);
+    const filled = messageFor(purpose, '482913', 5).text;
+    assert.ok(!filled.includes('{#'),
+      `${purpose} left an unfilled placeholder: ${filled}`);
+  }
+});
+
+test('a template awaiting DLT approval is not sent', async () => {
+  const { sendSms, messageFor } = await import('../src/services/smsService.js');
+  const { DLT_TEMPLATES } = await import('../src/config/smsTemplates.js');
+
+  /*
+   * The "mobile number changed" alert has no id yet — Jio classified it as
+   * Service Implicit rather than Transactional.
+   *
+   * Before this was handled it went out under the REGISTRATION template's id
+   * carrying completely different text, which the carrier drops. So the alert
+   * has never reached a handset, while the log, the delivery table and the
+   * caller all recorded it as sent. For a security alert, silence that looks
+   * like success is the worst of the available failures.
+   */
+  assert.equal(DLT_TEMPLATES.phone_changed.registered, false,
+    'if this template has been approved, set its id and flip this expectation');
+
+  const m = messageFor('phone_changed', '5881');
+  assert.equal(m.registered, false, 'messageFor must report it as unsendable');
+  assert.ok(m.text.includes('5881'), 'the wording is ready for when it is approved');
+
+  // 'kaleyra' rather than the default, because the log provider is the local
+  // mock and is deliberately exempt from this refusal.
+  const r = await sendSms('9876500000', m.text,
+    { purpose: 'phone_changed', provider: 'kaleyra' });
+  assert.equal(r.sent, false, 'an unregistered template must not be reported as sent');
+  assert.match(String(r.detail), /not registered/i, 'and must say why');
+});
+
+test('the registered sender header is accepted', async () => {
+  const { kaleyraMissing } = await import('../src/services/smsService.js');
+  const { DLT_SENDER_ID, SENDER_ID_RE } = await import('../src/config/smsTemplates.js');
+
+  /*
+   * IFQMID-T is a six-character DLT header plus the transactional category
+   * suffix. The check this replaced demanded exactly six characters, so it
+   * rejected the header the platform is actually registered under and reported
+   * a working gateway as misconfigured.
+   */
+  assert.equal(DLT_SENDER_ID, 'IFQMID-T');
+  assert.ok(SENDER_ID_RE.test('IFQMID-T'), 'the registered header must be valid');
+  assert.ok(SENDER_ID_RE.test('IFQMID'), 'a bare six-character header is still valid');
+  assert.ok(!SENDER_ID_RE.test('IFQMIDENT'), 'nine characters is not a header');
+  assert.ok(!SENDER_ID_RE.test('IFQM-T'), 'the header itself must be six characters');
+
+  const base = {
+    apiKey: 'k', sid: 'HXAP1678914824IN', peId: '1201174858303838784',
+    templates: { login: '1277178730169418603' },
+  };
+  assert.deepEqual(kaleyraMissing({ ...base, senderId: 'IFQMID-T' }, 'login'), [],
+    'a fully configured gateway must report nothing missing');
+  assert.ok(kaleyraMissing({ ...base, senderId: 'WAYTOOLONG' }, 'login').length,
+    'a malformed header must still be caught');
+});

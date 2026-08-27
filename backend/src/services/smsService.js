@@ -34,6 +34,7 @@
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { masterDb } from '../database/master.js';
+import { DLT_TEMPLATES, SENDER_ID_RE } from '../config/smsTemplates.js';
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
@@ -98,10 +99,17 @@ export function dltMissing(cfg) {
     ['api_key', 'Gateway API key'],
   ];
   const missing = need.filter(([k]) => !String(cfg[k] || '').trim()).map(([, label]) => label);
-  // Operators register a 6-character header; a longer one is a transcription
-  // slip that the gateway would reject with an opaque error.
-  if (cfg.sender_id && cfg.sender_id.length !== 6) {
-    missing.push('Header / Sender ID must be exactly 6 characters');
+  /*
+   * Six characters, optionally with a DLT category suffix: -T transactional,
+   * -S service, -P promotional.
+   *
+   * This demanded exactly six and nothing else, which rejects IFQMID-T — the
+   * header this platform is actually registered under. A correctly configured
+   * gateway was reported as misconfigured, and the console told an operator to
+   * go and fix a value that was right.
+   */
+  if (cfg.sender_id && !SENDER_ID_RE.test(cfg.sender_id)) {
+    missing.push('Header / Sender ID must be 6 characters, optionally followed by -T, -S or -P');
   }
   return missing;
 }
@@ -114,6 +122,30 @@ export async function sendSms(phone, message, { provider, purpose = 'login', ten
   const chosen = (provider || config.sms.provider || providerFromEnv() || 'log').toLowerCase();
   const to = String(phone || '').trim();
   if (!to) return { sent: false, provider: chosen, detail: 'no recipient' };
+
+  /*
+   * A purpose whose DLT template is not registered yet does not go out.
+   *
+   * Sending anyway would mean the gateway accepting it, the carrier dropping
+   * it, and this function returning sent:true — so the log, the delivery table
+   * and the caller would all record a message that no handset ever received.
+   * For a security alert, that is the worst of the three possible outcomes:
+   * silence that looks like success.
+   *
+   * The log provider is exempt because it is the local mock; it never reaches a
+   * carrier and is how this path gets exercised in development at all.
+   */
+  const spec = DLT_TEMPLATES[purpose];
+  if (spec && !spec.registered && chosen !== 'log') {
+    const why = spec.pendingReason || 'awaiting DLT approval';
+    logger.warn(
+      `sms: not sending "${spec.label}" — its DLT template is not registered (${why}). `
+      + 'Add the id to src/config/smsTemplates.js and set registered:true to enable it.'
+    );
+    const result = { sent: false, provider: chosen, detail: `template not registered: ${why}` };
+    await recordDelivery({ provider: chosen, purpose, to, tenantSlug, result });
+    return result;
+  }
 
   const result = await deliver(chosen, to, message, purpose);
   // Logged for every provider including the mock, so the console's activity
@@ -131,9 +163,21 @@ export async function sendSms(phone, message, { provider, purpose = 'login', ten
  */
 export function messageFor(purpose, code, minutes) {
   const key = config.sms.templates[purpose] !== undefined ? purpose : 'login';
+  const spec = DLT_TEMPLATES[key];
   return {
     templateId: config.sms.templates[key] || '',
     text: fillTemplate(config.sms.text[key], [code, minutes]),
+    /*
+     * Whether the carrier will actually carry it.
+     *
+     * A template awaiting DLT approval has no id, and a message sent without
+     * one — or with somebody else's — is accepted by the gateway and dropped by
+     * the carrier. Reported here so the caller can decline to send rather than
+     * report a success that did not happen.
+     */
+    registered: spec ? spec.registered && !!config.sms.templates[key] : true,
+    label: spec ? spec.label : key,
+    pendingReason: spec ? spec.pendingReason || null : null,
   };
 }
 
@@ -147,8 +191,10 @@ export function kaleyraMissing(cfg = config.sms, purpose = 'login') {
   if (!cfg.senderId) missing.push('SMS_SENDER_ID');
   if (!cfg.peId) missing.push('SMS_PE_ID');
   if (!cfg.templates[purpose]) missing.push(`template id for "${purpose}"`);
-  if (cfg.senderId && cfg.senderId.length !== 6) {
-    missing.push('SMS_SENDER_ID must be exactly 6 characters');
+  // See the note in dltMissing(): IFQMID-T is a six-character header with the
+  // transactional category suffix, and is valid.
+  if (cfg.senderId && !SENDER_ID_RE.test(cfg.senderId)) {
+    missing.push('SMS_SENDER_ID must be 6 characters, optionally followed by -T, -S or -P');
   }
   return missing;
 }

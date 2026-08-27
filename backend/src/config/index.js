@@ -6,6 +6,51 @@
  * PHP lives here, sourced from environment variables with the same defaults.
  */
 import dotenv from 'dotenv';
+import { DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID } from './smsTemplates.js';
+
+/** Collected at load, logged once at boot by smsService. */
+export const smsTemplateWarnings = [];
+
+/*
+ * Build { templates, text } for every purpose, honouring an environment
+ * override only when it supplies the id AND the wording.
+ */
+function smsTemplatePairs() {
+  const ENV = {
+    login: ['SMS_TEMPLATE_LOGIN', 'SMS_TEXT_LOGIN'],
+    password_reset: ['SMS_TEMPLATE_RESET', 'SMS_TEXT_RESET'],
+    registration_phone: ['SMS_TEMPLATE_ACTIVATION', 'SMS_TEXT_ACTIVATION'],
+    phone_verify: ['SMS_TEMPLATE_ACTIVATION', 'SMS_TEXT_ACTIVATION'],
+    phone_changed: ['SMS_TEMPLATE_PHONE_CHANGED', 'SMS_TEXT_PHONE_CHANGED'],
+  };
+
+  const templates = {};
+  const text = {};
+
+  for (const [purpose, spec] of Object.entries(DLT_TEMPLATES)) {
+    const [idKey, textKey] = ENV[purpose] || [];
+    const envId = (process.env[idKey] || '').trim();
+    const envText = (process.env[textKey] || '').trim();
+
+    if (envId && envText) {
+      templates[purpose] = envId;
+      text[purpose] = envText;
+    } else {
+      if (envId || envText) {
+        smsTemplateWarnings.push(
+          `${idKey}/${textKey}: only one of the pair is set, so both were ignored. `
+          + `A template id and its wording must match exactly or the carrier drops the `
+          + `message without an error. Using the registered "${spec.label}" instead.`
+        );
+      }
+      templates[purpose] = spec.id;
+      text[purpose] = spec.text;
+    }
+  }
+
+  return { templates, text };
+}
+
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -259,27 +304,35 @@ const config = {
     apiKey: (process.env.SMS_API_KEY || '').trim(),
     // Kaleyra's REST base. The account SID is a path segment, not a header.
     endpoint: (process.env.SMS_ENDPOINT || 'https://api.kaleyra.io').replace(/\/+$/, ''),
-    sid: (process.env.SMS_SID || '').trim(),
-    senderId: (process.env.SMS_SENDER_ID || '').trim(),
+    // Both default to what is registered, so a deployment only has to supply
+    // the API key. Either can still be overridden per environment.
+    sid: (process.env.SMS_SID || '').trim() || KALEYRA_SID,
+    senderId: (process.env.SMS_SENDER_ID || '').trim() || DLT_SENDER_ID,
     peId: (process.env.SMS_PE_ID || '').trim(),
-    templates: {
-      login: (process.env.SMS_TEMPLATE_LOGIN || '').trim(),
-      password_reset: (process.env.SMS_TEMPLATE_RESET || '').trim(),
-      // Both new-account journeys use the activation registration.
-      registration_phone: (process.env.SMS_TEMPLATE_ACTIVATION || '').trim(),
-      phone_verify: (process.env.SMS_TEMPLATE_ACTIVATION || '').trim(),
-    },
-    // {#var#} is filled left to right: first the code, then the minutes.
-    text: {
-      login: process.env.SMS_TEXT_LOGIN
-        || '{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.',
-      password_reset: process.env.SMS_TEXT_RESET
-        || '{#var#} is your IFQM password reset code. It expires in {#var#} minute(s). Do not share it with anyone.',
-      registration_phone: process.env.SMS_TEXT_ACTIVATION
-        || '{#var#} is your IFQM verification code. It expires in {#var#} minute(s). Do not share it with anyone.',
-      phone_verify: process.env.SMS_TEXT_ACTIVATION
-        || '{#var#} is your IFQM verification code. It expires in {#var#} minute(s). Do not share it with anyone.',
-    },
+    /*
+     * Template ids and wording come from the DLT registration, not from here.
+     *
+     * The defaults used to be invented text with two variables ("expires in
+     * {#var#} minute(s)"). None of the approved templates say that, and on a
+     * DLT gateway a body that does not match its template id is accepted by the
+     * gateway and dropped by the carrier — silently.
+     *
+     * ── Why an override has to supply both halves ─────────────────────────
+     *
+     * The id and the wording are one thing: the carrier's whole job is to check
+     * them against each other. An environment that sets SMS_TEMPLATE_LOGIN and
+     * leaves SMS_TEXT_LOGIN empty would pair a stale id with current wording,
+     * which is the exact combination that gets dropped — and it is the state a
+     * deployment naturally drifts into, because ids get updated and prose does
+     * not.
+     *
+     * So a purpose takes the pair from the environment only when BOTH are
+     * present. One without the other is refused, the registered pair is used
+     * instead, and the mismatch is reported through smsTemplateWarnings so it
+     * is visible at boot rather than in a support ticket about codes not
+     * arriving.
+     */
+    ...smsTemplatePairs(),
   },
 
   /*

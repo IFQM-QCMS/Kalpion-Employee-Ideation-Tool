@@ -7,6 +7,9 @@ import { closeAllPools } from './src/database/tenant.js';
 import { startScheduler, stopScheduler } from './src/workers/scheduler.js';
 import { platformMailReady, verifyPlatformMail } from './src/services/mailerService.js';
 import logger from './src/utils/logger.js';
+import { smsTemplateWarnings } from './src/config/index.js';
+import { effectiveProvider, kaleyraMissing } from './src/services/smsService.js';
+import { templateStatus } from './src/config/smsTemplates.js';
 
 // Never boot a production server with a forgeable token secret or a
 // passwordless database. Exits the process in production.
@@ -37,6 +40,41 @@ const server = app.listen(config.port, () => {
       if (r.ok) logger.info(`platform mail: ready — ${config.platformMail.from} via ${r.detail}`);
       else logger.error(`platform mail: configured but NOT working — ${r.detail}`);
     });
+  }
+
+  /*
+   * And whether SMS can be delivered, for the same reason.
+   *
+   * A DLT misconfiguration is the quietest failure in this product: the gateway
+   * accepts the message, the carrier drops it for not matching its template
+   * registration, and every layer here reports success. Nothing surfaces until
+   * somebody says they never got their code.
+   *
+   * So the state is stated once, at boot, where it costs nothing to read:
+   * which gateway is selected, which templates can actually be sent, and which
+   * cannot and why.
+   */
+  if (smsTemplateWarnings.length) {
+    for (const w of smsTemplateWarnings) logger.error(`sms config: ${w}`);
+  }
+
+  const provider = effectiveProvider();
+  if (provider === 'log') {
+    logger.warn('sms: provider is "log" — codes are written to this log, not sent. '
+      + 'Set SMS_PROVIDER in backend/.env before anyone relies on a text message.');
+  } else {
+    const blocked = kaleyraMissing(config.sms, 'login');
+    if (provider === 'kaleyra' && blocked.length) {
+      logger.error(`sms: gateway is not usable — missing ${blocked.join(', ')}`);
+    } else {
+      const ready = templateStatus().filter((t) => t.registered && t.id);
+      const pending = templateStatus().filter((t) => !t.registered || !t.id);
+      logger.info(`sms: ${provider} via ${config.sms.senderId} — `
+        + `${ready.length} template(s) registered (${ready.map((t) => t.purpose).join(', ')})`);
+      for (const t of pending) {
+        logger.warn(`sms: "${t.label}" will NOT be sent — ${t.pending_reason || 'no template id'}`);
+      }
+    }
   }
 });
 

@@ -40,23 +40,36 @@ RULE = RGBColor(0x99, 0x99, 0x99)
 # ── Facts, as read from the code ────────────────────────────────────────────
 
 PE_ID = '1201174858303838784'
-HEADER = 'IFQMSK'
-ENTITY = 'IFQM Skills'
+HEADER = 'IFQMID-T'
+ENTITY = 'IFQM Ideation'
 SID = 'HXAP1678914824IN'
 
-# The one wording that is approved today, used for every purpose because it is
-# the only one whose registered text is known.
-APPROVED_TEXT = ('Dear Customer, use OTP {#var#} to complete your activation on '
-                 'IFQM Skills. Do not share this OTP with anyone.')
-APPROVED_ID = '1207177450026368470'
-
-# Registered, still valid, but the approved wording was never supplied to us —
-# so they cannot be used: the carrier checks the id and the text against each
-# other and drops the message when they disagree.
-UNUSED = [
-    ('Login OTP', '1207177450582613311'),
-    ('Reset OTP', '1207177450911544422'),
+# Registered by Jio on 26 Aug 2026 under header IFQMID-T. These mirror
+# backend/src/config/smsTemplates.js, which is the source the code reads; if the
+# two ever disagree, the code is right and this document is stale.
+#
+#   (purpose, label, template id, approved wording)
+REGISTERED = [
+    ('registration_phone', 'Registration OTP', '1277178671564743852',
+     'Dear Customer, use OTP {#number#} to complete your registration on '
+     'IFQM Ideation. Do not share this OTP with anyone.'),
+    ('login', 'Sign-in OTP', '1277178730169418603',
+     'Dear Customer, use OTP {#number#} to complete your sign-in on '
+     'IFQM Ideation. Do not share this OTP with anyone.'),
+    ('password_reset', 'Password Reset OTP', '1277178730612100625',
+     'Dear Customer, use OTP {#number#} to reset your password on '
+     'IFQM Ideation. Do not share this OTP with anyone.'),
 ]
+
+# Submitted, not yet granted. Jio classified it as Service Implicit rather than
+# Transactional; a revised submission is in progress.
+PENDING = (
+    'phone_changed', 'Mobile Number Changed — Security Alert',
+    'Your IFQM Ideation sign-in number was changed to one ending {#number#}. '
+    'If this was not you, contact your administrator.',
+    'Classified Service Implicit rather than Transactional. Awaiting '
+    're-submission for Transactional approval.',
+)
 
 # Every place the platform sends an SMS.
 USAGE = [
@@ -288,31 +301,33 @@ def build():
             'number that has just been replaced. Four content templates cover '
             'all six.')
 
-    para(d, 'Only one template registration is usable today. Its approved '
-            'wording is:')
-    mono(d, APPROVED_TEXT)
-    para(d, f'Registered under template ID {APPROVED_ID}. Every one of the '
-            f'platform\'s messages currently goes out under that single '
-            f'registration, because it is the only registration whose approved '
-            f'text is known to us.')
+    para(d, 'Three of those four are registered and in use. The fourth is '
+            'submitted and not yet granted.')
 
-    para(d, 'That has one visible consequence and one hidden one.', bold=True)
+    table(d,
+          ['Journey', 'Template ID', 'Status'],
+          [[label, tid, 'Registered'] for _p, label, tid, _t in REGISTERED]
+          + [[PENDING[1], '—', 'Pending']],
+          [2.3, 1.9, 1.6], font=9, mono_cols=(1,))
 
-    bullet(d, 'Somebody signing in, or resetting a forgotten password, reads '
-              '"complete your activation on IFQM Skills". The message arrives '
-              'and the code works, but the wording describes a different '
-              'action from the one they are performing.',
-           bold_prefix='Visible: ')
-    bullet(d, 'The security notice sent to a replaced mobile number (journey 5) '
-              'has no matching registration at all, so it does not reach '
-              'anybody. This is the item most worth fixing: it is the only '
-              'warning the rightful owner of a number gets if somebody else '
-              'moves an account onto their own handset.',
-           bold_prefix='Hidden: ')
+    d.add_paragraph()
 
-    para(d, 'Section 3 asks for four templates that between them describe each '
-            'journey in its own words, and give the security notice a '
-            'registration it can be sent under.')
+    para(d, 'What the pending one costs, until it is granted.', bold=True)
+    bullet(d, 'The security notice sent to a mobile number that has just been '
+              'replaced (journey 5) is the only warning the rightful owner of a '
+              'number gets if somebody else moves an account onto their own '
+              'handset. It is not sent while it has no registration.',
+           bold_prefix='Effect: ')
+    bullet(d, 'It is not sent rather than sent-and-dropped. A message with no '
+              'registration is accepted by the gateway and discarded by the '
+              'carrier, with no error at either end — so sending it anyway '
+              'would have the platform record a delivery that never happened. '
+              'For a security alert that is worse than silence, because it '
+              'reads as success. The e-mail alert still goes out.',
+           bold_prefix='Handling: ')
+    bullet(d, 'Paste the ID into backend/src/config/smsTemplates.js and set '
+              'registered to true. Nothing else changes.',
+           bold_prefix='When granted: ')
 
     # ── 2. Where SMS is used ──
     h(d, '2.  Where the platform sends an SMS')
@@ -329,13 +344,16 @@ def build():
     d.add_paragraph()
 
     h(d, '2.1  How a code is put into the message', 2, space_before=10)
-    para(d, 'The registered wording is stored with its {#var#} placeholders '
-            'intact and filled left to right at send time: the first {#var#} '
-            'receives the code, the second receives the number of minutes the '
-            'code remains valid. A template registered with only one {#var#} '
-            'therefore receives just the code, and the validity period is '
-            'dropped — which is correct, and is why the one-variable form in '
-            'use today works.')
+    para(d, 'The registered wording is stored with its placeholder intact and '
+            'filled at send time. All four registrations take a single '
+            'variable — the code, or for the security notice the last four '
+            'digits of the new number. Jio\'s portal writes the placeholder as '
+            '{#number#}; the code writes it as {#var#}. They denote the same '
+            'thing, and the text that reaches the carrier — with the value '
+            'already substituted — is identical either way.')
+    para(d, 'None of the approved wordings mention an expiry period, so none is '
+            'sent. The validity of a code is shown on screen instead, where no '
+            'carrier has an opinion about it.')
     para(d, 'The message text and the template ID are always sent together, '
             'because the carrier checks the two against each other. This is '
             'the reason the two other registered IDs in section 4 cannot '
@@ -406,10 +424,8 @@ def build():
 
     table(d,
           ['Template ID', 'Named as', 'Approved wording known?', 'Status'],
-          [[APPROVED_ID, 'Activation OTP', 'Yes',
-            'In use — currently carries every message the platform sends'],
-           [UNUSED[0][1], UNUSED[0][0], 'No', 'Valid but unusable — see below'],
-           [UNUSED[1][1], UNUSED[1][0], 'No', 'Valid but unusable — see below']],
+          [[tid, label, 'Yes', 'Registered and in use'] for _p, label, tid, _t in REGISTERED]
+          + [['—', PENDING[1], 'Yes (submitted)', PENDING[3]]],
           [1.55, 1.15, 1.35, 2.7], font=9, mono_cols=(0,))
 
     d.add_paragraph()
