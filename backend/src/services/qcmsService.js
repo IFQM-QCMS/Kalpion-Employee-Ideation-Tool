@@ -1,5 +1,5 @@
 /**
- * QCMS integration — pushes approved ideas from this Ideation tool into the QCMS
+ * QCMS integration — pushes approved ideas from Kalpion into the QCMS
  * (Quality & Continuous Improvement Management System) tool for implementation.
  *
  * We are the SENDER. QCMS exposes POST {base}/ideas with a per-organisation

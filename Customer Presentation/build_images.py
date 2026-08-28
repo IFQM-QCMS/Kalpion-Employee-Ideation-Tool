@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Render the five artwork slots used by the Employee Ideation Tool deck.
+Render the five artwork slots used by Kalpion deck.
 
     python "Customer Presentation/build_images.py"
 
@@ -74,7 +74,7 @@ def chrome(ax, top, title, sub=None, width=100):
     """The app shell: a title bar with the product name and a page heading."""
     ax.add_patch(Rectangle((0, top - 4.6), width, 4.6, fc=NAVY, ec='none', zorder=2))
     txt(ax, 2.4, top - 2.3, 'IFQM', size=11, color='#FFFFFF', weight='bold')
-    txt(ax, 8.4, top - 2.3, 'Employee Ideation Tool', size=8.6, color='#B9C0D6')
+    txt(ax, 8.4, top - 2.3, 'Kalpion', size=8.6, color='#B9C0D6')
     for i, dot in enumerate(['Ideas', 'Board', 'Leaderboard', 'Analytics']):
         txt(ax, 34 + i * 11, top - 2.3, dot, size=8, color='#8E97B8')
     ax.add_patch(Circle((width - 3.2, top - 2.3), 1.25, fc=ORANGE, ec='none', zorder=3))

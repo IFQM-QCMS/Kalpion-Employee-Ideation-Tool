@@ -395,7 +395,7 @@ export async function forgotPassword({ email, orgSlug, host }) {
       '<body style="font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#1e293b;line-height:1.6">' +
       '<h2 style="color:#4f46e5;margin-top:0">IFQM – Password Reset Request</h2>' +
       `<p>Hi ${escapeHtml(user.name)},</p>` +
-      '<p>We received a request to reset your IFQM account password. Click the button below to set a new password. This link expires in 1 hour.</p>' +
+      '<p>We received a request to reset your Kalpion account password. Click the button below to set a new password. This link expires in 1 hour.</p>' +
       `<p style="margin:24px 0"><a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px">Reset Password</a></p>` +
       '<p style="color:#64748b;font-size:12px">If you did not request this, you can safely ignore this email. The link will expire automatically.</p>' +
       '</body></html>';

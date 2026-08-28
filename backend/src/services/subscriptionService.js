@@ -794,7 +794,7 @@ async function sendOverdueReminder(tenant, state) {
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
   <p>Hello,</p>
   <p>The subscription for <b>${String(tenant.name).replace(/[<>&]/g, '')}</b> on the IFQM
-  Employee Ideation Tool is <b>overdue</b>.</p>
+  Kalpion is <b>overdue</b>.</p>
   <p>Please make the payment within <b>${left} day(s)</b>. After that the organisation will be
   placed on hold, and nobody in your team will be able to sign in until payment is received.</p>
   <p>You can pay from <b>Settings &rarr; Billing</b> inside the application.</p>
@@ -879,7 +879,7 @@ export async function sendMonthlyInvoices() {
 
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
   <p>Hello,</p>
-  <p>This is the monthly subscription invoice notice for <b>${String(t.name).replace(/[<>&]/g, '')}</b> on the IFQM Ideation Platform.</p>
+  <p>This is the monthly subscription invoice notice for <b>${String(t.name).replace(/[<>&]/g, '')}</b> on Kalpion.</p>
   <p><b>Plan:</b> ${t.plan_name || 'Standard'}<br>
   <b>Monthly Amount:</b> ${amountStr}<br>
   <b>Due Date:</b> ${dueDate}</p>

@@ -82,7 +82,7 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('smtp_user',             ''),
   ('smtp_pass',             ''),
   ('smtp_from',             ''),
-  ('smtp_from_name',        'IFQM Ideation');
+  ('smtp_from_name',        'Kalpion');
 
 -- ── IFQM Tenant Cleanup: remove seed users, keep only SA-001 ───
 -- Only runs when org has no submitted ideas (preserves real data)

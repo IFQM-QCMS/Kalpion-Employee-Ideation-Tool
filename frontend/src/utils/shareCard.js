@@ -80,7 +80,7 @@ function footer(ctx, periodLabel) {
   ctx.textAlign = 'left';
   ctx.fillText(periodLabel || '', 72, H - 72);
   ctx.textAlign = 'right';
-  ctx.fillText('IFQM Employee Ideation Tool', W - 72, H - 72);
+  ctx.fillText('Kalpion', W - 72, H - 72);
 }
 
 function medalColour(rank) {

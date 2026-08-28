@@ -1,4 +1,4 @@
-# IFQM Ideation Platform — Technical & Deployment Documentation
+# Kalpion — Technical & Deployment Documentation
 **Version:** 1.0 (Mark-1) | **Generated:** 2026-05-28
 
 ---
@@ -19,7 +19,7 @@
 
 ## 1. Executive Summary
 
-**IFQM Ideation Platform** is a multi-tenant web application that enables organizations (particularly MSMEs) to collect, evaluate, and manage employee ideas for process improvement and innovation.
+**Kalpion** is a multi-tenant web application that enables organizations (particularly MSMEs) to collect, evaluate, and manage employee ideas for process improvement and innovation.
 
 **Current Status:**
 - Fully functional PHP/MySQL application

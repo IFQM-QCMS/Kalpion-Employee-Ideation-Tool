@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Build PROJECT_FLOWCHART.pdf - IFQM Employee Ideation Tool Flows & Timeline.
+Build PROJECT_FLOWCHART.pdf - Kalpion Flows & Timeline.
 """
 import os
 import re
@@ -132,7 +132,7 @@ class Doc(BaseDocTemplate):
         canvas.saveState()
         canvas.setFont('Helvetica-Bold', 8)
         canvas.setFillColor(ACCENT)
-        canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm, 'IFQM Employee Ideation Tool — Flows & Timeline')
+        canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm, 'Kalpion — Flows & Timeline')
         canvas.setStrokeColor(HAIR)
         canvas.setLineWidth(0.4)
         canvas.line(self.leftMargin, A4[1] - 1.5 * cm, A4[0] - self.rightMargin, A4[1] - 1.5 * cm)
@@ -148,7 +148,7 @@ def build_pdf():
     story = []
 
     # Title & Subtitle
-    story.append(Paragraph(clean('IFQM Employee Ideation Tool'), S_TITLE))
+    story.append(Paragraph(clean('Kalpion'), S_TITLE))
     story.append(Spacer(1, 2))
     story.append(Paragraph(clean('Flows, Process Architecture & Timeline'), S_SUB))
     story.append(Spacer(1, 10))

@@ -5,7 +5,7 @@
 --
 --  Idempotent: safe to re-run.
 --
---  Approved ideas are pushed from this Ideation tool into the QCMS tool for
+--  Approved ideas are pushed from Kalpion into the QCMS tool for
 --  implementation. These columns record, per idea, whether it has been pushed,
 --  when, and the outcome — so the org admin's "Approved Ideas" screen can show a
 --  push status and avoid pushing the same idea twice (QCMS also de-dupes on

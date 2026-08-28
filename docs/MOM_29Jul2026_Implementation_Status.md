@@ -1,6 +1,6 @@
 # MOM 29 Jul 2026 — Expected vs Implemented
 
-Tracks every action item in `IFQM_EIT_MOM_29Jul2026.docx` (in this folder) against what is now in
+Tracks every action item in `Kalpion_MOM_29Jul2026.docx` (in this folder) against what is now in
 the codebase.
 
 **Status as of 7 August 2026 (second round).**

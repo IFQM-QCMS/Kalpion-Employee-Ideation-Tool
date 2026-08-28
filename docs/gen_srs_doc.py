@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Build EIT_SRS.pdf - the Software Requirements Specification for the IFQM
-Employee Ideation Tool.
+Build Kalpion_SRS.pdf - the Software Requirements Specification for the IFQM
+Kalpion.
 
 Monochrome by design, like the other deliverables in this folder: black text,
 white background, grey hairlines. No colour, no emoji, no decorative characters.
@@ -27,7 +27,7 @@ from reportlab.platypus import (BaseDocTemplate, Frame, PageBreak, PageTemplate,
                                 Paragraph, Spacer, Table, TableStyle)
 from reportlab.platypus.tableofcontents import TableOfContents
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'EIT_SRS.pdf')
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Kalpion_SRS.pdf')
 
 BLACK = colors.black
 GREY = colors.Color(0.45, 0.45, 0.45)
@@ -159,7 +159,7 @@ class Doc(BaseDocTemplate):
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(GREY)
         canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm,
-                          'IFQM Employee Ideation Tool - Software Requirements Specification')
+                          'Kalpion - Software Requirements Specification')
         canvas.setStrokeColor(HAIR)
         canvas.setLineWidth(0.4)
         canvas.line(self.leftMargin, A4[1] - 1.5 * cm, A4[0] - self.rightMargin, A4[1] - 1.5 * cm)
@@ -181,12 +181,12 @@ s = []
 
 # ══════════════════════════════ COVER ══════════════════════════════════════
 s.append(Spacer(1, 3.4 * cm))
-s.append(Paragraph('Employee Ideation Tool', S_TITLE))
+s.append(Paragraph('Kalpion', S_TITLE))
 s.append(Spacer(1, 0.2 * cm))
 s.append(Paragraph('Software Requirements Specification', S_SUB))
 s.append(Spacer(1, 1.6 * cm))
 s.append(table([
-    trb('System', 'IFQM Employee Ideation Tool (EIT) - a multi-tenant platform on which member '
+    trb('System', 'Kalpion (Kalpion) - a multi-tenant platform on which member '
                   'organisations collect, review, approve and track employee improvement ideas.'),
     trb('Document', 'Software Requirements Specification. States what the system must do and how '
                     'well, separately from how it is built - that is the Software Architecture '
@@ -219,7 +219,7 @@ s.append(H1('1. Introduction'))
 
 s.append(H2('1.1 Purpose'))
 s.append(P(
-    'This document states what the Employee Ideation Tool is required to do, and how well it is '
+    'This document states what Kalpion is required to do, and how well it is '
     'required to do it. It is written to be read by people who will use, buy, build or test the '
     'system, which means requirements are stated in plain language and a technical term is '
     'explained in the sentence that introduces it.'))

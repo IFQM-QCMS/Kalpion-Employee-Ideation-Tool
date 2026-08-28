@@ -1,4 +1,4 @@
-# IFQM — Employee Ideation Platform
+# IFQM — Kalpion
 
 **User Guide — Version 1.0**
 

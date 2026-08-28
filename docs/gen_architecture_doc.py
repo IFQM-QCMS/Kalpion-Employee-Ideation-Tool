@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Build "Software Architecture.docx" - the complete architecture and design
-document for the IFQM Employee Ideation Tool.
+document for Kalpion.
 
     python docs/gen_architecture_doc.py
 
@@ -43,7 +43,7 @@ from docx.shared import Inches, Pt, RGBColor
 #  Document metadata
 # ---------------------------------------------------------------------------
 DOC_TITLE = "Software Architecture and Design Document"
-PRODUCT = "IFQM Employee Ideation Tool (EIT)"
+PRODUCT = "Kalpion (Kalpion)"
 VERSION = "1.1"
 STATUS = "Reviewed and verified against the code - for final review"
 ISSUE_DATE = date.today().strftime("%d %B %Y")
@@ -396,7 +396,7 @@ def front_matter(doc):
     doc.add_page_break()
 
     h(doc, "How to read this document", 1)
-    para(doc, "This document describes how the IFQM Employee Ideation Tool is built. It is "
+    para(doc, "This document describes how Kalpion is built. It is "
               "written for a mixed audience, so it avoids jargon wherever it can and explains "
               "it where it cannot. If you only need the shape of the system, sections 1 to 6 "
               "are enough. If you are going to work on it, read the whole thing.")

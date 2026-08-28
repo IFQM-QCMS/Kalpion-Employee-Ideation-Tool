@@ -43,7 +43,7 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   -- Must be an address on a domain verified in ZeptoMail. An unverified from
   -- address is refused outright.
   ('mail_zepto_from',        ''),
-  ('mail_zepto_from_name',   'IFQM Ideation'),
+  ('mail_zepto_from_name',   'Kalpion'),
   ('mail_zepto_last_test_at',   ''),
   ('mail_zepto_last_test_ok',   ''),
   ('mail_zepto_last_test_note', ''),

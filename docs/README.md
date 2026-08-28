@@ -1,4 +1,4 @@
-# IFQM Employee Ideation Tool
+# Kalpion
 
 A full-stack internal platform that lets employees submit improvement ideas, get them AI-scored, route them through a multi-level approval chain, and track everything on a live leaderboard and community voting board. Built as a single PHP/MySQL app with no framework dependencies — just drop it into XAMPP and it runs.
 

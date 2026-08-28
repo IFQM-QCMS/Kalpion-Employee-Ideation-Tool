@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Build EIT_TestCases_Simple.pdf from backend/test/tc_results.json.
+Build Kalpion_TestCases_Simple.pdf from backend/test/tc_results.json.
 
 The runner (backend/test/tc_runner.mjs) drives the real Express application over
 HTTP against scratch tenant databases and records, per case:
@@ -35,7 +35,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS = os.path.join(ROOT, 'backend', 'test', 'tc_results.json')
 # Writes into docs/ alongside the other documents, not into the project root.
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'EIT_TestCases_Simple.pdf')
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Kalpion_TestCases_Simple.pdf')
 
 BLACK = colors.black
 GREY = colors.Color(0.45, 0.45, 0.45)
@@ -133,7 +133,7 @@ class Doc(BaseDocTemplate):
         canvas.setFont('Helvetica', 7.6)
         canvas.setFillColor(GREY)
         canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm,
-                          'IFQM Employee Ideation Platform - Test Case & Assurance Document')
+                          'Kalpion - Test Case & Assurance Document')
         canvas.drawRightString(A4[0] - self.rightMargin, A4[1] - 1.35 * cm, RUN_LABEL)
         canvas.setStrokeColor(HAIR)
         canvas.setLineWidth(0.4)
@@ -241,14 +241,14 @@ story = []
 
 # ══════════════════════════════ COVER ══════════════════════════════════════
 story.append(Spacer(1, 3.2 * cm))
-story.append(Paragraph('IFQM Employee Ideation Platform', S_TITLE))
+story.append(Paragraph('Kalpion', S_TITLE))
 story.append(Paragraph('Test Case and Assurance Document', S_SUB))
 story.append(Spacer(1, 0.5 * cm))
 story.append(Paragraph('Functionality - Safety - Reliability - Scalability - Data Integrity - Future Scope', S_SUB))
 story.append(Spacer(1, 1.6 * cm))
 story.append(info_table([
-    ('Document', 'EIT_TestCases_Simple.pdf'),
-    ('System under test', 'IFQM Employee Ideation Platform (multi-tenant, role-based) - Node/Express API + React front end + MySQL'),
+    ('Document', 'Kalpion_TestCases_Simple.pdf'),
+    ('System under test', 'Kalpion (multi-tenant, role-based) - Node/Express API + React front end + MySQL'),
     ('Test method', 'Automated runner driving the real application over HTTP; nothing mocked'),
     ('Evidence source', 'backend/test/tc_results.json, written by backend/test/tc_runner.mjs'),
     ('Run completed', RUN_AT),
@@ -278,7 +278,7 @@ story.append(PageBreak())
 # ══════════════════════════════ 1. PURPOSE ═════════════════════════════════
 story.append(Paragraph('1. Purpose and scope', S_H1))
 story.append(P(
-    'This document is the test record for the IFQM Employee Ideation Platform. It exists to answer four questions that '
+    'This document is the test record for Kalpion. It exists to answer four questions that '
     'an evaluating organisation asks before putting a system in front of its whole workforce: does it do what it '
     'claims, is it safe with people&apos;s data, does it stay up when things go wrong, and will it still work when the '
     'organisation is ten times larger than it is today. A fifth question - can this be extended without a rewrite - is '

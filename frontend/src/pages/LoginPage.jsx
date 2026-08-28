@@ -528,7 +528,7 @@ export default function LoginPage() {
       <div className="auth-col">
         <Link to="/" className="brand" aria-label="IFQM home">
           <img src="/assets/ifqm-logo.png" alt="IFQM" onError={e => { e.target.style.display='none'; }} />
-          <span className="wm">IFQM<small>{t('login.app_title')}</small></span>
+          <span className="wm">Kalpion</span>
         </Link>
 
         <div>

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Build EIT_Security_Features.pdf - every security control in the IFQM Employee
-Ideation Platform, grouped by what it protects, in plain language.
+Build Kalpion_Security_Features.pdf - every security control in the IFQM Employee
+Kalpion, grouped by what it protects, in plain language.
 
 Content comes from docs/SECURITY_FEATURES.md, which is the source of truth; this
 script only lays it out. Every factual claim in that file was checked against
@@ -28,7 +28,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, 'SECURITY_FEATURES.md')
-OUT = os.path.join(HERE, 'EIT_Security_Features.pdf')
+OUT = os.path.join(HERE, 'Kalpion_Security_Features.pdf')
 
 BLACK = colors.black
 GREY = colors.Color(0.45, 0.45, 0.45)
@@ -114,7 +114,7 @@ class Doc(BaseDocTemplate):
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(GREY)
         canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm,
-                          'IFQM Employee Ideation Platform - Security Features')
+                          'Kalpion - Security Features')
         canvas.setStrokeColor(HAIR)
         canvas.setLineWidth(0.4)
         canvas.line(self.leftMargin, A4[1] - 1.5 * cm, A4[0] - self.rightMargin, A4[1] - 1.5 * cm)
@@ -139,7 +139,7 @@ body_md = md.split('---', 2)[2] if md.count('---') >= 2 else md
 story = []
 
 story.append(Spacer(1, 3.6 * cm))
-story.append(Paragraph('Employee Ideation Tool', S_TITLE))
+story.append(Paragraph('Kalpion', S_TITLE))
 story.append(Spacer(1, 0.2 * cm))
 story.append(Paragraph('Security Features', S_SUB))
 story.append(Spacer(1, 0.4 * cm))

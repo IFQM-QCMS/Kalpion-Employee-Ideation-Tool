@@ -1,4 +1,4 @@
-# IFQM EIT — Technical Manual
+# Kalpion — Technical Manual
 
 Written for whoever inherits this codebase. It assumes you can read JavaScript
 and SQL, and nothing else about the project.

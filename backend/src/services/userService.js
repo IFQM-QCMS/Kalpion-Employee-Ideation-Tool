@@ -761,10 +761,10 @@ async function notifyPhoneChanged(actor, previous, next) {
 
   if (actor.email) {
     await sendViaPlatform(
-      actor.email, actor.name, 'Your IFQM mobile number was changed',
+      actor.email, actor.name, 'Your Kalpion mobile number was changed',
       `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
   <p>Hello ${String(actor.name || '').replace(/[<>&]/g, '')},</p>
-  <p>The mobile number on your IFQM account was changed. Sign-in codes and
+  <p>The mobile number on your Kalpion account was changed. Sign-in codes and
   password resets will now go to the number ending <b>${tail}</b>.</p>
   <p style="color:#b91c1c"><b>If this was not you</b>, contact your organisation's
   administrator straight away — whoever made this change can receive your

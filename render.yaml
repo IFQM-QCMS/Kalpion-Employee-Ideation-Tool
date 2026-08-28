@@ -63,7 +63,7 @@ services:
       - key: PLATFORM_MAIL_FROM
         sync: false
       - key: PLATFORM_MAIL_FROM_NAME
-        value: IFQM Ideation
+        value: Kalpion
       # The "emailapikey" token, NOT the SMTP password — ZeptoMail issues the
       # two separately and the wrong one earns a silent 401.
       - key: PLATFORM_MAIL_API_KEY

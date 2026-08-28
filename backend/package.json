@@ -1,7 +1,7 @@
 {
   "name": "ifqm-backend",
   "version": "1.0.0",
-  "description": "IFQM Ideation Platform — Node/Express/MySQL backend (migration of the PHP api/*.php layer)",
+  "description": "Kalpion — Node/Express/MySQL backend (migration of the PHP api/*.php layer)",
   "type": "module",
   "main": "server.js",
   "scripts": {

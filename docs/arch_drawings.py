@@ -37,7 +37,7 @@ def a1_context():
     actor(ax, 78, 40, 'Organisation\nadministrator')
     actor(ax, 78, 20, 'IFQM platform\nadministrator')
 
-    box(ax, 26, 22, 36, 20, 'IFQM Employee\nIdeation Tool', fill=FILL_MED, size=10, bold=True)
+    box(ax, 26, 22, 36, 20, 'Kalpion', fill=FILL_MED, size=10, bold=True)
 
     arrow(ax, (15, 39), (26, 36), label='submits ideas')
     arrow(ax, (15, 21), (26, 27), label='reviews, decides')
@@ -199,7 +199,7 @@ def a6_security():
 def a7_integration():
     """Which way data travels with the outside world, and over which port."""
     fig, ax = canvas(9.4, 4.6)
-    box(ax, 34, 16, 24, 11, 'IFQM Employee\nIdeation Tool', fill=FILL_MED, size=8.4, bold=True)
+    box(ax, 34, 16, 24, 11, 'Kalpion', fill=FILL_MED, size=8.4, bold=True)
 
     for label, x, y, cap in [
         ('QCMS\nquality system', 74, 31, 'approved ideas'),
@@ -468,7 +468,7 @@ def d6_usecase():
     actor(ax, 81, 38, 'Org admin')
     actor(ax, 81, 18, 'Platform admin')
 
-    group(ax, 20, 3, 48, 44, 'IFQM Employee Ideation Tool')
+    group(ax, 20, 3, 48, 44, 'Kalpion')
     cases = [
         ('Submit an idea', 32, 43), ('Track my ideas', 56, 43),
         ('Vote and comment', 32, 36), ('See the leaderboard', 56, 36),

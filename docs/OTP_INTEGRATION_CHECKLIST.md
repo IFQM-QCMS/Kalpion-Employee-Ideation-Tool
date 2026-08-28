@@ -61,7 +61,7 @@ advance, with `{#var#}` marking anything that changes.
 Submit this, character for character:
 
 ```
-{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.
+{#var#} is your Kalpion sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.
 ```
 
 Category: **Transactional** (or Service Implicit). Approval gives:

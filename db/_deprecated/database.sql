@@ -12,7 +12,7 @@
 -- ============================================================
 
 -- ============================================================
---  IFQM Employee Ideation Tool – Database Schema
+--  Kalpion – Database Schema
 --  9-role system: trainee, employee, team_lead, project_lead,
 --  manager, senior_manager, executive, admin, super_admin
 -- ============================================================

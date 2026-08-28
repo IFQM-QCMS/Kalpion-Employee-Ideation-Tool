@@ -42,7 +42,7 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('sms_dlt_template_id',   ''),
   -- The registered wording. {#var#} is the DLT placeholder convention; the
   -- code is substituted into it at send time.
-  ('sms_dlt_template_text', '{#var#} is your IFQM sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.'),
+  ('sms_dlt_template_text', '{#var#} is your Kalpion sign-in code. It expires in {#var#} minute(s). Do not share it with anyone.'),
   ('sms_dlt_endpoint',      'https://api.jiodlt.com/sms/v1/send'),
   -- Secret. Never returned by the read endpoint; see platformSettingsService.
   ('sms_dlt_api_key',       ''),

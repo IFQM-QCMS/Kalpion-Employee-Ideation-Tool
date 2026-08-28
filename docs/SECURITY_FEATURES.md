@@ -1,4 +1,4 @@
-# IFQM Employee Ideation Tool — Security Features
+# Kalpion — Security Features
 
 **Version 1.0 · 10 August 2026**
 

@@ -26,7 +26,7 @@ A1_CONTEXT = r"""
                  │                    │                               │
                  ▼                    ▼                               ▼
    ┌──────────────────────────────────────────────┐   ┌────────────────────────┐
-   │        IFQM EMPLOYEE IDEATION TOOL           │   │   PLATFORM CONSOLE     │
+   │                  KALPION                     │   │   PLATFORM CONSOLE     │
    │  Capture, score, route, approve, track and   │◄──┤  Create organisations, │
    │  reward workplace improvement ideas          │   │  approve applications, │
    └──────────────────────────────────────────────┘   │  see totals only       │
@@ -251,7 +251,7 @@ A6_LEGEND = "Each layer assumes the ones above it were passed. A request must cl
 
 A7_INTEGRATION = r"""
                         ┌──────────────────────────────┐
-                        │   IFQM EMPLOYEE IDEATION     │
+                        │          KALPION             │
                         │           TOOL               │
                         └──┬────────┬────────┬─────┬───┘
              approved ideas│        │email   │SMS  │idea text
@@ -350,7 +350,7 @@ D2_DFD0 = r"""
     ┌──────────┐                        ┌───────────────────┐
     │   Org    │── people, settings ───►│                   │──── reports, exports ──►
     │  Admin   │◄─ reports, exports ────│   IFQM EMPLOYEE   │
-    └──────────┘                        │   IDEATION TOOL   │
+    └──────────┘                        │      KALPION      │
                                         │                   │
     ┌──────────┐                        │                   │──── approved ideas ───►┌──────┐
     │  IFQM    │── new organisations ──►│                   │                        │ QCMS │
@@ -544,7 +544,7 @@ D5_LEGEND = ("17 tables per organisation, every one of them existing once per cu
 
 D6_USECASE = r"""
                     ┌──────────────────────────────────────────────┐
-                    │        IFQM EMPLOYEE IDEATION TOOL           │
+                    │                  KALPION                     │
                     │                                              │
    ┌──────────┐     │   ( Sign in - password or one-time code )    │
    │ Employee │─────┼──►( Submit an idea )                         │
@@ -655,7 +655,7 @@ D8_SEQ_SUBMIT = r"""
       │            │            │ award 10 points ─────────────►│
       │            │            │ write the history entry ─────►│
       │            │            │ notify the reviewer ─────────►│
-      │            │◄───────────┤ idea code EIT-0142            │
+      │            │◄───────────┤ idea code Kalpion-0142            │
       │◄───────────┤ confirmed  │              │                │
 
    Everything after "save the idea" happens in one pass. If any of it fails the
@@ -915,7 +915,7 @@ D14_WIREFRAMES = r"""
                                         ┌─────────────────────────────────────────┐
    IDEA DETAIL (overlay)                │ [Orgs 12][Active 10][On Hold 2][Ideas…] │
    ┌────────────────────────────────┐   ├─────────────────────────────────────────┤
-   │ #EIT-0142  Cut die-change time │   │ COMPANY   ADMIN   USERS IDEAS QCMS  … ⋮ │
+   │ #Kalpion-0142  Cut die-change time │   │ COMPANY   ADMIN   USERS IDEAS QCMS  … ⋮ │
    │ Details | History | Files      │   │ Acme Ltd  P.Nair    85    42    12    ⋮ │
    ├────────────────────────────────┤   │ Vertex    R.Shah    40    18     4    ⋮ │
    │ Under review by A. Kumar       │   └─────────────────────────────────────────┘

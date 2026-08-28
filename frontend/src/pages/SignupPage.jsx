@@ -487,7 +487,7 @@ export default function SignupPage() {
       <div className="wrap">
         <Link to="/" className="brand">
           <img src="/assets/ifqm-logo.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-          <span><b>IFQM</b><small>Employee Ideation Tool</small></span>
+          <span><b>Kalpion</b></span>
         </Link>
 
         {done ? (

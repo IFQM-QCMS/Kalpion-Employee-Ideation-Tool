@@ -419,7 +419,7 @@ export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml
   }
   const transport = buildTransport(settings);
   const from = headerSafe(settings.smtp_from || settings.smtp_user || '');
-  const fromName = headerSafe(settings.smtp_from_name || 'IFQM Ideation');
+  const fromName = headerSafe(settings.smtp_from_name || 'Kalpion');
   const safeTo = headerSafe(toEmail);
 
   await transport.sendMail({
@@ -460,8 +460,8 @@ export async function sendTemporaryPassword({ email, name, orgName, slug, passwo
 
   const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, '');
   const lead = reason === 'reset'
-    ? `The password for your IFQM administrator account at <b>${esc(orgName)}</b> has been reset.`
-    : `Your IFQM workspace for <b>${esc(orgName)}</b> is ready.`;
+    ? `The password for your Kalpion administrator account at <b>${esc(orgName)}</b> has been reset.`
+    : `Your Kalpion workspace for <b>${esc(orgName)}</b> is ready.`;
 
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
   <p>Hello ${esc(name) || 'there'},</p>
@@ -483,7 +483,7 @@ export async function sendTemporaryPassword({ email, name, orgName, slug, passwo
 
   const subject = reason === 'reset'
     ? 'Your IFQM administrator password has been reset'
-    : `Your IFQM workspace for ${orgName} is ready`;
+    : `Your Kalpion workspace for ${orgName} is ready`;
 
   try {
     const res = await sendViaPlatform(email, name, subject, html);

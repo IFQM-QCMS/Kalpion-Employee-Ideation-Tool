@@ -51,7 +51,7 @@
 
 <!-- COVER PAGE -->
 <div class="cover">
-  <p class="cover-title">IFQM Ideation Platform</p>
+  <p class="cover-title">Kalpion</p>
   <p class="cover-sub">Architecture Changes &amp; Future Roadmap</p>
   <p class="cover-meta">
     Prepared by: IFQM Development Team &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -68,7 +68,7 @@
 <h1 class="nobreak">PART 1 &mdash; Technical Architecture Changes</h1>
 
 <h2>1.1 &nbsp; Overview</h2>
-<p>This session transformed the IFQM Ideation Tool from a single-organisation monolithic application into a multi-tenant SaaS platform. Three major workstreams were completed in this session:</p>
+<p>This session transformed Kalpion from a single-organisation monolithic application into a multi-tenant SaaS platform. Three major workstreams were completed in this session:</p>
 <ul>
   <li><strong>Multi-tenant database architecture</strong> &mdash; each MSME organisation receives an isolated MySQL database, provisioned automatically at sign-up.</li>
   <li><strong>Expanded role hierarchy</strong> &mdash; from 5 to 8 levels, with correct RBAC propagation across all API endpoints and the frontend.</li>
@@ -217,8 +217,8 @@
 
 <h1>PART 2 &mdash; Plain-Language Explanation</h1>
 
-<h2>2.1 &nbsp; What is the IFQM Ideation Tool?</h2>
-<p>The IFQM Ideation Tool is a <strong>digital suggestion box &mdash; but a very smart one</strong>. It allows every employee in a manufacturing company to submit ideas for improvements: how to reduce waste, speed up a process, save costs, improve safety, or better serve customers.</p>
+<h2>2.1 &nbsp; What is Kalpion?</h2>
+<p>Kalpion is a <strong>digital suggestion box &mdash; but a very smart one</strong>. It allows every employee in a manufacturing company to submit ideas for improvements: how to reduce waste, speed up a process, save costs, improve safety, or better serve customers.</p>
 <p>Those ideas then go through a structured review by team leaders, managers, and directors. The best ones get implemented. And the employees who suggested them earn points and recognition &mdash; instead of their ideas disappearing into a dusty physical box that nobody opens.</p>
 <p>Think of it as replacing the suggestion box in the factory canteen with a modern system that tracks every idea, uses AI to score its quality, routes it to the right reviewer, and tells the employee exactly what happened to their suggestion &mdash; and why.</p>
 

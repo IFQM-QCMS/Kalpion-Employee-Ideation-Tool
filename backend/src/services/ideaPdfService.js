@@ -374,7 +374,7 @@ export function buildIdeaGistPdf(idea, res, viewer = null) {
   doc.font('R').fontSize(6.8).fillColor(MUTED).text(
     `Produced ${fmtDateTimeLocal(new Date())}`
     + (viewer ? ` for ${viewer.name}${viewer.employee_id ? ` (${viewer.employee_id})` : ''}` : '')
-    + '  -  IFQM Employee Ideation Tool',
+    + '  -  Kalpion',
     MARGIN, 812 - 20, { width: CONTENT_W, align: 'center' });
 
   doc.end();

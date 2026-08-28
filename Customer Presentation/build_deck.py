@@ -122,12 +122,12 @@ def drop(slide, name):
 # ── Slide content ───────────────────────────────────────────────────────────
 
 S1 = {
-    'Title 5': 'Employee Ideation Tool',
+    'Title 5': 'Kalpion',
     'Subtitle 6': 'A digital platform that turns everyday employee ideas into measurable improvement.',
 }
 
 S2 = {
-    'Text 0': 'Why Employee Ideation?',
+    'Text 0': 'Why Kalpion?',
     'Text 6': 'WHY WE ARE DOING THIS',
     'Text 7': ('The people closest to the work see the waste first',
                ' — a jig that slips, a rework loop, a delivery that always runs late. Most of '
@@ -154,7 +154,7 @@ S2 = {
 }
 
 S3 = {
-    'Text 0': 'What is the Employee Ideation Tool?',
+    'Text 0': 'What is Kalpion?',
     'Text 7': ('A platform where employees raise improvement ideas and somebody actually '
                'decides on them.',
                '  Ideas move up a named approval chain, and approved ones are pushed to the QC '
@@ -335,7 +335,7 @@ def main():
     # for this product would still announce itself as the DWM overview in the
     # title bar, in search results and in any library it is uploaded to.
     cp = prs.core_properties
-    cp.title = 'IFQM Employee Ideation Tool — Overview'
+    cp.title = 'Kalpion — Overview'
     cp.subject = 'Customer presentation'
     cp.comments = ('Built from V2_DWM_Overview.pptx by build_deck.py — same theme, master, '
                    'layouts and design; content and artwork replaced.')

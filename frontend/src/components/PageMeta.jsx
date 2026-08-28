@@ -5,7 +5,7 @@ import { useLocation } from 'react-router-dom';
  * The browser tab title, and the description a shared link shows.
  *
  * This is a single-page application: without this, every screen keeps the title
- * the server sent, so ten open tabs all read "IFQM Ideation Platform" and the
+ * the server sent, so ten open tabs all read "Kalpion" and the
  * back button gives no clue where it is going. Browser history is built from
  * document.title.
  *
@@ -47,7 +47,7 @@ const META = {
   '/platform/plans':          ['Plans'],
 };
 
-const SUFFIX = 'IFQM Employee Ideation Tool';
+const SUFFIX = 'Kalpion';
 
 function setMeta(name, content) {
   if (!content) return;

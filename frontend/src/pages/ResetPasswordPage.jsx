@@ -127,12 +127,12 @@ export default function ResetPasswordPage() {
       <div className="reset-card">
         <Link to="/" className="brand">
           <img src="/assets/ifqm-logo.png" alt="IFQM" onError={e => { e.target.style.display = 'none'; }} />
-          <span>IFQM</span>
+          <span>Kalpion</span>
         </Link>
 
         <div>
           <h1>Reset Password</h1>
-          <p className="sub">Enter your new password for your IFQM account.</p>
+          <p className="sub">Enter your new password for your Kalpion account.</p>
         </div>
 
         {error && <div className="err">{error}</div>}

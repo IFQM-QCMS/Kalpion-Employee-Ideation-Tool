@@ -11,7 +11,7 @@ def build(doc, H, para, bullets, table, figure, fig):
     H(doc, "1. System Overview and Objectives", 1)
 
     H(doc, "1.1 What the system is", 2)
-    para(doc, "The IFQM Employee Ideation Tool is a web application that lets the staff of a "
+    para(doc, "Kalpion is a web application that lets the staff of a "
               "business put forward ideas for improving how that business works, and then makes "
               "sure those ideas are actually looked at, decided on and followed through.")
     para(doc, "Most businesses already have some version of this. It is usually a suggestion box "

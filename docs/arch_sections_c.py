@@ -271,7 +271,7 @@ def build(doc, H, para, bullets, table, figure, fig):
                       "stored as empty rather than creating a fourth band or a one-off tag that "
                       "every filter would then miss. The author is dropped from their own "
                       "co-suggester list, as are duplicates."],
-        ["200", '{ "success": true, "idea_id": 142, "idea_code": "EIT-0142", "ai_score": 78, '
+        ["200", '{ "success": true, "idea_id": 142, "idea_code": "Kalpion-0142", "ai_score": 78, '
                 '"points_added": 10 }'],
         ["400", '"Title, present situation and proposed solution are required."'],
         ["Side effects", "Scores the idea, sets the review due date from the organisation's SLA, "
@@ -287,7 +287,7 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["Purpose", "The list of ideas this person is allowed to see."],
         ["Auth", "Any signed-in user. The scope is worked out from the role, not requested."],
         ["Query", "search, status, impact, archived, tag, time_required - all optional"],
-        ["200", '{ "success": true, "ideas": [ { "id": 142, "idea_code": "EIT-0142", '
+        ["200", '{ "success": true, "ideas": [ { "id": 142, "idea_code": "Kalpion-0142", '
                 '"title": "...", "solution_summary": "First sentence only.", '
                 '"solution_redacted": true, "ai_score": 78, "status": "Under Review", '
                 '"submitter_name": "Priya S", "created_at": "2026-07-02 11:04:19" } ] }'],
@@ -346,7 +346,7 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["Auth", "Any signed-in user, who must own the idea being attached to."],
         ["Request", "multipart/form-data with file, idea_id and section. section is one of "
                     "situation, solution, benefits, support."],
-        ["200", '{ "success": true, "filename": "EIT-0142-1722512345-plan.pdf" }'],
+        ["200", '{ "success": true, "filename": "Kalpion-0142-1722512345-plan.pdf" }'],
         ["Accepted", "pdf, png, jpg, jpeg, gif, xlsx, xls, csv, docx, doc"],
         ["400", '"File type not allowed.", "No file uploaded.", or '
                 '"File exceeds this organisation\'s 5 MB limit."'],
@@ -397,7 +397,7 @@ def build(doc, H, para, bullets, table, figure, fig):
         ["Auth", "Organisation admin."],
         ["Request", '{ "idea_ids": [142, 155], "only_pending": true }'],
         ["200", '{ "success": true, "attempted": 2, "imported": 1, "duplicate": 1, "failed": 0, '
-                '"results": [ { "id": 142, "idea_code": "EIT-0142", "status": "imported", '
+                '"results": [ { "id": 142, "idea_code": "Kalpion-0142", "status": "imported", '
                 '"message": "..." } ] }'],
         ["400", '"QCMS integration is turned off. Enable it and save your API key first." or '
                 '"No QCMS API key saved."'],

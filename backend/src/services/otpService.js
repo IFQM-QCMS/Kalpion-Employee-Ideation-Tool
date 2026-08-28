@@ -121,7 +121,7 @@ function otpEmailHtml(name, code, minutes) {
   const safe = String(name || '').replace(/[<>&]/g, '');
   return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#111;line-height:1.6">
   <p>Hello ${safe || 'there'},</p>
-  <p>Use this code to sign in to the IFQM Employee Ideation Tool:</p>
+  <p>Use this code to sign in to Kalpion:</p>
   <p style="font-size:30px;font-weight:700;letter-spacing:7px;margin:22px 0">${code}</p>
   <p>It expires in ${minutes} minute(s) and can be used once.</p>
   <p style="color:#666;font-size:13px">If you did not ask to sign in, you can ignore this message —
@@ -298,7 +298,7 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     const route = platformMailReady() ? 'platform_smtp' : 'zeptomail_api';
     try {
       await sendViaPlatform(emailAddr, user.name,
-        `${code} is your IFQM sign-in code`, otpEmailHtml(user.name, code, minutes));
+        `${code} is your Kalpion sign-in code`, otpEmailHtml(user.name, code, minutes));
       return { sent: true, provider: route, channel: 'email' };
     } catch (err) {
       return { sent: false, provider: route, detail: err.message, channel: 'email' };

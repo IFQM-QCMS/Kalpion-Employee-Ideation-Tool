@@ -1,4 +1,4 @@
-# IFQM Employee Ideation Tool — Flows and Timeline
+# Kalpion — Flows and Timeline
 
 **How an idea travels, how an organisation joins, who can see what, and when each part was built.**
 
@@ -25,7 +25,7 @@
 
 ```mermaid
 flowchart TD
-    subgraph Overview["IFQM Employee Ideation Tool — System Overview"]
+    subgraph Overview["Kalpion — System Overview"]
         A[1. Employee / Submitter] -->|Submits Idea| B[Idea Lifecycle & AI Scoring]
         B -->|Workflow Routing| C[Line Manager / Plant Head Approval]
         C -->|Approved| D[Implementation & ROI Tracking]

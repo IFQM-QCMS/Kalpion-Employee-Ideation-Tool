@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-Build EIT_User_Guide.pdf - the complete, plain-language manual for every person
-who touches the IFQM Employee Ideation Platform: employees who submit ideas,
+Build Kalpion_User_Guide.pdf - the complete, plain-language manual for every person
+who touches Kalpion: employees who submit ideas,
 managers who review them, organisation administrators who run the tool, and the
 IFQM platform team who look after all the organisations.
 
@@ -25,7 +25,7 @@ from reportlab.platypus.tableofcontents import TableOfContents
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Writes into docs/ alongside the other documents, not into the project root.
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'EIT_User_Guide.pdf')
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Kalpion_User_Guide.pdf')
 
 BLACK = colors.black
 GREY = colors.Color(0.45, 0.45, 0.45)
@@ -161,7 +161,7 @@ class Doc(BaseDocTemplate):
         canvas.saveState()
         canvas.setFont('Helvetica', 8)
         canvas.setFillColor(GREY)
-        canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm, 'IFQM Employee Ideation Platform - User Guide')
+        canvas.drawString(self.leftMargin, A4[1] - 1.35 * cm, 'Kalpion - User Guide')
         canvas.setStrokeColor(HAIR)
         canvas.setLineWidth(0.4)
         canvas.line(self.leftMargin, A4[1] - 1.5 * cm, A4[0] - self.rightMargin, A4[1] - 1.5 * cm)
@@ -183,7 +183,7 @@ s = []
 
 # ══════════════════════════ COVER ══════════════════════════════════════════
 s.append(Spacer(1, 3.6 * cm))
-s.append(Paragraph('Employee Ideation Tool', S_TITLE))
+s.append(Paragraph('Kalpion', S_TITLE))
 s.append(Spacer(1, 0.2 * cm))
 s.append(Paragraph('Complete User Guide', S_SUB))
 s.append(Spacer(1, 0.4 * cm))
@@ -217,7 +217,7 @@ s.append(PageBreak())
 # ══════════════════════════ 1. ABOUT ═══════════════════════════════════════
 s.append(H1('1. About this guide'))
 s.append(P(
-    'This guide explains how to use the Employee Ideation Tool from end to end. It assumes nothing: not that you have '
+    'This guide explains how to use Kalpion from end to end. It assumes nothing: not that you have '
     'used a system like this before, and not that you know what any of the words on the screen mean. Where a word has '
     'a specific meaning here - "escalation", "co-suggester", "challenge" - it is explained the first time it appears '
     'and again in the glossary at the end.'))

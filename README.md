@@ -1,4 +1,4 @@
-# IFQM — Employee Ideation Platform
+# IFQM — Kalpion
 
 A multi-tenant web platform that lets employees submit workplace improvement ideas,
 scores them with AI, routes them through a configurable approval chain, and rewards
@@ -127,7 +127,7 @@ and configuration.
 
 **Generated files** (rebuild with the scripts in `docs/`)
 
-- `docs/EIT_User_Guide.pdf`, `docs/EIT_TestCases_Simple.pdf`,
+- `docs/Kalpion_User_Guide.pdf`, `docs/Kalpion_TestCases_Simple.pdf`,
   `docs/QCMS_TestCases_Simple.pdf`
 - `docs/IFQM_Demo_Employees_500.xlsx` — 500 fictional employees for demos and
   testing (`node backend/scripts/generate-demo-employees.js`)

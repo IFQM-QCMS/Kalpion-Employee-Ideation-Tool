@@ -54,13 +54,13 @@
 const EMPLOYEE = {
   role: 'employee',
   title: 'User Manual — Employees',
-  subtitle: 'IFQM Employee Ideation Tool',
+  subtitle: 'Kalpion',
   sections: [
     {
       id: 'signing-in',
       title: '1. Signing In',
       blocks: [
-        { p: "Go to your organisation's IFQM web address. On the Sign In screen:" },
+        { p: "Go to your organisation's Kalpion web address. On the Sign In screen:" },
         {
           steps: [
             'Type your **Username**, **Email**, or **Phone number** — any one of the three works.',
@@ -262,14 +262,14 @@ const EMPLOYEE = {
 const ORG_ADMIN = {
   role: 'admin',
   title: 'User Manual — Organisation Admin',
-  subtitle: 'IFQM Employee Ideation Tool',
+  subtitle: 'Kalpion',
   sections: [
     {
       id: 'signing-in',
       title: '1. Signing In',
       blocks: [
         {
-          p: "Go to your organisation's IFQM web address and sign in with your **Username**, **Email**, or "
+          p: "Go to your organisation's Kalpion web address and sign in with your **Username**, **Email**, or "
             + '**Phone**, plus your password, then click **Sign In**.',
         },
         {
@@ -576,7 +576,7 @@ const ORG_ADMIN = {
 const PLATFORM_ADMIN = {
   role: 'platform_admin',
   title: 'User Manual — IFQM Platform Console (Superadmin)',
-  subtitle: 'IFQM Employee Ideation Tool',
+  subtitle: 'Kalpion',
   sections: [
     {
       id: 'signing-in',

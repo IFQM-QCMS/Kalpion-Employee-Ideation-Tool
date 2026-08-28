@@ -281,11 +281,11 @@ export async function sendTestEmail(db, user) {
   const now = new Date();
   const p2 = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`;
-  const subject = 'IFQM Ideation – Test Email';
+  const subject = 'Kalpion – Test Email';
   const body =
     '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
     '<body style="font-family:Arial,sans-serif;padding:20px;color:#1e293b">' +
-    '<h2 style="color:#4f46e5">IFQM Ideation Tool – Test Email</h2>' +
+    '<h2 style="color:#4f46e5">Kalpion – Test Email</h2>' +
     `<p>Hi ${escapeHtml(toName)},</p>` +
     '<p>This is a test email confirming that your SMTP configuration is working correctly.</p>' +
     `<p style="color:#64748b;font-size:12px">Sent at ${stamp} (server time)</p>` +

@@ -1,6 +1,6 @@
 # Changes made after the meeting of 29 July 2026
 
-IFQM Employee Ideation Tool. Written 7 August 2026.
+Kalpion. Written 7 August 2026.
 
 This is the list of everything that was built following the review meeting,
 written for anyone who needs to know what changed without reading code. There

@@ -255,7 +255,7 @@ def build():
     # ── Cover ──
     p = d.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = p.add_run('IFQM Employee Ideation Tool')
+    r = p.add_run('Kalpion')
     r.bold = True
     r.font.size = Pt(13)
     p.paragraph_format.space_after = Pt(2)

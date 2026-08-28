@@ -490,7 +490,7 @@ export default function LandingPage() {
         <div className="nav-in">
           <Link to="/" className="logo">
             <img src="/assets/ifqm-logo.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-            <span>IFQM<small>Employee Ideation Tool</small></span>
+            <span>Kalpion</span>
           </Link>
           <div className="nav-links">
             <a href="#problem">Why</a>
@@ -741,7 +741,7 @@ export default function LandingPage() {
 
       <footer>
         <div className="wrap foot">
-          <span>© {new Date().getFullYear()} IFQM — Employee Ideation Tool</span>
+          <span>© {new Date().getFullYear()} Kalpion</span>
           <span style={{ display: 'flex', gap: 18 }}>
             <Link to="/login">Sign in</Link>
             <Link to="/signup">Get started</Link>

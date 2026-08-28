@@ -8,7 +8,7 @@
  *   Test Case ID | Module | Functionality | Expected Output | Actual Output | Result | Timestamp
  *
  * Results are written as JSON; docs/gen_testcases_doc.py turns them into
- * EIT_TestCases_Simple.pdf. Nothing here is mocked — Actual Output is whatever
+ * Kalpion_TestCases_Simple.pdf. Nothing here is mocked — Actual Output is whatever
  * the running instance did, so a genuine defect shows up as Fail rather than
  * being hidden. (Three real ones did in the cycle that added the deep modules:
  * a concurrent-submission collision on idea_code, an approval that could be

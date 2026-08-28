@@ -211,7 +211,7 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('smtp_user',                 ''),
   ('smtp_pass',                 ''),
   ('smtp_from',                 ''),
-  ('smtp_from_name',            'IFQM Ideation'),
+  ('smtp_from_name',            'Kalpion'),
   ('approval_mode',             'default'),
   ('approval_reviewer_roles',   'team_lead,project_lead,manager,senior_manager'),
   ('approval_final_approver_roles', 'executive,admin,super_admin'),

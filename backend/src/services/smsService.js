@@ -614,7 +614,7 @@ export async function sendTestSms(phone, { provider } = {}) {
   } else if (chosen === 'kaleyra') {
     message = messageFor('login', '000000', 5).text;
   } else {
-    message = '000000 is your IFQM sign-in code. It expires in 5 minute(s). Do not share it with anyone.';
+    message = '000000 is your Kalpion sign-in code. It expires in 5 minute(s). Do not share it with anyone.';
   }
 
   const result = await deliver(chosen, String(phone || '').trim(), message);

@@ -337,7 +337,7 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('smtp_user',                 ''),
   ('smtp_pass',                 ''),
   ('smtp_from',                 ''),
-  ('smtp_from_name',            'IFQM Ideation'),
+  ('smtp_from_name',            'Kalpion'),
   -- The approval chain, as one ordered sequence (migration 024). It replaced
   -- approval_mode / approval_reviewer_roles / approval_final_approver_roles /
   -- approval_threshold, which described this same chain three different ways

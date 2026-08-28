@@ -48,17 +48,17 @@ export const PURPOSES = {
   },
   registration_phone: {
     channel: 'sms',
-    subject: (code) => `${code} is your IFQM verification code`,
+    subject: (code) => `${code} is your Kalpion verification code`,
     lead: 'Use this code to verify the mobile number on your IFQM registration:',
   },
   password_reset: {
     channel: 'any',
-    subject: (code) => `${code} is your IFQM password reset code`,
-    lead: 'Use this code to set a new password on your IFQM account:',
+    subject: (code) => `${code} is your Kalpion password reset code`,
+    lead: 'Use this code to set a new password on your Kalpion account:',
   },
   phone_verify: {
     channel: 'sms',
-    subject: (code) => `${code} is your IFQM verification code`,
+    subject: (code) => `${code} is your Kalpion verification code`,
     lead: 'Use this code to confirm your mobile number:',
   },
 };
