@@ -34,9 +34,23 @@ export default function PlatformTicketsPage() {
   const [openId,  setOpenId]  = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [archived, setArchived] = useState('');   // '' = live only, '1' = archived only
+  /*
+   * Tickets ticked by hand.
+   *
+   * The bulk panel could take everything on screen or everything before a date,
+   * which are both all-or-nothing against a filter. Clearing three specific
+   * tickets out of a list of forty meant opening each one — the thing bulk
+   * archiving was added to stop.
+   */
+  const [picked, setPicked] = useState(new Set());
+  // Which statuses a one-click sweep should take.
+  const [sweepStatuses, setSweepStatuses] = useState([]);
+  const [sweeping, setSweeping] = useState(false);
   const [includeOpen, setIncludeOpen] = useState(false);
 
   useEffect(() => { load(); }, [status, priority, archived]);
+  // A tick means "this row"; when the rows change, the ticks are meaningless.
+  useEffect(() => { setPicked(new Set()); }, [status, priority, archived]);
 
   async function load() {
     setLoading(true); setError('');
@@ -116,6 +130,100 @@ export default function PlatformTicketsPage() {
           </label>
         } />
 
+      {/*
+        Archive by status.
+        The question at the end of a quarter is "clear out everything resolved",
+        and answering it with the date option means choosing a date that happens
+        to separate them — a guess. Naming the status says what is meant.
+      */}
+      <div className="card" style={{ marginTop:12,padding:'14px 16px' }}>
+        <div style={{ fontSize:13,fontWeight:650,color:'var(--heading)',marginBottom:8 }}>
+          {t('pt.sweep_title')}
+        </div>
+        <div style={{ display:'flex',gap:14,flexWrap:'wrap',alignItems:'center' }}>
+          {/* Same vocabulary and same labels as the filter above, so the
+              status someone filtered by is the status they can sweep. */}
+          {STATUSES.map((value) => (
+            <label key={value} style={{ display:'flex',alignItems:'center',gap:6,fontSize:12.5 }}>
+              <input
+                type="checkbox"
+                checked={sweepStatuses.includes(value)}
+                onChange={(e) => setSweepStatuses(prev =>
+                  e.target.checked ? [...prev, value] : prev.filter(v => v !== value))}
+              />
+              {t('sup.status_' + value)}
+            </label>
+          ))}
+          <button
+            className="btn btn-outline btn-sm"
+            disabled={!sweepStatuses.length || sweeping}
+            onClick={async () => {
+              /*
+               * Confirmed by count before anything moves. "Archive every open
+               * ticket" is a sentence somebody can tick their way into without
+               * meaning it, and archiving an unanswered ticket is how a
+               * customer gets forgotten.
+               */
+              const names = sweepStatuses.map(v => t('sup.status_' + v)).join(', ');
+              if (!window.confirm(t('pt.sweep_confirm', { statuses: names }))) return;
+              setSweeping(true);
+              try {
+                const res = await platformApi.bulkArchiveTickets({
+                  statuses: sweepStatuses, archived: true,
+                });
+                showToast(res.data?.message || t('bulk.done'), 'success');
+                setSweepStatuses([]);
+                load();
+              } catch (e) {
+                showToast(e.response?.data?.error || t('msg.server_error'), 'danger');
+              }
+              setSweeping(false);
+            }}
+          >
+            {sweeping ? t('msg.loading') : t('pt.sweep_run')}
+          </button>
+        </div>
+      </div>
+
+      {/* Acting on the rows that were ticked. Only shown once something is. */}
+      {picked.size > 0 && (
+        <div className="card" style={{ marginTop:12,padding:'12px 16px',display:'flex',
+          alignItems:'center',gap:12,flexWrap:'wrap' }}>
+          <span style={{ fontSize:13,fontWeight:600 }}>
+            {t('pt.n_selected', { n: picked.size })}
+          </span>
+          <button className="btn btn-primary btn-sm" onClick={async () => {
+            /*
+             * Archiving an unanswered ticket is how a customer gets forgotten,
+             * so the server leaves open ones alone by default. Ticking a row is
+             * a clear enough choice to override that — but not silently: if
+             * some of the ticked tickets are still awaiting an answer, say so
+             * and let the operator decide, rather than either dropping them
+             * from the count or filing them away without a word.
+             */
+            const unanswered = tickets.filter(
+              (tk) => picked.has(tk.id) && !['resolved', 'closed'].includes(tk.status));
+            if (unanswered.length && !window.confirm(
+              t('pt.archive_open_confirm', { n: unanswered.length }))) return;
+            try {
+              const res = await platformApi.bulkArchiveTickets({
+                ids: [...picked], archived: archived !== '1', include_open: true,
+              });
+              showToast(res.data?.message || t('bulk.done'), 'success');
+              setPicked(new Set());
+              load();
+            } catch (e) {
+              showToast(e.response?.data?.error || t('msg.server_error'), 'danger');
+            }
+          }}>
+            {archived === '1' ? t('pt.restore_selected') : t('pt.archive_selected')}
+          </button>
+          <button className="btn btn-outline btn-sm" onClick={() => setPicked(new Set())}>
+            {t('bulk.clear')}
+          </button>
+        </div>
+      )}
+
       {loading && <div className="empty-state"><div className="spinner"></div></div>}
       {error   && <div className="alert alert-danger">{error}</div>}
 
@@ -125,6 +233,16 @@ export default function PlatformTicketsPage() {
             <table className="table">
               <thead>
                 <tr>
+                  <th style={{ width:34 }}>
+                    <input
+                      type="checkbox"
+                      title={t('review.select_all')}
+                      checked={tickets.length > 0 && picked.size === tickets.length}
+                      onChange={(e) => setPicked(e.target.checked
+                        ? new Set(tickets.map(x => x.id))
+                        : new Set())}
+                    />
+                  </th>
                   <th>{t('sup.col_ticket')}</th>
                   <th>{t('pa.col_company')}</th>
                   <th>{t('sup.col_subject')}</th>
@@ -137,6 +255,19 @@ export default function PlatformTicketsPage() {
               <tbody>
                 {tickets.map((tk) => (
                   <tr key={tk.id} style={{ cursor:'pointer' }} onClick={() => setOpenId(tk.id)}>
+                    {/* stopPropagation: the row opens the ticket, and ticking
+                        the box must not do that as well. */}
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={picked.has(tk.id)}
+                        onChange={(e) => setPicked(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(tk.id); else next.delete(tk.id);
+                          return next;
+                        })}
+                      />
+                    </td>
                     <td style={{ fontWeight:700,whiteSpace:'nowrap' }}>{tk.ticket_code}</td>
                     <td style={{ fontSize:12 }}>{tk.tenant_slug || '—'}</td>
                     <td>

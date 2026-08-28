@@ -1624,7 +1624,16 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
             {t('admin.uf_login_hint')}
           </div>
           <div className="form-row">
-            <div className="form-group"><label>{t('admin.uf_phone')} <span style={{color:'var(--danger)'}}>*</span></label><input className="form-control" type="tel" value={phone} onChange={e=>setPhone(e.target.value)} id="uf-phone" placeholder={t('admin.uf_phone_ph')} required /></div>
+            <div className="form-group">
+              <label>{t('admin.uf_phone')} <span style={{ color:'var(--danger)' }}>*</span></label>
+              <input className="form-control" type="tel" value={phone} id="uf-phone" required
+                onChange={e => setPhone(e.target.value)} placeholder={t('admin.uf_phone_ph')} />
+              {/* The placeholder read "Optional" under a field marked required.
+                  The server has refused a blank number since the temporary
+                  password started being built from it, so the form was
+                  contradicting both the asterisk beside it and the rule. */}
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_phone_hint')}</div>
+            </div>
             <div className="form-group" />
           </div>
           {/*

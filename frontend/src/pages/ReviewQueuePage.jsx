@@ -103,14 +103,28 @@ export default function ReviewQueuePage() {
 
   // Org admins may not act on ideas, so they get no selection column at all -
   // and the column count has to follow it, or every empty-state row runs short.
-  const canSelect = user?.role !== 'admin';
+  /*
+   * Administrators may READ this queue and may not act on it.
+   *
+   * The banner said so and the buttons were rendered anyway — Route to
+   * Committee, Review, and the bulk bar — so the only thing standing between an
+   * org admin and an approval was the server refusing the request they had just
+   * been invited to make. Offering a control that is guaranteed to fail is
+   * worse than not offering it: it reads as a bug rather than as a rule.
+   *
+   * super_admin is included because that account can promote people to admin;
+   * if it could also approve, the separation between administering the chain
+   * and answering to it would not exist.
+   */
+  const canDecide = user?.role !== 'admin' && user?.role !== 'super_admin';
+  const canSelect = canDecide;
   const colCount  = canSelect ? 12 : 11;   // +1 for the Stage column
 
   return (
     <ScreenGuard>
-      {user?.role === 'admin' && (
-        <div className="alert alert-warning" style={{ marginBottom: 16 }}>
-          Org Admins are strictly prohibited from approving, rejecting, or acting on submitted ideas.
+      {!canDecide && (
+        <div className="alert alert-info" style={{ marginBottom: 16 }}>
+          {t('review.admin_readonly')}
         </div>
       )}
       {/* Bulk action bar */}
@@ -271,13 +285,20 @@ export default function ReviewQueuePage() {
                       {!isSelf && isMultiRv && isMyPending && (
                         <>
                           <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
-                          <button className="btn btn-primary btn-sm" onClick={() => { setOpenRvDecId(i.id); setOpenRvDecCode(i.idea_code); }}>{t('review.my_review')}</button>
+                          {canDecide && (
+                            <button className="btn btn-primary btn-sm" onClick={() => { setOpenRvDecId(i.id); setOpenRvDecCode(i.idea_code); }}>{t('review.my_review')}</button>
+                          )}
                         </>
                       )}
                       {!isSelf && isMultiRv && !isMyPending && (
                         <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
                       )}
-                      {!isSelf && !isMultiRv && (
+                      {!isSelf && !isMultiRv && !canDecide && (
+                        <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>
+                          {t('btn.view')}
+                        </button>
+                      )}
+                      {!isSelf && !isMultiRv && canDecide && (
                         <>
                           <button className="btn btn-outline btn-sm" onClick={() => { setOpenAssignId(i.id); setOpenAssignCode(i.idea_code); }}>
                             {t('review.route_committee')}

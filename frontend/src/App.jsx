@@ -61,8 +61,23 @@ function PrivateRoute({ children }) {
     return <ForcePasswordChangePage />;
   }
 
+  /*
+   * Screens that document the software rather than anybody's data.
+   *
+   * The user guide is the same for every role in the sense that matters here:
+   * it opens no tenant database and reads nobody's ideas. It was caught by the
+   * platform-admin redirect below and bounced straight back to /platform, so
+   * the item sat in the sidebar and did nothing when clicked — which is what
+   * "the user guide is not opening" was.
+   *
+   * The server already treats it this way: /api/export/user-guide is on the
+   * short list of routes that require authentication but no tenant.
+   */
+  const ROLE_NEUTRAL = ['/user-guide'];
+  const roleNeutral = ROLE_NEUTRAL.some((p) => location.pathname.startsWith(p));
+
   // Platform admin can only access /platform routes
-  if (user.role === 'platform_admin' && !location.pathname.startsWith('/platform')) {
+  if (user.role === 'platform_admin' && !roleNeutral && !location.pathname.startsWith('/platform')) {
     return <Navigate to="/platform" replace />;
   }
   // Super admin home is /super-admin, not /dashboard

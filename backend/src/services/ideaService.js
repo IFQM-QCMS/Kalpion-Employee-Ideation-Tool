@@ -1208,7 +1208,9 @@ async function notifySubmitterProgress(db, idea, fromLabel, toLabel, position, t
 }
 
 async function reviewActionLocked(db, user, ideaId, decision, comment) {
-  if (user.role === 'admin') {
+  // Both administrator roles. super_admin was not named here, so the one
+  // account that can promote people to admin could also approve ideas.
+  if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from approving or acting on submitted ideas.');
   }
   const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
@@ -1539,7 +1541,9 @@ export async function dashboard(db, user) {
 
 // ── ASSIGN REVIEWERS (→ multi_reviewer workflow) ────────────────────
 export async function assignReviewers(db, user, b) {
-  if (user.role === 'admin') {
+  // Both administrator roles. super_admin was not named here, so the one
+  // account that can promote people to admin could also approve ideas.
+  if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from routing ideas.');
   }
   const ideaId = Number(b.idea_id) || 0;
@@ -1662,7 +1666,9 @@ export async function checkDuplicate(db, title) {
 
 // ── BULK REVIEW ─────────────────────────────────────────────────────
 export async function bulkReview(db, user, b) {
-  if (user.role === 'admin') {
+  // Both administrator roles. super_admin was not named here, so the one
+  // account that can promote people to admin could also approve ideas.
+  if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from approving or reviewing ideas.');
   }
   const ideaIds = (b.idea_ids ?? []).map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x));

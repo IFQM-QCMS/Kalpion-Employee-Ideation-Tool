@@ -141,6 +141,13 @@ export function decoratePlan(row) {
     // Shown next to the field so an operator can see whether the stored number
     // is sane rather than having to work it out.
     suggested_quota: suggestQuota(row.max_users),
+    /*
+     * Whether this plan may be deleted. Sent so the console can leave the
+     * Delete button out rather than showing one that always fails — an
+     * operator who is told "no" only after clicking reads it as a bug.
+     */
+    is_permanent: !!permanentReason(row),
+    permanent_reason: permanentReason(row),
   };
 }
 
@@ -276,6 +283,34 @@ export async function updatePlan(id, body) {
   if (!existing) throw notFound('Plan not found.');
 
   const data = validate(body, { partial: true });
+
+  /*
+   * A permanent plan keeps its code and, for LIFETIME, its billing cycle.
+   *
+   * Editing is otherwise free — but renaming the code is the same as deleting
+   * the plan as far as every lookup here is concerned, and moving LIFETIME onto
+   * a cycle with a length would give the organisations held on it an expiry
+   * date. Both are the deletion this guard exists to prevent, arrived at
+   * through the edit form instead.
+   */
+  const permanent = permanentReason(existing);
+  if (permanent) {
+    if (data.code && data.code !== existing.code) {
+      throw badRequest(`The ${existing.code} plan's code cannot be changed. ${permanent}`);
+    }
+    if (data.billing_cycle && data.billing_cycle !== existing.billing_cycle
+        && isLifetime(existing.billing_cycle)) {
+      throw badRequest(
+        'The Lifetime plan must stay on the lifetime billing cycle - any other cycle gives '
+        + 'the organisations on it an expiry date. Create a separate plan instead.'
+      );
+    }
+    // Retiring through the edit form is the same act as the Delete button.
+    if (data.status === 'inactive' && existing.status === 'active') {
+      throw badRequest(permanent);
+    }
+  }
+
   if (data.code && data.code !== existing.code) {
     const [[clash]] = await masterDb().execute(
       'SELECT id FROM plans WHERE code = ? AND id <> ? LIMIT 1', [data.code, planId]
@@ -322,29 +357,45 @@ export async function defaultTrialPlan() {
   return byTier || null;
 }
 
-/** Is this the plan every new organisation depends on? */
-const isDefaultTrial = (plan) => String(plan?.code || '').toUpperCase() === 'TRIAL';
+/*
+ * Plans that may be edited but never removed.
+ *
+ * TRIAL is a dependency: every approved organisation is put on it, so deleting
+ * it breaks approval itself — later, quietly, for whoever next approves an
+ * application rather than for whoever deleted the plan.
+ *
+ * LIFETIME is a promise. IFQM's founding members were given permanent free
+ * access to the platform, and that commitment outlives whoever is sitting in
+ * the console today. Retiring the plan does not cut those organisations off on
+ * the day it happens — they keep their `billing_status = 'exempt'` row and the
+ * nightly sweep still skips them — which is exactly the danger: the plan would
+ * vanish from the list an approver picks from, and the next founding member to
+ * be onboarded would silently be put on something that expires. The failure
+ * would surface months later as a renewal notice sent to L&T.
+ *
+ * The value is the sentence shown when somebody tries. Editing is untouched in
+ * both cases: price, name, limits and description are all still theirs.
+ */
+const PERMANENT_PLANS = {
+  TRIAL:
+    'The Trial plan cannot be deleted - every newly approved organisation starts on it. '
+    + 'You can edit its price, limits and description.',
+  LIFETIME:
+    'The Lifetime plan cannot be deleted - it is what IFQM founding members are held on, '
+    + 'and it has to stay available for the next one. You can edit its name, limits and description.',
+};
+
+/** Is this a plan the platform depends on continuing to exist? */
+const permanentReason = (plan) => PERMANENT_PLANS[String(plan?.code || '').toUpperCase()] || null;
 
 export async function retirePlan(id) {
   const planId = Number(id) || 0;
   const [[plan]] = await masterDb().execute('SELECT * FROM plans WHERE id = ? LIMIT 1', [planId]);
   if (!plan) throw notFound('Plan not found.');
 
-  /*
-   * The trial plan cannot be deleted, only edited.
-   *
-   * Every newly approved organisation is put on it, so removing it would break
-   * approval itself - and it would break it later, quietly, for whoever next
-   * approves an application rather than for the person who deleted the plan.
-   * Its price, limits and trial length are all editable; only its existence is
-   * fixed.
-   */
-  if (isDefaultTrial(plan)) {
-    throw badRequest(
-      'The Trial plan cannot be deleted - every newly approved organisation starts on it. '
-      + 'You can edit its price, limits and description.'
-    );
-  }
+  // Some plans are editable but permanent; see PERMANENT_PLANS for which, and why.
+  const permanent = permanentReason(plan);
+  if (permanent) throw badRequest(permanent);
 
   const [[used]] = await masterDb().execute(
     'SELECT COUNT(*) AS n FROM tenants WHERE plan_id = ?', [planId]

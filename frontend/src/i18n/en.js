@@ -1114,7 +1114,7 @@ export default {
   'login.identifier_ph':'yashas123, you@company.com or 98765 43210',
 
   'admin.uf_phone':'Phone',
-  'admin.uf_phone_ph':'Optional',
+  'admin.uf_phone_ph':'10-digit mobile number',
   'admin.uf_temp_pw':'Temp password',
 
   'form.co_suggesters':'Co-suggesters',
@@ -1218,6 +1218,13 @@ export default {
   'pa.kpi_inactive':'Gone quiet',
   'pa.kpi_never_login':'Never signed in',
   'pt.show_archived':'Show archived tickets',
+  'pt.sweep_title':'Archive by status',
+  'pt.sweep_run':'Archive these statuses',
+  'pt.sweep_confirm':'Archive every ticket with status: {statuses}? This covers all matching tickets, not only the ones on this page.',
+  'pt.n_selected':'{n} ticket(s) selected',
+  'pt.archive_selected':'Archive selected',
+  'pt.restore_selected':'Restore selected',
+  'pt.archive_open_confirm':'{n} of the selected ticket(s) have not been resolved yet. Archive them anyway?',
 
   // ── Admin: per-organisation limits ───────────────────────────────────
   'admin.max_file_mb':'Largest attachment (MB)',
@@ -1660,4 +1667,6 @@ export default {
   'hier.stage_nobody':'Nobody holds {role} — ideas will step over this stage',
   'hier.stage_holders':'{n} person(s) can act here',
   'hier.gap_warning':'Nobody in this organisation holds: {stages}. Ideas reaching those stages are stepped over — recorded on the idea, but not the approval you configured. Give somebody those roles, or remove the stages.',
+  'admin.uf_phone_hint':'Required. Sign-in codes and password resets are sent here.',
+  'review.admin_readonly':'You can see everything here, but administrators do not approve or reject ideas — that is kept independent of administration. Use View to read an idea.',
 };

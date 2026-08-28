@@ -450,11 +450,14 @@ VALUES
    'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 1500000,  'standard', 'active'),
   ('PRO',     'Professional', 'For multi-plant MSMEs running ideation across departments.',
    'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 22500000, 'priority', 'active'),
-  -- Permanent and free: a pilot site, a partner, or an internal organisation.
+  -- Permanent and free. This is what IFQM's founding members are held on --
+  -- the companies that backed the platform before it had customers were
+  -- promised lifetime access, and this row is the only place that promise is
+  -- recorded. planService refuses to retire it for that reason (PERMANENT_PLANS).
   -- Assigning it marks the tenant exempt with no period end, so the nightly
   -- lapse sweep never examines it.
-  ('LIFETIME','Lifetime (Free)','Permanent access at no charge. Never expires and is never billed.',
-   'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active'),
+  ('LIFETIME','Lifetime (Founding Member)','Permanent free access for IFQM founding members. Never expires and is never billed.',
+   'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'priority', 'active'),
   -- Pay as you go (migration 030). amount_paise here is the price of ONE active
   -- user for ONE month, not the price of the plan — usageBillingService
   -- multiplies it by however many people actually signed in.

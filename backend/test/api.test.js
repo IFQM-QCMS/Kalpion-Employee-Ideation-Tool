@@ -3850,3 +3850,234 @@ test('a reviewer cannot be the approver of their own idea, even alone in the rol
     body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
   });
 });
+
+/*
+ * Archiving a whole status at once, and archiving hand-picked tickets.
+ *
+ * The two existing ways to choose tickets — an explicit list, or everything
+ * before a date — cannot express the thing actually asked for at the end of a
+ * quarter: clear out everything resolved. Answering that with the date filter
+ * means picking a date that happens to separate them, which is a guess that is
+ * silently wrong when one old ticket was reopened last week.
+ *
+ * The risk being tested for is over-reach. A status filter is a sentence that
+ * matches rows nobody has looked at, so what matters is that it matches exactly
+ * the named statuses and nothing adjacent to them.
+ */
+test('tickets can be archived by status, and only the named statuses move', async () => {
+  const raise = async (subject) => {
+    const res = await api('POST', '/api/support/tickets', {
+      token: AADMIN,
+      body: { subject, category: 'question', priority: 'normal',
+        body: 'Raised by the suite to exercise archiving by status.' },
+    });
+    assert.equal(res.data.success, true,
+      `a ticket must be raisable — server said: ${JSON.stringify(res.data)}`);
+    return res.data.ticket_id ?? res.data.id;
+  };
+  const setStatus = (id, status) =>
+    api('PATCH', `/api/platform/tickets/${id}`, { token: PA, body: { status } });
+
+  const resolved = await raise('Status sweep — resolved');
+  const closed   = await raise('Status sweep — closed');
+  const waiting  = await raise('Status sweep — waiting');
+  const open     = await raise('Status sweep — still open');
+  await setStatus(resolved, 'resolved');
+  await setStatus(closed, 'closed');
+  await setStatus(waiting, 'waiting');
+
+  const archivedAt = async () => {
+    const rows = await sql('ifqm_test_master',
+      'SELECT id, archived_at FROM ifqm_test_master.support_tickets '
+      + `WHERE id IN (${resolved}, ${closed}, ${waiting}, ${open})`);
+    return Object.fromEntries(rows.map((r) => [r.id, r.archived_at]));
+  };
+
+  // ── Naming one status takes that status and leaves its neighbours ─────────
+  let res = await api('POST', '/api/platform/tickets/bulk-archive', {
+    token: PA, body: { statuses: ['resolved'] },
+  });
+  assert.equal(res.data.success, true,
+    `archiving by status must be accepted — server said: ${JSON.stringify(res.data)}`);
+
+  let state = await archivedAt();
+  assert.ok(state[resolved], 'the resolved ticket is archived');
+  assert.ok(!state[closed],  'a closed ticket is NOT swept up by asking for resolved');
+  assert.ok(!state[waiting], 'a waiting ticket is left alone');
+  assert.ok(!state[open],    'an open ticket is left alone');
+
+  /*
+   * Naming an unanswered status archives it.
+   *
+   * Everywhere else the server refuses to archive an open ticket, because
+   * filing away something nobody has answered is how a customer is forgotten.
+   * Spelling the status out is the one place that is an explicit instruction
+   * rather than an accident, so it is honoured — and the count reported has to
+   * match, since "3 archived" when one was quietly dropped is worse than the
+   * refusal it replaced.
+   */
+  // Counted first, because the sweep is deliberately global: it acts on every
+  // matching ticket in the registry, not only on the ones this test raised.
+  const [{ n: pending }] = await sql('ifqm_test_master',
+    "SELECT COUNT(*) AS n FROM ifqm_test_master.support_tickets "
+    + "WHERE status IN ('waiting','open') AND archived_at IS NULL");
+  res = await api('POST', '/api/platform/tickets/bulk-archive', {
+    token: PA, body: { statuses: ['waiting', 'open'] },
+  });
+  assert.equal(res.data.affected, Number(pending),
+    'every named ticket moves, and the number reported says so — a count that '
+    + 'quietly excludes the rows the caller asked for is worse than a refusal');
+  state = await archivedAt();
+  assert.ok(state[waiting] && state[open], 'a named status is archived even when unanswered');
+
+  // ── An unknown status matches nothing; it never widens the net ────────────
+  res = await api('POST', '/api/platform/tickets/bulk-archive', {
+    token: PA, body: { statuses: ['not_a_status'] },
+  });
+  assert.notEqual(res.status, 200,
+    'a status list that survives filtering as empty is the same as naming nothing, '
+    + 'and naming nothing must be refused rather than treated as "everything"');
+  state = await archivedAt();
+  assert.ok(!state[closed], 'and nothing was archived on the way to that refusal');
+
+  // ── Restoring works the same way round ───────────────────────────────────
+  // By id rather than by status, so this test leaves the registry as it found
+  // it: a status sweep here would also un-archive whatever earlier tests filed.
+  res = await api('POST', '/api/platform/tickets/bulk-archive', {
+    token: PA, body: { ids: [resolved, closed, waiting, open], archived: false },
+  });
+  assert.equal(res.data.success, true);
+  state = await archivedAt();
+  assert.ok(!state[resolved], 'restoring puts an archived ticket back');
+  assert.ok(!state[open],
+    'including an OPEN one — the guard that keeps unanswered tickets out of the '
+    + 'archive applied to restoring too, which left a ticket that had been swept '
+    + 'in with no way out of it short of resolving it first');
+});
+
+/*
+ * The Lifetime plan cannot be removed, and cannot be edited into something
+ * that expires.
+ *
+ * IFQM's founding members were promised permanent free access, and the plan is
+ * the only place that promise is recorded. Retiring it would not cut anybody
+ * off on the day — those organisations are billing_status = 'exempt' with no
+ * period_end, and the nightly sweep never looks at them — which is precisely
+ * what makes it dangerous: the plan would vanish from the list an approver
+ * picks from, and the next founding member onboarded would quietly be put on
+ * something that expires. Nobody would find out until a renewal notice went to
+ * a company that was told it would never get one.
+ *
+ * Deleting is the obvious route and the edit form is the one that gets missed,
+ * so both are checked here.
+ */
+test('the Lifetime plan is permanent, and stays a lifetime plan', async () => {
+  const plans = (await api('GET', '/api/platform/plans', { token: PA })).data.plans;
+  const lifetime = plans.find((p) => String(p.code).toUpperCase() === 'LIFETIME');
+  assert.ok(lifetime, 'the Lifetime plan must exist — founding members are held on it');
+  assert.equal(lifetime.is_lifetime, true, 'and must be on the lifetime cycle');
+  assert.equal(lifetime.is_permanent, true,
+    'the console reads this to leave the Delete button out; a button that always '
+    + 'fails reads as a bug rather than as a rule');
+
+  // Deleting: refused.
+  let res = await api('DELETE', `/api/platform/plans/${lifetime.id}`, { token: PA });
+  assert.equal(res.status, 400);
+  assert.match(res.data.error, /cannot be deleted/i);
+
+  // Retiring through the edit form: the same act, refused the same way.
+  res = await api('PATCH', `/api/platform/plans/${lifetime.id}`, {
+    token: PA, body: { status: 'inactive' },
+  });
+  assert.notEqual(res.status, 200, 'status = inactive is deletion by another name');
+
+  // Moving it onto a cycle with a length: refused, because that would hand
+  // every organisation on it an expiry date.
+  res = await api('PATCH', `/api/platform/plans/${lifetime.id}`, {
+    token: PA, body: { billing_cycle: 'yearly' },
+  });
+  assert.notEqual(res.status, 200, 'a lifetime plan that expires is not a lifetime plan');
+  assert.match(res.data.error, /lifetime billing cycle/i);
+
+  // Everything else about it is still the operator's to change.
+  res = await api('PATCH', `/api/platform/plans/${lifetime.id}`, {
+    token: PA, body: { description: 'Permanent free access for IFQM founding members.' },
+  });
+  assert.equal(res.status, 200, 'editing a permanent plan must still be allowed');
+
+  const after = (await api('GET', '/api/platform/plans', { token: PA })).data.plans
+    .find((p) => p.id === lifetime.id);
+  assert.equal(after.status, 'active', 'and it survives all of that, still active');
+  assert.equal(after.billing_cycle, 'lifetime');
+});
+
+/*
+ * An organisation admin may read the review queue and may never decide on it.
+ *
+ * The rule existed as a thrown error deep in ideaService, and everything in
+ * front of it disagreed: the route list accepted `admin` on every decision
+ * endpoint, and the screen drew Approve, Reject, Route to Committee and the
+ * bulk bar. So the only thing between an org admin and an approval was one
+ * check at the bottom of a request that three layers had already waved
+ * through — and a prohibition that survives on a single `if` is one refactor
+ * away from not existing.
+ *
+ * It matters because the admin is the person who CONFIGURES the chain. An
+ * admin who can also approve is both the author of the approval path and a
+ * party to it, which is the separation the sequential chain was built for.
+ * super_admin is included for the same reason, one step up: that account
+ * promotes people to admin.
+ *
+ * Reading stays allowed. Oversight of what is pending across the organisation
+ * is the admin's job; acting on it is not.
+ */
+test('an org admin can see the review queue and cannot act on it', async () => {
+  await api('POST', '/api/settings', {
+    token: AADMIN,
+    body: { approval_stages: 'originator,team_lead,plant_head' },
+  });
+  // Needed so the team_lead stage has a holder: an empty stage is stepped over,
+  // and the idea would then be waiting somewhere other than where this test says.
+  await makeReviewer('ro.tl@orga.test', 'team_lead', '+919812345921', 'ROTL');
+  const [tl] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.users WHERE email = 'ro.tl@orga.test'");
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Label the coolant lines by colour',
+      present_situation: 'The lines are identical, so the wrong one gets drained during a changeover.',
+      proposed_solution: 'Colour-band each line at both ends and put a key on the wall.',
+      impact_level: 'Medium', impact_areas: 'Quality', action: 'submit',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  // Reading: allowed, and the idea really is in there — otherwise "cannot act"
+  // would be trivially true because there was nothing to act on.
+  const queue = await api('GET', '/api/ideas/review', { token: AADMIN });
+  assert.equal(queue.status, 200, 'an admin must still be able to read the queue');
+  assert.ok((queue.data.ideas || []).some((i) => i.id === ideaId),
+    'and the pending idea must be visible in it');
+
+  // Deciding: refused at the route, before the service is ever reached.
+  const refusals = [
+    ['/api/ideas/review-action', { idea_id: ideaId, decision: 'Approved' }],
+    ['/api/ideas/review-action', { idea_id: ideaId, decision: 'Rejected', comment: 'No.' }],
+    ['/api/ideas/bulk-review',   { idea_ids: [ideaId], decision: 'Approved' }],
+    ['/api/ideas/assign-reviewers', { idea_id: ideaId, reviewer_ids: [tl.id] }],
+    ['/api/ideas/reviewer-decision', { idea_id: ideaId, decision: 'Approved' }],
+  ];
+  for (const [path, body] of refusals) {
+    const res = await api('POST', path, { token: AADMIN, body });
+    assert.equal(res.status, 403,
+      `${path} must refuse an org admin outright — got ${res.status} `
+      + `${JSON.stringify(res.data)}`);
+  }
+
+  // And nothing moved on the way through any of that.
+  const st = await stageOf(ideaId);
+  assert.equal(st.current_stage, 'team_lead', 'the idea is still waiting on its first stage');
+  assert.equal(st.status, 'Submitted', 'and is still merely submitted');
+});

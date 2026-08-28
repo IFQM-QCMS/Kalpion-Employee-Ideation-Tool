@@ -587,6 +587,11 @@ export default function PlatformPlansPage() {
                   <div style={{ fontWeight: 700, color: 'var(--heading)' }}>{p.name}</div>
                   <div className="cell-clamp" style={{ maxWidth: 240, fontSize: 11.5, color: 'var(--subtle)' }}
                     title={p.description || ''}>{p.description || '—'}</div>
+                  {p.is_lifetime && (
+                    <span className="chip chip-success" style={{ fontSize: 10, marginTop: 4 }}>
+                      Never expires
+                    </span>
+                  )}
                 </td>
                 <td><code style={{ fontSize: 12 }}>{p.code}</code></td>
                 <td style={{ whiteSpace: 'nowrap' }}>
@@ -619,9 +624,17 @@ export default function PlatformPlansPage() {
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button className="btn btn-outline btn-sm" onClick={() => setEditing(p)}>Edit</button>
-                  {p.status === 'active' && (
+                  {/* Trial and Lifetime are permanent: the platform depends on
+                      one existing and IFQM's founding members depend on the
+                      other. The server refuses either way; not drawing the
+                      button is the difference between a rule and a bug. */}
+                  {p.status === 'active' && !p.is_permanent && (
                     <button className="btn btn-outline btn-sm" style={{ marginLeft: 6 }}
                       onClick={() => retire(p)}>Delete</button>
+                  )}
+                  {p.is_permanent && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--subtle)' }}
+                      title={p.permanent_reason || ''}>Permanent</span>
                   )}
                 </td>
               </tr>

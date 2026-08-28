@@ -33,6 +33,14 @@ const STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
  */
 const ARCHIVABLE_STATUSES = ['resolved', 'closed'];
 
+/*
+ * Every status a ticket can hold. ARCHIVABLE_STATUSES above is the subset that
+ * may be archived without saying so explicitly; this is the vocabulary the
+ * status filter is checked against, so an unrecognised value narrows the match
+ * to nothing rather than widening it to everything.
+ */
+const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
+
 // Statuses a tenant may set themselves. They can withdraw a request or confirm
 // it is done; triage (in_progress/waiting/resolved) belongs to IFQM.
 const TENANT_SETTABLE = ['closed'];
@@ -410,10 +418,13 @@ export async function updatePlatformTicket(id, body) {
  * looking at - the tickets stay in the queue for everybody else. Clearing out
  * last year's closed tickets one at a time was the actual complaint.
  *
- * Choose them either by an explicit list of ids, or by everything last touched
- * before a date. Open tickets are left alone unless `include_open` is set,
- * because archiving something nobody has answered yet is how a customer gets
- * forgotten.
+ * Choose them three ways, combined with AND if more than one is given: an
+ * explicit list of ids, everything last touched before a date, or everything in
+ * a named set of statuses.
+ *
+ * Open tickets are left alone unless `include_open` is set or the caller named
+ * the statuses outright, because archiving something nobody has answered yet is
+ * how a customer gets forgotten.
  */
 export async function bulkArchiveTickets(body = {}) {
   const archive = !(body.archived === false || body.archived === 0 || body.archived === '0');
@@ -423,8 +434,23 @@ export async function bulkArchiveTickets(body = {}) {
   const beforeDate = String(body.before_date ?? '').trim();
   const includeOpen = body.include_open === true || body.include_open === '1';
 
-  if (!ids.length && !beforeDate) {
-    throw badRequest('Choose the tickets to archive, or a date to archive before.');
+  /*
+   * Archive by status.
+   *
+   * The date and the explicit list both answer "which tickets", and neither
+   * answers the question actually asked at the end of a quarter: clear out
+   * everything that is resolved. Doing that through the date option means
+   * picking a date that happens to separate them, which is a guess.
+   *
+   * Whitelisted rather than passed through, because this string reaches a WHERE
+   * clause; an unknown status is dropped rather than widening the match.
+   */
+  const statuses = (Array.isArray(body.statuses) ? body.statuses : [])
+    .map((v) => String(v).trim().toLowerCase())
+    .filter((v) => TICKET_STATUSES.includes(v));
+
+  if (!ids.length && !beforeDate && !statuses.length) {
+    throw badRequest('Choose the tickets to archive, a status, or a date to archive before.');
   }
   if (beforeDate && !/^\d{4}-\d{2}-\d{2}$/.test(beforeDate)) {
     throw badRequest('before_date must be in YYYY-MM-DD form.');
@@ -440,7 +466,26 @@ export async function bulkArchiveTickets(body = {}) {
     where.push('updated_at < ?');
     params.push(`${beforeDate} 00:00:00`);
   }
-  if (!includeOpen) {
+  if (statuses.length) {
+    where.push(`status IN (${statuses.map(() => '?').join(',')})`);
+    params.push(...statuses);
+  }
+  /*
+   * The open-ticket guard, and the two cases it does not apply to.
+   *
+   * It exists because archiving something nobody has answered is how a customer
+   * gets forgotten. That reasoning is entirely about archiving:
+   *
+   *  - `archive === false` is RESTORING, and restoring must never be harder
+   *    than losing something. Left in, this clause silently refused to bring
+   *    back an open ticket that had been archived — the ticket would sit in the
+   *    archive with no way out of it short of resolving it first, which is
+   *    precisely backwards.
+   *  - Naming the statuses outright is an explicit instruction. Dropping those
+   *    rows anyway would report a number that does not match what was asked
+   *    for, which is worse than refusing.
+   */
+  if (archive && !includeOpen && !statuses.length) {
     where.push(`status IN (${ARCHIVABLE_STATUSES.map(() => '?').join(',')})`);
     params.push(...ARCHIVABLE_STATUSES);
   }
