@@ -3709,3 +3709,144 @@ test('removing a stage an idea is sitting at does not skip the rest of the chain
   assert.equal(isFinalStage(chain, 'immediate_manager'), false,
     'and removing a stage must not make it final');
 });
+
+test('a stage nobody holds is skipped, recorded, and does not hide the idea', async () => {
+  /*
+   * What went wrong in production.
+   *
+   * Making the chain strictly sequential and strictly role-gated meant an idea
+   * waited at a stage until somebody holding that role approved it. Real
+   * organisations name stages they have not filled: six ideas sat at
+   * `immediate_manager` in a tenant with no manager, invisible to every queue
+   * in the product, and five of six tenants had nobody in ANY approval role.
+   *
+   * A stage with nobody in it is not a pending approval, it is an approval that
+   * cannot happen. It is skipped, and the skip is written on the idea so the
+   * trail shows which step was passed and why.
+   */
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+
+  /*
+   * senior_manager is chosen because nothing earlier in this suite creates one
+   * — asserted below rather than assumed, since a test whose premise quietly
+   * stops holding passes for the wrong reason.
+   */
+  const [held] = await sql('ifqm_test_a',
+    "SELECT COUNT(*) n FROM ifqm_test_a.users WHERE role='senior_manager' AND status='active'");
+  assert.equal(Number(held.n), 0, 'this test needs senior_manager to be unheld');
+
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,senior_manager,plant_head' },
+  });
+  const ph = await makeReviewer('gap.ph@orga.test', 'plant_head', '+919812346001', 'GAPPH');
+
+  const r = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Second bin for swarf at the lathe',
+      present_situation: 'Swarf is mixed with general waste and the skip is charged as contaminated.',
+      proposed_solution: 'Put a dedicated swarf bin at each lathe and sell it as clean scrap.',
+      impact_level: 'Medium', impact_areas: 'Cost', action: 'submit',
+    },
+  });
+  assert.equal(r.data.success, true, JSON.stringify(r.data));
+  const ideaId = r.data.idea_id;
+
+  const [row] = await sql('ifqm_test_a',
+    `SELECT current_stage, status FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.equal(row.current_stage, 'plant_head',
+    'the idea must land on the first stage that has somebody in it');
+  assert.notEqual(row.status, 'Approved', 'skipping stages must never approve the idea');
+
+  // The skip is on the record, not only in a log.
+  const wf = await api('GET', `/api/ideas/${ideaId}`, { token: aTok });
+  const trail = JSON.stringify(wf.data.idea?.workflow || wf.data.workflow || []);
+  assert.match(trail, /Skipped/i, 'the audit trail must show which stages were passed over');
+
+  // And the person who CAN act sees it.
+  const queue = await api('GET', '/api/ideas/review', { token: ph });
+  assert.ok((queue.data.ideas || []).some((i) => Number(i.id) === Number(ideaId)),
+    'the idea must appear in the queue of the role that can act on it');
+});
+
+test('an idea whose whole chain is empty waits — it is never auto-approved', async () => {
+  /*
+   * The other end of the same problem. If NOBODY can act at any stage, the
+   * honest outcome is that the idea waits and the administrators are told.
+   * Approving it because there was no one to ask would be recording consent
+   * that nobody gave.
+   */
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,senior_manager,executive' },
+  });
+
+  const [before] = await sql('ifqm_test_a',
+    "SELECT COUNT(*) n FROM ifqm_test_a.users WHERE role IN ('senior_manager','executive') AND status='active'");
+  assert.equal(Number(before.n), 0, 'this test needs those roles to be unheld');
+
+  const r = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Shadow board for the fitting bench',
+      present_situation: 'Tools are not returned and each shift loses time hunting for them.',
+      proposed_solution: 'Mount a shadow board so a missing tool is obvious at a glance.',
+      impact_level: 'Low', impact_areas: 'Productivity', action: 'submit',
+    },
+  });
+  assert.equal(r.data.success, true, JSON.stringify(r.data));
+
+  const [row] = await sql('ifqm_test_a',
+    `SELECT status, current_stage FROM ifqm_test_a.ideas WHERE id = ${r.data.idea_id}`);
+  assert.equal(row.status, 'Submitted', 'it waits');
+  assert.notEqual(row.status, 'Approved', 'and is certainly not approved');
+
+  // Administrators are told, since only they can mend the configuration.
+  const [notes] = await sql('ifqm_test_a',
+    `SELECT COUNT(*) n FROM ifqm_test_a.notifications
+      WHERE title LIKE '%Approval path%' AND created_at > NOW() - INTERVAL 2 MINUTE`);
+  assert.ok(Number(notes.n) > 0, 'the administrators must be told the path has no one in it');
+
+  // Put the chain back for anything that follows.
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+test('a reviewer cannot be the approver of their own idea, even alone in the role', async () => {
+  /*
+   * A team lead who submits an idea is not a team lead who can approve it, so
+   * a stage whose only holder is the author is as empty as one with nobody in
+   * it — and must be skipped rather than leaving the idea unactionable.
+   */
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,project_lead,plant_head' },
+  });
+
+  const pl = await makeReviewer('solo.pl@orga.test', 'project_lead', '+919812346011', 'SOLOPL');
+  await makeReviewer('solo.ph@orga.test', 'plant_head', '+919812346012', 'SOLOPH');
+
+  const r = await api('POST', '/api/ideas/submit', {
+    token: pl,
+    body: {
+      title: 'Colour-code the hydraulic lines',
+      present_situation: 'Every line is black and tracing a leak takes an hour.',
+      proposed_solution: 'Sleeve each circuit in its own colour and put a key on the machine.',
+      impact_level: 'Medium', impact_areas: 'Maintenance', action: 'submit',
+    },
+  });
+  assert.equal(r.data.success, true, JSON.stringify(r.data));
+
+  const [row] = await sql('ifqm_test_a',
+    `SELECT current_stage FROM ifqm_test_a.ideas WHERE id = ${r.data.idea_id}`);
+  assert.notEqual(row.current_stage, 'project_lead',
+    'the author cannot be the approver, so their own stage is skipped');
+  assert.equal(row.current_stage, 'plant_head');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});

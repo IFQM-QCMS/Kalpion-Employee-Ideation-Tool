@@ -39,6 +39,7 @@ import { masterDb } from '../database/master.js';
 import { getTenantPool } from '../database/tenant.js';
 import { processEmailQueue } from '../services/mailerService.js';
 import { pruneOtps } from '../services/otpService.js';
+import * as ideaService from '../services/ideaService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
 import { purgeExpiredLogs } from '../services/retentionService.js';
 
@@ -159,6 +160,36 @@ async function housekeeping() {
     }
   } catch (e) {
     logger.warn('scheduler: subscription sweep failed', e.message);
+  }
+
+  /*
+   * Ideas waiting on somebody who no longer exists.
+   *
+   * Submitting and approving both step over a stage nobody holds, but neither
+   * runs unless somebody acts — and an idea can become unactionable with no
+   * action at all: the last holder of its stage is deactivated, or an admin
+   * edits the chain, and the idea is then waiting for a person who is not
+   * there. Nobody can act on it, so nothing will ever come along to notice.
+   *
+   * Here rather than on a read, because a GET that quietly rewrites rows is a
+   * surprise; and hourly is soon enough for a condition measured in days.
+   */
+  try {
+    const [tenants] = await masterDb().query(
+      "SELECT id, slug, db_name FROM tenants WHERE status = 'active'");
+    for (const t of tenants) {
+      try {
+        const r = await ideaService.repairStrandedIdeas(getTenantPool(t));
+        if (r.moved || r.stranded) {
+          logger.info(`scheduler: ${t.slug} — ${r.moved} idea(s) re-routed, ${r.stranded} with nobody to act`);
+        }
+      } catch (e) {
+        // One customer's database must not stop the others being repaired.
+        logger.warn(`scheduler: approval repair failed for ${t.slug}`, e.message);
+      }
+    }
+  } catch (e) {
+    logger.warn('scheduler: could not list tenants for approval repair', e.message);
   }
 }
 

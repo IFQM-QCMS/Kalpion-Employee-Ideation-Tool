@@ -30,7 +30,15 @@ export default function ReviewQueuePage() {
   const [error,     setError]     = useState('');
   const [selected,  setSelected]  = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
-  const [openDetailId,   setOpenDetailId]   = useState(null);
+  /*
+   * The chain, as this organisation has it configured right now.
+   *
+   * Sent with the queue on every load rather than kept in the client, because
+   * an administrator can change the stages at any moment and a cached copy
+   * would label ideas with a journey the server is no longer taking.
+   */
+  const [chain, setChain] = useState(null);
+  const [openDetailId, setOpenDetailId] = useState(null);
   const [openReviewId,   setOpenReviewId]   = useState(null);
   const [openReviewCode, setOpenReviewCode] = useState('');
   const [openAssignId,   setOpenAssignId]   = useState(null);
@@ -45,7 +53,7 @@ export default function ReviewQueuePage() {
     setError('');
     try {
       const res = await ideasApi.reviewQueue();
-      if (res.data.success) { setIdeas(res.data.ideas || []); setSelected(new Set()); }
+      if (res.data.success) { setIdeas(res.data.ideas || []); setChain(res.data.chain || null); setSelected(new Set()); }
       else setError(res.data.error || t('msg.fail_queue'));
     } catch { setError(t('msg.fail_queue')); }
     setLoading(false);
@@ -96,7 +104,7 @@ export default function ReviewQueuePage() {
   // Org admins may not act on ideas, so they get no selection column at all -
   // and the column count has to follow it, or every empty-state row runs short.
   const canSelect = user?.role !== 'admin';
-  const colCount  = canSelect ? 11 : 10;
+  const colCount  = canSelect ? 12 : 11;   // +1 for the Stage column
 
   return (
     <ScreenGuard>
@@ -160,6 +168,7 @@ export default function ReviewQueuePage() {
               <th>{t('table.impact')}</th>
               <th>{t('table.score')}</th>
               <th>{t('table.status')}</th>
+              <th>{t('table.stage')}</th>
               <th>{t('review.due')}</th>
               <th>{t('audit.when')}</th>
               <th></th>
@@ -230,6 +239,22 @@ export default function ReviewQueuePage() {
                       </div>
                     )}
                   </td>
+                  {/* Which approval this idea is waiting for, and how far
+                      along it is. "Under Review" alone never said. */}
+                  <td style={{ whiteSpace:'nowrap' }}>
+                    {(() => {
+                      const step = chain?.steps?.find(x => x.stage === i.current_stage);
+                      if (!step) return <span style={{ color:'var(--subtle)' }}>—</span>;
+                      return (
+                        <span title={t('review.at_stage', { stage: step.label, n: step.position, total: chain.total })}>
+                          <span className="chip chip-primary">{step.label}</span>
+                          <span style={{ fontSize:11,color:'var(--subtle)',marginLeft:5 }}>
+                            {step.position}/{chain.total}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td style={{ whiteSpace:'nowrap' }}>
                     {dueDate
                       ? <span className={`chip ${isOverdue ? 'chip-danger' : ''}`}>
@@ -258,7 +283,15 @@ export default function ReviewQueuePage() {
                             {t('review.route_committee')}
                           </button>
                           <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
-                          <button className="btn btn-success btn-sm" onClick={() => { setOpenReviewId(i.id); setOpenReviewCode(i.idea_code); }}>{t('review.review_btn')}</button>
+                          {/* Named for the outcome, not for the screen it
+                              opens: at the last stage this approves the idea,
+                              everywhere else it passes it on. */}
+                          <button className="btn btn-success btn-sm"
+                            onClick={() => { setOpenReviewId(i.id); setOpenReviewCode(i.idea_code); }}>
+                            {chain?.steps?.find(x => x.stage === i.current_stage)?.is_final
+                              ? t('review.approve_final')
+                              : t('review.review_btn')}
+                          </button>
                         </>
                       )}
                     </div>
@@ -272,7 +305,15 @@ export default function ReviewQueuePage() {
       </div>
 
       {openDetailId && <IdeaDetailModal ideaId={openDetailId} onClose={() => { setOpenDetailId(null); load(); }} />}
-      {openReviewId && <ReviewActionModal ideaId={openReviewId} ideaCode={openReviewCode} onClose={() => { setOpenReviewId(null); load(); }} />}
+      {openReviewId && (
+        <ReviewActionModal
+          ideaId={openReviewId}
+          ideaCode={openReviewCode}
+          stage={ideas.find(i => i.id === openReviewId)?.current_stage}
+          chain={chain}
+          onClose={() => { setOpenReviewId(null); load(); }}
+        />
+      )}
       {openAssignId && <AssignReviewersModal ideaId={openAssignId} ideaCode={openAssignCode} onClose={() => { setOpenAssignId(null); load(); }} />}
       {openRvDecId  && <ReviewerDecisionModal ideaId={openRvDecId} ideaCode={openRvDecCode} onClose={() => { setOpenRvDecId(null); load(); }} />}
     </ScreenGuard>

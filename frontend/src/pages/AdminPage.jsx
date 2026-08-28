@@ -934,6 +934,26 @@ const STAGE_OPTIONS = [
 ];
 const DEFAULT_STAGES = ['originator','team_lead','immediate_manager','department_manager','plant_head'];
 
+/*
+ * Which users.role fills each stage. Mirrors STAGE_CATALOG in
+ * backend/src/services/approvalStages.js.
+ *
+ * `immediate_manager` is filled by plain `manager`: it is a level in the
+ * reporting tree rather than a job title of its own, and that mismatch between
+ * the stage name and the role name is exactly the kind of thing an admin
+ * cannot be expected to hold in their head — which is why the count below is
+ * shown rather than left to be discovered.
+ */
+const STAGE_ROLE = {
+  team_lead: 'team_lead',
+  immediate_manager: 'manager',
+  project_lead: 'project_lead',
+  department_manager: 'department_manager',
+  senior_manager: 'senior_manager',
+  plant_head: 'plant_head',
+  executive: 'executive',
+};
+
 /* Section headings inside the settings form: a rule and a weight change, so a
    heading is distinguishable from the field labels beneath it. */
 const SECTION_HEAD = {
@@ -1096,6 +1116,23 @@ function HierarchyTab({ t, showToast, currentUserId }) {
    * to branch three ways and two of those branches showed roles that were not
    * in force, which is how an admin could read a chain the engine never walked.
    */
+  /*
+   * How many active people hold each stage's role.
+   *
+   * A chain naming stages nobody occupies is the most consequential mistake
+   * that can be made on this screen and the least visible: ideas reaching an
+   * empty stage are stepped over, which is recorded but is not what the
+   * organisation asked for. Six ideas in one tenant sat at a stage with no
+   * holder before this was shown anywhere.
+   */
+  const holders = {};
+  for (const u of users) {
+    if (u.status === 'inactive') continue;
+    holders[u.role] = (holders[u.role] || 0) + 1;
+  }
+  const holdersFor = (stage) => holders[STAGE_ROLE[stage]] || 0;
+  const emptyStages = stages.filter(s => s !== 'originator' && holdersFor(s) === 0);
+
   const approverStages = stages.filter(s => s !== 'originator');
   // The Approval Path reads back what an idea will actually do, in this
   // organisation's own words — so a renamed stage must appear renamed here, or
@@ -1131,6 +1168,17 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         <div style={{ marginBottom:14 }}>
           <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}<InfoDot term="approval_stages" /></label>
           <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:10 }}>{t('hier.stages_hint')}</div>
+
+          {/* Shown before the list, because the fix is usually to change the
+              chain — and somebody who has scrolled past the warning to the
+              save button has already decided. */}
+          {emptyStages.length > 0 && (
+            <div className="alert alert-warning" style={{ fontSize:12,marginBottom:12 }}>
+              {t('hier.gap_warning', {
+                stages: emptyStages.map(k => labels[k]?.trim() || t(`stage.${k}`)).join(', '),
+              })}
+            </div>
+          )}
 
           <div style={{ display:'flex',flexDirection:'column',gap:6,marginBottom:12 }}>
             {stages.map((s, i) => {
@@ -1169,8 +1217,15 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                         </>
                       )}
                     </div>
-                    <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>
-                      {isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}
+                    <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2,display:'flex',gap:8,flexWrap:'wrap' }}>
+                      <span>{isOriginator ? t('hier.stage_locked') : isFinal ? t('hier.stage_final') : ''}</span>
+                      {!isOriginator && (
+                        holdersFor(s) === 0
+                          ? <span style={{ color:'var(--danger)',fontWeight:600 }}>
+                              {t('hier.stage_nobody', { role: formatRole(STAGE_ROLE[s], t) })}
+                            </span>
+                          : <span>{t('hier.stage_holders', { n: holdersFor(s) })}</span>
+                      )}
                     </div>
                   </div>
                   {!isOriginator && (
