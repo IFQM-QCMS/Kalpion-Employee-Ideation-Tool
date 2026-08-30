@@ -84,8 +84,18 @@ async function emailRequesterAboutReply(ticket, authorName, replyBody) {
     );
     if (!tenant) return;
 
+    /*
+     * Same rule as the queue drain, and for the same reason twice over.
+     *
+     * `email_enabled !== '1'` meant "off unless somebody opted in", and every
+     * tenant is seeded '0' — so a reply to a support ticket was never sent to
+     * anybody. Requiring a tenant `smtp_host` on top of that made it
+     * unreachable even for an organisation that HAD opted in, because almost
+     * none of them run their own mail server; the platform sender exists
+     * precisely to carry mail for the ones that do not.
+     */
     const settings = await getOrgSettings(getTenantPool(tenant));
-    if (settings.email_enabled !== '1' || !String(settings.smtp_host || '').trim()) return;
+    if (String(settings.email_enabled ?? '1') === '0') return;
 
     const html =
       '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +

@@ -20,6 +20,7 @@
 import config from '../config/index.js';
 import { computeAIScoreWithReason } from './aiService.js';
 import { getApprovalConfig, advanceStage, rolePlaysStages } from './settingsService.js';
+import { seniorityRanks, rankOf } from './approvalStages.js';
 import { getOrgSettings, queueEmail } from './mailerService.js';
 import { generateIdeaCode, addNotification, addWorkflow, addPoints } from './coreHelpers.js';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
@@ -1146,20 +1147,38 @@ export async function submitOrDraft(db, user, action, b) {
     try { await addWorkflow(db, ideaId, user.id, 'Submitted', submitNote, 'originator'); } catch {}
     try { await addPoints(db, user.id, POINTS.submit); } catch {}
 
-    if (user.manager_id) {
+    /*
+     * Tell the person the idea was actually ROUTED to.
+     *
+     * This used to notify `user.manager_id` — the submitter's line manager,
+     * whoever that is and whatever role they hold. That is not necessarily the
+     * person the chain put the idea with: the first stage might be Team Lead
+     * while the author's manager_id points at a department manager, or the
+     * author's own stage was skipped, or their manager holds no role in the
+     * chain at all. So the one person who could act on the idea got no mail,
+     * and somebody who could not act on it got one asking them to.
+     *
+     * currentReviewerId is what resolveActionableStage decided, so the notice
+     * and the queue always name the same person. Null means the stage is open
+     * to every holder of its role — nobody in particular to write to, and the
+     * idea is in all of their queues.
+     */
+    if (currentReviewerId) {
       try {
         await addNotification(
-          db, user.manager_id, 'New Idea Submitted',
+          db, currentReviewerId, 'New Idea Submitted',
           `${user.name} submitted a new idea. Please review it in your queue.`, ideaId
         );
       } catch {}
       try {
-        const [mrows] = await db.execute('SELECT email, name FROM users WHERE id=?', [user.manager_id]);
-        const mgr = mrows[0];
-        if (mgr && mgr.email) {
-          await queueEmail(db, mgr.email, mgr.name,
+        const [mrows] = await db.execute(
+          'SELECT email, name FROM users WHERE id=?', [currentReviewerId]);
+        const rv = mrows[0];
+        if (rv && rv.email) {
+          await queueEmail(db, rv.email, rv.name,
             'New Idea Requires Your Review',
-            `Dear ${mgr.name},\n\n${user.name} has submitted a new idea for your review.\n\nPlease log in to action it from your review queue.`);
+            `Dear ${rv.name},\n\n${user.name} has submitted a new idea for your review.\n\n`
+            + 'Please log in to action it from your review queue.');
         }
       } catch {}
     }
@@ -1996,6 +2015,58 @@ export async function assignReviewers(db, user, b) {
   // Submitter cannot be a reviewer; de-dupe
   reviewerIds = [...new Set(reviewerIds.filter((rid) => rid !== Number(idea.submitter_id)))];
   if (!reviewerIds.length) throw badRequest('No valid reviewers — submitter cannot review own idea.');
+
+  /*
+   * ── An idea may only be routed UPWARD ───────────────────────────────────
+   *
+   * This endpoint took any user id at all, and routing to a committee takes the
+   * idea OFF the sequential chain (workflow_type becomes multi_reviewer). So a
+   * department manager could hand an idea down to a team lead, the stages above
+   * the department manager were never visited, and the decision was made by
+   * people junior to the person who routed it. That is not a committee — it is
+   * a way round the chain, and it undoes the whole point of a sequence that
+   * ends at the plant head.
+   *
+   * Same level is allowed: a panel of fellow department managers is a real and
+   * reasonable thing. Below is not.
+   *
+   * Seniority comes from THIS organisation's configured chain first, so an
+   * organisation that has reordered its own hierarchy gets its own answer
+   * rather than a built-in opinion about job titles. See seniorityRanks.
+   */
+  const cfg = await getApprovalConfig(db);
+  const ranks = seniorityRanks(cfg.stages);
+  const myRank = rankOf(ranks, user.role);
+
+  const [candidates] = await db.query(
+    'SELECT id, name, role, status FROM users WHERE id IN (?)', [reviewerIds]);
+
+  const tooJunior = [];
+  const notApprovers = [];
+  for (const c of candidates) {
+    if (c.status !== 'active') {
+      throw badRequest(`${c.name} is not an active account and cannot be given a review.`);
+    }
+    const theirRank = rankOf(ranks, c.role);
+    // -1 is "holds no role in any approval path" — an employee, a trainee, or
+    // an administrator, who is barred from deciding anything anyway.
+    if (theirRank < 0) notApprovers.push(c.name);
+    else if (theirRank < myRank) tooJunior.push(c.name);
+  }
+
+  if (notApprovers.length) {
+    throw badRequest(
+      `${notApprovers.join(', ')} ${notApprovers.length > 1 ? 'hold' : 'holds'} no role in this `
+      + 'organisation\'s approval path, so the idea cannot be routed to them. '
+      + `The path is: ${cfg.approvers.map((a) => cfg.labels[a.stage] || a.stage).join(' → ')}.`);
+  }
+  if (tooJunior.length) {
+    throw forbidden(
+      `An idea can only be routed to people at or above your own level in the approval `
+      + `path, and ${tooJunior.join(', ')} ${tooJunior.length > 1 ? 'are' : 'is'} below you. `
+      + 'Routing downward would take the idea off the chain and let it be decided '
+      + 'without the stages above you ever seeing it.');
+  }
 
   await db.execute('DELETE FROM idea_reviewers WHERE idea_id=?', [ideaId]);
   await db.execute(

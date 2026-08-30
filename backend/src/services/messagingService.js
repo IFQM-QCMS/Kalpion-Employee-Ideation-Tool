@@ -381,10 +381,19 @@ export async function emailHealth() {
           "SELECT key_name, value FROM org_settings WHERE key_name IN ('email_enabled','smtp_host')"
         );
         const s = Object.fromEntries(settingRows.map((r) => [r.key_name, r.value]));
-        // A tenant can send if it has switched email on AND either has its own
-        // SMTP host or can fall through to the platform provider.
-        const canSend = s.email_enabled === '1'
-          && (String(s.smtp_host || '').trim() || platformCanSend);
+        /*
+         * A tenant can send unless it has switched email OFF, and provided
+         * there is a route — its own SMTP host, or the platform provider.
+         *
+         * Written as `=== '1'` before, which is the same off-by-default reading
+         * that stopped the queue draining at all. This one only mis-reported a
+         * health figure rather than losing mail, but a monitoring screen that
+         * disagrees with the sender is how the real fault stayed hidden: it
+         * said "0 of 6 organisations have email on", which looked like a
+         * customer configuration matter rather than a bug.
+         */
+        const canSend = String(s.email_enabled ?? '1') !== '0'
+          && !!(String(s.smtp_host || '').trim() || platformCanSend);
         if (canSend) health.orgs_email_on += 1;
 
         const [[row]] = await db.query(

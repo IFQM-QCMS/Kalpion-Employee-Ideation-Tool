@@ -509,10 +509,61 @@ export async function queueEmail(db, toEmail, toName, subject, body) {
   }
 }
 
+/**
+ * How long a queued notification is still worth delivering.
+ *
+ * These are notices about something that happened, and their value decays.
+ * Worse, their CONTENT decays: "Action Required: idea awaiting your approval"
+ * sent a fortnight late is not merely stale, it is wrong — the idea has almost
+ * certainly moved on, and the recipient goes looking for something that is not
+ * in their queue.
+ *
+ * This exists because the gate below had left 47 real messages sitting unsent
+ * across two organisations, some of them three weeks old. Turning delivery on
+ * without this would have posted all of them at once.
+ */
+const MAX_QUEUE_AGE_DAYS = 3;
+
 /** Process up to 5 pending emails (PHP processEmailQueue). */
 export async function processEmailQueue(db) {
   const settings = await getOrgSettings(db);
-  if ((settings.email_enabled ?? '0') !== '1') return;
+
+  /*
+   * Retire anything too old to be true any more — first, before any gate.
+   *
+   * Expiring a notice has nothing to do with whether a provider exists. It is
+   * the deployments WITHOUT one where this matters most: those are exactly the
+   * ones whose queue grows without bound, and this whole bug is what that looks
+   * like after three weeks. Doing it below the checks would mean the queue only
+   * gets tidied on the systems that never needed tidying.
+   *
+   * Marked 'failed' rather than deleted: the row is the evidence that the
+   * notification was generated and never reached anybody, which is worth
+   * keeping when somebody asks why they were not told.
+   */
+  await db.execute(
+    `UPDATE email_queue SET status = 'failed'
+      WHERE status = 'pending' AND created_at < NOW() - INTERVAL ? DAY`,
+    [MAX_QUEUE_AGE_DAYS]
+  ).catch(() => {});
+
+  /*
+   * ── The switch that silently swallowed every notification ────────────────
+   *
+   * This used to read `(settings.email_enabled ?? '0') !== '1'`, and every
+   * tenant is seeded with email_enabled = '0'. So a brand-new organisation had
+   * mail off, nobody knew the setting existed, and the queue filled up forever
+   * while every other part of the product behaved as though mail worked. The
+   * rows were not failed or retried — `attempts` stayed at 0 — because nothing
+   * ever reached the SELECT below. It looked fine from every direction except
+   * the recipient's, which is exactly what this file's own header warns about.
+   *
+   * The setting now means what its name says: an organisation that has opted
+   * OUT. Off requires somebody to have chosen it, and the default is to deliver
+   * the mail the product has already promised to send. Migration 037 turns the
+   * seeded '0' into '1' for existing tenants, because none of them chose it.
+   */
+  if (String(settings.email_enabled ?? '1') === '0') return;
 
   // No tenant SMTP is no longer a dead end: the platform provider can carry it.
   // Only give up when neither route exists, and say which is missing — this

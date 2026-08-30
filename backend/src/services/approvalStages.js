@@ -149,6 +149,49 @@ export function stagesForRole(stages, role) {
   return approverStages(stages).filter((a) => a.role === role).map((a) => a.stage);
 }
 
+/**
+ * How senior each role is, as one ordered scale.
+ *
+ * ── What this is for ──────────────────────────────────────────────────────
+ *
+ * Routing an idea to a committee let the router name anybody at all, so a
+ * department manager could hand an idea down to a team lead — and doing so took
+ * the idea OFF the sequential chain entirely (workflow_type becomes
+ * multi_reviewer), so the stages above the router were skipped and the decision
+ * was made by people junior to him. That is the escalation ladder run backwards,
+ * and it is a way around the chain rather than a use of it.
+ *
+ * ── Why the chain comes first, and the catalogue second ───────────────────
+ *
+ * The tenant's own configured chain is the authority on seniority, because it
+ * is the organisation's own statement of who answers to whom. A role that is
+ * not in the chain still needs a place — an Executive in an organisation whose
+ * chain stops at Plant Head is plainly not junior to a Team Lead — so anything
+ * left over is appended in catalogue order, which is declared junior-to-senior.
+ *
+ * Roles with no standing in any approval path at all (employee, trainee, and
+ * the administrator roles, which are barred from deciding anything) are absent
+ * from the map. `rankOf` reports them as -1: below everyone, routable to by
+ * nobody.
+ */
+export function seniorityRanks(stages) {
+  const order = [];
+  for (const { role } of approverStages(stages)) {
+    if (!order.includes(role)) order.push(role);
+  }
+  // Everything the catalogue knows about that this chain does not use.
+  for (const key of STAGE_KEYS) {
+    const role = STAGE_CATALOG[key].role;
+    if (role && !order.includes(role)) order.push(role);
+  }
+  return new Map(order.map((role, i) => [role, i]));
+}
+
+/** Where `role` sits on that scale; -1 for a role with no approval standing. */
+export function rankOf(ranks, role) {
+  return ranks.has(role) ? ranks.get(role) : -1;
+}
+
 /** 1-based position of a stage among the approvers, for display. */
 export function stagePosition(stages, key) {
   const i = approverStages(stages).findIndex((a) => a.stage === key);
@@ -215,5 +258,6 @@ export default {
   STAGE_CATALOG, STAGE_KEYS, DEFAULT_STAGES, DEFAULT_CHAIN,
   parseStages, approverStages, stagesToChain,
   firstStage, finalStage, nextStage, isFinalStage, stagesForRole, stagePosition,
+  seniorityRanks, rankOf,
   resolveLabels,
 };

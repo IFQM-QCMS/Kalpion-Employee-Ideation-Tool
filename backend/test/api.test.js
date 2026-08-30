@@ -4910,3 +4910,202 @@ test('the submitter is emailed at every step, and congratulated at the last', as
     body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
   });
 });
+
+/*
+ * The queue is actually drained.
+ *
+ * processEmailQueue began `if ((settings.email_enabled ?? '0') !== '1') return;`
+ * and every tenant is seeded with email_enabled = '0'. So it returned before it
+ * ever looked at the queue: nothing failed, nothing retried, `attempts` stayed
+ * at 0 forever, and every other part of the product carried on as though mail
+ * worked. On production this had swallowed 47 real messages across two
+ * organisations, the oldest three weeks old — ideas received, approvals given,
+ * reviews awaiting somebody. Not one had been attempted.
+ *
+ * Nobody chose that. It was the seed value, and the setting is not surfaced
+ * anywhere an administrator would find it. The switch now means what its name
+ * says — an organisation that has opted OUT — and the default is to deliver.
+ */
+test('queued mail is actually attempted, and only silenced by an explicit opt-out', async () => {
+  const { processEmailQueue } = await import('../src/services/mailerService.js');
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+
+  const setEnabled = (v) => sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_a.org_settings (key_name, value) VALUES ('email_enabled', '${v}')
+       ON DUPLICATE KEY UPDATE value = '${v}'`);
+  /*
+   * Backdated by two days on purpose.
+   *
+   * The drain takes five at a time, OLDEST FIRST, and by the time this test
+   * runs the suite has left dozens of pending rows behind it — so a row queued
+   * now sits at the back and one drain never reaches it. Two days is old enough
+   * to be picked first and still inside the three-day window, so it is not
+   * retired as stale by the test above.
+   */
+  const queueOne = async (subject) => {
+    await sql('ifqm_test_a',
+      `INSERT INTO ifqm_test_a.email_queue (to_email, to_name, subject, body, status, attempts, created_at)
+       VALUES ('drain@orga.test', 'Drain', '${subject}', 'body', 'pending', 0, NOW() - INTERVAL 2 DAY)`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.email_queue WHERE subject = '${subject}' ORDER BY id DESC LIMIT 1`);
+    return row.id;
+  };
+  const stateOf = async (id) => {
+    const [row] = await sql('ifqm_test_a',
+      `SELECT status, attempts FROM ifqm_test_a.email_queue WHERE id = ${id}`);
+    return row;
+  };
+
+  /*
+   * The suite has no mail provider, so a send cannot succeed — and that is
+   * fine, because the bug was never about delivery. What is being pinned is
+   * whether the message is PICKED UP: attempts moving off 0 is the whole
+   * difference between "we tried and the provider refused" and "nothing ever
+   * looked at this row", which is what three weeks of silence looked like.
+   */
+  await setEnabled('0');
+  const optedOut = await queueOne('Opted out');
+  await processEmailQueue(pool);
+  let st = await stateOf(optedOut);
+  assert.equal(Number(st.attempts), 0,
+    'an organisation that has explicitly opted out is still left alone — the setting works');
+
+  /*
+   * Now with a route. The provider gate below the opt-out is a separate and
+   * legitimate check — a deployment with nowhere to send has nothing to try —
+   * so the suite gives this tenant an SMTP host that will refuse the
+   * connection. Refusing is the point: it proves the row was PICKED UP.
+   */
+  await setEnabled('1');
+  await sql('ifqm_test_a',
+    "INSERT INTO ifqm_test_a.org_settings (key_name, value) VALUES ('smtp_host', '127.0.0.1') "
+    + "ON DUPLICATE KEY UPDATE value = '127.0.0.1'");
+  await sql('ifqm_test_a',
+    "INSERT INTO ifqm_test_a.org_settings (key_name, value) VALUES ('smtp_port', '1') "
+    + "ON DUPLICATE KEY UPDATE value = '1'");
+  const wanted = await queueOne('Should be attempted');
+  await processEmailQueue(pool);
+  st = await stateOf(wanted);
+  assert.ok(Number(st.attempts) > 0,
+    `a pending message must be picked up — it was left at attempts=${st.attempts}, `
+    + 'which is the signature of a consumer that never ran');
+  assert.notEqual(st.status, 'pending', 'and it must not be left pending forever');
+
+  await sql('ifqm_test_a',
+    "DELETE FROM ifqm_test_a.email_queue WHERE to_email = 'drain@orga.test'");
+  // Put the tenant back as it was: later tests read these settings.
+  await sql('ifqm_test_a',
+    "DELETE FROM ifqm_test_a.org_settings WHERE key_name IN ('smtp_host','smtp_port')");
+});
+
+/*
+ * A notification too old to be true is retired rather than posted.
+ *
+ * Turning delivery on uncovered a backlog going back three weeks. "Action
+ * Required: idea awaiting your approval" sent a fortnight late is not merely
+ * stale — the idea has moved on, and the recipient goes looking for something
+ * that is not in their queue. Marked failed rather than deleted, because the
+ * row is the evidence that a notification was generated and never reached
+ * anybody.
+ */
+test('a stale queued notification is retired, not posted late', async () => {
+  const { processEmailQueue } = await import('../src/services/mailerService.js');
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+
+  await sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_a.org_settings (key_name, value) VALUES ('email_enabled', '1')
+       ON DUPLICATE KEY UPDATE value = '1'`);
+  await sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_a.email_queue (to_email, to_name, subject, body, status, attempts, created_at)
+     VALUES ('stale@orga.test', 'Stale', 'Three weeks late', 'body', 'pending', 0,
+             NOW() - INTERVAL 21 DAY)`);
+  const [before] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.email_queue WHERE to_email = 'stale@orga.test' ORDER BY id DESC LIMIT 1");
+
+  await processEmailQueue(pool);
+
+  const [after] = await sql('ifqm_test_a',
+    `SELECT status, attempts FROM ifqm_test_a.email_queue WHERE id = ${before.id}`);
+  assert.equal(after.status, 'failed', 'a three-week-old notice is retired');
+  assert.equal(Number(after.attempts), 0,
+    'and never attempted — it is retired because it is wrong now, not because sending failed');
+
+  await sql('ifqm_test_a',
+    "DELETE FROM ifqm_test_a.email_queue WHERE to_email = 'stale@orga.test'");
+});
+
+/*
+ * An idea can only be routed UPWARD.
+ *
+ * "Route to committee" took any user id at all, and routing takes the idea OFF
+ * the sequential chain — workflow_type becomes multi_reviewer, so the stages
+ * above the router are never visited. A department manager could therefore hand
+ * an idea down to a team lead and have it decided by people junior to him,
+ * without the plant head ever seeing it. That is not a committee; it is a way
+ * round the chain, and it undoes the point of a sequence that ends at the top.
+ *
+ * Same level is allowed — a panel of fellow department managers is a real
+ * thing. Below is not.
+ */
+test('an idea can be routed sideways or upward, never down the hierarchy', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+
+  const mk = async (name, email, empId, phone, role) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'RoutePass12345', role, employee_id: empId,
+        phone, department: 'Route' },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'RoutePass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const dm = await mk('Route DM', 'route.dm@orga.test', 'RTDM', '+919812347091', 'department_manager');
+  const dm2 = await mk('Route DM Two', 'route.dm2@orga.test', 'RTDM2', '+919812347092', 'department_manager');
+  const tl = await mk('Route TL', 'route.tl@orga.test', 'RTTL', '+919812347093', 'team_lead');
+  const emp = await mk('Route Emp', 'route.emp@orga.test', 'RTEMP', '+919812347094', 'employee');
+  await thePlantHead();
+  const [phRow] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.users WHERE role = 'plant_head' AND status = 'active' LIMIT 1");
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: emp.token,
+    body: {
+      title: 'Guard the coolant pump coupling',
+      present_situation: 'The coupling turns exposed at ankle height beside the walkway.',
+      proposed_solution: 'A bolted mesh guard over the coupling.',
+      impact_level: 'High', impact_areas: 'Safety', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  // Downward: refused, and told who was below them.
+  const down = await api('POST', '/api/ideas/assign-reviewers', {
+    token: dm.token, body: { idea_id: ideaId, reviewer_ids: [tl.id] },
+  });
+  assert.equal(down.status, 403, `routing down must be refused — ${JSON.stringify(down.data)}`);
+  assert.match(down.data.error, /Route TL/, 'naming who is below them, so the refusal is actionable');
+
+  // To somebody with no place in the chain at all: refused for a different reason.
+  const outside = await api('POST', '/api/ideas/assign-reviewers', {
+    token: dm.token, body: { idea_id: ideaId, reviewer_ids: [emp.id] },
+  });
+  assert.notEqual(outside.status, 200, 'an employee holds no approval role and cannot be a reviewer');
+
+  // Sideways and upward: allowed.
+  const up = await api('POST', '/api/ideas/assign-reviewers', {
+    token: dm.token, body: { idea_id: ideaId, reviewer_ids: [dm2.id, phRow.id] },
+  });
+  assert.equal(up.status, 200,
+    `a peer and somebody above must both be allowed — ${JSON.stringify(up.data)}`);
+  assert.equal(up.data.reviewer_count, 2);
+});

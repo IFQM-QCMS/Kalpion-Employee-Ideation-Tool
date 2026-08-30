@@ -336,7 +336,12 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('anonymous_allowed',         '0'),
   ('public_board_enabled',      '1'),
   ('challenges_enabled',        '1'),
-  ('email_enabled',             '0'),
+  -- ON by default. Seeded '0' until migration 037, which meant every new
+  -- organisation had notification mail switched off, nobody knew the setting
+  -- existed, and the email_queue filled up forever without a single delivery
+  -- attempt. The switch is for an organisation that wants no outbound mail —
+  -- it was never meant to be the starting state.
+  ('email_enabled',             '1'),
   ('smtp_host',                 ''),
   ('smtp_port',                 '587'),
   ('smtp_user',                 ''),
