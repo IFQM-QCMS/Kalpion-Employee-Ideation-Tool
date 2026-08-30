@@ -541,11 +541,35 @@ export async function processEmailQueue(db) {
    * notification was generated and never reached anybody, which is worth
    * keeping when somebody asks why they were not told.
    */
-  await db.execute(
-    `UPDATE email_queue SET status = 'failed'
-      WHERE status = 'pending' AND created_at < NOW() - INTERVAL ? DAY`,
-    [MAX_QUEUE_AGE_DAYS]
-  ).catch(() => {});
+  try {
+    await db.execute(
+      `UPDATE email_queue SET status = 'failed'
+        WHERE status = 'pending' AND created_at < NOW() - INTERVAL ? DAY`,
+      [MAX_QUEUE_AGE_DAYS]
+    );
+
+    /*
+     * Reclaim rows left mid-flight.
+     *
+     * A row is marked 'processing' before the send and only leaves that state
+     * when the send returns. A process that is restarted in between — a deploy,
+     * a crash, a host recycling — strands it: it is not 'pending', so no later
+     * pass will ever pick it up again, and it is not 'sent', so nobody got it.
+     * `attempts` was already incremented, so putting it back cannot loop; five
+     * failures still retire it.
+     *
+     * Fifteen minutes is comfortably longer than any send can legitimately
+     * take, so nothing is reclaimed out from under a send that is still going.
+     */
+    await db.execute(
+      `UPDATE email_queue SET status = 'pending'
+        WHERE status = 'processing' AND created_at < NOW() - INTERVAL 15 MINUTE`
+    );
+  } catch (e) {
+    // A tenant whose migration has not run has no 'processing' in its enum.
+    // Tidying is not the job; delivering is. Say so once and carry on.
+    logger.warn(`processEmailQueue: queue housekeeping skipped — ${e.message}`);
+  }
 
   /*
    * ── The switch that silently swallowed every notification ────────────────
@@ -587,10 +611,43 @@ export async function processEmailQueue(db) {
 
   for (const email of emails) {
     const id = Number(email.id);
-    await db.execute(
-      "UPDATE email_queue SET status = 'processing', attempts = attempts + 1 WHERE id = ?",
-      [id]
-    );
+
+    /*
+     * Claim the row before sending.
+     *
+     * ── The second reason no mail was going out ─────────────────────────────
+     *
+     * `status` is an ENUM('pending','sent','failed') and this wrote
+     * 'processing', which is not one of them. Under a permissive sql_mode
+     * (MariaDB 10.4, which is what XAMPP ships and what development runs on)
+     * the server truncates it to '' with a warning and carries on, so this was
+     * invisible for as long as nobody looked. Under STRICT_ALL_TABLES — which
+     * is Aiven's default, and therefore production — it is error 1265, the
+     * whole pass throws, the per-tenant catch in the scheduler logs a line, and
+     * not one message is ever sent.
+     *
+     * So even with the email_enabled gate fixed, production would still have
+     * delivered nothing. Both faults produced the identical symptom: rows
+     * pending forever at attempts = 0.
+     *
+     * Migration 038 adds 'processing' to the enum. The fallback below keeps
+     * this working on a tenant whose migration has not run yet: losing the
+     * claim marker costs an at-most-once guarantee that a single-instance
+     * scheduler already provides, and is far better than sending nothing.
+     */
+    try {
+      await db.execute(
+        "UPDATE email_queue SET status = 'processing', attempts = attempts + 1 WHERE id = ?",
+        [id]
+      );
+    } catch (e) {
+      logger.warn(`processEmailQueue: could not mark ${id} as processing (${e.code}) `
+        + '— run migration 038; continuing without the claim marker');
+      await db.execute(
+        'UPDATE email_queue SET attempts = attempts + 1 WHERE id = ?', [id]
+      );
+    }
+
     try {
       const sent = await sendSmtpEmail(
         settings,

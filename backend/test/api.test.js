@@ -5109,3 +5109,51 @@ test('an idea can be routed sideways or upward, never down the hierarchy', async
     `a peer and somebody above must both be allowed — ${JSON.stringify(up.data)}`);
   assert.equal(up.data.reviewer_count, 2);
 });
+
+/*
+ * The queue's status column must accept every value the sender writes.
+ *
+ * processEmailQueue claims a row with status='processing' and the ENUM did not
+ * include it. On MariaDB 10.4 — XAMPP, which is what development runs on — that
+ * truncates to '' with a warning and carries on, so the suite passed and
+ * nothing looked wrong. On Aiven, which runs STRICT_ALL_TABLES, it is error
+ * 1265: the drain throws, the scheduler logs one line per tenant, and not a
+ * single notification is ever delivered.
+ *
+ * Two faults produced the identical symptom — rows pending forever at
+ * attempts=0 — and fixing only the first would have moved the failure two lines
+ * down without a recipient noticing any difference.
+ *
+ * The first assertion is the one that gives the second its meaning: under a
+ * permissive server a bad enum write does not raise, so this test would pass
+ * while proving nothing.
+ */
+test('the email queue accepts every status the sender writes, strictly', async () => {
+  /*
+   * Asked through the pool the APPLICATION uses, not through the suite's own
+   * connection. It is the app's sessions that have to be strict — the helper is
+   * scaffolding, and a strict helper proves nothing about the service code.
+   */
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+  const [[mode]] = await pool.query('SELECT @@SESSION.sql_mode AS m');
+  assert.match(mode.m, /STRICT/,
+    'the suite must run as strictly as production does — otherwise a value a '
+    + 'column cannot hold is silently truncated here and fatal there, which is '
+    + 'exactly how this bug reached six live tenants');
+
+  for (const status of ['pending', 'processing', 'sent', 'failed']) {
+    await pool.execute(
+      `INSERT INTO email_queue (to_email, subject, body, status)
+       VALUES ('enum@orga.test', ?, 'body', ?)`, [`status ${status}`, status]);
+    const [[row]] = await pool.execute(
+      'SELECT status FROM email_queue WHERE to_email = ? AND subject = ?',
+      ['enum@orga.test', `status ${status}`]);
+    assert.equal(row.status, status,
+      `the column must store '${status}' as written — a value it cannot hold is `
+      + 'either an error or an empty string, and both mean the sender is broken');
+  }
+
+  await sql('ifqm_test_a',
+    "DELETE FROM ifqm_test_a.email_queue WHERE to_email = 'enum@orga.test'");
+});

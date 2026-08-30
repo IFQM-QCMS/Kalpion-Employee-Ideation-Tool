@@ -304,7 +304,11 @@ CREATE TABLE IF NOT EXISTS email_queue (
   to_name    VARCHAR(100),
   subject    VARCHAR(255) NOT NULL,
   body       TEXT NOT NULL,
-  status     ENUM('pending','sent','failed') NOT NULL DEFAULT 'pending',
+  -- 'processing' is a claim marker taken for the length of one send. It was
+  -- missing here while the code wrote it, so on a strict server (Aiven runs
+  -- STRICT_ALL_TABLES) every drain threw error 1265 and no mail was ever sent.
+  -- Migration 038.
+  status     ENUM('pending','processing','sent','failed') NOT NULL DEFAULT 'pending',
   attempts   INT NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   sent_at    DATETIME NULL

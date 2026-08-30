@@ -77,6 +77,32 @@ export function masterDb() {
     });
   });
 
+  /*
+   * In tests, be as strict as production is.
+   *
+   * Development runs on XAMPP, whose MariaDB 10.4 is permissive: writing a
+   * value a column cannot hold truncates it, warns, and carries on. Aiven runs
+   * STRICT_ALL_TABLES, where the same write is error 1265 and the request dies.
+   *
+   * That gap hid a real fault for as long as it existed. processEmailQueue
+   * wrote status='processing' into an ENUM that had no such value; locally it
+   * silently became '' and the suite passed, and on production every drain
+   * threw and not one notification was ever delivered. CI caught it only
+   * because its MariaDB is strict — so the suite was already capable of finding
+   * it, on somebody else's machine, a push too late.
+   *
+   * Applied only under NODE_ENV=test, deliberately. Turning it on for local
+   * development would be a larger change than this is the moment for; the
+   * suite is where the difference has to be closed, because the suite is what
+   * decides whether a change is safe to ship.
+   */
+  if (config.env === 'test') {
+    raw.on('connection', (conn) => {
+      conn.query("SET SESSION sql_mode = CONCAT(@@SESSION.sql_mode, ',STRICT_ALL_TABLES')",
+        (err) => { if (err) logger.warn(`db: could not pin test session to strict mode — ${err.message}`); });
+    });
+  }
+
   pool = resilientPool(raw, 'master');
   return pool;
 }

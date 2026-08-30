@@ -396,12 +396,18 @@ export async function emailHealth() {
           && !!(String(s.smtp_host || '').trim() || platformCanSend);
         if (canSend) health.orgs_email_on += 1;
 
+        /*
+         * 'processing' counts as pending, because that is what it is: claimed
+         * for a send that has not finished. Counting only 'pending' would hide
+         * a row stranded mid-flight by a restart from the one screen whose job
+         * is to notice a queue that has stopped moving.
+         */
         const [[row]] = await db.query(
           `SELECT
-             SUM(status = 'pending') AS pending,
+             SUM(status IN ('pending','processing')) AS pending,
              SUM(status = 'failed')  AS failed,
              SUM(status = 'sent' AND sent_at > DATE_SUB(NOW(), INTERVAL 1 DAY)) AS sent_24h,
-             MIN(CASE WHEN status = 'pending' THEN created_at END) AS oldest
+             MIN(CASE WHEN status IN ('pending','processing') THEN created_at END) AS oldest
            FROM email_queue`
         );
         const pending = Number(row?.pending || 0);
