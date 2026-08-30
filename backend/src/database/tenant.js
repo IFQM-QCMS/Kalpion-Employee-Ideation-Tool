@@ -22,6 +22,7 @@ import config from '../config/index.js';
 import { masterDb } from './master.js';
 import { ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
+import { resilientPool, KEEPALIVE_OPTIONS } from './resilient.js';
 
 const poolCache = new Map();
 
@@ -233,7 +234,7 @@ export function getTenantPool(tenant) {
     return existing;
   }
 
-  const pool = mysql.createPool({
+  const raw = mysql.createPool({
     host,
     port: config.db.port,
     ssl: config.db.ssl,
@@ -244,7 +245,6 @@ export function getTenantPool(tenant) {
     waitForConnections: true,
     connectionLimit: config.dbPoolSize,
     maxIdle: Math.min(4, config.dbPoolSize),
-    idleTimeout: 60000,
     namedPlaceholders: false,
     dateStrings: true,
     /*
@@ -262,6 +262,13 @@ export function getTenantPool(tenant) {
     // Real prepared statements (mysql2 default for execute()) — the PDO
     // ATTR_EMULATE_PREPARES=false equivalent. Keeps parameter binding honest.
     multipleStatements: false,
+    /*
+     * Keepalive, and the idle timeout that was already here — now shared with
+     * the master pool so the two cannot drift. See database/resilient.js for
+     * what a connection the server closed behind our back actually looks like
+     * from in here.
+     */
+    ...KEEPALIVE_OPTIONS,
   });
 
   /*
@@ -273,12 +280,13 @@ export function getTenantPool(tenant) {
    * Without it the pinning above is decorative: rows would still be stamped in
    * whatever zone the database host happens to run in.
    */
-  pool.on('connection', (conn) => {
+  raw.on('connection', (conn) => {
     conn.query("SET time_zone = '+00:00'", (err) => {
       if (err) logger.warn(`db: could not pin session to UTC — ${err.message}`);
     });
   });
 
+  const pool = resilientPool(raw, tenant.db_name);
   poolCache.set(key, pool);
   evictIfOverCap();
   return pool;

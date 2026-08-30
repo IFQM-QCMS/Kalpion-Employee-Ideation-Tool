@@ -66,6 +66,9 @@ export default function AdminPage() {
   const [userPage,    setUserPage]    = useState(1);
   const [userMeta,    setUserMeta]    = useState({ total: 0, pages: 1 });
   const [managers,    setManagers]    = useState([]);
+  // Which one-per-organisation roles are already held, and by whom. See
+  // SINGLETON_ROLES in the backend userService for why plant_head is one.
+  const [takenRoles,  setTakenRoles]  = useState({});
   const [settings,    setSettings]    = useState(null);
   // The platform-wide attachment ceiling, sent with the settings. Defaults to
   // the old hard-coded bound until the first response arrives.
@@ -136,7 +139,10 @@ export default function AdminPage() {
 
     // The manager dropdown is a convenience on the edit form; losing it must
     // not take the list with it.
-    if (mRes.status === 'fulfilled') setManagers(mRes.value.data.managers || []);
+    if (mRes.status === 'fulfilled') {
+      setManagers(mRes.value.data.managers || []);
+      setTakenRoles(mRes.value.data.taken_roles || {});
+    }
 
     setLoading(false);
   }
@@ -1653,7 +1659,20 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_role')}</label>
               <select className="form-control" id="uf-role" value={role} onChange={e=>setRole(e.target.value)}>
-                {roleOptions.map(r => <option key={r} value={r}>{formatRole(r, t)}</option>)}
+                {/* An organisation has one Plant Head. Saying so in the option
+                    beats a 409 after the form is filled in — the server still
+                    refuses, but the admin should not have to discover the rule
+                    by breaking it. */}
+                {roleOptions.map(r => {
+                  const heldBy = takenRoles[r];
+                  const mine = heldBy && editUser && heldBy.user_id === editUser.id;
+                  return (
+                    <option key={r} value={r} disabled={!!heldBy && !mine}>
+                      {formatRole(r, t)}
+                      {heldBy && !mine ? ` — ${t('admin.uf_role_taken', { name: heldBy.name })}` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <div className="form-group"><label>{t('admin.uf_manager')}</label>
@@ -1661,6 +1680,14 @@ function UserFormModal({ user: editUser, managers, currentUserRole, currentUserI
                 <option value="">{t('admin.uf_none')}</option>
                 {managers.filter(m=>m.id!==editUser?.id).map(m => <option key={m.id} value={m.id}>{m.name} ({formatRole(m.role, t)})</option>)}
               </select>
+              {/* This field used to be documentation. It is now what decides
+                  which approver an idea goes to — Jitesh's idea reaches Elisa
+                  because Elisa is on this line, and reaches no other manager.
+                  Left blank, the idea falls back to being offered to every
+                  holder of the stage's role. */}
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
+                {t('admin.uf_manager_hint')}
+              </div>
             </div>
           </div>
           <div className="form-row">

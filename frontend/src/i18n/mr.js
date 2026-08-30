@@ -353,6 +353,8 @@ export default {
   'admin.uf_password':'पासवर्ड',
   'admin.uf_role':'भूमिका',
   'admin.uf_manager':'व्यवस्थापक',
+  'admin.uf_role_taken':'आधीच {name} यांच्याकडे आहे',
+  'admin.uf_manager_hint':'ही व्यक्ती कोणाला अहवाल देते. कल्पना याच रेषेवरील मंजूरकर्त्याकडे जातात — हे भरा, अन्यथा त्या भूमिकेतील प्रत्येकाला कल्पना दाखवली जाईल.',
   'admin.uf_none':'— काहीही नाही —',
   'admin.uf_dept':'विभाग',
   'admin.uf_bu':'व्यवसाय युनिट',

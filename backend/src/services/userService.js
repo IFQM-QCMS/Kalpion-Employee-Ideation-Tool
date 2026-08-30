@@ -26,6 +26,105 @@ const ROLES_ADMIN_CAN_ASSIGN = [
 ];
 const ROLES_SUPER_ADMIN_CAN_ASSIGN = [...ROLES_ADMIN_CAN_ASSIGN, 'admin'];
 
+/*
+ * Roles an organisation may fill exactly once.
+ *
+ * A plant runs one plant head. That is not an arbitrary policy — it is what
+ * makes the last step of the approval chain mean something. With two of them,
+ * "final approval" becomes "approval by whichever plant head the router picked",
+ * and an idea's fate depends on a tie-break nobody chose. The stage is the one
+ * that releases an idea to QCMS, so the ambiguity is at the most consequential
+ * point in the whole flow.
+ *
+ * Per organisation, because that is the only scope where it means anything: two
+ * customers each having a plant head is normal, and each tenant's users live in
+ * that tenant's own database, so the count below is naturally scoped.
+ *
+ * Enforced on every route into the users table — the console, the bulk import,
+ * the API — because a rule enforced in one of them is a rule that gets around.
+ */
+const SINGLETON_ROLES = {
+  plant_head: 'Plant Head',
+};
+
+/**
+ * Refuse a role that is already taken.
+ *
+ * `exceptUserId` lets an edit re-save the person who already holds it without
+ * tripping over their own row — otherwise changing a plant head's phone number
+ * would fail because a plant head exists.
+ *
+ * Deactivated holders do not count. Somebody who has left should not block the
+ * appointment of their successor, and the alternative is an administrator who
+ * has to know to go and edit a departed employee's record first.
+ */
+async function assertRoleVacant(db, role, exceptUserId = null) {
+  const label = SINGLETON_ROLES[role];
+  if (!label) return;
+
+  const [rows] = await db.execute(
+    `SELECT id, name, employee_id FROM users
+      WHERE role = ? AND status = 'active' AND id <> ? LIMIT 1`,
+    [role, exceptUserId || 0]
+  );
+  if (!rows.length) return;
+
+  const held = rows[0];
+  throw new ApiError(409,
+    `${label} is already held by ${held.name}${held.employee_id ? ` (${held.employee_id})` : ''}. `
+    + `An organisation has one ${label}: the chain ends there, so two of them would mean `
+    + `an idea's final approval depended on which one it happened to reach. `
+    + `Change ${held.name} to another role first, or deactivate that account.`);
+}
+
+/** Which singleton roles are already taken, for the console to grey out. */
+export async function takenSingletonRoles(db) {
+  const roles = Object.keys(SINGLETON_ROLES);
+  if (!roles.length) return {};
+  const [rows] = await db.query(
+    `SELECT role, id, name FROM users WHERE status = 'active' AND role IN (?)`, [roles]);
+  const out = {};
+  for (const r of rows) {
+    // First holder wins the label. A tenant that already had two before this
+    // rule existed is reported by singletonConflicts() below.
+    if (!out[r.role]) out[r.role] = { user_id: r.id, name: r.name, label: SINGLETON_ROLES[r.role] };
+  }
+  return out;
+}
+
+/**
+ * Singleton roles this organisation holds MORE than once.
+ *
+ * The guards above stop a second plant head being appointed from today. They
+ * cannot undo one appointed yesterday, and at least one live tenant has two.
+ *
+ * Demoting one automatically was considered and rejected. Picking which of two
+ * real people loses their authority is a decision about the organisation, not
+ * about the data — and it would happen silently, to somebody who would find out
+ * when an idea they expected stopped arriving. So the conflict is reported to
+ * the administrators, repeatedly, and they choose.
+ *
+ * Meanwhile nothing is broken: routing walks the submitter's reporting line, so
+ * in an organisation with a filled-in org chart each idea still reaches exactly
+ * one of them — the right one. The ambiguity only bites where the line runs out.
+ */
+export async function singletonConflicts(db) {
+  const roles = Object.keys(SINGLETON_ROLES);
+  if (!roles.length) return [];
+  const [rows] = await db.query(
+    `SELECT role, id, name, employee_id FROM users
+      WHERE status = 'active' AND role IN (?) ORDER BY role, id`, [roles]);
+
+  const byRole = new Map();
+  for (const r of rows) {
+    if (!byRole.has(r.role)) byRole.set(r.role, []);
+    byRole.get(r.role).push(r);
+  }
+  return [...byRole.entries()]
+    .filter(([, holders]) => holders.length > 1)
+    .map(([role, holders]) => ({ role, label: SINGLETON_ROLES[role], holders }));
+}
+
 /**
  * Every role that can appear on a user row — the vocabulary the admin console's
  * role filter offers (MOM §13.9). Wider than the assignable lists above:
@@ -281,6 +380,8 @@ export async function createUser(db, actor, body, tenant = null) {
     throw badRequest('Enter a valid mobile number, including the country or area code.');
   }
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
+  // One plant head per organisation. See SINGLETON_ROLES.
+  await assertRoleVacant(db, role);
 
   const [dup] = await db.execute(
     `SELECT id FROM users
@@ -432,6 +533,9 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   const username = String(body.username || '').trim().toLowerCase();
 
   if (!assignableRoles(actor.role).includes(role)) throw forbidden('You cannot assign that role.');
+  // Excepting this user, so re-saving the sitting plant head is not blocked by
+  // their own existence.
+  await assertRoleVacant(db, role, id);
   if (usernameGiven && username && !isUsername(username)) {
     throw badRequest('A username must be 3-30 characters using letters, numbers, dot, underscore or hyphen, and must contain at least one letter.');
   }
@@ -570,7 +674,24 @@ export async function managers(db) {
       WHERE role IN ('team_lead','project_lead','manager','department_manager','senior_manager','plant_head','executive','admin') AND status='active'
       ORDER BY FIELD(role,'admin','executive','plant_head','senior_manager','department_manager','manager','project_lead','team_lead'), name`
   );
-  return { success: true, managers: rows };
+  /*
+   * Which one-per-organisation roles are already spoken for.
+   *
+   * Sent with the manager list because they are wanted by the same form, and
+   * because the console should be able to grey the option out rather than let
+   * an administrator fill in a whole user and then be told the role is taken.
+   * The server refuses either way — this is so the refusal is not a surprise.
+   */
+  return {
+    success: true,
+    managers: rows,
+    taken_roles: await takenSingletonRoles(db),
+    // Roles held by more than one person — a state the guards prevent from
+    // today but cannot undo. The console shows these; nobody is demoted
+    // automatically, because choosing which of two real people loses their
+    // authority is the organisation's decision, not ours.
+    role_conflicts: await singletonConflicts(db),
+  };
 }
 
 /** GET action=hierarchy — org tree data + role stats (super_admin only). */

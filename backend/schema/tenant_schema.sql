@@ -206,6 +206,11 @@ CREATE TABLE IF NOT EXISTS idea_workflow (
   actor_id   INT NOT NULL,
   action     ENUM('Submitted','Reviewed','Approved','Rejected','Implemented','Commented','Reopened') NOT NULL,
   comment    TEXT,
+  -- The approval stage this action was taken AT, recorded rather than derived
+  -- (migration 036). Joining users for `role` would answer what that person's
+  -- job is today, so a promotion would silently rewrite every approval they
+  -- ever gave. The closure PDF prints this.
+  stage      VARCHAR(40) NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (idea_id)  REFERENCES ideas(id) ON DELETE CASCADE,
   FOREIGN KEY (actor_id) REFERENCES users(id)
@@ -457,6 +462,16 @@ SET @sql := IF(
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
        AND INDEX_NAME = 'idx_ideas_current_reviewer') = 0,
   'CREATE INDEX idx_ideas_current_reviewer ON ideas(current_reviewer_id)',
+  'SELECT 1'
+);
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- "What is waiting on ME" — the review queue matches the routed approver AND
+-- the stage AND the status, so all three belong in one index (migration 036).
+SET @sql := IF(
+  (SELECT COUNT(*) FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+       AND INDEX_NAME = 'idx_ideas_reviewer_stage') = 0,
+  'CREATE INDEX idx_ideas_reviewer_stage ON ideas(current_reviewer_id, current_stage, status)',
   'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;

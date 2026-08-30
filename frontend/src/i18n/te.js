@@ -353,6 +353,8 @@ export default {
   'admin.uf_password':'పాస్‌వర్డ్',
   'admin.uf_role':'పాత్ర',
   'admin.uf_manager':'మేనేజర్',
+  'admin.uf_role_taken':'ఇప్పటికే {name} వద్ద ఉంది',
+  'admin.uf_manager_hint':'ఈ వ్యక్తి ఎవరికి నివేదిస్తారు. ఆలోచనలు ఈ వరుసలోని ఆమోదకుడికే వెళ్తాయి — దీన్ని సెట్ చేయండి, లేకుంటే ఆ పాత్రలోని ప్రతి ఒక్కరికీ ఆలోచన చూపబడుతుంది.',
   'admin.uf_none':'— ఏదీ లేదు —',
   'admin.uf_dept':'విభాగం',
   'admin.uf_bu':'వ్యాపార విభాగం',

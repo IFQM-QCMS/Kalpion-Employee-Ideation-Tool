@@ -183,7 +183,81 @@ function calloutHeight(doc, w, lines) {
 }
 
 /**
- * Every step the idea actually took, in order.
+ * Role key → a readable job title, for entries recorded before the stage was.
+ *
+ * Only ever a fallback. See `positionOf`.
+ */
+const ROLE_TITLE = {
+  trainee: 'Trainee',
+  employee: 'Employee',
+  team_lead: 'Team Lead',
+  project_lead: 'Project Lead',
+  manager: 'Manager',
+  department_manager: 'Department Manager',
+  senior_manager: 'Senior Manager',
+  plant_head: 'Plant Head',
+  executive: 'Executive',
+  admin: 'Administrator',
+  super_admin: 'Administrator',
+};
+
+/**
+ * What position this person was acting in, and whether we actually know.
+ *
+ * The recorded stage is preferred and is the truth: it was written at the
+ * moment of the decision, so a team lead promoted to plant head six months
+ * later still reads as the team lead who approved at step two.
+ *
+ * Where there is no recorded stage — every entry made before migration 036 —
+ * the actor's CURRENT role is shown with a trailing "?" instead. That mark is
+ * doing real work on an audit document: it is the difference between "this is
+ * what happened" and "this is our best guess from who they are today", and
+ * printing the guess unmarked would make the PDF assert something it cannot
+ * support.
+ */
+function positionOf(w, chain) {
+  const stage = s(w.stage);
+  if (stage) {
+    if (stage === 'originator') return { text: 'Submitter', exact: true };
+    const label = chain?.labels?.[stage];
+    return { text: label || stage.replace(/_/g, ' '), exact: true };
+  }
+  if (/submitted/i.test(s(w.action))) return { text: 'Submitter', exact: true };
+  const role = s(w.actor_role);
+  return { text: role ? `${ROLE_TITLE[role] || role.replace(/_/g, ' ')} ?` : '—', exact: false };
+}
+
+/**
+ * The path this organisation configured, printed above what actually happened.
+ *
+ * The two are not the same document and both are needed. The history says an
+ * idea went Jitesh → Elisa → Sunil; only the configured path tells a reader
+ * whether that was the whole journey or whether two steps were skipped because
+ * nobody held them. Without it, a chain that stopped early and one that ran to
+ * completion look identical on paper.
+ *
+ * The steps are numbered, because that is what makes it a sequence rather than
+ * a list of job titles — and it is the numbering the history's POSITION column
+ * refers back to.
+ */
+function configuredPath(doc, y, chain) {
+  if (!chain?.steps?.length) return y;
+
+  const line = `Submitter   →   ${chain.steps.map((st, i) => `${i + 1}. ${st.label}`).join('   →   ')}`;
+  doc.font('B').fontSize(6.8).fillColor(MUTED)
+    .text('APPROVAL PATH FOR THIS ORGANISATION', MARGIN, y, { width: CONTENT_W });
+  y += 10;
+  doc.font('R').fontSize(7.6);
+  const h = doc.heightOfString(line, { width: CONTENT_W - 8 });
+  doc.rect(MARGIN, y, CONTENT_W, h + 8).fillAndStroke('#ffffff', LINE);
+  doc.font('R').fontSize(7.6).fillColor(INK)
+    .text(line, MARGIN + 4, y + 4, { width: CONTENT_W - 8 });
+  return y + h + 16;
+}
+
+/**
+ * Every step the idea actually took, in order, and the position each person
+ * held when they took it.
  *
  * Section G used to name one person: the last Approved or Implemented entry in
  * the workflow. On a closure document that is the wrong record. An idea that
@@ -192,13 +266,19 @@ function calloutHeight(doc, w, lines) {
  * and a signed-off PDF that credits only the final signature loses the audit
  * trail that made the decision defensible.
  *
+ * The POSITION column is what makes it readable as a journey rather than a list
+ * of names — "Jitesh, Submitter → Elisa, Immediate Manager, approved → ...".
+ * Without it a reader has to already know the organisation to follow the
+ * document, which defeats the point of a record meant to outlive the people in
+ * it.
+ *
  * Rendered as a table rather than prose because that is what it is read for:
- * who, what they decided, when, and what they said.
+ * who, in what capacity, what they decided, when, and what they said.
  *
  * Returns the y after the block. Draws nothing when there is no history — an
  * empty ruled table is worse than an honest absence.
  */
-function approvalChain(doc, y, workflow) {
+function approvalChain(doc, y, workflow, chain) {
   const steps = (workflow || []).filter((w) => s(w.action));
   if (!steps.length) {
     doc.font('R').fontSize(8).fillColor(MUTED)
@@ -207,33 +287,44 @@ function approvalChain(doc, y, workflow) {
   }
 
   const cols = [
-    { label: 'STEP', w: 26 },
-    { label: 'WHO', w: 118 },
-    { label: 'DECISION', w: 86 },
-    { label: 'WHEN', w: 96 },
+    { label: 'STEP', w: 24 },
+    { label: 'WHO', w: 104 },
+    { label: 'POSITION', w: 96 },
+    { label: 'DECISION', w: 74 },
+    { label: 'WHEN', w: 86 },
   ];
   const commentW = CONTENT_W - cols.reduce((a, c) => a + c.w, 0);
 
-  // Header strip
-  doc.rect(MARGIN, y, CONTENT_W, 13).fill(LABEL_BG);
-  let x = MARGIN + 4;
-  doc.font('B').fontSize(6.8).fillColor(MUTED);
-  for (const c of cols) {
-    doc.text(c.label, x, y + 4, { width: c.w - 4, lineBreak: false });
-    x += c.w;
-  }
-  doc.text('COMMENT', x, y + 4, { width: commentW - 4, lineBreak: false });
-  y += 13;
+  // A closure PDF routinely runs the table onto a second page. Drawn as a
+  // function so the continuation gets a header too, instead of orphan rows
+  // under nothing.
+  const header = () => {
+    doc.rect(MARGIN, y, CONTENT_W, 13).fill(LABEL_BG);
+    let x = MARGIN + 4;
+    doc.font('B').fontSize(6.8).fillColor(MUTED);
+    for (const c of cols) {
+      doc.text(c.label, x, y + 4, { width: c.w - 4, lineBreak: false });
+      x += c.w;
+    }
+    doc.text('COMMENT', x, y + 4, { width: commentW - 4, lineBreak: false });
+    y += 13;
+  };
+  header();
+
+  let inferred = false;
 
   steps.forEach((w, i) => {
     const comment = s(w.comment);
+    const pos = positionOf(w, chain);
+    if (!pos.exact) inferred = true;
+
     doc.font('R').fontSize(7.6);
     const rowH = Math.max(14, doc.heightOfString(comment || ' ', { width: commentW - 6 }) + 6);
 
-    // A new page mid-table would orphan rows under no header at all.
     if (y + rowH > doc.page.height - 44) {
       doc.addPage();
       y = MARGIN;
+      header();
     }
 
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill(BOX_BG);
@@ -245,19 +336,32 @@ function approvalChain(doc, y, workflow) {
     doc.font('B').fontSize(7.6).fillColor(INK)
       .text(s(w.actor_name) || '—', cx, y + 4, { width: cols[1].w - 4, lineBreak: false });
     cx += cols[1].w;
-    doc.font('B').fontSize(7.6).fillColor(/reject/i.test(s(w.action)) ? '#b3261e' : BLUE_DK)
-      .text(s(w.action), cx, y + 4, { width: cols[2].w - 4, lineBreak: false });
+    doc.font('R').fontSize(7.4).fillColor(pos.exact ? BLUE_DK : MUTED)
+      .text(pos.text, cx, y + 4, { width: cols[2].w - 4, lineBreak: false });
     cx += cols[2].w;
+    doc.font('B').fontSize(7.6).fillColor(/reject/i.test(s(w.action)) ? '#b3261e' : BLUE_DK)
+      .text(s(w.action), cx, y + 4, { width: cols[3].w - 4, lineBreak: false });
+    cx += cols[3].w;
     doc.font('R').fontSize(7.4).fillColor(MUTED)
       .text(fmtDateTimeLocal(w.created_at) || fmtDate(w.created_at), cx, y + 4,
-        { width: cols[3].w - 4, lineBreak: false });
-    cx += cols[3].w;
+        { width: cols[4].w - 4, lineBreak: false });
+    cx += cols[4].w;
     if (comment) {
       doc.font('R').fontSize(7.4).fillColor(INK)
         .text(comment, cx, y + 4, { width: commentW - 6 });
     }
     y += rowH;
   });
+
+  // Said once, at the bottom, rather than left for the reader to wonder about.
+  if (inferred) {
+    y += 3;
+    doc.font('R').fontSize(6.6).fillColor(MUTED).text(
+      '? — position inferred from that person’s current role. These entries were recorded '
+      + 'before the position was stored alongside the decision.',
+      MARGIN, y, { width: CONTENT_W });
+    y += 11;
+  }
 
   doc.moveTo(MARGIN, y).lineTo(RIGHT, y).lineWidth(0.5).strokeColor(LINE).stroke();
   return y + 10;
@@ -541,8 +645,19 @@ export function buildIdeaPdf(idea, res) {
 
   // Section G — Team & Sign-Off
   y = sectionHeader(doc, y, 'SECTION G — TEAM & SIGN-OFF', 'CLOSURE APPROVAL');
+  /*
+   * The final signature, with the position that made it final.
+   *
+   * "Approved by Sunil Rao" leaves the reader to work out whether Sunil was
+   * entitled to close the idea. "Sunil Rao, Plant Head" answers it on the line
+   * itself — which is what a sign-off box is for. The full journey is in
+   * Section H; this is the one name somebody looks for first.
+   */
   const approval = (idea.workflow || []).filter((w) => /Approved|Implemented/i.test(s(w.action))).slice(-1)[0];
-  const approvedBy = approval ? `${s(approval.actor_name)} — ${fmtDate(approval.created_at)}` : '';
+  const approvedBy = approval
+    ? `${s(approval.actor_name)}, ${positionOf(approval, idea.approval_chain).text}`
+      + ` — ${fmtDate(approval.created_at)}`
+    : '';
   y = field(doc, MARGIN, y, CONTENT_W, 'Team Leader', idea.is_anonymous ? 'Anonymous' : submitter, { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Facilitator', s(idea.manager_name), { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Sponsor / Champion', '', { labelW: 150 });
@@ -551,7 +666,8 @@ export function buildIdeaPdf(idea, res) {
   // Section H — the route the idea actually took to get here.
   y += 4;
   y = sectionHeader(doc, y, 'SECTION H — APPROVAL CHAIN', 'FULL HISTORY');
-  y = approvalChain(doc, y, idea.workflow);
+  y = configuredPath(doc, y, idea.approval_chain);
+  y = approvalChain(doc, y, idea.workflow, idea.approval_chain);
 
   // Footer on every page — generation stamp, no external branding.
   /*

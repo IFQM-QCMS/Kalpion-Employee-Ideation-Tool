@@ -374,6 +374,8 @@ export default {
   'admin.uf_password':'पासवर्ड',
   'admin.uf_role':'भूमिका',
   'admin.uf_manager':'प्रबंधक',
+  'admin.uf_role_taken':'पहले से {name} के पास है',
+  'admin.uf_manager_hint':'यह व्यक्ति किसे रिपोर्ट करता है। विचार इसी रेखा के अनुमोदक के पास जाते हैं — इसे भरें, अन्यथा विचार उस भूमिका के हर व्यक्ति को दिखाया जाएगा।',
   'admin.uf_none':'— कोई नहीं —',
   'admin.uf_dept':'विभाग',
   'admin.uf_bu':'व्यावसायिक इकाई',

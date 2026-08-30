@@ -3425,9 +3425,25 @@ async function makeReviewer(email, role, phone, empId) {
   return token;
 }
 
+/**
+ * The organisation's one plant head.
+ *
+ * Memoised because there can only be one: the chain ends at the plant head, so
+ * two of them would mean an idea's final approval depended on which one it
+ * happened to reach, and userService now refuses the second. Every test below
+ * that needs a plant head needs THE plant head.
+ */
+let plantHeadToken = null;
+async function thePlantHead() {
+  if (!plantHeadToken) {
+    plantHeadToken = await makeReviewer('seq.ph@orga.test', 'plant_head', '+919812345904', 'SEQPH');
+  }
+  return plantHeadToken;
+}
+
 const stageOf = async (ideaId) => {
   const [row] = await sql('ifqm_test_a',
-    `SELECT status, current_stage FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+    `SELECT status, current_stage, current_reviewer_id FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
   return row;
 };
 
@@ -3451,7 +3467,7 @@ test('an idea travels every stage of the chain and is Approved only at the last'
   const tl = await makeReviewer('seq.tl@orga.test', 'team_lead', '+919812345901', 'SEQTL');
   const im = await makeReviewer('seq.im@orga.test', 'manager', '+919812345902', 'SEQIM');
   const dm = await makeReviewer('seq.dm@orga.test', 'department_manager', '+919812345903', 'SEQDM');
-  const ph = await makeReviewer('seq.ph@orga.test', 'plant_head', '+919812345904', 'SEQPH');
+  const ph = await thePlantHead();
 
   const submitted = await api('POST', '/api/ideas/submit', {
     token: AUSER,
@@ -3531,7 +3547,7 @@ test('an idea is only pushable to QCMS after the final stage', async () => {
   });
 
   const tl = await makeReviewer('qc.tl@orga.test', 'team_lead', '+919812345911', 'QCTL');
-  const ph = await makeReviewer('qc.ph@orga.test', 'plant_head', '+919812345912', 'QCPH');
+  const ph = await thePlantHead();
 
   const submitted = await api('POST', '/api/ideas/submit', {
     token: AUSER,
@@ -3738,7 +3754,7 @@ test('a stage nobody holds is skipped, recorded, and does not hide the idea', as
   await api('POST', '/api/settings', {
     token: aTok, body: { approval_stages: 'originator,senior_manager,plant_head' },
   });
-  const ph = await makeReviewer('gap.ph@orga.test', 'plant_head', '+919812346001', 'GAPPH');
+  const ph = await thePlantHead();
 
   const r = await api('POST', '/api/ideas/submit', {
     token: AUSER,
@@ -3826,7 +3842,7 @@ test('a reviewer cannot be the approver of their own idea, even alone in the rol
   });
 
   const pl = await makeReviewer('solo.pl@orga.test', 'project_lead', '+919812346011', 'SOLOPL');
-  await makeReviewer('solo.ph@orga.test', 'plant_head', '+919812346012', 'SOLOPH');
+  await thePlantHead();
 
   const r = await api('POST', '/api/ideas/submit', {
     token: pl,
@@ -4080,4 +4096,817 @@ test('an org admin can see the review queue and cannot act on it', async () => {
   const st = await stageOf(ideaId);
   assert.equal(st.current_stage, 'team_lead', 'the idea is still waiting on its first stage');
   assert.equal(st.status, 'Submitted', 'and is still merely submitted');
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  An idea goes to the author's OWN approver
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * Jitesh reports to Elisa. Mark is also a manager, of a different team.
+ *
+ * Choosing the approver by ROLE alone put Jitesh's idea in front of both of
+ * them, and whichever one opened it first could decide it. So an idea could be
+ * approved by somebody who had never met its author and knew nothing about the
+ * work, while the manager who could actually judge it might never learn it
+ * existed. It also made "who approved this" a race.
+ *
+ * The chain still decides the SEQUENCE — that is what the ordered stage list is
+ * for, and routing by the reporting tree is the exact mistake it was built to
+ * undo. The reporting tree decides only WHO fills the stage the chain has
+ * already chosen. Those are different questions and this test pins both: the
+ * idea is at the immediate_manager STAGE (the chain's answer) and it is with
+ * Elisa (the tree's answer).
+ */
+test('an idea reaches the submitter\'s own manager, and no other manager', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,immediate_manager' },
+  });
+
+  const mkUser = async (name, email, role, empId, phone, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'LinePass12345', role, employee_id: empId,
+        phone, department: 'Ops', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'LinePass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const elisa = await mkUser('Elisa Vaz', 'elisa@orga.test', 'manager', 'LINEELI', '+919812347001');
+  const mark = await mkUser('Mark Rowe', 'mark@orga.test', 'manager', 'LINEMRK', '+919812347002');
+  const jitesh = await mkUser('Jitesh Rao', 'jitesh@orga.test', 'employee', 'LINEJIT',
+    '+919812347003', elisa.id);
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: jitesh.token,
+    body: {
+      title: 'Stage the die trolley beside the press',
+      present_situation: 'The trolley lives two bays away and every changeover starts with a walk.',
+      proposed_solution: 'Park it in the marked bay next to the press and paint the outline.',
+      impact_level: 'Medium', impact_areas: 'Productivity', action: 'submit',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  // The chain put it at the immediate_manager stage; the tree put it with Elisa.
+  const st = await stageOf(ideaId);
+  assert.equal(st.current_stage, 'immediate_manager', 'the chain decides the stage');
+  assert.equal(Number(st.current_reviewer_id), Number(elisa.id),
+    'and the reporting line decides who — Elisa, not whichever manager sorted first');
+
+  // Elisa sees it. Mark does not.
+  const elisaQ = await api('GET', '/api/ideas/review', { token: elisa.token });
+  assert.ok((elisaQ.data.ideas || []).some((i) => i.id === ideaId),
+    'the submitter\'s own manager must see it');
+  const markQ = await api('GET', '/api/ideas/review', { token: mark.token });
+  assert.ok(!(markQ.data.ideas || []).some((i) => i.id === ideaId),
+    'a manager from another team must not see somebody else\'s report\'s idea');
+
+  /*
+   * And the screen is not the rule. Mark is refused at the endpoint too — a
+   * queue that hides a button is a presentation choice, and anybody can post
+   * to the API.
+   */
+  const markTries = await api('POST', '/api/ideas/review-action', {
+    token: mark.token, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(markTries.status, 403,
+    `another team's manager must be refused — got ${markTries.status} `
+    + JSON.stringify(markTries.data));
+  assert.match(markTries.data.error, /Elisa/,
+    'and told whose it is, so they know it is routed rather than broken');
+
+  // Elisa can, and the idea closes because she is the only stage in this chain.
+  const elisaApproves = await api('POST', '/api/ideas/review-action', {
+    token: elisa.token, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(elisaApproves.status, 200, JSON.stringify(elisaApproves.data));
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * The submitter is told WHO has their idea, not just what rank they are.
+ *
+ * "Now with Immediate Manager" is a sentence with no useful content in an
+ * organisation that has nine managers: the first thing anybody does with this
+ * notification is work out whose desk to go to. Naming the person is the whole
+ * value of routing by the reporting line — if the message cannot say "Elisa",
+ * the author still cannot tell whether their idea is moving or lost.
+ */
+test('the progress notification names the person the idea is now with', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead,immediate_manager' },
+  });
+
+  const mk = async (name, email, role, empId, phone, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'NotifPass12345', role, employee_id: empId,
+        phone, department: 'Paint', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'NotifPass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const anita = await mk('Anita Bose', 'anita.mgr@orga.test', 'manager', 'NOTIFMGR', '+919812347011');
+  const raj = await mk('Raj Kumar', 'raj.tl@orga.test', 'team_lead', 'NOTIFTL', '+919812347012', anita.id);
+  const dev = await mk('Dev Shah', 'dev.emp@orga.test', 'employee', 'NOTIFEMP', '+919812347013', raj.id);
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: dev.token,
+    body: {
+      title: 'Cover the paint mixing bench',
+      present_situation: 'Dust settles on the bench overnight and ends up in the mix.',
+      proposed_solution: 'A hinged lid on the bench, dropped at the end of each shift.',
+      impact_level: 'Medium', impact_areas: 'Quality', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  await api('POST', '/api/ideas/review-action', {
+    token: raj.token, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+
+  const notes = await sql('ifqm_test_a',
+    `SELECT message FROM ifqm_test_a.notifications
+      WHERE user_id = ${dev.id} AND idea_id = ${ideaId}
+      ORDER BY id DESC LIMIT 5`);
+  const moved = notes.find((n) => /approved by .* reviewed by/i.test(n.message));
+  assert.ok(moved, `the submitter must be told it moved — got ${JSON.stringify(notes)}`);
+  assert.match(moved.message, /Raj Kumar/, 'naming who approved it');
+  assert.match(moved.message, /Anita Bose/,
+    'and who has it now, by name: "reviewed by Anita Bose, your Immediate Manager" — '
+    + 'not "reviewed by Immediate Manager", which in an organisation with nine of them '
+    + 'is not an answer');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * One plant head per organisation.
+ *
+ * The chain ends at the plant head and that approval is what releases an idea
+ * to QCMS. With two of them, "final approval" quietly becomes "approval by
+ * whichever plant head the router happened to reach" — the most consequential
+ * decision in the flow settled by a tie-break nobody chose.
+ *
+ * Checked at both doors. The console is one way in and the bulk import is the
+ * other, and a rule enforced in one of them is a rule with a way around it.
+ */
+test('an organisation may have only one plant head', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await thePlantHead();   // the sitting one
+
+  // A second, through the console.
+  const second = await api('POST', '/api/users', {
+    token: aTok,
+    body: { name: 'Second Head', email: 'second.ph@orga.test', password: 'PhPassword12345',
+      role: 'plant_head', employee_id: 'PH2', phone: '+919812347021', department: 'Ops' },
+  });
+  assert.equal(second.status, 409, JSON.stringify(second.data));
+  assert.match(second.data.error, /already held by/i,
+    'and it must name who holds it — otherwise the admin cannot act on the refusal');
+
+  // A second, by promoting somebody who already exists.
+  const other = await api('POST', '/api/users', {
+    token: aTok,
+    body: { name: 'Promotable Person', email: 'promo@orga.test', password: 'PhPassword12345',
+      role: 'senior_manager', employee_id: 'PROMO1', phone: '+919812347022', department: 'Ops' },
+  });
+  assert.equal(other.data.success, true, JSON.stringify(other.data));
+  const [promo] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.users WHERE email = 'promo@orga.test'");
+
+  const promoted = await api('PUT', `/api/users/${promo.id}`, {
+    token: aTok,
+    body: { name: 'Promotable Person', role: 'plant_head', phone: '+919812347022',
+      department: 'Ops', status: 'active' },
+  });
+  assert.equal(promoted.status, 409,
+    'the edit form is the same door — a rule the console enforces on creation and '
+    + 'not on promotion is not a rule');
+
+  /*
+   * Editing the sitting plant head must still work. `assertRoleVacant` excepts
+   * the row being edited, or changing their phone number would fail on the
+   * grounds that a plant head exists — which they are.
+   */
+  const [sitting] = await sql('ifqm_test_a',
+    "SELECT id, name FROM ifqm_test_a.users WHERE role = 'plant_head' AND status = 'active' LIMIT 1");
+  const resave = await api('PUT', `/api/users/${sitting.id}`, {
+    token: aTok,
+    body: { name: sitting.name, role: 'plant_head', phone: '+919812345904',
+      department: 'Ops', status: 'active' },
+  });
+  assert.equal(resave.status, 200,
+    `the sitting plant head must be editable — ${JSON.stringify(resave.data)}`);
+});
+
+/*
+ * The bug behind "the plant head still cannot give final approval sometimes".
+ *
+ * An idea approved at the last STAFFED stage of a chain whose final stage
+ * nobody holds used to be left sitting where it was. It had an Approved entry
+ * against it at a stage with a perfectly healthy holder, so the hourly repair
+ * pass — which asked only "can anybody act at this idea's stage?" — saw nothing
+ * wrong and moved on. When a plant head was finally appointed, nothing ever
+ * looked at that idea again: it waited forever at a stage that had already
+ * finished with it, showing up in the department manager's queue and never in
+ * the plant head's.
+ *
+ * The fix is one line of intent: park it at the stage that is BLOCKING. Then
+ * the repair pass asks the right question and answers it the moment the role is
+ * filled.
+ */
+test('an idea waiting for a plant head reaches them once one is appointed', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+
+  // A chain ending in a role this organisation has nobody for.
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead,executive' },
+  });
+
+  const tl = await makeReviewer('block.tl@orga.test', 'team_lead', '+919812347031', 'WAITTL');
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Bund the solvent store',
+      present_situation: 'A drum split last month and the solvent ran to the floor drain.',
+      proposed_solution: 'Kerb the store and put the drums on a bunded pallet.',
+      impact_level: 'High', impact_areas: 'Safety', action: 'submit',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  const approved = await api('POST', '/api/ideas/review-action', {
+    token: tl, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(approved.status, 200, JSON.stringify(approved.data));
+
+  /*
+   * It waits AT the empty stage, not at the one that just approved it. This is
+   * the assertion the whole bug turns on.
+   */
+  let st = await stageOf(ideaId);
+  assert.equal(st.current_stage, 'executive',
+    'a blocked idea waits at the stage that is blocking it, not at the stage that '
+    + 'has already approved it — otherwise the repair pass looks at the wrong role');
+  assert.notEqual(st.status, 'Approved',
+    'and it is certainly not approved: nobody gave that approval');
+
+  // The team lead is done with it and must not still be holding it.
+  const tlQueue = await api('GET', '/api/ideas/review', { token: tl });
+  assert.ok(!(tlQueue.data.ideas || []).some((i) => i.id === ideaId),
+    'the stage that approved it must not keep seeing it');
+
+  // Now somebody is appointed to the empty role.
+  const exec = await makeReviewer('block.exec@orga.test', 'executive', '+919812347032', 'BLKEX');
+
+  const { repairStrandedIdeas } = await import('../src/services/ideaService.js');
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+  const repair = await repairStrandedIdeas(pool);
+  assert.ok(repair.moved >= 1, `the repair pass must re-route it — got ${JSON.stringify(repair)}`);
+
+  st = await stageOf(ideaId);
+  assert.equal(st.current_stage, 'executive');
+  assert.ok(st.current_reviewer_id, 'and it is now assigned to a real person');
+
+  // And that person can finish it.
+  const execQueue = await api('GET', '/api/ideas/review', { token: exec });
+  assert.ok((execQueue.data.ideas || []).some((i) => i.id === ideaId),
+    'the newly appointed approver must see the idea that was waiting for them');
+
+  const closed = await api('POST', '/api/ideas/review-action', {
+    token: exec, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(closed.status, 200, JSON.stringify(closed.data));
+  st = await stageOf(ideaId);
+  assert.equal(st.status, 'Approved', 'the final stage closes it');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * An idea whose assigned approver has left does not sit in a dead queue.
+ *
+ * Routing to a named person buys precision and costs resilience: the one queue
+ * an idea appears in can belong to somebody who no longer logs in. The old
+ * repair pass could not see this at all — it asked whether the idea's ROLE had
+ * holders, and it did, so an idea assigned to a deactivated manager looked
+ * perfectly healthy while being invisible to every living person.
+ */
+test('an idea assigned to somebody who has left is re-routed', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,immediate_manager' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'GonePass12345', role, employee_id: empId,
+        phone, department: 'Press', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    return { id: row.id };
+  };
+
+  const leaver = await mk('Leaving Manager', 'leaver@orga.test', 'GONEMGR', '+919812347041', 'manager');
+  const staying = await mk('Staying Manager', 'stayer@orga.test', 'STAYMGR', '+919812347042', 'manager');
+  const author = await mk('Reporting Author', 'author.gone@orga.test', 'GONEEMP', '+919812347043',
+    'employee', leaver.id);
+  const { token: authorTok } = await login('author.gone@orga.test', 'GonePass12345', 'orga');
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: authorTok,
+    body: {
+      title: 'Second scrap bin at the press',
+      present_situation: 'One bin fills by mid-shift and offcuts stack on the floor.',
+      proposed_solution: 'A second bin on the far side, emptied on the same round.',
+      impact_level: 'Low', impact_areas: 'Housekeeping', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+  let st = await stageOf(ideaId);
+  assert.equal(Number(st.current_reviewer_id), Number(leaver.id), 'routed to the author\'s manager');
+
+  // They leave.
+  await api('PUT', `/api/users/${leaver.id}`, {
+    token: aTok,
+    body: { name: 'Leaving Manager', role: 'manager', phone: '+919812347041',
+      department: 'Press', status: 'inactive' },
+  });
+
+  const { repairStrandedIdeas } = await import('../src/services/ideaService.js');
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+  await repairStrandedIdeas(pool);
+
+  st = await stageOf(ideaId);
+  assert.notEqual(Number(st.current_reviewer_id), Number(leaver.id),
+    'an idea must not stay in the queue of somebody who has been deactivated');
+  assert.equal(st.current_stage, 'immediate_manager', 'the stage itself is unchanged — only the person');
+  assert.ok(author.id, 'author fixture used');
+  assert.ok(staying.id, 'a living manager existed to take it');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * The closure PDF says who approved and in what capacity.
+ *
+ * "Approved by Sunil Rao" leaves a reader to work out whether Sunil was
+ * entitled to close the idea; the point of a closure document is that somebody
+ * who was not there can follow it years later. The position is read from what
+ * was RECORDED at the moment of each decision rather than from the approver's
+ * role today — otherwise a promotion silently rewrites history, and a team lead
+ * made plant head in March would appear to have given plant-head approval at
+ * step one back in January.
+ */
+test('the closure PDF records the position each approver held at the time', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'PdfPass12345', role, employee_id: empId,
+        phone, department: 'Weld', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'PdfPass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const lead = await mk('Pdf Lead', 'pdf.tl@orga.test', 'PDFTL', '+919812347051', 'team_lead');
+  const worker = await mk('Pdf Worker', 'pdf.emp@orga.test', 'PDFEMP', '+919812347052',
+    'employee', lead.id);
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: worker.token,
+    body: {
+      title: 'Jig for the bracket weld',
+      present_situation: 'The bracket is held by hand and the angle drifts across a batch.',
+      proposed_solution: 'A simple jig that locates the bracket at the right angle every time.',
+      impact_level: 'High', impact_areas: 'Quality', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+  await api('POST', '/api/ideas/review-action', {
+    token: lead.token, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+
+  // The stage is on the row, which is what the PDF prints.
+  const wf = await sql('ifqm_test_a',
+    `SELECT action, stage FROM ifqm_test_a.idea_workflow
+      WHERE idea_id = ${ideaId} ORDER BY id ASC`);
+  const submittedRow = wf.find((w) => w.action === 'Submitted');
+  const approvedRow = wf.find((w) => w.action === 'Approved');
+  assert.equal(submittedRow.stage, 'originator', 'the author acted as the originator');
+  assert.equal(approvedRow.stage, 'team_lead',
+    'and the approval records the stage it was given at, so a later promotion '
+    + 'cannot rewrite what capacity it was given in');
+
+  // The document itself is a PDF, and it carries the chain the renderer needs.
+  const detail = await api('GET', `/api/ideas/${ideaId}`, { token: worker.token });
+  assert.ok(detail.data.idea.approval_chain?.steps?.length,
+    'the idea must travel with this organisation\'s chain — the renderer cannot '
+    + 'look up a tenant\'s own stage names for itself');
+
+  const pdf = await api('GET', `/api/export/idea/${ideaId}/pdf`, { token: worker.token });
+  assert.equal(pdf.status, 200, 'the closure PDF must render');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * A pooled connection the database has already closed costs one retry, not one
+ * error page.
+ *
+ * This is the whole of "sometimes it says server error, on any page". MySQL
+ * closes a connection after `wait_timeout` (600s on Aiven) and nothing tells
+ * the client; the pool keeps holding it; the next request after a quiet spell
+ * borrows the corpse and gets ECONNRESET. It looked random because it was —
+ * whoever made the first request after a lull, on whichever socket had gone
+ * stale — and it could never be reproduced on a busy system, which is why it
+ * survived so long.
+ *
+ * Tested against a fake pool rather than a real one: reproducing it for real
+ * means waiting ten minutes for a server-side timeout, and what needs pinning
+ * is the decision — WHICH errors are retried, and that a retry happens at all.
+ */
+test('a dead pooled connection is retried once, and a real error is not', async () => {
+  const { resilientPool, KEEPALIVE_OPTIONS } = await import('../src/database/resilient.js');
+
+  // ── the stale-socket case ──
+  let calls = 0;
+  const flaky = {
+    on() {},
+    execute: async () => {
+      calls++;
+      if (calls === 1) {
+        const err = new Error('read ECONNRESET');
+        err.code = 'ECONNRESET';
+        err.fatal = true;
+        throw err;
+      }
+      return [[{ ok: 1 }]];
+    },
+  };
+  const [rows] = await resilientPool(flaky, 'test').execute('SELECT 1');
+  assert.equal(calls, 2, 'the statement is tried again on a fresh connection');
+  assert.equal(rows[0].ok, 1, 'and the caller gets the answer, not an error');
+
+  // ── a query that is simply wrong is NOT retried ──
+  /*
+   * The distinction the whole thing rests on. A duplicate-key error came back
+   * THROUGH a working connection, so the server did receive the statement and
+   * running it again would only produce the same answer more slowly — or, for
+   * a write, produce it twice.
+   */
+  let dupCalls = 0;
+  const dup = {
+    on() {},
+    execute: async () => {
+      dupCalls++;
+      const err = new Error("Duplicate entry 'x' for key 'email'");
+      err.code = 'ER_DUP_ENTRY';
+      throw err;
+    },
+  };
+  await assert.rejects(
+    () => resilientPool(dup, 'test').execute('INSERT ...'),
+    /Duplicate entry/);
+  assert.equal(dupCalls, 1, 'a real error is reported at once, not retried');
+
+  // ── a second failure is an outage, and is told truthfully ──
+  let downCalls = 0;
+  const down = {
+    on() {},
+    query: async () => {
+      downCalls++;
+      const err = new Error('connect ECONNREFUSED');
+      err.code = 'ECONNREFUSED';
+      throw err;
+    },
+  };
+  await assert.rejects(
+    () => resilientPool(down, 'test').query('SELECT 1'),
+    /ECONNREFUSED/);
+  assert.equal(downCalls, 2, 'tried twice and then believed — retrying forever would only delay the truth');
+
+  /*
+   * The listener that stops one dead connection killing the process.
+   *
+   * A mysql2 pool that emits 'error' with nothing listening THROWS, and that
+   * throw is not inside any request — it lands on the process-level
+   * uncaughtException handler, which calls process.exit(1). So an idle
+   * connection dying could take the whole server down and fail every request in
+   * flight. That is the version of this bug that looked like "any part of the
+   * platform".
+   */
+  const listeners = [];
+  resilientPool({ on: (evt) => listeners.push(evt), execute: async () => [[]] }, 'test');
+  assert.ok(listeners.includes('error'),
+    'the pool must have an error listener, or one dead idle connection exits the process');
+
+  // ── and the settings that stop it happening in the first place ──
+  assert.equal(KEEPALIVE_OPTIONS.enableKeepAlive, true);
+  assert.ok(KEEPALIVE_OPTIONS.idleTimeout < 600000,
+    'our idle timeout must be well under MySQL wait_timeout (600s on Aiven), so WE '
+    + 'close idle connections first — a connection we closed is one the pool knows '
+    + 'about, and one the server closed is one it does not');
+});
+
+/*
+ * Ideas already in flight are moved to the author's own approver.
+ *
+ * The routing rule is only half a fix. Every idea submitted before it existed
+ * was assigned to whichever holder of the role sorted first, so on the day this
+ * ships there is a backlog sitting with the wrong managers — alive, assigned,
+ * and therefore invisible to every other check in the repair pass. They would
+ * have stayed wrong until somebody approved them, which is the outcome the
+ * routing was built to prevent.
+ *
+ * Only ever moved TOWARDS the author's line, and never un-assigned: a
+ * correction that empties the field would take an idea out of one queue without
+ * putting it into another.
+ */
+test('an idea sitting with the wrong manager is moved to the author\'s own', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,immediate_manager' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'FixupPass12345', role, employee_id: empId,
+        phone, department: 'Tool', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    return { id: row.id };
+  };
+
+  const hers = await mk('Her Manager', 'hers.mgr@orga.test', 'FIXOWN', '+919812347061', 'manager');
+  const other = await mk('Other Manager', 'other.mgr@orga.test', 'FIXOTH', '+919812347062', 'manager');
+  await mk('Fixup Author', 'fixup@orga.test', 'FIXEMP', '+919812347063', 'employee', hers.id);
+  const { token: authorTok } = await login('fixup@orga.test', 'FixupPass12345', 'orga');
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: authorTok,
+    body: {
+      title: 'Shadow board for the setter’s tools',
+      present_situation: 'Tools go missing between shifts and a setup waits while somebody hunts.',
+      proposed_solution: 'An outlined shadow board at the machine, checked at handover.',
+      impact_level: 'Medium', impact_areas: 'Productivity', action: 'submit',
+    },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  // Put it where the old logic would have: with a manager who is not theirs.
+  await sql('ifqm_test_a',
+    `UPDATE ifqm_test_a.ideas SET current_reviewer_id = ${other.id} WHERE id = ${ideaId}`);
+
+  const { repairStrandedIdeas } = await import('../src/services/ideaService.js');
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const pool = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+  await repairStrandedIdeas(pool);
+
+  const st = await stageOf(ideaId);
+  assert.equal(Number(st.current_reviewer_id), Number(hers.id),
+    'the backlog is corrected towards the reporting line, not left where it was');
+  assert.equal(st.current_stage, 'immediate_manager',
+    'and the STAGE is untouched — the chain decides that, and re-routing must not '
+    + 'quietly move an idea forwards or backwards through it');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * The dashboard count and the review queue are the same claim, made twice.
+ *
+ * "4 ideas are waiting on your decision" above a list containing two of them is
+ * not a rounding difference — it is the product telling somebody their work is
+ * somewhere they cannot find, and there is nowhere to go and look. The two used
+ * to be computed from different rules: the card matched the reporting tree with
+ * no reference to the approval chain at all, so it counted ideas at stages the
+ * person plays no part in, counted their own ideas, and missed unassigned ones
+ * at a stage they do hold.
+ */
+test('the dashboard pending count agrees with the review queue', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,immediate_manager' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'CountPass12345', role, employee_id: empId,
+        phone, department: 'Assembly', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'CountPass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const boss = await mk('Count Manager', 'count.mgr@orga.test', 'CNTMGR', '+919812347071', 'manager');
+  const one = await mk('Count One', 'count.one@orga.test', 'CNTONE', '+919812347072', 'employee', boss.id);
+  const two = await mk('Count Two', 'count.two@orga.test', 'CNTTWO', '+919812347073', 'employee', boss.id);
+
+  const mine = [];
+  for (const [who, title] of [[one, 'Label the fastener bins'], [two, 'Torque wrench at the station']]) {
+    const r = await api('POST', '/api/ideas/submit', {
+      token: who.token,
+      body: {
+        title,
+        present_situation: 'The current arrangement costs time on every build.',
+        proposed_solution: 'A small change at the station that removes the walk.',
+        impact_level: 'Low', impact_areas: 'Productivity', action: 'submit',
+      },
+    });
+    assert.equal(r.data.success, true, JSON.stringify(r.data));
+    mine.push(r.data.idea_id);
+  }
+
+  /*
+   * The manager submits one of their own. It must appear in NEITHER — nobody
+   * reviews their own idea, and a count that includes it sends somebody looking
+   * for a decision they are not allowed to make.
+   */
+  const own = await api('POST', '/api/ideas/submit', {
+    token: boss.token,
+    body: {
+      title: 'Move the parts trolley closer',
+      present_situation: 'The trolley is parked outside the cell.',
+      proposed_solution: 'Bring it inside the marked area.',
+      impact_level: 'Low', impact_areas: 'Productivity', action: 'submit',
+    },
+  });
+
+  const dash = await api('GET', '/api/ideas/dashboard', { token: boss.token });
+  const queue = await api('GET', '/api/ideas/review', { token: boss.token });
+  const listed = (queue.data.ideas || []).length;
+
+  assert.equal(Number(dash.data.pending_reviews), listed,
+    `the card says ${dash.data.pending_reviews} and the queue lists ${listed} — `
+    + 'they are the same question and must give the same answer');
+  /*
+   * Asserted by identity rather than by total. The queue legitimately also
+   * holds ideas left unassigned by earlier tests in this file, which any
+   * manager may act on; a bare count would be pinning the order the suite
+   * happens to run in rather than the rule under test.
+   */
+  const ids = new Set((queue.data.ideas || []).map((i) => i.id));
+  for (const id of mine) {
+    assert.ok(ids.has(id), 'every idea from this manager\'s own reports is waiting on them');
+  }
+  assert.ok(!ids.has(own.data.idea_id),
+    'and their own idea is not — nobody reviews what they wrote, so counting it would '
+    + 'send them looking for a decision they are not allowed to make');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * The author hears about every step, by email, and hears who has it.
+ *
+ * Most of the people this platform is for do not sit at a desk with the
+ * dashboard open. An idea can spend a fortnight travelling four stages, and an
+ * author who hears nothing in that time concludes it went into a drawer — which
+ * is how a suggestion scheme quietly stops being used. The in-app notification
+ * only reaches somebody who has already come back to look; the email reaches
+ * somebody who has not.
+ *
+ * Both ends are named on purpose. "Approved at Team Lead, now with Immediate
+ * Manager" describes ranks; what the author wants is which two PEOPLE, because
+ * the first thing anybody does with this is decide whether to go and ask
+ * somebody about it.
+ */
+test('the submitter is emailed at every step, and congratulated at the last', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead,immediate_manager' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'MailPass12345', role, employee_id: empId,
+        phone, department: 'Foundry', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'MailPass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const akshay = await mk('Akshay Nair', 'akshay.mgr@orga.test', 'MAILMGR', '+919812347081', 'manager');
+  const lead = await mk('Priya Menon', 'priya.tl@orga.test', 'MAILTL', '+919812347082', 'team_lead', akshay.id);
+  const author = await mk('Sunil Das', 'sunil.emp@orga.test', 'MAILEMP', '+919812347083', 'employee', lead.id);
+
+  const mailsTo = async (addr) => sql('ifqm_test_a',
+    `SELECT subject, body FROM ifqm_test_a.email_queue
+      WHERE to_email = '${addr}' ORDER BY id ASC`);
+  const before = (await mailsTo('sunil.emp@orga.test')).length;
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: author.token,
+    body: {
+      title: 'Extract hood over the pouring bay',
+      present_situation: 'Fume drifts across the bay and the operators work in it all shift.',
+      proposed_solution: 'A hood over the pour point, ducted to the existing extraction.',
+      impact_level: 'High', impact_areas: 'Safety', action: 'submit',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  // ── Step one: the team lead approves, and it goes on to Akshay ──
+  const first = await api('POST', '/api/ideas/review-action', {
+    token: lead.token, body: { idea_id: ideaId, decision: 'Approved' },
+  });
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+
+  let mails = (await mailsTo('sunil.emp@orga.test')).slice(before);
+  const moved = mails.find((m) => /moved forward/i.test(m.subject));
+  assert.ok(moved, `the author must be emailed when it moves — got ${JSON.stringify(mails)}`);
+  assert.match(moved.body, /Priya Menon/, 'it names who approved it');
+  assert.match(moved.body, /Akshay Nair/, 'and who has it now — by name, not by rank');
+  assert.match(moved.body, /step 2 of 2/,
+    'and how far along it is, so "under review" has a size to it');
+
+  // ── The last step: a different letter ──
+  const last = await api('POST', '/api/ideas/review-action', {
+    token: akshay.token, body: { idea_id: ideaId, decision: 'Approved', comment: 'Do it.' },
+  });
+  assert.equal(last.status, 200, JSON.stringify(last.data));
+
+  mails = (await mailsTo('sunil.emp@orga.test')).slice(before);
+  const done = mails.find((m) => /Congratulations/i.test(m.subject));
+  assert.ok(done, `the final approval must read as an ending — got ${
+    JSON.stringify(mails.map((m) => m.subject))}`);
+  assert.match(done.body, /Akshay Nair/, 'naming who gave the final approval');
+  assert.match(done.body, /quality system/i,
+    'and saying what happens next — it can go to QC and be built');
+  assert.match(done.body, /points/i,
+    'and what it earned: the scheme runs on people seeing that writing an idea '
+    + 'down led somewhere');
+
+  const [who] = await sql('ifqm_test_a',
+    `SELECT points FROM ifqm_test_a.users WHERE id = ${author.id}`);
+  assert.match(done.body, new RegExp(`${who.points} points in total`),
+    'the running total must match what the author actually has, not just the '
+    + 'increment — "+40" alone does not tell somebody where they stand');
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
 });

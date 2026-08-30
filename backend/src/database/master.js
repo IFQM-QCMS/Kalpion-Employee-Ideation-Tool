@@ -7,6 +7,7 @@
 import mysql from 'mysql2/promise';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
+import { resilientPool, KEEPALIVE_OPTIONS } from './resilient.js';
 
 let pool = null;
 
@@ -25,7 +26,7 @@ export async function closeMasterPool() {
 
 export function masterDb() {
   if (pool) return pool;
-  pool = mysql.createPool({
+  const raw = mysql.createPool({
     host: config.masterDb.host,
     port: config.db.port,
     ssl: config.db.ssl,
@@ -49,6 +50,16 @@ export function masterDb() {
      * what helpers.parseServerDate assumes.
      */
     timezone: 'Z',
+    /*
+     * Keepalive, and an idle timeout under the server's.
+     *
+     * The master pool had neither, which is why the intermittent server errors
+     * hit EVERY endpoint rather than a few: every request resolves its tenant
+     * through this pool first, so one stale master connection failed whatever
+     * the user happened to be doing. See database/resilient.js.
+     */
+    ...KEEPALIVE_OPTIONS,
+    maxIdle: Math.min(4, config.dbPoolSize),
   });
 
   /*
@@ -60,11 +71,13 @@ export function masterDb() {
    * Without it the pinning above is decorative: rows would still be stamped in
    * whatever zone the database host happens to run in.
    */
-  pool.on('connection', (conn) => {
+  raw.on('connection', (conn) => {
     conn.query("SET time_zone = '+00:00'", (err) => {
       if (err) logger.warn(`db: could not pin session to UTC — ${err.message}`);
     });
   });
+
+  pool = resilientPool(raw, 'master');
   return pool;
 }
 

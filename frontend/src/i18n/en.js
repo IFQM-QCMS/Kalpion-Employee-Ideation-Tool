@@ -577,6 +577,8 @@ export default {
   'admin.uf_password':'Password',
   'admin.uf_role':'Role',
   'admin.uf_manager':'Manager',
+  'admin.uf_role_taken':'already held by {name}',
+  'admin.uf_manager_hint':'Who this person reports to. Ideas go to the approver on this line — set it, or the idea is offered to every holder of the role instead.',
   'admin.uf_none':'— None —',
   'admin.uf_dept':'Department',
   'admin.uf_bu':'Business Unit',

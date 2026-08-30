@@ -412,10 +412,14 @@ export async function my(db, user) {
  * Those two only run when somebody acts. An idea can become unactionable
  * without anybody acting at all:
  *
+ *   • the person it was routed to leaves and is deactivated;
  *   • the only holder of its stage leaves and is deactivated;
  *   • an administrator edits the chain and the idea's stage is now filled by
  *     nobody;
- *   • a migration placed it at a stage that was correct under the old chain.
+ *   • a migration placed it at a stage that was correct under the old chain;
+ *   • it was waiting for a role nobody held, and somebody has now been given
+ *     that role — a plant head appointed a week after the department manager
+ *     approved.
  *
  * The last one is not hypothetical — it is how six ideas came to be sitting at
  * `immediate_manager` in a tenant with no manager, invisible to every queue in
@@ -432,47 +436,97 @@ export async function my(db, user) {
  * people to approve something they already approved, and would let a chain edit
  * silently undo decisions that were properly made.
  *
- * Nothing is ever approved by this. An idea with nowhere to go stays where it
- * is and the administrators are told.
+ * Nothing is ever approved by this. An idea with nowhere to go is parked at the
+ * stage that is blocking it, so the next pass asks whether THAT role has been
+ * filled rather than re-examining a stage which already finished with it.
  */
 export async function repairStrandedIdeas(db) {
   const cfg = await getApprovalConfig(db);
   if (!cfg.approvers.length) return { checked: 0, moved: 0, stranded: 0 };
 
   const [rows] = await db.execute(
-    `SELECT i.id, i.idea_code, i.title, i.submitter_id, i.current_stage,
+    `SELECT i.id, i.idea_code, i.title, i.submitter_id, i.current_stage, i.current_reviewer_id,
+            rv.status AS reviewer_status,
             (SELECT COUNT(*) FROM idea_workflow w
               WHERE w.idea_id = i.id AND w.action = 'Approved') AS approvals
        FROM ideas i
+       LEFT JOIN users rv ON rv.id = i.current_reviewer_id
       WHERE i.status IN ('Submitted','Under Review')
         AND COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'`
   );
   if (!rows.length) return { checked: 0, moved: 0, stranded: 0 };
 
-  // One lookup for the whole pass rather than one per idea.
-  const roles = [...new Set(cfg.approvers.map((a) => a.role))];
-  const [holders] = await db.query(
-    `SELECT role, COUNT(*) n FROM users
-      WHERE status = 'active' AND role IN (?) GROUP BY role`, [roles]);
-  const held = Object.fromEntries(holders.map((h) => [h.role, Number(h.n)]));
-
-  const actionable = (stage, submitterId) => {
-    const spec = cfg.approvers.find((a) => a.stage === stage);
-    if (!spec) return false;
-    /*
-     * One holder who happens to be the author is the same as none: nobody may
-     * approve their own idea. Counting rather than querying per idea would get
-     * this wrong, so the single-holder case is checked exactly.
-     */
-    return (held[spec.role] || 0) > 0;
-  };
-
   let moved = 0;
   let stranded = 0;
 
   for (const idea of rows) {
-    if (idea.current_stage && actionable(idea.current_stage, idea.submitter_id)) continue;
+    /*
+     * ── Is this idea in a state somebody can act on? ────────────────────────
+     *
+     * Three things have to be true, and the old version only checked one.
+     *
+     * It used to ask "does anybody hold this idea's stage?" and stop there. So
+     * an idea assigned to a person who had since been deactivated looked
+     * perfectly healthy — their ROLE still had holders — while the one queue it
+     * appeared in belonged to somebody who no longer logs in. The idea sat
+     * there indefinitely with no sign anything was wrong.
+     *
+     * Unassigned is deliberately treated as needing repair rather than as
+     * broken: the queue still offers those to every holder of the role, so
+     * nothing is lost meanwhile, but if somebody suitable now exists the idea
+     * should be pointed at them.
+     */
+    const stageSpec = cfg.approvers.find((a) => a.stage === idea.current_stage);
+    const stageExists = !!stageSpec;
+    const assigneeAlive = idea.current_reviewer_id
+      && idea.reviewer_status === 'active'
+      && Number(idea.current_reviewer_id) !== Number(idea.submitter_id);
 
+    if (stageExists && assigneeAlive) {
+      /*
+       * ── Assigned, alive, and possibly the wrong person ─────────────────────
+       *
+       * Everything above asks whether SOMEBODY can act. This asks whether it is
+       * the RIGHT somebody.
+       *
+       * Ideas routed before the reporting line was consulted went to whichever
+       * holder of the role sorted first — so Jitesh's idea could be sitting
+       * with Mark while Elisa, his actual manager, has never seen it. Those
+       * ideas are alive and assigned, so nothing else here would ever look at
+       * them again, and they would stay wrong until somebody approved them.
+       *
+       * Only ever moved TOWARDS the author's own line, and only when that line
+       * actually produces somebody. An idea is never un-assigned by this: a
+       * correction that empties the field would take it out of one queue
+       * without putting it in another.
+       */
+      const own = await lineHolderFor(db, idea.submitter_id, stageSpec.role);
+      if (!own || Number(own.id) === Number(idea.current_reviewer_id)) continue;
+
+      await db.execute(
+        'UPDATE ideas SET current_reviewer_id = ?, updated_at = NOW() WHERE id = ?',
+        [own.id, idea.id]
+      );
+      try {
+        await addNotification(db, own.id, 'Idea Awaiting Your Approval',
+          `Idea ${idea.idea_code} — "${idea.title}" — is now with you as `
+          + `${cfg.labels[idea.current_stage] || idea.current_stage}.`, idea.id);
+      } catch { /* best effort: the routing is the thing that matters */ }
+      logger.info(`idea ${idea.idea_code}: moved to ${own.name} — the submitter's own `
+        + `${cfg.labels[idea.current_stage] || idea.current_stage}`);
+      moved++;
+      continue;
+    }
+
+    /*
+     * Where to resume from.
+     *
+     * An idea that has been approved at least once searches FORWARD from where
+     * it is. Sending it back would ask people to approve something they already
+     * approved, and would let a chain edit silently undo decisions that were
+     * properly made. One with no approvals restarts at the top of the chain,
+     * because nothing has been decided about it yet.
+     */
     const from = Number(idea.approvals) > 0 && idea.current_stage
       ? idea.current_stage
       : cfg.approvers[0].stage;
@@ -480,21 +534,58 @@ export async function repairStrandedIdeas(db) {
     const resolved = await resolveActionableStage(db, cfg, from, idea.submitter_id);
 
     if (resolved.stranded || !resolved.stage) {
+      /*
+       * Still nobody. Park it at the stage that is BLOCKING, so the next pass
+       * asks the right question — "can anybody act at plant_head yet?" — rather
+       * than looking at a stage that has already finished with it and
+       * concluding all is well. That mistake is how an idea approved by the
+       * department manager stayed invisible to the plant head who was appointed
+       * a week later.
+       */
+      if (resolved.stage && resolved.stage !== idea.current_stage) {
+        const pos = cfg.approvers.findIndex((a) => a.stage === resolved.stage) + 1;
+        await db.execute(
+          `UPDATE ideas SET current_stage = ?, current_reviewer_id = NULL,
+                  escalation_level = ?, updated_at = NOW()
+            WHERE id = ?`,
+          [resolved.stage, pos, idea.id]
+        );
+      }
       stranded++;
       continue;
     }
-    if (resolved.stage === idea.current_stage) continue;
+
+    const nextAssignee = resolved.assignee ? resolved.assignee.id : null;
+    if (resolved.stage === idea.current_stage
+        && Number(nextAssignee) === Number(idea.current_reviewer_id)) continue;
 
     const position = cfg.approvers.findIndex((a) => a.stage === resolved.stage) + 1;
     await db.execute(
       `UPDATE ideas SET current_stage = ?, current_reviewer_id = ?, escalation_level = ?, updated_at = NOW()
         WHERE id = ?`,
-      [resolved.stage, resolved.assignee ? resolved.assignee.id : null, position, idea.id]
+      [resolved.stage, nextAssignee, position, idea.id]
     );
+
+    /*
+     * Tell the new owner. A silent reassignment is an idea that arrives in
+     * somebody's queue with no reason to look at it — and the person it moved
+     * FROM is usually gone, so nobody else is going to mention it.
+     */
+    if (resolved.assignee) {
+      try {
+        await addNotification(db, resolved.assignee.id, 'Idea Awaiting Your Approval',
+          `Idea ${idea.idea_code} — "${idea.title}" — is now with you as `
+          + `${cfg.labels[resolved.stage] || resolved.stage}.`, idea.id);
+      } catch { /* best effort: the routing is the thing that matters */ }
+    }
 
     const was = idea.current_stage ? (cfg.labels[idea.current_stage] || idea.current_stage) : 'no stage';
     const now = cfg.labels[resolved.stage] || resolved.stage;
-    logger.info(`idea ${idea.idea_code}: moved from ${was} to ${now} — nobody could act at ${was}`);
+    const why = !stageExists ? `${was} is no longer in the chain`
+      : !idea.current_reviewer_id ? `nobody was assigned at ${was}`
+      : `the ${was} it was with is no longer active`;
+    logger.info(`idea ${idea.idea_code}: re-routed to ${now}`
+      + `${resolved.assignee ? ` (${resolved.assignee.name})` : ''} — ${why}`);
     moved++;
   }
 
@@ -537,18 +628,27 @@ export async function review(db, user) {
   /*
    * ── What is waiting on me ───────────────────────────────────────────────
    *
-   * The stages my role plays in THIS organisation's chain, and the ideas
-   * sitting at one of them.
+   * Two conditions, and both are needed.
    *
-   * This used to match on `current_reviewer_id = me OR (unassigned AND I am the
-   * submitter's manager)`, which had two consequences. An idea assigned to one
-   * holder of a role was invisible to every other holder of the same role, so a
-   * reviewer on leave stopped the chain; and an unassigned idea was offered to
-   * the submitter's manager whatever role that manager held, which is the
-   * reporting tree deciding the approval sequence again.
+   * The idea must be at a stage MY ROLE plays in this organisation's chain —
+   * that is the chain deciding the sequence, and it is not negotiable.
    *
-   * Matching on the stage fixes both. Anybody holding the role the idea is
-   * waiting on can act, and nobody else sees it.
+   * And it must have been routed to ME. Jitesh reports to Elisa; Mark manages
+   * a different team. Matching on the stage alone put Jitesh's idea in front of
+   * both of them, and whichever manager opened it first could approve it — so
+   * an idea could be decided by somebody with no connection to the work, while
+   * the manager who could actually judge it never knew it existed.
+   *
+   * ── The unassigned case, and why it is not simply excluded ──────────────
+   *
+   * `current_reviewer_id IS NULL` means nobody could be identified for that
+   * stage: an incomplete org chart, a row created before this routing existed,
+   * or a stage whose holder was deactivated. Dropping those from every queue
+   * would hide the idea from the entire organisation, which is how an idea
+   * disappears without anybody being told. They are offered to every holder of
+   * the stage's role instead — the old behaviour, kept exactly where it is the
+   * lesser evil, and the hourly repair pass assigns them properly as soon as
+   * somebody suitable exists.
    */
   const myStages = rolePlaysStages(cfg, user.role);
 
@@ -569,10 +669,11 @@ export async function review(db, user) {
        WHERE i.status IN ('Submitted','Under Review')
          AND i.submitter_id <> ?
          AND ((COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
-               AND i.current_stage IN (${placeholders}))
+               AND i.current_stage IN (${placeholders})
+               AND (i.current_reviewer_id = ? OR i.current_reviewer_id IS NULL))
               OR (i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending'))
        ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
-    const [ideas] = await db.execute(sql, [uid, uid, uid, ...myStages]);
+    const [ideas] = await db.execute(sql, [uid, uid, uid, ...myStages, uid]);
     return { success: true, ideas, chain: chainSummary(cfg, user.role) };
   }
 
@@ -647,13 +748,50 @@ export async function get(db, user, id) {
   idea.co_suggesters = cosug;
   idea.co_suggesters_display = cosug.map((c) => c.name).join(', ');
 
+  /*
+   * The trail, with the stage each action was taken at.
+   *
+   * `w.stage` is what was recorded at the time; `actor_role` is what that
+   * person is now. They are both here because they answer different questions
+   * and the older rows only have the second one — see migration 036. A reader
+   * showing "in what capacity" prefers the recorded stage and falls back to the
+   * current role, and must not present the fallback as though it were a record.
+   */
   const [wf] = await db.execute(
-    `SELECT w.*, u.name AS actor_name, u.role AS actor_role
+    `SELECT w.*, u.name AS actor_name, u.role AS actor_role, u.employee_id AS actor_employee_id
      FROM idea_workflow w JOIN users u ON u.id = w.actor_id
-     WHERE w.idea_id = ? ORDER BY w.created_at ASC`,
+     WHERE w.idea_id = ? ORDER BY w.created_at ASC, w.id ASC`,
     [id]
   );
   idea.workflow = wf;
+
+  /*
+   * This organisation's chain, travelling with the idea.
+   *
+   * The closure PDF has to print "team lead approved and passed it to the
+   * immediate manager" using THIS tenant's names for those steps — an
+   * organisation that calls its team leads Shift Incharges gets that word. The
+   * labels live in the tenant's own settings, so they have to come from here;
+   * a renderer cannot look them up, and hard-coding the catalogue names would
+   * print a document describing somebody else's organisation.
+   */
+  try {
+    const cfg = await getApprovalConfig(db);
+    idea.approval_chain = {
+      labels: cfg.labels,
+      steps: cfg.approvers.map((a, i) => ({
+        stage: a.stage,
+        label: cfg.labels[a.stage] || a.stage,
+        role: a.role,
+        position: i + 1,
+      })),
+      total: cfg.approvers.length,
+    };
+  } catch {
+    // A settings read that fails must not take the idea down with it. The PDF
+    // falls back to the actor's role, which is worse but is not nothing.
+    idea.approval_chain = null;
+  }
 
   try {
     const [rv] = await db.execute(
@@ -1004,7 +1142,8 @@ export async function submitOrDraft(db, user, action, b) {
         + 'approval path, so it cannot be reviewed. Assign the roles, or change the path.');
     }
 
-    try { await addWorkflow(db, ideaId, user.id, 'Submitted', submitNote); } catch {}
+    // 'originator' is a real stage in the chain, and it is the submitter's.
+    try { await addWorkflow(db, ideaId, user.id, 'Submitted', submitNote, 'originator'); } catch {}
     try { await addPoints(db, user.id, POINTS.submit); } catch {}
 
     if (user.manager_id) {
@@ -1120,42 +1259,158 @@ export async function reviewAction(db, user, b) {
  *   stranded — no stage in the rest of the chain has anybody who can act. The
  *   caller leaves the idea where it is and tells the administrators.
  */
+/**
+ * Walk the submitter's reporting line upward and return the first person on it
+ * who holds `role`.
+ *
+ * ── Why the line, and not the role ────────────────────────────────────────
+ *
+ * An organisation has many managers. Jitesh reports to Elisa; Mark is also a
+ * manager, of a different team, and has no business reading Jitesh's idea, let
+ * alone approving it. Choosing by role alone put the idea in front of both of
+ * them and let whichever one got there first decide it — so an idea could be
+ * approved by somebody who had never met the person who wrote it, and Elisa,
+ * who could actually judge whether the thing was worth doing, might never see
+ * it at all.
+ *
+ * The reporting tree answers "which manager is YOURS". It is not being used to
+ * decide the SEQUENCE — that mistake is what the ordered stage list exists to
+ * prevent, and the chain still decides which stage comes next. It decides only
+ * WHO fills the stage the chain has already chosen.
+ *
+ * The walk is bounded and remembers where it has been: manager_id is edited by
+ * hand on an admin screen, and a cycle (two people managing each other, or
+ * somebody set as their own manager) would otherwise spin forever inside a
+ * request. A depth cap alone would not do it — a two-person cycle never gets
+ * deeper.
+ */
+async function lineHolderFor(db, submitterId, role) {
+  const seen = new Set([Number(submitterId)]);
+  let currentId = Number(submitterId);
+
+  for (let hop = 0; hop < 20; hop++) {
+    const [rows] = await db.execute(
+      `SELECT u.id, u.name, u.email, u.role, u.status, u.manager_id
+         FROM users u WHERE u.id = (SELECT manager_id FROM users WHERE id = ?)`,
+      [currentId]
+    );
+    const boss = rows[0];
+    if (!boss) return null;                    // top of the tree
+    if (seen.has(Number(boss.id))) return null; // a cycle in the org chart
+    seen.add(Number(boss.id));
+
+    /*
+     * An inactive manager is stepped over rather than treated as the end of
+     * the line: somebody on long leave should not stop their whole team's
+     * ideas, and the person above them is the natural stand-in.
+     */
+    if (boss.role === role && boss.status === 'active' && Number(boss.id) !== Number(submitterId)) {
+      return { id: boss.id, name: boss.name, email: boss.email };
+    }
+    currentId = boss.id;
+  }
+  return null;
+}
+
+/**
+ * The first stage from `startStage` onwards that somebody can actually act on,
+ * and the specific person it belongs to.
+ *
+ * "Somebody" excludes the submitter: a team lead who submits an idea cannot be
+ * the team lead who approves it, so a stage whose only holder is the author is
+ * as empty as one with nobody in it.
+ *
+ * Who fills the stage is decided in three steps, in this order:
+ *
+ *   1. The submitter's own reporting line. This is the answer whenever the org
+ *      chart is complete, and it is the one people expect.
+ *   2. Failing that, the role's only holder — if there is exactly one, "the"
+ *      plant head is unambiguous whatever the reporting line says, and refusing
+ *      to route to them because a manager_id was left blank would strand the
+ *      idea for a data-entry reason.
+ *   3. Failing that — several holders and none of them in the submitter's line
+ *      — nobody is chosen, and the administrators are told the reporting line
+ *      is incomplete.
+ *
+ * ── Why step 3 assigns nobody rather than picking somebody ────────────────
+ *
+ * Picking is the obvious thing to do and it is a trap. Assigning the idea to
+ * whichever holder sorts first would mean the queue shows it to that one person
+ * — and the guard on the approve endpoint would then refuse everybody else, so
+ * an arbitrary tie-break would have quietly decided who was allowed to approve.
+ * If that person is on leave, the idea does not move at all, and the reason is
+ * invisible: it is sitting in the queue of somebody who is not looking.
+ *
+ * Leaving it unassigned falls back to the behaviour this routing replaced: any
+ * holder of the stage's role may act on it. That is exactly right here, because
+ * "which of these managers is the author's" is a question the data cannot
+ * answer — and a guess presented as an answer is worse than saying so. The
+ * `offLine` flag is what says so, to the only people who can fix it.
+ *
+ * @returns {{stage, role, assignee, skipped: string[], stranded: boolean, offLine: boolean}}
+ *   assignee — null when the stage is open to every holder of its role.
+ *   stranded — no stage in the rest of the chain has anybody who can act. The
+ *   caller parks the idea at the stage that is blocking and tells the admins.
+ */
 async function resolveActionableStage(db, cfg, startStage, submitterId) {
   const approvers = cfg.approvers;
   let i = approvers.findIndex((a) => a.stage === startStage);
   if (i < 0) i = 0;
 
   const skipped = [];
+  let blockedAt = null;   // the first stage that had nobody — where the idea waits
+
   for (; i < approvers.length; i++) {
     const { stage, role } = approvers[i];
 
-    /*
-     * Prefer the submitter's own line manager when they hold the role — an
-     * idea is better read by somebody who knows the work — but any holder will
-     * do, because the queue offers it to all of them.
-     */
+    // 1. The submitter's own line of report.
+    const own = await lineHolderFor(db, submitterId, role);
+    if (own) {
+      return { stage, role, assignee: own, skipped, stranded: false, offLine: false };
+    }
+
+    // 2. and 3. Everybody else who holds the role.
     const [rows] = await db.execute(
       `SELECT id, name, email FROM users
         WHERE role = ? AND status = 'active' AND id <> ?
-        ORDER BY (id = (SELECT manager_id FROM users WHERE id = ?)) DESC, id ASC
-        LIMIT 1`,
-      [role, submitterId, submitterId]
+        ORDER BY id ASC`,
+      [role, submitterId]
     );
 
-    if (rows.length) {
-      return { stage, role, assignee: rows[0], skipped, stranded: false };
+    if (rows.length === 1) {
+      // Unambiguous. "The" plant head is the plant head whether or not anybody
+      // filled in a manager_id.
+      return { stage, role, assignee: rows[0], skipped, stranded: false, offLine: false };
     }
+    if (rows.length > 1) {
+      // Several, and the data cannot say which is the author's. Open to all of
+      // them, and flagged so somebody fixes the org chart.
+      return { stage, role, assignee: null, skipped, stranded: false, offLine: true };
+    }
+
+    if (!blockedAt) blockedAt = stage;
     skipped.push(stage);
   }
 
-  // Nothing in the rest of the chain can act.
-  const fallback = approvers[approvers.findIndex((a) => a.stage === startStage)] || approvers[0] || null;
+  /*
+   * Nothing in the rest of the chain can act.
+   *
+   * The idea is reported as blocked AT THE STAGE THAT IS MISSING, not at the
+   * stage it came from. That distinction is the whole bug behind "the plant
+   * head sometimes cannot give final approval": an idea approved by the
+   * department manager with no plant head in the organisation used to be left
+   * sitting at department_manager. It had already been approved there, so the
+   * hourly repair pass saw a stage with a living holder and left it alone — and
+   * when a plant head was finally appointed, nothing ever moved the idea to
+   * them. It waited at a stage that was already done with it, forever.
+   */
   return {
-    stage: fallback ? fallback.stage : null,
-    role: fallback ? fallback.role : null,
+    stage: blockedAt || (approvers[approvers.length - 1]?.stage ?? null),
+    role: blockedAt ? cfg.approvers.find((a) => a.stage === blockedAt).role : null,
     assignee: null,
     skipped: [],
     stranded: true,
+    offLine: false,
   };
 }
 
@@ -1196,12 +1451,50 @@ async function reportChainGap(db, idea, message) {
  * succeeded — the decision is the thing that matters, and it is already
  * committed by the time this runs.
  */
-async function notifySubmitterProgress(db, idea, fromLabel, toLabel, position, total) {
+async function notifySubmitterProgress(db, idea, step) {
+  const {
+    approverName, fromLabel, toLabel, withName, position, total,
+  } = step;
   try {
+    /*
+     * Named on both ends, not just titled.
+     *
+     * "Approved at Team Lead, now with Immediate Manager" describes ranks. What
+     * the author wants to know is which two PEOPLE — who signed it off and
+     * whose desk it is on now — because the first thing anybody does with this
+     * is decide whether to go and ask somebody about it. In an organisation
+     * with nine managers, "with a manager" is not an answer.
+     */
+    const by = approverName ? `${approverName} (${fromLabel})` : fromLabel;
+    const withWhom = withName ? `${withName}, your ${toLabel}` : toLabel;
+
     await addNotification(db, idea.submitter_id, 'Your idea moved forward',
-      `Idea ${idea.idea_code} — "${idea.title}" — was approved at ${fromLabel} `
-      + `and is now with ${toLabel} (step ${position} of ${total}).`,
+      `Idea ${idea.idea_code} — "${idea.title}" — was approved by ${by} `
+      + `and is now being reviewed by ${withWhom} (step ${position} of ${total}).`,
       idea.id);
+
+    /*
+     * And by email, not only in the app.
+     *
+     * Most of the people this platform is for do not sit at a desk with the
+     * dashboard open. An idea can spend a fortnight travelling four stages, and
+     * an author who hears nothing in that time concludes the thing went into a
+     * drawer — which is how a suggestion scheme quietly stops being used. The
+     * in-app notification only reaches somebody who has already come back to
+     * look; the email is what reaches somebody who has not.
+     */
+    const [subRows] = await db.execute(
+      'SELECT email, name FROM users WHERE id = ?', [idea.submitter_id]);
+    const sub = subRows[0];
+    if (sub?.email) {
+      await queueEmail(db, sub.email, sub.name,
+        `Your idea ${idea.idea_code} has moved forward`,
+        `Dear ${sub.name},\n\n`
+        + `Good news — your idea "${idea.title}" (${idea.idea_code}) has been approved by ${by}.\n\n`
+        + `It is now being reviewed by ${withWhom}. That is step ${position} of ${total} `
+        + `in your organisation's approval path.\n\n`
+        + 'We will let you know as soon as it moves again.');
+    }
   } catch (e) {
     logger.warn(`idea ${idea.idea_code}: could not notify submitter of progress — ${e.message}`);
   }
@@ -1310,6 +1603,30 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         + 'It will reach you when the stages before yours have approved it.'
       );
     }
+
+    /*
+     * Holding the right role is not enough — it has to be YOUR idea to decide.
+     *
+     * Jitesh reports to Elisa. Mark is also a manager and is not in Jitesh's
+     * line, so Mark approving Jitesh's idea is somebody signing off work they
+     * have no relationship to. The queue no longer offers it to him; this is
+     * the same rule at the door, because the queue is a screen and this is the
+     * endpoint, and a rule that lives only in a screen is not a rule.
+     *
+     * An unassigned idea (current_reviewer_id IS NULL) stays open to any holder
+     * of the stage's role. Nobody could be identified for it — an incomplete
+     * org chart, or a row from before this routing existed — and refusing
+     * everybody would leave it undecidable by anyone at all.
+     */
+    const assignedTo = idea.current_reviewer_id;
+    if (assignedTo && Number(assignedTo) !== Number(user.id)) {
+      const [owner] = await db.execute('SELECT name FROM users WHERE id = ?', [assignedTo]);
+      throw forbidden(
+        `This idea is with ${owner[0]?.name || 'another ' + label(stageKey)} for `
+        + `${label(stageKey)} approval — they are the submitter's ${label(stageKey)}. `
+        + 'Ideas go to the approver in the reporting line of whoever wrote them.'
+      );
+    }
   }
 
   /*
@@ -1321,28 +1638,63 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     if (next) {
       /*
        * Move to the next stage somebody can act on, skipping any that nobody
-       * holds. Assignment prefers the submitter's own line of report, but the
-       * queue does not depend on it — ideas are offered to every holder of the
-       * stage's role, so an unassigned stage is still actionable.
+       * holds, and route it to the approver in the SUBMITTER's own line — not
+       * to whoever happens to hold the role. Where the org chart cannot answer
+       * that, the stage is left open to every holder rather than guessed at;
+       * see resolveActionableStage.
        */
       const resolved = await resolveActionableStage(db, cfg, next.stage, idea.submitter_id);
 
       if (resolved.stranded) {
         /*
-         * Nothing further in the chain can act. The idea stays where it is
-         * rather than being approved: an approval nobody gave must never be
-         * recorded, and "there was no one to ask" is not consent.
+         * Nothing further in the chain can act.
+         *
+         * The approval that just happened is real and is recorded. What cannot
+         * happen is the NEXT one: an approval nobody gave must never be
+         * written, and "there was no one to ask" is not consent.
+         *
+         * ── Where the idea waits, and the bug that came from getting it wrong
+         *
+         * It is parked at the stage that is BLOCKING — the empty one — and not
+         * at the stage that just approved it. That one line is the whole of
+         * "the plant head sometimes cannot give final approval".
+         *
+         * It used to stay put. So an idea approved by the department manager in
+         * an organisation with no plant head sat at department_manager with an
+         * Approved entry against it. The hourly repair pass asks "can anybody
+         * act at this idea's stage?", saw a perfectly healthy department
+         * manager, and moved on. When a plant head was finally appointed,
+         * nothing looked at that idea again — it was not stranded by the only
+         * test the repair knew how to make. It waited forever at a stage that
+         * had already finished with it, while the department manager kept
+         * seeing it in their queue and the plant head never saw it at all.
+         *
+         * Parked at the empty stage, both halves work by themselves: the
+         * department manager's queue is clear because their stage is done, and
+         * the repair pass finds an idea at a stage nobody holds and re-routes
+         * it the moment somebody is appointed.
          */
+        const blockedAt = resolved.stage || stageKey;
+        const position = cfg.approvers.findIndex((a) => a.stage === blockedAt) + 1;
+        await db.execute(
+          `UPDATE ideas
+              SET status = 'Under Review', current_stage = ?, current_reviewer_id = NULL,
+                  escalation_level = ?, updated_at = NOW()
+            WHERE id = ?`,
+          [blockedAt, position, ideaId]
+        );
+
         await addWorkflow(db, ideaId, user.id, 'Approved',
-          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — no one holds any later stage; awaiting configuration]`.trim());
+          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — waiting for ${label(blockedAt)}, which nobody holds]`.trim(),
+          stageKey);
         await reportChainGap(db, idea,
-          `Idea ${idea.idea_code} was approved at ${label(stageKey)}, but nobody in this organisation `
-          + 'holds any of the later roles in the approval path. Assign those roles, or shorten the path, '
-          + 'and the idea will continue.');
+          `Idea ${idea.idea_code} was approved at ${label(stageKey)} and is now waiting for `
+          + `${label(blockedAt)}, which nobody in this organisation holds. Assign that role and the `
+          + 'idea will move on by itself; it is held, not lost.');
         return {
-          success: true, decision: 'Waiting', stage: stageKey,
-          stage_label: label(stageKey), escalated_to: null, points_awarded: 0,
-          detail: 'No later stage has anybody who can act on it.',
+          success: true, decision: 'Waiting', stage: blockedAt,
+          stage_label: label(blockedAt), escalated_to: null, points_awarded: 0,
+          detail: `Waiting for ${label(blockedAt)} — nobody holds that role yet.`,
         };
       }
 
@@ -1369,8 +1721,15 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         [nextStageKey, assignee ? assignee.id : null, position, ideaId]
       );
 
+      /*
+       * The stage is recorded on the entry, not inferred later from the
+       * actor's role — see addWorkflow. It is what the closure PDF prints in
+       * its POSITION column.
+       */
+      const withWhom = assignee ? `${assignee.name} as ${label(nextStageKey)}` : label(nextStageKey);
       await addWorkflow(db, ideaId, user.id, 'Approved',
-        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — now with ${label(nextStageKey)}]${skipNote}`.trim());
+        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — now with ${withWhom}]${skipNote}`.trim(),
+        stageKey);
 
       if (assignee) {
         await addNotification(db, assignee.id, 'Idea Awaiting Your Approval',
@@ -1383,7 +1742,29 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         }
       }
 
-      await notifySubmitterProgress(db, idea, label(stageKey), label(nextStageKey), position, cfg.approvers.length);
+      /*
+       * If we had to pick somebody outside the submitter's reporting line, say
+       * so. The idea still moves — holding it up over an org-chart gap would
+       * punish the author for an administrator's data entry — but somebody is
+       * about to approve an idea from a team they may have nothing to do with,
+       * and that should not happen silently.
+       */
+      if (resolved.offLine) {
+        await reportChainGap(db, idea,
+          `Idea ${idea.idea_code} is open to every ${label(nextStageKey)} rather than to one `
+          + 'person, because nobody in the reporting line of whoever submitted it holds that role '
+          + 'and more than one person does. Set the Manager field on the people involved and ideas '
+          + 'will go to their own approver.');
+      }
+
+      await notifySubmitterProgress(db, idea, {
+        approverName: user.name,
+        fromLabel: label(stageKey),
+        toLabel: label(nextStageKey),
+        withName: assignee ? assignee.name : null,
+        position,
+        total: cfg.approvers.length,
+      });
       return {
         success: true,
         decision: 'Escalated',
@@ -1415,7 +1796,9 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
   const [codeRows] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
   const ideaCode = codeRows[0]?.idea_code || `#${ideaId}`;
 
-  await addWorkflow(db, ideaId, user.id, wfAction, comment || null);
+  // stageKey is where this person was standing when they decided — the final
+  // stage for a closing approval, or wherever in the chain a rejection came from.
+  await addWorkflow(db, ideaId, user.id, wfAction, comment || null, stageKey);
 
   const pts = ({ Approved: POINTS.approved, Implemented: POINTS.implemented })[decision] || 0;
   if (pts > 0) {
@@ -1430,10 +1813,42 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
   }[decision] || `Your idea ${ideaCode} is Under Review.`;
   await addNotification(db, idea.submitter_id, `Idea ${decision}`, msg, ideaId);
 
-  const [subRows] = await db.execute('SELECT email, name FROM users WHERE id=?', [idea.submitter_id]);
+  const [subRows] = await db.execute(
+    'SELECT email, name, points FROM users WHERE id=?', [idea.submitter_id]);
   const sub = subRows[0];
   if (sub && sub.email) {
-    await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} — ${decision}`, msg);
+    /*
+     * The end of the road gets its own letter.
+     *
+     * Every other step says "it moved". This one says it is finished, and that
+     * deserves to read like it: who gave the final approval and in what
+     * capacity, that the idea is now eligible to go to QC and be built, and
+     * what it earned. The scheme runs on people believing that writing an idea
+     * down leads somewhere, and this is the only message that proves it did.
+     *
+     * The score is stated in both halves — what this approval added, and the
+     * running total including the points for submitting in the first place —
+     * because "+40 points" alone does not tell somebody where they stand.
+     */
+    if (decision === 'Approved') {
+      const finalLabel = label(stageKey) || 'the final approver';
+      const total = Number(sub.points ?? 0);
+      await queueEmail(db, sub.email, sub.name,
+        `Congratulations — your idea ${ideaCode} has been approved`,
+        `Dear ${sub.name},\n\n`
+        + `Congratulations. Your idea "${idea.title}" (${ideaCode}) has been approved by `
+        + `${user.name} (${finalLabel}) — the last step in your organisation's approval path.\n\n`
+        + 'It is now ready to be sent to the quality system and taken forward for '
+        + 'implementation.\n\n'
+        + (pts > 0
+          ? `You have earned ${pts} points for this approval, taking you to ${total} points `
+            + 'in total for submitting it and seeing it through.\n\n'
+          : '')
+        + (comment ? `Comments from the approver: ${comment}\n\n` : '')
+        + 'Thank you for taking the trouble to write it up.');
+    } else {
+      await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} — ${decision}`, msg);
+    }
   }
 
   return { success: true, decision, points_awarded: pts };
@@ -1466,20 +1881,43 @@ export async function dashboard(db, user) {
   if ([...TEAM_ROLES, ...ADMIN_ROLES].includes(role)) {
     try {
       if (TEAM_ROLES.includes(role)) {
+        /*
+         * The same rule as the review queue, deliberately.
+         *
+         * This counter and that list are the same claim made twice — "N ideas
+         * are waiting on your decision" and then the ideas themselves — and
+         * they used to be computed from different rules. The card matched
+         * `current_reviewer_id = me OR (unassigned AND I am the submitter's
+         * manager)` with no reference to the chain at all, so it counted ideas
+         * sitting at stages this person plays no part in, counted their own
+         * ideas, and missed unassigned ones at a stage they DO hold. A
+         * dashboard that says 4 above a list of 2 is not a rounding
+         * difference; it is the product telling somebody their work is
+         * somewhere they cannot find it.
+         *
+         * Built from cfg so a chain edit moves both together.
+         */
+        const cfg = await getApprovalConfig(db);
+        const myStages = rolePlaysStages(cfg, role);
+        const stageIn = myStages.length ? myStages.map(() => '?').join(',') : null;
+
+        const waitingOnMe = stageIn
+          ? `i.status IN ('Submitted','Under Review')
+               AND i.submitter_id <> ?
+               AND COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
+               AND i.current_stage IN (${stageIn})
+               AND (i.current_reviewer_id = ? OR i.current_reviewer_id IS NULL)`
+          : '1 = 0';
+        const args = stageIn ? [uid, ...myStages, uid] : [];
+
         const [pr] = await db.execute(
-          `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
-           WHERE i.status IN ('Submitted','Under Review')
-           AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
-          [uid, uid]
-        );
+          `SELECT COUNT(*) AS c FROM ideas i WHERE ${waitingOnMe}`, args);
         pendingReviews = Number(pr[0]?.c || 0);
         const [od] = await db.execute(
-          `SELECT COUNT(*) AS c FROM ideas i JOIN users u ON u.id=i.submitter_id
-           WHERE i.status IN ('Submitted','Under Review')
-           AND i.review_due_date IS NOT NULL AND i.review_due_date < CURDATE()
-           AND (i.current_reviewer_id=? OR (i.current_reviewer_id IS NULL AND u.manager_id=?))`,
-          [uid, uid]
-        );
+          `SELECT COUNT(*) AS c FROM ideas i
+            WHERE ${waitingOnMe}
+              AND i.review_due_date IS NOT NULL AND i.review_due_date < CURDATE()`,
+          args);
         overdueReviews = Number(od[0]?.c || 0);
       } else {
         const [pr] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review')");

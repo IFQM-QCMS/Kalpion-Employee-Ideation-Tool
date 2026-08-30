@@ -286,6 +286,9 @@ export async function buildTemplate(actorRole) {
   h('', '');
   h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe — it will not touch anyone who already has an account.');
   h('Roles', `You may assign: ${roles.join(', ')}. Anything else will be rejected. Leave the cell blank for "employee".`);
+  h('Plant Head', 'One per organisation. The approval chain ends there, so a second one would '
+    + 'mean an idea\'s final approval depended on which plant head it happened to reach. A row '
+    + 'asking for a role that is already held is rejected with the name of the person who has it.');
   h('Managers', 'manager_employee_id must be the employee_id of somebody who already exists, or of another row in this same sheet. Circular reporting lines (A reports to B, B reports to A) are rejected.');
   h('Limit', `Up to ${MAX_ROWS.toLocaleString()} employees per file.`);
   h('', '');
@@ -403,6 +406,14 @@ async function parseSheet(buffer, filename) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/*
+ * Roles an organisation may fill exactly once. Mirrors SINGLETON_ROLES in
+ * userService, which is where the reasoning lives — the chain ends at the plant
+ * head, so two of them means final approval depends on which one an idea
+ * happened to reach.
+ */
+const SINGLETON_ROLES_LIST = ['plant_head'];
 /**
  * Validate every row against the DB, the sheet itself, and the actor's rights.
  * Pure: touches no state, writes nothing. Used by both the dry run and the
@@ -415,6 +426,28 @@ export async function validateRows(db, actor, records) {
   const [existing] = await db.query(
     'SELECT id, employee_id, LOWER(email) AS email, LOWER(username) AS username FROM users'
   );
+
+  /*
+   * Roles this organisation may fill only once, and who has them.
+   *
+   * The console refuses a second plant head; a spreadsheet is the other door
+   * into this table and would otherwise walk straight past that rule. Worse
+   * than the console case, too: an import can appoint two in the same upload,
+   * so the sheet is checked against itself as well as against the database.
+   *
+   * Keyed by employee_id rather than row id, because that is what the sheet
+   * uses to say "this is the same person" — re-importing a sheet that contains
+   * the sitting plant head must not be rejected for containing them.
+   */
+  const [heldRows] = await db.query(
+    `SELECT role, employee_id, name FROM users
+      WHERE status = 'active' AND role IN (?)`, [SINGLETON_ROLES_LIST]);
+  const singletonHeldBy = new Map();
+  for (const r of heldRows) {
+    if (!singletonHeldBy.has(r.role)) {
+      singletonHeldBy.set(r.role, { employee_id: String(r.employee_id || '').toLowerCase(), name: r.name });
+    }
+  }
   const byEmpId = new Map();
   const emails = new Set();
   const usernames = new Set();
@@ -506,6 +539,22 @@ export async function validateRows(db, actor, records) {
     if (!allowedRoles.includes(role)) {
       reject(rec, `You are not allowed to assign the role "${role}". Allowed: ${allowedRoles.join(', ')}.`);
       continue;
+    }
+
+    // ── one per organisation: plant head ──
+    if (singletonHeldBy.has(role)) {
+      const held = singletonHeldBy.get(role);
+      if (held.employee_id !== employeeId.toLowerCase()) {
+        reject(rec, `Only one ${role.replace(/_/g, ' ')} is allowed per organisation, and `
+          + `${held.name} already holds it. Change this row's role, or change `
+          + `${held.name}'s role first.`);
+        continue;
+      }
+    } else if (SINGLETON_ROLES_LIST.includes(role)) {
+      // Nobody holds it yet — this row takes it, and any later row asking for
+      // the same role is now the duplicate. Recorded here so two rows in one
+      // sheet cannot both be accepted.
+      singletonHeldBy.set(role, { employee_id: employeeId.toLowerCase(), name });
     }
 
     // ── duplicates: inside the sheet ──
