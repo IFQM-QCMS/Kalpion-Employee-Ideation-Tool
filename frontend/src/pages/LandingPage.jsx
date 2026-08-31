@@ -234,10 +234,32 @@ export default function LandingPage() {
           border-bottom:1px solid transparent}
         .ifqm-lp .nav.on{background:var(--topbar-bg);backdrop-filter:blur(12px);border-bottom-color:var(--topbar-border)}
         .ifqm-lp .nav-in{max-width:var(--lp-max);margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:26px}
-        .ifqm-lp .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:var(--heading)}
-        .ifqm-lp .logo img{height:34px;background:#fff;border-radius:9px;padding:5px 8px;object-fit:contain;
+        .ifqm-lp .logo{display:flex;align-items:center;gap:11px;color:var(--heading)}
+        /*
+         * The wordmark.
+         *
+         * It was 17px of the same Inter the body text uses, which made it a
+         * label sitting next to a logo rather than a mark of its own — the
+         * plate carried all the identity and the name carried none.
+         *
+         * Sora at 700, a size up, with the tracking pulled in: a wordmark is
+         * read as a shape, and letters set slightly tighter than running text
+         * are what make it hold together as one. The stack falls back to Inter,
+         * so the mark is never missing while the face loads (display=swap).
+         */
+        .ifqm-lp .logo span{
+          font-family:'Sora','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+          font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1;
+        }
+        .ifqm-lp .logo img{height:38px;background:#fff;border-radius:9px;padding:5px 8px;object-fit:contain;
           box-shadow:0 6px 18px rgba(79,70,229,.16)}
         .ifqm-lp .logo small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted);letter-spacing:0}
+        /* The plate grows with the name so the two stay in proportion — a
+           bigger word beside the old 34px mark reads as a mismatch. */
+        @media (max-width:640px){
+          .ifqm-lp .logo span{font-size:20px}
+          .ifqm-lp .logo img{height:32px}
+        }
         .ifqm-lp .nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--text-muted);font-weight:500}
         .ifqm-lp .nav-links a:hover{color:var(--text)}
         .ifqm-lp .nav-cta{display:flex;align-items:center;gap:10px}

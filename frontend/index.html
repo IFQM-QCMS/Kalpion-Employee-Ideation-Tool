@@ -34,6 +34,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!--
+      A display face for the Kalpion wordmark only.
+
+      Inter carries the whole interface, and a wordmark set in the same face as
+      the body text is a name rather than a mark — which is why the header read
+      as unfinished. Sora is geometric and slightly technical, which suits a
+      quality-and-manufacturing product, and it is distinct enough from Inter to
+      look chosen.
+
+      `text=Kalpion` subsets the download to those seven glyphs, so this costs a
+      few hundred bytes rather than a whole font. `display=swap` means the mark
+      renders in Inter immediately and upgrades when the face lands, so a slow
+      connection sees the right words at the right size and never a blank space.
+    -->
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@700&text=Kalpion&display=swap" rel="stylesheet">
 
     <!--
       Structured data.
