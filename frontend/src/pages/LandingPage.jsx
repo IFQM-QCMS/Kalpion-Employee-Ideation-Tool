@@ -275,11 +275,28 @@ export default function LandingPage() {
         /* ── hero pipeline mock ───────────────────────────────────────────── */
         .ifqm-lp .mock{background:var(--surface);border:1px solid var(--border);border-radius:18px;
           box-shadow:0 26px 60px -30px rgba(12,14,20,.32);padding:16px;position:relative;overflow:hidden}
-        .ifqm-lp .mock-bar{display:flex;align-items:center;gap:6px;padding:0 2px 13px}
-        .ifqm-lp .mock-bar i{width:9px;height:9px;border-radius:50%;background:var(--surface-3);display:block}
-        .ifqm-lp .mock-bar span{margin-left:8px;font-size:11.5px;color:var(--subtle);font-weight:600}
+        /*
+         * The panel header.
+         *
+         * It was three grey circles imitating a macOS title bar. That is a
+         * decoration pretending to be a window: this is not a window, nothing
+         * closes, and the pattern is on every template landing page there is.
+         * A titled panel with a live indicator says the same thing — "this is
+         * the product" — without the costume.
+         */
+        .ifqm-lp .mock-bar{display:flex;align-items:center;gap:8px;padding:0 2px 13px;
+          border-bottom:1px solid var(--border);margin-bottom:13px}
+        .ifqm-lp .mock-bar span{font-size:12px;color:var(--heading);font-weight:650}
+        .ifqm-lp .mock-bar em{margin-left:auto;font-style:normal;display:inline-flex;align-items:center;gap:6px;
+          font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--success)}
+        .ifqm-lp .mock-bar em::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success)}
         .ifqm-lp .lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-        .ifqm-lp .lane{background:var(--panel-bg);border:1px solid var(--border);border-radius:13px;padding:10px;min-height:186px}
+        /* Equal columns with their content aligned to the top. A min-height
+           alone let a lane with one card centre it against a lane with two,
+           which read as a misalignment rather than as a difference in count. */
+        .ifqm-lp .lane{background:var(--panel-bg);border:1px solid var(--border);border-radius:13px;padding:10px;
+          min-height:186px;display:flex;flex-direction:column;align-content:flex-start}
+        .ifqm-lp .lane .card-m:last-child{margin-bottom:0}
         .ifqm-lp .lane h4{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);
           margin:0 0 9px;font-weight:750;display:flex;align-items:center;gap:6px}
         .ifqm-lp .lane h4 i{width:6px;height:6px;border-radius:50%;display:block}
@@ -290,17 +307,21 @@ export default function LandingPage() {
         .ifqm-lp .card-m u{display:block;text-decoration:none;font-size:10px;color:var(--subtle);margin-top:5px}
         .ifqm-lp .score{display:inline-flex;align-items:center;gap:5px;margin-top:7px;font-size:9.5px;font-weight:700;
           background:var(--primary-light);color:var(--primary);border-radius:999px;padding:2px 7px}
-        /* one card walks the pipeline, on a loop — it shows the product's core
-           promise (idea → review → done) without a video or a screenshot that
-           would go stale */
-        .ifqm-lp .travel{animation:lp-travel 9s ease-in-out infinite}
-        @keyframes lp-travel{
-          0%,26%{transform:translate(0,0);opacity:1}
-          33%,59%{transform:translate(calc(100% + 10px),0)}
-          66%,92%{transform:translate(calc(200% + 20px),0)}
-          97%,100%{transform:translate(calc(200% + 20px),0);opacity:0}
-        }
-        @media (prefers-reduced-motion:reduce){.ifqm-lp .travel{animation:none}}
+        /*
+         * ── The card that used to walk the pipeline ───────────────────────
+         *
+         * It was translated across the three lanes on a loop to dramatise
+         * "idea → review → done". It also kept its place in lane one and
+         * landed ON TOP of whatever was already in the lanes it travelled to,
+         * so the live page showed two headlines printed over each other in the
+         * In-review column — the first thing anybody saw.
+         *
+         * Removed rather than repaired. Making it dodge the other cards needs
+         * absolute positioning and hand-tuned offsets that break at every
+         * width, and it was buying an animation nobody asked for on the one
+         * screen that has to load fast and read clearly on a phone. The three
+         * lanes say the same thing standing still.
+         */
 
         /* ── generic section furniture ────────────────────────────────────── */
         .ifqm-lp .sec{padding:72px 0}
@@ -417,34 +438,50 @@ export default function LandingPage() {
            same specificity further up, so the only thing that decides them is
            document order. Put them next to the tokens and they lose. */
         /*
-         * Sizes, matched to the corporate site.
+         * Sizes.
          *
-         * Its hero runs considerably larger than this page's did, and on a dark
-         * ground that is not decoration: light type on dark carries less
-         * apparent weight, so the same size reads smaller and thinner than it
-         * does on white. The headline and lede both go up a step to compensate.
+         * The headline ran to 62px at 5.4vw, which on a laptop filled four
+         * lines and left the hero shouting one sentence. Oversized display type
+         * is the loudest tell of a page nobody edited: it reads as a template
+         * rather than as a company that has something specific to say.
+         *
+         * 46px is the top of the range business software actually ships at, and
+         * light-on-dark still needs the compensation the previous note
+         * describes — so the weight stays up rather than the size.
          */
-        .ifqm-lp h1{font-size:clamp(38px,5.4vw,62px);line-height:1.08;font-weight:750;letter-spacing:-.02em;margin:0}
-        .ifqm-lp .lede{font-size:18.5px;line-height:1.66}
+        .ifqm-lp h1{font-size:clamp(32px,3.6vw,46px);line-height:1.14;font-weight:760;letter-spacing:-.018em;margin:0}
+        .ifqm-lp .lede{font-size:17px;line-height:1.68}
         .ifqm-lp .nav-links{font-size:14.5px}
-        .ifqm-lp h2{font-size:clamp(26px,3.2vw,38px);font-weight:720}
+        .ifqm-lp h2{font-size:clamp(24px,2.6vw,32px);font-weight:720;letter-spacing:-.012em}
 
         /*
-         * The headline's gradient span.
+         * The headline's emphasis.
          *
-         * It was indigo-to-purple, which on navy is nearly invisible — two dark
-         * blues on a dark blue. Gold against white type is the contrast the
-         * corporate site uses, so it is what the emphasis uses here.
+         * A flat gold word, not gradient-clipped text. The gradient was two
+         * golds a shade apart, so it cost a paint trick and a transparent
+         * fallback to produce something indistinguishable from one colour —
+         * and background-clip:text drops to invisible wherever it is not
+         * supported, which is a poor trade for an effect nobody can see.
          */
         .ifqm-lp h1 .em{
-          background:linear-gradient(96deg,#e0c383,#c9a961);
-          -webkit-background-clip:text;background-clip:text;color:transparent;
+          color:#d9bd82;
+          /* The rule further up still sets a gradient and clips it to the
+             glyphs. With an opaque colour on top that paint does nothing but
+             cost a compositing pass, so it is cancelled here rather than left
+             running invisibly. */
+          background:none;-webkit-background-clip:border-box;background-clip:border-box;
         }
 
-        /* The two indigo glows behind the hero were tuned for a white page and
-           are invisible on navy. Warmed and lifted so they read as light. */
-        .ifqm-lp .glow-a{background:radial-gradient(50% 50% at 50% 50%,rgba(201,169,97,.16),transparent 78%)}
-        .ifqm-lp .glow-b{background:radial-gradient(50% 50% at 50% 50%,rgba(90,140,210,.20),transparent 78%)}
+        /*
+         * The two glows behind the hero, turned down.
+         *
+         * Big soft coloured blobs behind a headline are the other half of the
+         * template look, and at .16/.20 these were doing most of the visual
+         * work in the hero. Kept, because a flat navy field is dead, but taken
+         * to the level where they read as depth rather than as decoration.
+         */
+        .ifqm-lp .glow-a{background:radial-gradient(50% 50% at 50% 50%,rgba(201,169,97,.07),transparent 72%)}
+        .ifqm-lp .glow-b{background:radial-gradient(50% 50% at 50% 50%,rgba(90,140,210,.09),transparent 72%)}
 
         /* The secondary button was a light surface with light text — invisible
            on both counts once the surface went dark. Outlined instead. */
@@ -532,11 +569,11 @@ export default function LandingPage() {
           </div>
 
           <div className="rv in mock" aria-hidden="true">
-            <div className="mock-bar"><i /><i /><i /><span>Idea pipeline — live</span></div>
+            <div className="mock-bar"><span>Idea pipeline</span><em>Live</em></div>
             <div className="lanes">
               <div className="lane l1">
                 <h4><i />Submitted</h4>
-                <div className="card-m travel">
+                <div className="card-m">
                   <b>Cut die-change time with a pre-staged trolley</b>
                   <span className="score"><IcoSpark />Score 82</span>
                   <u>Ravi · Production</u>
