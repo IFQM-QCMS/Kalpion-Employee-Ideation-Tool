@@ -106,6 +106,11 @@ export default function Sidebar({ collapsed, onToggle }) {
 
           <div className="nav-section">{t('section.insights')}</div>
           <NavItem path="/leaderboard" icon={NAV_ICONS.leaderboard} label={t('nav.leaderboard')} />
+          {/* Rewards & Recognition sits beside the leaderboard because it IS the
+              leaderboard — the version you hand to HR. Shown to the people who
+              run a reward cycle; the server enforces the same list. */}
+          <NavItem path="/rewards" icon={NAV_ICONS.leaderboard} label={t('nav.rewards')}
+            hidden={!canReport} />
           <NavItem path="/analytics"   icon={NAV_ICONS.analytics}   label={t('nav.analytics')}   hidden={!canReport} />
 
           {isAdm && (

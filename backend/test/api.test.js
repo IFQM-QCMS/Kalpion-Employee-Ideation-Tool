@@ -2873,15 +2873,24 @@ test('a role outside the configured approval chain cannot approve, and sees an e
  *  Onboarding without a date of birth
  * ─────────────────────────────────────────────────────────────────────────── */
 
-test('an employee with no email gets the username+phone password, and no DOB is asked for', async () => {
+test('an employee with no email gets the name+phone password, and no DOB is asked for', async () => {
   const empId = `NODOB${Date.now() % 100000}`;
   const res = await api('POST', '/api/users', {
     token: AADMIN,
     body: {
       action: 'create_user',
-      // The display name deliberately does NOT start with "yash": the password
-      // must come from the username, and a name that also matched would let a
-      // regression pass unnoticed.
+      /*
+       * The username deliberately does NOT match the name.
+       *
+       * This test was written the other way round — the password came from the
+       * USERNAME, and the mismatched name was here so a regression to the name
+       * could not pass unnoticed. The rule has since been reversed to the name,
+       * and the same mismatch now guards the same boundary from the other side.
+       *
+       * The name is the better source for where this credential is used: these
+       * accounts have no mailbox, so the password is read out loud to somebody
+       * who may not have been told their username yet.
+       */
       name: 'Kumar Rao',
       employee_id: empId,
       username: `yashas${Date.now() % 100000}`,
@@ -2894,9 +2903,9 @@ test('an employee with no email gets the username+phone password, and no DOB is 
   assert.equal(res.data.success, true,
     `creating a user without a date of birth must work — ${JSON.stringify(res.data)}`);
 
-  // MOM 24/08: first 4 characters of the USERNAME + last 4 digits of the phone
-  assert.equal(res.data.temp_password, 'yash5881',
-    'the derived password is username(4) + phone(last 4)');
+  // First 4 LETTERS of the name + last 4 digits of the phone.
+  assert.equal(res.data.temp_password, 'kuma5881',
+    'the derived password is name(4 letters) + phone(last 4) — "Kumar Rao" gives kuma');
 
   const [u] = await sql('ifqm_test_a',
     `SELECT username, must_change_password, date_of_birth, year_of_birth
@@ -2910,7 +2919,7 @@ test('an employee with no email gets the username+phone password, and no DOB is 
   // It must actually BE the password, not merely a string in the response.
   // The account has a username and no address, so it signs in the way it can.
   const login = await api('POST', '/api/auth/login', {
-    body: { email: u.username, password: 'yash5881', org_slug: 'orga' },
+    body: { email: u.username, password: 'kuma5881', org_slug: 'orga' },
   });
   assert.equal(login.data.success, true,
     `the derived password must actually sign in — ${JSON.stringify(login.data)}`);
@@ -2932,7 +2941,7 @@ test('a country code does not change the derived password', async () => {
     },
   });
   assert.equal(res.data.success, true, JSON.stringify(res.data));
-  assert.equal(res.data.temp_password, 'yash5881',
+  assert.equal(res.data.temp_password, 'kuma5881',
     'formatting of the number must not change the password');
 });
 
@@ -5156,4 +5165,317 @@ test('the email queue accepts every status the sender writes, strictly', async (
 
   await sql('ifqm_test_a',
     "DELETE FROM ifqm_test_a.email_queue WHERE to_email = 'enum@orga.test'");
+});
+
+/*
+ * The first-time password for somebody with no mailbox.
+ *
+ * First 4 LETTERS of the name, then the last 4 digits of the phone: "Yashas" on
+ * 7975495881 becomes yash5881. It read the USERNAME until now, on the reasoning
+ * that the username is the other thing typed on the same screen.
+ *
+ * The name is the better source for where this credential actually gets used.
+ * These accounts belong to people with no email, so the password is passed on
+ * out loud — by a supervisor, on a shop floor, often to somebody who has not
+ * been told their username yet. "The first four letters of your name" needs no
+ * lookup and survives being repeated down a noisy line.
+ *
+ * Only new accounts are affected: an existing password is a stored hash, not a
+ * formula re-evaluated at sign-in, so nothing about this locks anybody out.
+ */
+test('a user with no email gets a password built from their name and number', async () => {
+  const { tempPasswordFor } = await import('../src/services/userImportService.js');
+
+  assert.equal(tempPasswordFor(null, '7975495881', 'Yashas', 'E1'), 'yash5881',
+    'the example everybody is given');
+
+  // The username is ignored when a name is present — that is the whole change.
+  assert.equal(tempPasswordFor('ykumar', '+91 79754 95881', 'Yashas Kumar', 'E2'), 'yash5881',
+    'derived from the NAME even when a quite different username exists');
+
+  /*
+   * The last four digits, taken from the end, so the country code cannot move
+   * them. +91 79754 95881, 07975495881 and 7975495881 are the same phone and
+   * must give the same password — a leading zero or a +91 changes the front of
+   * the string and never the back.
+   */
+  for (const p of ['+91 79754 95881', '07975495881', '7975495881', '+917975495881']) {
+    assert.equal(tempPasswordFor(null, p, 'Yashas', 'E3'), 'yash5881',
+      `every way of writing the same number must agree — ${p} did not`);
+  }
+
+  // LETTERS, so anything else is skipped rather than counted.
+  assert.equal(tempPasswordFor('rkumar', '9876543210', 'R. Kumar', 'E4'), 'rkum3210',
+    'r, k, u, m — the dot and the space are not letters');
+  assert.equal(tempPasswordFor(null, '9876543210', 'Mary-Anne', 'E5'), 'mary3210');
+
+  // A short name is padded rather than producing a 6-character password, which
+  // would be a different shape from every other one and look like a bug.
+  assert.equal(tempPasswordFor(null, '9998887777', 'Li', 'E6'), 'lixx7777');
+
+  /*
+   * A name in a script with no Latin letters leaves nothing to slice. It falls
+   * through to the username and then the employee id rather than to a shared
+   * default, so two such employees never end up with the same password.
+   */
+  assert.equal(tempPasswordFor('namaste1', '9998887777', 'नमस्ते', 'E7'), 'nama7777');
+  const a = tempPasswordFor('', '9998887777', 'नमस्ते', 'EMP01');
+  const b = tempPasswordFor('', '9998887777', 'नमस्ते', 'EMP02');
+  assert.notEqual(a, b,
+    'two people with no Latin letters and no username must still differ — a '
+    + 'shared fallback would hand one of them the other one\'s account');
+
+  /*
+   * And end to end: the account really is created with it. A formula the tests
+   * agree on but the sign-in screen does not is worth nothing.
+   */
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  const created = await api('POST', '/api/users', {
+    token: aTok,
+    body: { name: 'Yashas Derived', username: 'yderived', employee_id: 'PWDERIV',
+      phone: '+919812348001', role: 'employee', department: 'Ops' },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+
+  const signedIn = await login('yderived', 'yash8001', 'orga');
+  assert.ok(signedIn.token,
+    'the derived password must actually sign the account in — got '
+    + JSON.stringify(signedIn));
+});
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  Rewards & Recognition
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * A period is a range of dates, not a SQL fragment.
+ *
+ * The old leaderboard filtered with things like `YEARWEEK(submitted_at,1) =
+ * YEARWEEK(NOW(),1)`, which cannot be printed on a document. A reward pack has
+ * to state the window it covers or the reader cannot tell what they are holding
+ * — and two people running the same report a day apart get different answers
+ * with no way to notice.
+ *
+ * Ranges are half-open, start inclusive and end exclusive, which is the only
+ * form that cannot double-count a submission at midnight on the boundary.
+ */
+test('a reward period resolves to a printable, calendar-aligned range', async () => {
+  const { resolveRange, PERIODS } = await import('../src/services/rewardsService.js');
+
+  // Every period the organisation was promised exists.
+  for (const p of ['weekly', 'fortnightly', 'monthly', 'quarterly', 'half_yearly', 'yearly']) {
+    assert.ok(PERIODS[p], `${p} must be offered`);
+    const r = resolveRange({ period: p, offset: 1 });
+    assert.match(r.start, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(r.end, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(r.start < r.end, `${p}: the range must run forwards`);
+    assert.ok(r.display.includes(' to '), `${p}: the window must be printable`);
+  }
+
+  // Calendar alignment: a month starts on the 1st, a quarter on a quarter month.
+  const m = resolveRange({ period: 'monthly', offset: 1 });
+  assert.ok(m.start.endsWith('-01'), `a monthly window starts on the 1st — got ${m.start}`);
+  const q = resolveRange({ period: 'quarterly', offset: 1 });
+  assert.ok(['01', '04', '07', '10'].includes(q.start.slice(5, 7)),
+    `a quarter starts in Jan, Apr, Jul or Oct — got ${q.start}`);
+  const h = resolveRange({ period: 'half_yearly', offset: 1 });
+  assert.ok(['01', '07'].includes(h.start.slice(5, 7)),
+    `a half-year starts in Jan or Jul — got ${h.start}`);
+
+  // A fortnight is two whole weeks, never a fortnight ending mid-week.
+  const f = resolveRange({ period: 'fortnightly', offset: 1 });
+  const days = (new Date(f.end) - new Date(f.start)) / 86400000;
+  assert.equal(days, 14, 'a fortnight is 14 days');
+
+  /*
+   * Offsets step backwards without overlapping. Two adjacent periods that
+   * shared a day would count somebody's idea twice across two reward cycles,
+   * which is the one arithmetic error a reward document cannot survive.
+   */
+  const now = resolveRange({ period: 'monthly', offset: 0 });
+  const prev = resolveRange({ period: 'monthly', offset: 1 });
+  assert.equal(prev.end, now.start, 'the previous period ends exactly where this one starts');
+
+  // A custom range is honoured, and `to` is inclusive as a human would read it.
+  const c = resolveRange({ from: '2026-03-01', to: '2026-03-31' });
+  assert.equal(c.start, '2026-03-01');
+  assert.equal(c.end, '2026-04-01', 'an inclusive "to" is stored as an exclusive end');
+
+  await assert.rejects(async () => resolveRange({ from: '2026-03-01', to: 'nonsense' }));
+  await assert.rejects(async () => resolveRange({ period: 'daily' }),
+    /Unknown period/, 'an unknown period is refused rather than silently ignored');
+});
+
+/*
+ * The leaderboard HR is given is the WHOLE leaderboard.
+ *
+ * The existing one stops at 20 and ranks by lifetime points while filtering
+ * ideas by period — so "this month" ordered people by everything they had ever
+ * done. For an award that is not a near miss, it is the wrong list. This one
+ * scores what was earned IN the window, includes everybody who took part, and
+ * shows its working so a query about somebody's total has an answer.
+ */
+test('the rewards leaderboard scores the period and lists everyone', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  await api('POST', '/api/settings', {
+    token: aTok, body: { approval_stages: 'originator,team_lead' },
+  });
+
+  const mk = async (name, email, empId, phone, role, managerId) => {
+    const res = await api('POST', '/api/users', {
+      token: aTok,
+      body: { name, email, password: 'RewardPass12345', role, employee_id: empId,
+        phone, department: 'Rewards', manager_id: managerId ?? undefined },
+    });
+    assert.equal(res.data.success, true, `${name}: ${JSON.stringify(res.data)}`);
+    const [row] = await sql('ifqm_test_a',
+      `SELECT id FROM ifqm_test_a.users WHERE email = '${email}'`);
+    const { token } = await login(email, 'RewardPass12345', 'orga');
+    return { id: row.id, token };
+  };
+
+  const lead = await mk('Reward Lead', 'rw.tl@orga.test', 'RWTL', '+919812349001', 'team_lead');
+  const busy = await mk('Busy Bee', 'rw.busy@orga.test', 'RWBUSY', '+919812349002', 'employee', lead.id);
+  const quiet = await mk('Quiet One', 'rw.quiet@orga.test', 'RWQUIET', '+919812349003', 'employee', lead.id);
+  const idle = await mk('Idle Hands', 'rw.idle@orga.test', 'RWIDLE', '+919812349004', 'employee', lead.id);
+
+  const submit = async (who, title) => {
+    const r = await api('POST', '/api/ideas/submit', {
+      token: who.token,
+      body: {
+        title,
+        present_situation: 'Something on the line costs time every single shift.',
+        proposed_solution: 'A small, cheap change at the station that removes it.',
+        impact_level: 'Medium', impact_areas: 'Productivity', action: 'submit',
+      },
+    });
+    assert.equal(r.data.success, true, JSON.stringify(r.data));
+    return r.data.idea_id;
+  };
+
+  const b1 = await submit(busy, 'Rewards — bin at the press');
+  await submit(busy, 'Rewards — label the fasteners');
+  await submit(quiet, 'Rewards — move the trolley');
+
+  // One approval, so the outcome points are not all zero.
+  await api('POST', '/api/ideas/review-action', {
+    token: lead.token, body: { idea_id: b1, decision: 'Approved' },
+  });
+
+  // offset 0 — the period in progress, which is where today's submissions are.
+  const res = await api('GET', '/api/rewards/leaderboard?period=monthly&offset=0', { token: aTok });
+  assert.equal(res.status, 200, JSON.stringify(res.data));
+
+  const find = (id) => res.data.people.find((p) => p.id === id);
+  const bRow = find(busy.id);
+  const qRow = find(quiet.id);
+
+  assert.ok(bRow, 'somebody who submitted must appear');
+  assert.equal(bRow.ideas_submitted, 2);
+  assert.equal(qRow.ideas_submitted, 1);
+
+  /*
+   * Ordered on the PERIOD score. Two ideas beat one, whatever either person's
+   * lifetime total happens to be — that is the entire correction.
+   */
+  assert.ok(bRow.rank < qRow.rank,
+    'two ideas this period must outrank one this period');
+
+  // The working is shown, and it adds up. A score somebody is rewarded against
+  // has to be checkable without re-deriving it.
+  assert.equal(bRow.points_period, bRow.points_submission + bRow.points_from_ideas,
+    'the total must equal the parts printed beside it');
+  assert.equal(bRow.points_submission, 2 * res.data.points_scheme.submit,
+    'submission points come from the count, at the configured rate');
+
+  // Somebody who submitted nothing is left out by default, and included on ask.
+  assert.ok(!find(idle.id), 'a reward shortlist is not padded with zeroes');
+  const all = await api('GET',
+    '/api/rewards/leaderboard?period=monthly&offset=0&include_all=1', { token: aTok });
+  assert.ok(all.data.people.some((p) => p.id === idle.id),
+    '"who did not take part" is a real question and must be answerable');
+
+  // The window is stated in dates, not just named.
+  assert.match(res.data.range.display, /\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}/);
+
+  await api('POST', '/api/settings', {
+    token: aTok,
+    body: { approval_stages: 'originator,team_lead,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+/*
+ * The pack carries the evidence, not just the score.
+ *
+ * HR is being asked to give somebody money on the strength of this. "Priya
+ * scored 140" is not evidence; the ideas, the people who approved each one and
+ * the dates they did it are. The reward decision and the audit of that decision
+ * have to be the same document, or a question six months later has no answer.
+ */
+test('the rewards pack carries every idea, its chain and its timeline', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+
+  const detail = await api('GET', '/api/rewards/detail?period=monthly&offset=0', { token: aTok });
+  assert.equal(detail.status, 200, JSON.stringify(detail.data));
+  assert.ok(detail.data.ideas.length, 'this period has ideas in it');
+
+  const withTrail = detail.data.ideas.find((i) => (i.workflow || []).length > 1);
+  assert.ok(withTrail, 'at least one idea has been acted on');
+
+  // The full text, not a summary — the pack is read without the app open.
+  assert.ok(withTrail.present_situation, 'the situation travels with it');
+  assert.ok(withTrail.proposed_solution, 'and the proposal');
+  assert.ok(withTrail.submitter_name, 'and who wrote it');
+
+  /*
+   * The position each approver held AT THE TIME, recorded rather than read off
+   * their user row today. Somebody promoted since must not appear to have
+   * signed off in a capacity they did not hold — on a document produced two
+   * years later that is the difference between a record and a guess.
+   */
+  const approval = withTrail.workflow.find((w) => w.action === 'Approved');
+  assert.ok(approval, 'an approval is in the trail');
+  assert.ok(approval.actor_name, 'named');
+  assert.ok(approval.created_at, 'and dated');
+  assert.ok(approval.stage_label || approval.actor_role,
+    'and placed — either the recorded stage or, for older rows, the role');
+
+  // The configured path, so a chain that stopped early is distinguishable from
+  // one that ran to completion.
+  assert.ok(detail.data.chain.length, 'the organisation\'s approval path travels too');
+  assert.equal(detail.data.chain[0].position, 1);
+
+  // ── The two downloads ──
+  const xlsx = await api('GET', '/api/rewards/export.xlsx?period=monthly&offset=0', { token: aTok });
+  assert.equal(xlsx.status, 200, 'the workbook must build');
+  const pdf = await api('GET', '/api/rewards/export.pdf?period=monthly&offset=0', { token: aTok });
+  assert.equal(pdf.status, 200, 'the PDF must build');
+});
+
+/*
+ * The pack is not open to everybody the ordinary leaderboard is open to.
+ *
+ * The public leaderboard is a ranking. This carries every employee's contact
+ * details, their manager, the full text of every idea and the name of everybody
+ * who approved each one. That the reader could see each part individually does
+ * not make the compilation harmless — the compilation is what makes it an HR
+ * document about identifiable people.
+ */
+test('an ordinary employee cannot pull the rewards pack', async () => {
+  const denied = await api('GET', '/api/rewards/detail?period=monthly', { token: AUSER });
+  assert.equal(denied.status, 403,
+    `an employee must be refused — got ${denied.status} ${JSON.stringify(denied.data)}`);
+
+  const deniedFile = await api('GET', '/api/rewards/export.xlsx?period=monthly', { token: AUSER });
+  assert.equal(deniedFile.status, 403,
+    'and the download is guarded too — a file endpoint left open is the same leak');
+
+  /*
+   * The org admin CAN. Running a reward cycle is administration, not
+   * adjudication: reading who did well is not deciding whether an idea is any
+   * good, so this does not cross the line that keeps admins out of approvals.
+   */
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  const allowed = await api('GET', '/api/rewards/leaderboard?period=monthly', { token: aTok });
+  assert.equal(allowed.status, 200, 'the org admin runs the reward cycle');
 });

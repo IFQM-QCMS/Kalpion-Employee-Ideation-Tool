@@ -344,6 +344,30 @@ async function downloadBlob(path, filename) {
   saveBlob(res.data, filename);
 }
 
+/*
+ * Rewards & Recognition.
+ *
+ * The query string is built once here rather than at each call site: the
+ * downloads and the on-screen table MUST describe the same window, or HR gets a
+ * spreadsheet that disagrees with the screen the admin was looking at when they
+ * pressed the button.
+ */
+const rrQuery = (o = {}) => {
+  const q = new URLSearchParams();
+  if (o.period) q.set('period', o.period);
+  if (o.offset != null) q.set('offset', String(o.offset));
+  if (o.from) q.set('from', o.from);
+  if (o.to) q.set('to', o.to);
+  if (o.include_all) q.set('include_all', '1');
+  return q.toString();
+};
+
+export const rewardsApi = {
+  leaderboard: (o) => api.get(`/rewards/leaderboard?${rrQuery(o)}`),
+  excel: (o, name) => downloadBlob(`/rewards/export.xlsx?${rrQuery(o)}`, name),
+  pdf: (o, name) => downloadBlob(`/rewards/export.pdf?${rrQuery(o)}`, name),
+};
+
 export const exportApi = {
   // The product manual. Authenticated, so it cannot be a plain <a href> — it
   // goes through the same blob download as every other export here.

@@ -411,11 +411,13 @@ export async function createUser(db, actor, body, tenant = null) {
    *   an email address       a random password, mailed to them directly. There
    *                          is a private channel, so there is no reason to
    *                          issue a guessable credential.
-   *   neither                the derived formula: first 4 characters of the
-   *                          username plus the last 4 digits of the phone.
+   *   neither                the derived formula: first 4 letters of the
+   *                          NAME plus the last 4 digits of the phone.
    *                          Guessable, and the only option when there is
    *                          nowhere to send anything and it has to be read
-   *                          out loud.
+   *                          out loud — which is also why it is built from the
+   *                          name rather than the username: the person being
+   *                          told it may not know their username yet.
    *
    * The first two are hashed at 12 and 12; the derived one at 10, because
    * stretching a password that is guessable by design buys nothing.

@@ -419,10 +419,20 @@ minutes, and the app stays fully responsive throughout.
 
 ### The first-time password — read this
 
-Each imported employee gets a temporary password: **the first 4 letters of their
-name (lowercase) + their year of birth.** `Asha Rao`, born 1994 → `asha1994`.
+Each imported employee **without an email address** gets a temporary password:
+**the first 4 letters of their name (lowercase) + the last 4 digits of their
+phone number.** `Yashas` on 7975495881 → `yash5881`. Anything that is not a letter
+is skipped, so `R. Kumar` gives `rkum`.
 
-**This is guessable by any colleague who knows their birthday.** It is a bootstrap
+Employees **with** an email address are sent a random password directly and
+never get a derived one — where there is a private channel there is no reason
+to issue a guessable credential.
+
+(Date of birth was the second half of this formula until migration 031. It is
+no longer collected at all: nothing else ever read it, and it was worse than the
+phone number for this purpose because a birthday is public inside a team.)
+
+**A derived password is guessable by any colleague who knows the name and the number.** It is a bootstrap
 credential, not a password. It is made safe by being short-lived:
 
 - `must_change_password` is set, and **the server refuses every other endpoint**

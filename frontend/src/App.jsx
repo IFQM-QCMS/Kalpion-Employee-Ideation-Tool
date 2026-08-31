@@ -37,6 +37,7 @@ import SupportPage from './pages/SupportPage';
 import NotFoundPage from './pages/NotFoundPage';
 import HelpPage from './pages/HelpPage';
 import UserGuidePage from './pages/UserGuidePage';
+import RewardsPage from './pages/RewardsPage';
 import PageMeta from './components/PageMeta';
 
 function PrivateRoute({ children }) {
@@ -125,6 +126,9 @@ function AppRoutes() {
       <Route path="/challenges"      element={<PrivateRoute><AppShell><ChallengesPage /></AppShell></PrivateRoute>} />
       <Route path="/audit"           element={<PrivateRoute><AppShell><AuditPage /></AppShell></PrivateRoute>} />
       <Route path="/leaderboard"     element={<PrivateRoute><AppShell><LeaderboardPage /></AppShell></PrivateRoute>} />
+      {/* Rewards & Recognition — the leaderboard as a document HR can act on.
+          The server restricts it; the sidebar only hides the link. */}
+      <Route path="/rewards"         element={<PrivateRoute><AppShell><RewardsPage /></AppShell></PrivateRoute>} />
       <Route path="/analytics"       element={<PrivateRoute><AppShell><AnalyticsPage /></AppShell></PrivateRoute>} />
       <Route path="/admin"           element={<PrivateRoute><AppShell><AdminPage /></AppShell></PrivateRoute>} />
       <Route path="/super-admin"     element={<PrivateRoute><AppShell><SuperAdminPage /></AppShell></PrivateRoute>} />

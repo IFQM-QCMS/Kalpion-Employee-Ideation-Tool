@@ -9,6 +9,7 @@ import ideaRoutes from './ideaRoutes.js';
 import votingRoutes from './votingRoutes.js';
 import commentRoutes from './commentRoutes.js';
 import leaderboardRoutes from './leaderboardRoutes.js';
+import rewardsRoutes from './rewardsRoutes.js';
 import scoreRoutes from './scoreRoutes.js';
 import notificationRoutes from './notificationRoutes.js';
 import settingsRoutes from './settingsRoutes.js';
@@ -53,6 +54,8 @@ router.use('/ideas', ideaRoutes);
 router.use('/votes', votingRoutes);
 router.use('/comments', commentRoutes);
 router.use('/leaderboard', leaderboardRoutes);
+// Rewards & Recognition — the leaderboard as a document HR can act on.
+router.use('/rewards', rewardsRoutes);
 router.use('/score', scoreRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/settings', settingsRoutes);

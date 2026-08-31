@@ -336,7 +336,7 @@ const ORG_ADMIN = {
         {
           bullets: [
             { term: 'With an email address', text: 'a temporary password is generated and emailed to them directly. You never see it and have nothing to pass on — just tell them to check their inbox.' },
-            { term: 'Without an email address', text: 'the temporary password is the first 4 characters of their username plus the last 4 digits of their phone number — username "yashas123" on 7975495881 becomes yash5881. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information — avoid sending it in an unprotected email).' },
+            { term: 'Without an email address', text: 'the temporary password is the first 4 letters of their name plus the last 4 digits of their phone number — "Yashas" on 7975495881 becomes yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information — avoid sending it in an unprotected email).' },
           ],
         },
         {
@@ -475,6 +475,30 @@ const ORG_ADMIN = {
         {
           note: 'Send to HR is available to managers and administrators only. It sends mail from IFQM\'s own '
             + 'address, so it is deliberately not open to everyone.',
+        },
+        {
+          p: 'For an actual reward cycle, use **Rewards & Recognition** instead. The Leaderboard screen is a '
+            + 'ranking; this is the document you hand to HR, and it answers the questions they will ask back.',
+        },
+        {
+          bullets: [
+            { term: 'Pick a period', text: 'Weekly, Fortnightly, Monthly, Quarterly, Half-yearly or Yearly — or your own dates. It opens on the LAST COMPLETE period rather than the one in progress, because you decide March\'s award in April and a half-finished month is a list that is still going to change.' },
+            { term: 'Everyone, not a top ten', text: 'every person who submitted in that period appears, in order, and the count is printed above the table. The Leaderboard screen stops at twenty; a reward list that quietly cuts off at twenty is how the twenty-first person never finds out they were close.' },
+            { term: 'Scored on the period', text: 'points EARNED in that window, not a lifetime total. Each row shows the two halves — points for submitting, points for what those ideas went on to achieve — so a score somebody queries can be checked on sight.' },
+            { term: 'Download Excel', text: 'five sheets: a summary, the full leaderboard, every idea in full, the approval trail one row per decision, and the attachments. This is the one to sort, filter and paste into a payroll sheet.' },
+            { term: 'Download PDF', text: 'the same figures as a document to file, circulate or produce two years later. It carries each idea complete — the situation, the proposal, the benefits — then who approved it, in what capacity, and on what date.' },
+          ],
+        },
+        {
+          note: 'An idea counts in the period it was SUBMITTED in, even where its approval came later. That '
+            + 'credits the effort to when the work was done; the alternative would move an idea between '
+            + 'periods depending on how long its approval chain took, which is not the author\'s doing. Every '
+            + 'idea in the pack carries its own dates, so you can always see both.',
+        },
+        {
+          note: 'Anonymous ideas are listed without their author, here as everywhere else. Attachments are '
+            + 'named and dated in the pack but the files themselves are not embedded — download those from '
+            + 'the idea if HR needs them.',
         },
       ],
     },

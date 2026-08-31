@@ -120,26 +120,35 @@ function normaliseHeader(s) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * First 4 characters of the username + the last 4 digits of the phone number.
- * "yashas123" / 7975495881 -> "yash5881".
+ * First 4 letters of the NAME + the last 4 digits of the phone number.
+ * "Yashas" / 7975495881 -> "yash5881".
  *
- * ── Why the username and not the display name ──────────────────────────────
+ * ── The name, not the username ─────────────────────────────────────────────
  *
- * This read the name for a while, and MOM 24/08 asked for the username. It is
- * the better source for a reason worth writing down: the employee has to type
- * this password, and the username is the other thing they type on the same
- * screen. Deriving from a name means an employee called "Yashas Kumar" with the
- * username "ykumar" gets yash5881 — the four characters they are told to type
- * appear nowhere in what they are typing next to it, which is exactly the shape
- * of a credential people mistype and then believe they were given wrong.
+ * This read the username for a while, on the reasoning that the username is the
+ * other thing the employee types on the same screen, so a password derived from
+ * it is easier to dictate without confusion.
  *
- * ── The username is always there when this is used ────────────────────────
+ * The name is what is wanted, and it is the better answer for the situation
+ * this credential actually exists in. These accounts belong to people with no
+ * mailbox, so the password is passed on out loud — by a supervisor, on a shop
+ * floor, often to somebody who has not yet been told what their username is.
+ * "The first four letters of your name" is an instruction that needs no
+ * lookup and survives being repeated down a noisy line; "the first four
+ * characters of your username" needs the username to hand before it means
+ * anything at all.
  *
- * Every route that creates an account requires a username OR an email address,
- * and an account WITH an address is mailed a random password instead of coming
- * here at all. So a derived password implies no address, which implies a
- * username. The name fallback below is genuine belt-and-braces rather than an
- * expected path.
+ * Only newly created accounts are affected. An existing password is a stored
+ * hash, not a formula re-evaluated at sign-in, so nobody is locked out by this.
+ *
+ * ── Letters, not characters ────────────────────────────────────────────────
+ *
+ * Digits and punctuation are stripped from the name before slicing, so
+ * "R. Kumar" gives "rkum" — the first four LETTERS, in the order they appear.
+ * A name that is left with nothing
+ * — a non-Latin script, say — falls back through the username and then the
+ * employee id, so the result stays per-person rather than becoming a shared
+ * default.
  *
  * ── This is still a bootstrap credential ───────────────────────────────────
  *
@@ -153,20 +162,37 @@ function normaliseHeader(s) {
  * guessable by design buys nothing, and cost 12 would double the time of a
  * 20,000-row import for no security gain.
  */
-export function tempPasswordFor(username, phone, fallbackName, employeeId) {
+export function tempPasswordFor(username, phone, name, employeeId) {
   /*
-   * Usernames are [a-z0-9._-], so the punctuation has to come out or a password
-   * could begin "y.ku" — and a dot read down a phone line is a word, not a
-   * character. Letters and digits only, in the order they appear.
+   * Letters only for the name, because "the first four LETTERS of your name" is
+   * what the employee is told, and that is a sentence somebody can follow with
+   * no reference material. Non-letters simply do not count: "R. Kumar" gives
+   * "rkum" — r, k, u, m — and "Mary-Anne" gives "mary".
    */
-  const clean = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+  const letters = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z]/g, '').toLowerCase();
+  /*
+   * The fallbacks keep digits, because a username or an employee id may be
+   * mostly numeric and dropping those would collapse different people onto the
+   * same password. Punctuation still comes out — a dot read down a phone line
+   * is a word, not a character.
+   */
+  const alnum = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
 
-  let base = clean(username).slice(0, 4);
-  if (!base) base = clean(fallbackName).slice(0, 4);
+  let base = letters(name).slice(0, 4);
+  if (!base) base = alnum(username).slice(0, 4);
   if (!base) {
-    // A name in a non-Latin script with no username leaves nothing to slice;
-    // the employee id keeps the password per-person rather than shared.
-    base = clean(employeeId).slice(0, 4);
+    /*
+     * A name in a non-Latin script with no username leaves nothing to slice, so
+     * the employee id is the last thing that can keep this per-person.
+     *
+     * Taken from the END of the id, not the start. Employee ids are almost
+     * always a shared prefix and a serial — EMP001, EMP002 — so the first four
+     * characters collapse a whole workforce onto "emp0" and hand colleagues
+     * each other's passwords. The last four are the part that actually varies.
+     * (The phone suffix usually differs too, but two people can share a
+     * number on a shop floor, and this should not depend on that.)
+     */
+    base = alnum(employeeId).slice(-4);
   }
   if (!base) base = 'user';
 
@@ -279,7 +305,7 @@ export async function buildTemplate(actorRole) {
   h('', '');
   h('First-time password', 'It depends on whether the row has an email address, and you do not have to do anything either way.');
   h('  With an email', 'A random password is generated and emailed to them directly. You never see it and do not need to pass anything on. Tell them to check their inbox.');
-  h('  Without an email', 'The password is the first 4 letters of their name, lowercased, followed by the LAST 4 DIGITS of their phone number. Example: "Yashas" on 7975495881 → yash5881. This one is shown to you after the import, because you have to pass it on yourself.');
+  h('  Without an email', 'The password is the first 4 LETTERS of their name, lowercased, followed by the LAST 4 DIGITS of their phone number. Example: "Yashas" on 7975495881 → yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. This one is shown to you after the import, because you have to pass it on yourself.');
   h('Either way', 'They MUST change it the first time they sign in — until they do, they cannot use any other part of the app.');
   h('Important', 'A password built from a name and a phone number can be worked out by any colleague who knows both. Ask those employees to sign in and change it promptly, and treat the account as not-yet-secure until they have.');
   h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored — you do not need to delete it before uploading.');
