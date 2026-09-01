@@ -400,7 +400,25 @@ export function validateApplication(body) {
     [gstin, 'GSTIN'],
     [pan, 'business PAN'],
     [entityType, 'entity type'],
-    [category, 'MSME category'],
+    /*
+     * MSME category is NOT required, and asking for it here was a live bug.
+     *
+     * The sign-up form stopped collecting it under MOM 24/08 — the platform
+     * does not differentiate organisations by size, so filing every applicant
+     * into a band collected an answer nothing acts on and implied a tiering
+     * that does not exist. The field went from the form; this line did not go
+     * with it.
+     *
+     * So every application since then failed on submit with "Enter your MSME
+     * category" against a form that has no such field. There was no way to
+     * complete it and nothing on screen to suggest what was wrong — an
+     * applicant could only conclude the product was broken, which for the one
+     * page that turns interest into a customer is about as bad as it gets.
+     *
+     * It stays validated and stored when supplied (see above and the insert
+     * below), exactly like Udyam, CIN and the website: applications already
+     * carrying one keep it, and the platform screens go on showing it.
+     */
     [str(body.sector), 'sector'],
   ];
   for (const [value, label] of required) {

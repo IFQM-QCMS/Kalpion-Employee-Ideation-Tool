@@ -6034,3 +6034,80 @@ test('a mistyped number on a new admin can be corrected, and must be re-proved',
     + 'code before the account works, or this route would be a way to hand '
     + 'somebody else an account with a number of your choosing');
 });
+
+/*
+ * An application carrying exactly what the sign-up form collects is accepted.
+ *
+ * ── The bug this pins ──────────────────────────────────────────────────────
+ *
+ * The form stopped asking for MSME category under MOM 24/08 — the platform does
+ * not differentiate organisations by size, so filing applicants into a band
+ * collected an answer nothing acts on. The field went from the form. The
+ * server's required list did not go with it.
+ *
+ * Every application since then failed on submit with "Enter your MSME
+ * category", against a form containing no such field. Nothing on screen
+ * suggested what was wrong, and there was no way to complete it — on the one
+ * page that turns interest into a customer.
+ *
+ * ── Why the field list is written out in full ─────────────────────────────
+ *
+ * This is the guard, not the decoration. The payload below is exactly what
+ * SignupPage sends: the required fields of steps 1 and 2, and nothing else.
+ * Any future field the server starts demanding but the form does not collect
+ * fails here — which is the whole class of fault, not just this instance of it.
+ */
+test('the sign-up form\'s own payload is enough to submit an application', async () => {
+  const svc = await import('../src/services/registrationService.js');
+
+  // Exactly the fields SignupPage marks required, and no others.
+  const application = {
+    company_name: 'Formfields Manufacturing',
+    proposed_slug: 'formfields',
+    contact_name: 'Asha Rao',
+    contact_designation: 'Plant Manager',
+    contact_email: 'asha@formfields.co.in',
+    contact_phone: '+919812380001',
+    /*
+     * A real GSTIN, check digit and all — computed with the project's own
+     * gstinCheckDigit rather than invented. The validator verifies the digit,
+     * so a plausible-looking string is rejected, and a fixture that does not
+     * satisfy the rule tests the rule instead of the thing under test.
+     */
+    gstin: '29AABCU9603R1ZJ',
+    pan: 'AABCU9603R',
+    entity_type: 'private_limited',
+    sector: 'Automotive & components',
+    employee_count: 105,
+    year_established: 2011,
+    accepted_terms: true,
+    // Deliberately absent: enterprise_category. The form has no such field.
+  };
+
+  /*
+   * validateApplication is called directly rather than through the endpoint.
+   * Submitting for real needs a consumed email code AND a consumed phone code,
+   * which needs a mail sender and an SMS gateway the suite does not have — and
+   * neither is what is under test. What is: whether the shape the form produces
+   * is one the server will accept.
+   */
+  const row = svc.validateApplication(application);
+  assert.ok(row, 'the form\'s own payload must validate');
+  assert.equal(row.enterprise_category, null,
+    'and the absent category is stored as nothing, not refused');
+  assert.equal(row.company_name, 'Formfields Manufacturing');
+  assert.equal(Number(row.employee_count), 105);
+
+  /*
+   * Still validated when it IS supplied. Removing a requirement must not turn
+   * the field into a hole that accepts anything — applications already carrying
+   * a category keep it, and the platform screens go on showing it.
+   */
+  const withCategory = svc.validateApplication({ ...application, enterprise_category: 'small' });
+  assert.equal(withCategory.enterprise_category, 'small', 'a real value is kept');
+
+  assert.throws(
+    () => svc.validateApplication({ ...application, enterprise_category: 'enormous' }),
+    /micro, small or medium/i,
+    'and a value outside the vocabulary is still refused, naming the choices');
+});
