@@ -927,8 +927,14 @@ function isValidEmail(email) {
  * rejecting those is how a required field turns into a support ticket. What
  * actually matters is that there are enough digits to be a real mobile number,
  * because a code will be sent to it.
+ *
+ * Exported so the platform console applies the SAME rule to an IFQM staff
+ * account. A second copy of "what counts as a phone number" would agree on the
+ * day it was written and drift the first time either is touched, and the
+ * failure would be a number this product accepted but could never send a code
+ * to.
  */
-function isValidPhone(phone) {
+export function isValidPhone(phone) {
   const digits = String(phone || '').replace(/\D/g, '');
   return /^[0-9+\-\s()]{7,20}$/.test(String(phone || '').trim())
     && digits.length >= 10 && digits.length <= 15;

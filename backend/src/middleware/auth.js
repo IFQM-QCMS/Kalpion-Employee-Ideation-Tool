@@ -339,12 +339,25 @@ async function loadLivePlatformAdmin(req, payload) {
   const id = Number(String(claimed.id || '').replace(/^pa_/, ''));
   if (!id) throw unauthorized('Not authenticated');
 
+  /*
+   * Read fresh on every request, not taken from the token.
+   *
+   * The verification state changes DURING a session — that is the whole point
+   * of the flow — so a token minted at sign-in says "unverified" for its full
+   * eight hours. Reading the row is what lets the gate open the moment the
+   * second code is accepted, without the new admin having to sign in again.
+   */
   const [rows] = await req.master.execute(
-    'SELECT id, name, email FROM platform_admins WHERE id = ? LIMIT 1',
+    `SELECT id, name, email, phone, email_verified_at, phone_verified_at
+       FROM platform_admins WHERE id = ? LIMIT 1`,
     [id]
   );
   const row = rows[0];
   if (!row) throw unauthorized('Your account no longer exists.');
+
+  const pending = [];
+  if (!row.email_verified_at) pending.push('email');
+  if (!row.phone_verified_at) pending.push('phone');
 
   return {
     id: `pa_${row.id}`,
@@ -353,7 +366,47 @@ async function loadLivePlatformAdmin(req, payload) {
     role: 'platform_admin',
     avatar_initials: claimed.avatar_initials || 'PA',
     points: 0,
+    ...(pending.length ? { must_verify: true, pending_verification: pending } : {}),
   };
+}
+
+/**
+ * What an unverified platform admin may reach.
+ *
+ * Only the endpoints that let them finish verifying, plus the ones the app
+ * shell calls before it can draw anything at all — refusing /auth/me produces a
+ * blank screen instead of the page telling them what to do next, and refusing
+ * logout leaves them holding a token every other endpoint rejects, which is a
+ * worse dead end than the one being prevented.
+ */
+const PLATFORM_VERIFY_ALLOWED = [
+  '/api/auth/platform/verify',
+  '/api/auth/me',
+  '/api/auth/logout',
+];
+
+/**
+ * A platform admin who has not proved both channels may only prove them.
+ *
+ * ── Why this is here and not in React ──────────────────────────────────────
+ *
+ * This account reaches every tenant on the platform: every organisation's
+ * people, ideas, billing and support history. A gate that lives in the UI is
+ * bypassed by anybody who calls the API directly with the token they were just
+ * handed at sign-in — which, for a credential this wide, is not a theoretical
+ * objection. The same reasoning, and the same shape, as enforcePasswordChange
+ * above.
+ */
+function enforcePlatformAdminVerification(req) {
+  if (!req.user?.must_verify) return;
+  const path = (req.originalUrl || '').split('?')[0];
+  if (PLATFORM_VERIFY_ALLOWED.some((p) => path === p || path.startsWith(p + '/'))) return;
+
+  throw new ApiError(403,
+    'Verify your email address and mobile number before using the console.', {
+      must_verify: true,
+      pending_verification: req.user.pending_verification,
+    });
 }
 
 /** Hard auth guard — mirrors PHP requireAuth(). */
@@ -378,6 +431,8 @@ export const requireAuth = asyncHandler(async (req, _res, next) => {
     req.isPlatformAdmin = true;
     req.master = masterDb();
     req.user = await loadLivePlatformAdmin(req, payload);
+    // An account that has not proved both channels may only prove them.
+    enforcePlatformAdminVerification(req);
     /*
      * A platform admin belongs to no organisation, so req.db is deliberately
      * never set for them. Any tenant-scoped route therefore reached the service

@@ -116,6 +116,30 @@ export const DLT_TEMPLATES = {
     label: 'Number Change OTP',
     pendingReason: 'Submitted to Jio DLT; awaiting a template id.',
   },
+
+  /*
+   * 6. Platform admin account verification.
+   *
+   * A new IFQM staff account proves it holds the number before the console will
+   * do anything for it. Falls back to the registration wording, which is the
+   * closest registered template and is not misleading here — setting up a new
+   * account IS a registration from the recipient's point of view, and they are
+   * expecting a code because they have just been told to look for one.
+   *
+   * Registering a wording of its own is worth doing, because "IFQM Ideation" in
+   * the registration text reads as though a workspace is being created for them
+   * rather than staff access being granted. It is not worth WAITING for: the
+   * fallback delivers today, and holding the feature until a DLT queue clears
+   * would mean shipping a verification step that cannot verify.
+   */
+  platform_admin_phone: {
+    id: '',
+    text: 'Dear Customer, use OTP {#var#} to verify your mobile number for IFQM platform administrator access. Do not share this OTP with anyone.',
+    registered: false,
+    fallback: 'registration_phone',
+    label: 'Platform Admin Verification OTP',
+    pendingReason: 'Not yet submitted to Jio DLT; sending on the registration template.',
+  },
 };
 
 /**

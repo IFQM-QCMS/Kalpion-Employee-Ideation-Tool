@@ -334,8 +334,15 @@ export async function verifyPlatformMail() {
   }
 }
 
-/** Enough of an address to correlate a log line, not enough to harvest one. */
-function maskEmail(v) {
+/**
+ * Enough of an address to correlate a log line, not enough to harvest one.
+ *
+ * Exported because the platform-admin verification screen shows the address a
+ * code is going to, and that screen is reachable with only a password — so it
+ * has to be enough for the right person to recognise their own mailbox and not
+ * enough for anybody else to learn one.
+ */
+export function maskEmail(v) {
   const [name = '', domain = ''] = String(v).split('@');
   return `${name.slice(0, 2)}***@${domain}`;
 }

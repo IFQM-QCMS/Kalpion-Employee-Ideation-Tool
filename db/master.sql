@@ -62,16 +62,43 @@ CREATE TABLE IF NOT EXISTS platform_admins (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(100) NOT NULL,
   email         VARCHAR(150) NOT NULL UNIQUE,
+  -- Required of every account created through the console. Nullable only
+  -- because the seed below and any pre-migration-039 row has none.
+  phone         VARCHAR(20)  NULL,
   password_hash VARCHAR(255) NOT NULL,
+  /*
+   * Both proofs, as timestamps (migration 039).
+   *
+   * This is the widest credential the product issues — it reaches every tenant's
+   * people, ideas, billing and support history — and it used to be created by
+   * typing an address into a form that nothing checked. A typo produced a
+   * working account its intended owner could never receive a reset for.
+   *
+   * Until both are set the account can sign in and do exactly one thing:
+   * verify itself. Timestamps rather than booleans, because "verified" happened
+   * at a moment, and knowing when is what lets somebody later ask whether it
+   * was before or after an incident.
+   */
+  email_verified_at DATETIME NULL,
+  phone_verified_at DATETIME NULL,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Seed: password = "password"
-INSERT IGNORE INTO platform_admins (name, email, password_hash)
+/*
+ * Seed: password = "password".
+ *
+ * Verified on both counts from the start, because this row is how a fresh
+ * install reaches the console at all — an unverifiable bootstrap account that
+ * cannot sign in is an installation nobody can finish. It is a development and
+ * first-boot credential; the password policy and the deployment guide both say
+ * to replace it.
+ */
+INSERT IGNORE INTO platform_admins (name, email, password_hash, email_verified_at, phone_verified_at)
 VALUES (
   'IFQM Platform Admin',
   'platform@ifqm.io',
-  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+  '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
+  NOW(), NOW()
 );
 
 -- ── Brute-force lockout state ────────────────────────────────────────────────
@@ -239,6 +266,16 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
 -- platform admin approves it.
 CREATE TABLE IF NOT EXISTS tenant_registrations (
   id                    INT AUTO_INCREMENT PRIMARY KEY,
+  /*
+   * When the platform admins were successfully told about this (migration 040).
+   *
+   * NULL means nobody has been reached yet, and the hourly job will try again.
+   * The notice used to be sent once and forgotten, so an application submitted
+   * during a mail outage waited in the queue with nobody aware of it — which is
+   * the exact situation the notice exists to prevent, since the admins do not
+   * sit refreshing the console.
+   */
+  notified_at           DATETIME     NULL,
   company_name          VARCHAR(150) NOT NULL,
   proposed_slug         VARCHAR(50)  NOT NULL,
   email_domain          VARCHAR(255) NOT NULL,

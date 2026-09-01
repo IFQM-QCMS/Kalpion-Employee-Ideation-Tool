@@ -6,6 +6,7 @@
 import * as authService from '../services/authService.js';
 import * as otpService from '../services/otpService.js';
 import { maintenanceStatus } from '../services/maintenanceService.js';
+import * as platformVerify from '../services/platformVerifyService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
@@ -156,6 +157,25 @@ export const checkResetToken = asyncHandler(async (req, res) => {
  * first login. Returns a new token: stamping password_changed_at revokes every
  * token issued before it, including the caller's.
  */
+/*
+ * ── Platform admin account verification ────────────────────────────────────
+ *
+ * Behind requireAuth, so the caller has already proved the password. That is
+ * what stops these being an oracle: without it, anybody could ask for a code to
+ * be sent to an account they merely know the address of, and could probe which
+ * addresses exist by watching which requests succeed.
+ *
+ * The destination is never taken from the request — see platformVerifyService.
+ */
+export const platformVerifyStatus = asyncHandler(async (req, res) =>
+  respond(res, await platformVerify.status(req.user)));
+
+export const platformVerifySend = asyncHandler(async (req, res) =>
+  respond(res, await platformVerify.sendCode(req.user, req.body || {})));
+
+export const platformVerifyConfirm = asyncHandler(async (req, res) =>
+  respond(res, await platformVerify.confirmCode(req.user, req.body || {})));
+
 export const changePassword = asyncHandler(async (req, res) => {
   const { current_password, new_password } = req.body || {};
   const result = await authService.changePassword(req.db, req.user, {

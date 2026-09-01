@@ -27,6 +27,8 @@ import config from '../config/index.js';
 import { getTenantPool } from '../database/tenant.js';
 import { badRequest, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
+// The same rule the tenant console applies, not a second copy of it.
+import { isValidPhone } from './userService.js';
 import { STAGE_CATALOG, DEFAULT_STAGES } from './approvalStages.js';
 import logger from '../utils/logger.js';
 
@@ -329,19 +331,54 @@ export async function updateTenantSettings(tenantId, body) {
 // ── 3. Platform admin accounts ─────────────────────────────────────
 
 export async function listAdmins() {
+  /*
+   * The verification state travels with the list.
+   *
+   * An account that has not proved its address is one nobody can send a reset
+   * to, and an account grandfathered past migration 039 has no number on file
+   * at all. Neither fact is visible from a name and an email, so the console
+   * would show a tidy list of accounts with no way to tell the difference
+   * between one that is reachable and one that is not.
+   */
   const [rows] = await masterDb().query(
-    'SELECT id, name, email, created_at FROM platform_admins ORDER BY id'
+    `SELECT id, name, email, phone, created_at, email_verified_at, phone_verified_at
+       FROM platform_admins ORDER BY id`
   );
-  return { success: true, admins: rows };
+  return {
+    success: true,
+    admins: rows.map((a) => ({
+      ...a,
+      email_verified: !!a.email_verified_at,
+      phone_verified: !!a.phone_verified_at,
+      verified: !!(a.email_verified_at && a.phone_verified_at),
+      // Grandfathered: trusted from before the rule existed, and never actually
+      // asked to prove anything. Worth naming rather than showing a green tick.
+      predates_verification: !!a.email_verified_at && !a.phone,
+    })),
+  };
 }
 
 export async function createAdmin(body) {
   const name = String(body?.name ?? '').trim();
   const email = String(body?.email ?? '').trim().toLowerCase();
+  const phone = String(body?.phone ?? '').trim();
   const password = body?.password ?? '';
 
   if (!name || !email) throw badRequest('Name and email are required.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest('Invalid email address.');
+  /*
+   * A number is required, and it is not paperwork.
+   *
+   * This account is verified on two independent channels before it can do
+   * anything, and "two channels" means two — an account with only an address
+   * can be taken by whoever holds that mailbox, which for a credential that
+   * reaches every tenant on the platform is the whole risk in one sentence.
+   * It is also the only way back in when the address stops working.
+   */
+  if (!phone) throw badRequest('A mobile number is required. The account is verified on both channels before it can be used.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
   // A platform admin can reach every tenant in the product. Same policy as a
   // tenant super user, at minimum.
   assertPasswordStrength(password, { label: 'Password' });
@@ -367,12 +404,34 @@ export async function createAdmin(body) {
       + 'or raise the limit in Platform Settings, before adding another.');
   }
 
+  /*
+   * Created UNVERIFIED, and the codes are not sent from here.
+   *
+   * The person being given this account is not at the keyboard — somebody else
+   * is creating it for them. Sending both codes now would put them in a mailbox
+   * and a handset that nobody is watching, where they expire in five minutes,
+   * long before the new admin first signs in. The account would then look
+   * broken on the one screen it is allowed to reach.
+   *
+   * So the proofs are collected at first sign-in, when the right person is
+   * present and asking for them. Until both are recorded the session can do
+   * exactly one thing: verify itself. See enforcePlatformAdminVerification.
+   */
   const [res] = await masterDb().execute(
-    'INSERT INTO platform_admins (name, email, password_hash) VALUES (?, ?, ?)',
-    [name, email, await bcrypt.hash(password, 12)]
+    'INSERT INTO platform_admins (name, email, phone, password_hash) VALUES (?, ?, ?, ?)',
+    [name, email, phone, await bcrypt.hash(password, 12)]
   );
-  logger.info(`platform: admin account created (${email})`);
-  return { success: true, id: res.insertId, name, email };
+  logger.info(`platform: admin account created, awaiting verification (${email})`);
+  return {
+    success: true,
+    id: res.insertId,
+    name,
+    email,
+    phone,
+    verification_required: true,
+    message: `${name} can now sign in. They will be asked to verify ${email} and the mobile `
+      + 'number by one-time code before the console will do anything else for them.',
+  };
 }
 
 /**

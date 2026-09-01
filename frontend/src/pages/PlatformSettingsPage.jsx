@@ -383,7 +383,7 @@ function AdminsTab() {
   const { t } = useLang();
   const { showToast } = useToast();
   const [admins, setAdmins] = useState([]);
-  const [form, setForm] = useState({ name:'', email:'', password:'' });
+  const [form, setForm] = useState({ name:'', email:'', phone:'', password:'' });
   const [pw, setPw] = useState({ current_password:'', new_password:'' });
   const [busy, setBusy] = useState(false);
 
@@ -397,7 +397,19 @@ function AdminsTab() {
     setBusy(true);
     try {
       const res = await platformApi.createAdmin(form);
-      if (res.data.success) { setForm({ name:'', email:'', password:'' }); showToast(t('ps.admin_added'), 'success'); await load(); }
+      if (res.data.success) {
+        setForm({ name:'', email:'', phone:'', password:'' });
+        /*
+         * The server's own sentence, not a generic "added".
+         *
+         * What happens next is unusual enough to be worth saying: the account
+         * exists but does nothing until the person it belongs to proves the
+         * address and the number. An operator who is not told that reads the
+         * new admin's "I am locked out" as a bug.
+         */
+        showToast(res.data.message || t('ps.admin_added'), 'success');
+        await load();
+      }
       else showToast(res.data.error || t('msg.server_error'), 'danger');
     } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
     setBusy(false);
@@ -431,12 +443,34 @@ function AdminsTab() {
         <div className="card-title">{t('ps.admins_title')}</div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12,lineHeight:1.6 }}>{t('ps.admins_hint')}</div>
         <table className="table">
-          <thead><tr><th>{t('table.user')}</th><th>{t('table.email')}</th><th>{t('sup.col_updated')}</th><th></th></tr></thead>
+          <thead><tr><th>{t('table.user')}</th><th>{t('table.email')}</th><th>{t('ps.admin_verified')}</th><th>{t('sup.col_updated')}</th><th></th></tr></thead>
           <tbody>
             {admins.map((a) => (
               <tr key={a.id}>
                 <td style={{ fontWeight:600 }}>{a.name}{a.id === meId && <span style={{ marginLeft:8,fontSize:10,color:'var(--subtle)' }}>{t('ps.you')}</span>}</td>
-                <td style={{ fontSize:12 }}>{a.email}</td>
+                <td style={{ fontSize:12 }}>
+                  {a.email}
+                  {a.phone && <div style={{ fontSize:11,color:'var(--subtle)' }}>{a.phone}</div>}
+                </td>
+                {/*
+                  Whether this account has proved it is reachable.
+
+                  An account with an unverified address is one nobody can send a
+                  reset to, and one grandfathered past migration 039 has no
+                  number on file at all. Neither shows in a name and an email,
+                  so without this the console lists accounts that cannot be
+                  contacted as though they were fine.
+                */}
+                <td style={{ fontSize:12 }}>
+                  {a.verified
+                    ? (a.predates_verification
+                      ? <span className="chip chip-warning">{t('ps.admin_v_legacy')}</span>
+                      : <span className="chip chip-success">{t('ps.admin_v_yes')}</span>)
+                    : <span className="chip chip-warning">
+                        {t('ps.admin_v_pending', { channels: (a.email_verified ? [] : ['email'])
+                          .concat(a.phone_verified ? [] : ['phone']).join(' + ') })}
+                      </span>}
+                </td>
                 <td style={{ fontSize:12,color:'var(--subtext)' }}>{fmtDate(a.created_at)}</td>
                 <td style={{ textAlign:'right' }}>
                   <button className="btn btn-outline btn-sm" disabled={busy || a.id === meId} onClick={() => del(a)}>
@@ -457,9 +491,20 @@ function AdminsTab() {
           <div className="form-group"><label>{t('pa.admin_email')} *</label>
             <input className="form-control" type="email" value={form.email} onChange={(e) => setForm({ ...form, email:e.target.value })} /></div>
         </div>
-        <div className="form-group"><label>{t('pa.admin_password')} *</label>
-          <input className="form-control" type="password" value={form.password} onChange={(e) => setForm({ ...form, password:e.target.value })} />
-          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('ps.pw_policy')}</div>
+        <div className="form-row">
+          <div className="form-group"><label>{t('pa.admin_phone')} *</label>
+            <input className="form-control" type="tel" value={form.phone}
+              onChange={(e) => setForm({ ...form, phone:e.target.value })}
+              placeholder={t('admin.uf_phone_ph')} />
+          </div>
+          <div className="form-group"><label>{t('pa.admin_password')} *</label>
+            <input className="form-control" type="password" value={form.password} onChange={(e) => setForm({ ...form, password:e.target.value })} />
+            <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('ps.pw_policy')}</div>
+          </div>
+        </div>
+        {/* Said before the button, not after the fact. */}
+        <div className="alert alert-info" style={{ fontSize:12,marginBottom:12 }}>
+          {t('ps.admin_verify_notice')}
         </div>
         <button className="btn btn-primary" disabled={busy} onClick={add}>{t('ps.add_admin')}</button>
       </div>

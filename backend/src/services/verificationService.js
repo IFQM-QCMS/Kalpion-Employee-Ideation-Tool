@@ -61,6 +61,25 @@ export const PURPOSES = {
     subject: (code) => `${code} is your Kalpion verification code`,
     lead: 'Use this code to confirm your mobile number:',
   },
+
+  /*
+   * A new IFQM staff account proving it holds both the address and the number.
+   *
+   * Two purposes rather than one with channel:'any', because both have to
+   * happen — the point is that the account is reachable on two independent
+   * channels, and a single 'any' purpose would let one of them stand in for
+   * the other and call the job done.
+   */
+  platform_admin_email: {
+    channel: 'email',
+    subject: (code) => `${code} is your Kalpion administrator verification code`,
+    lead: 'Use this code to verify your email address for IFQM platform administrator access:',
+  },
+  platform_admin_phone: {
+    channel: 'sms',
+    subject: (code) => `${code} is your Kalpion administrator verification code`,
+    lead: 'Use this code to verify your mobile number for IFQM platform administrator access:',
+  },
 };
 
 /** How long a consumed code counts as proof, for the caller that acts on it. */

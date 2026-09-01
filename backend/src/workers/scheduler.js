@@ -42,6 +42,7 @@ import { pruneOtps } from '../services/otpService.js';
 import * as ideaService from '../services/ideaService.js';
 import * as subscriptionService from '../services/subscriptionService.js';
 import { purgeExpiredLogs } from '../services/retentionService.js';
+import { retryUnsentRegistrationNotices } from '../services/registrationService.js';
 
 const MINUTE = 60 * 1000;
 
@@ -174,6 +175,21 @@ async function housekeeping() {
    * Here rather than on a read, because a GET that quietly rewrites rows is a
    * surprise; and hourly is soon enough for a condition measured in days.
    */
+  /*
+   * Applications the platform admins were never told about.
+   *
+   * The notice is sent once, at submission, on a channel that can be down. When
+   * it is, nobody learns that it failed — the admins are not watching the
+   * console, which is the whole reason the email exists. This is the second
+   * chance.
+   */
+  try {
+    const r = await retryUnsentRegistrationNotices();
+    if (r.sent) logger.info(`scheduler: ${r.sent} registration notice(s) delivered on retry`);
+  } catch (e) {
+    logger.warn('scheduler: registration notice retry failed', e.message);
+  }
+
   try {
     const [tenants] = await masterDb().query(
       "SELECT id, slug, db_name FROM tenants WHERE status = 'active'");

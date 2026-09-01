@@ -143,6 +143,18 @@ export const authApi = {
    * field in the one request that needs it costs nothing and cannot do that.
    */
   login: (data) => api.post('/auth/login', { ...data, client_timezone: clientTimezone() }),
+  /*
+   * Platform admin account verification.
+   *
+   * Authenticated: the caller has already proved the password at sign-in. That
+   * is what stops these being an oracle — without it, anybody could have a code
+   * sent to an address they merely know, and could probe which accounts exist
+   * by watching which calls succeed. The destination is never sent from here;
+   * the server reads it off the account row.
+   */
+  platformVerifyStatus: () => api.get('/auth/platform/verify/status'),
+  platformVerifySend: (data) => api.post('/auth/platform/verify/send', data),
+  platformVerifyConfirm: (data) => api.post('/auth/platform/verify/confirm', data),
   logout: () => api.post('/auth/logout'),
   me: () => api.get('/auth/me'),
   forgotPassword: (data) => api.post('/auth/forgot-password', data),

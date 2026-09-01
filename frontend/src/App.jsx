@@ -39,6 +39,7 @@ import HelpPage from './pages/HelpPage';
 import UserGuidePage from './pages/UserGuidePage';
 import RewardsPage from './pages/RewardsPage';
 import ErrorBoundary from './components/ErrorBoundary';
+import PlatformVerifyPage from './pages/PlatformVerifyPage';
 import PageMeta from './components/PageMeta';
 
 function PrivateRoute({ children }) {
@@ -77,6 +78,22 @@ function PrivateRoute({ children }) {
    */
   const ROLE_NEUTRAL = ['/user-guide'];
   const roleNeutral = ROLE_NEUTRAL.some((p) => location.pathname.startsWith(p));
+
+  /*
+   * A platform admin who has not proved both channels sees one screen.
+   *
+   * The server already refuses everything else — the gate is in the auth
+   * middleware, because a gate in React is bypassed by anybody who calls the
+   * API with the token they were just handed. This is only so they land
+   * somewhere that explains itself instead of collecting 403s.
+   *
+   * Rendered directly rather than redirected: there is nothing to navigate
+   * between, and a redirect would put a URL in history that goes nowhere once
+   * verification is done.
+   */
+  if (user.role === 'platform_admin' && user.must_verify) {
+    return <PlatformVerifyPage />;
+  }
 
   // Platform admin can only access /platform routes
   if (user.role === 'platform_admin' && !roleNeutral && !location.pathname.startsWith('/platform')) {

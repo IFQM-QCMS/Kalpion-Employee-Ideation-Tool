@@ -5479,3 +5479,284 @@ test('an ordinary employee cannot pull the rewards pack', async () => {
   const allowed = await api('GET', '/api/rewards/leaderboard?period=monthly', { token: aTok });
   assert.equal(allowed.status, 200, 'the org admin runs the reward cycle');
 });
+
+/* ───────────────────────────────────────────────────────────────────────────
+ *  Platform admin account verification
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * A new IFQM staff account proves both channels before the console will do
+ * anything for it.
+ *
+ * This is the widest credential the product issues — it reaches every
+ * organisation's people, ideas, billing and support history — and it was
+ * created by typing a name, an address and a password into a form that checked
+ * none of them. A typo in the email field produced a fully working account
+ * whose intended owner could never receive a password reset, and the account
+ * still worked for whoever did receive the mail.
+ *
+ * The gate is in the middleware, not the UI, and that is the half worth
+ * testing: a React redirect is bypassed by anybody who calls the API with the
+ * token they were just handed at sign-in.
+ */
+test('a new platform admin cannot use the console until both channels are proved', async () => {
+  const email = `newpa${Date.now() % 100000}@ifqm.io`;
+  const password = 'PlatformAdminPass12345';
+
+  // ── A number is required. The account is verified on two channels, and two
+  //    means two: an address alone can be taken by whoever holds that mailbox.
+  const noPhone = await api('POST', '/api/platform/admins', {
+    token: PA, body: { name: 'No Phone Admin', email: `x${email}`, password },
+  });
+  assert.notEqual(noPhone.status, 200, 'an admin without a mobile number must be refused');
+  assert.match(noPhone.data.error, /mobile number/i);
+
+  const created = await api('POST', '/api/platform/admins', {
+    token: PA,
+    body: { name: 'Fresh Admin', email, phone: '+919812350001', password },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+  assert.equal(created.data.verification_required, true,
+    'the operator creating the account is told it cannot be used yet');
+
+  // ── Signing in works, and says what is outstanding ──
+  /*
+   * Deliberately not refused. The codes have to go somewhere, and where is
+   * decided by this row — refusing the login would leave the new admin with a
+   * password that works on nothing and no way to ask for a code. It would also
+   * tell anybody guessing addresses which accounts exist but are not set up.
+   */
+  const signIn = await api('POST', '/api/auth/login', { body: { email, password } });
+  assert.equal(signIn.data.success, true, JSON.stringify(signIn.data));
+  const token = signIn.data.token;
+  assert.ok(token, 'a session is issued');
+  assert.equal(signIn.data.user.must_verify, true);
+  assert.deepEqual(signIn.data.user.pending_verification, ['email', 'phone']);
+  /*
+   * The destinations are masked. This screen is reachable with only a password,
+   * so it must show enough for the right person to recognise their own mailbox
+   * and not enough for anybody else to learn one.
+   */
+  assert.ok(signIn.data.user.verify_email.includes('***'), 'the address is masked');
+  assert.ok(!signIn.data.user.verify_email.includes(email.split('@')[0]),
+    'and does not simply echo the local part back');
+
+  // ── And the console is shut ──
+  for (const path of ['/api/platform/tenants', '/api/platform/admins', '/api/platform/registrations']) {
+    const blocked = await api('GET', path, { token });
+    assert.equal(blocked.status, 403,
+      `${path} must be refused before verification — got ${blocked.status}`);
+    assert.equal(blocked.data.must_verify, true,
+      'and the refusal says why, so the screen can act on it rather than guessing');
+  }
+
+  // The two endpoints that finish the job are open, or the flow cannot complete.
+  const status = await api('GET', '/api/auth/platform/verify/status', { token });
+  assert.equal(status.status, 200, 'the verification endpoints stay reachable');
+  assert.equal(status.data.email_verified, false);
+  assert.equal(status.data.phone_verified, false);
+
+  /*
+   * ── Proving a channel ──
+   *
+   * The code row is seeded rather than sent. This suite has no mail provider
+   * and no SMS gateway, so an actual send answers 503 — and delivery is not
+   * what is under test here. What is: that a wrong code records nothing, that a
+   * right one records the timestamp, and that the gate opens when both are in.
+   * Seeded exactly as verificationService stores it, so the confirm handler is
+   * exercised for real.
+   */
+  const bcrypt = (await import('bcryptjs')).default;
+  /*
+   * Stored under the key the SERVICE will look it up by, not the raw string.
+   * A number is normalised before it is stored or matched — +91 9812 350001,
+   * 09812350001 and 9812350001 are one identifier — so seeding the raw form
+   * writes a row the lookup can never find. Going through classify() means this
+   * fixture cannot drift from the rule the service actually applies.
+   */
+  const { classify } = await import('../src/services/verificationService.js');
+  const seedCode = async (identifier, purpose, code) => {
+    const { key, idType, channel } = classify(identifier);
+    const hash = await bcrypt.hash(code, 10);
+    await sql('ifqm_test_master',
+      `INSERT INTO ifqm_test_master.login_otps
+         (identifier, id_type, channel, code_hash, purpose, expires_at)
+       VALUES ('${key}', '${idType}', '${channel}', '${hash}',
+               '${purpose}', DATE_ADD(NOW(), INTERVAL 10 MINUTE))`);
+  };
+
+  await seedCode(email, 'platform_admin_email', '123456');
+
+  /*
+   * A wrong code proves nothing. Asserted because the whole feature is one
+   * misplaced UPDATE away from being decorative: writing the timestamp before
+   * the code is checked leaves a screen that looks like verification and is not.
+   */
+  const wrong = await api('POST', '/api/auth/platform/verify/confirm', {
+    token, body: { channel: 'email', code: '000000' },
+  });
+  assert.notEqual(wrong.status, 200, 'a wrong code is refused');
+  const [stillNo] = await sql('ifqm_test_master',
+    `SELECT email_verified_at FROM ifqm_test_master.platform_admins WHERE email = '${email}'`);
+  assert.equal(stillNo.email_verified_at, null,
+    'and records nothing — a failed guess must not mark the channel proved');
+
+  // The right one does.
+  await seedCode(email, 'platform_admin_email', '123456');
+  const rightEmail = await api('POST', '/api/auth/platform/verify/confirm', {
+    token, body: { channel: 'email', code: '123456' },
+  });
+  assert.equal(rightEmail.status, 200, JSON.stringify(rightEmail.data));
+  assert.equal(rightEmail.data.email_verified, true);
+  assert.equal(rightEmail.data.verified, false, 'one channel is not both');
+
+  // ── Still shut, because the phone is outstanding ──
+  const halfway = await api('GET', '/api/platform/admins', { token });
+  assert.equal(halfway.status, 403,
+    'proving one channel must not open the console — the point is two independent ones');
+
+  // ── The second channel opens it ──
+  await seedCode('+919812350001', 'platform_admin_phone', '654321');
+  const rightPhone = await api('POST', '/api/auth/platform/verify/confirm', {
+    token, body: { channel: 'phone', code: '654321' },
+  });
+  assert.equal(rightPhone.status, 200, JSON.stringify(rightPhone.data));
+  assert.equal(rightPhone.data.verified, true, 'both channels are now proved');
+
+  /*
+   * And the gate opens on the SAME token. The middleware re-reads the row on
+   * every request, so verification takes effect immediately — a new admin who
+   * had to sign in again would reasonably think the flow had failed.
+   */
+  const open = await api('GET', '/api/platform/admins', { token });
+  assert.equal(open.status, 200,
+    'the console opens without a fresh sign-in — the row is read per request');
+});
+
+/*
+ * The destination comes from the account row, never from the request.
+ *
+ * Taking it from the caller would turn this into a way to point an unverified
+ * account at an address of the caller's choosing and then verify it — the whole
+ * thing being prevented, wearing the flow's own clothes.
+ */
+test('platform verification sends only to the address on the account', async () => {
+  const email = `divert${Date.now() % 100000}@ifqm.io`;
+  const created = await api('POST', '/api/platform/admins', {
+    token: PA,
+    body: { name: 'Divert Test', email, phone: '+919812350002', password: 'PlatformAdminPass12345' },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+  const { token } = await api('POST', '/api/auth/login', {
+    body: { email, password: 'PlatformAdminPass12345' },
+  }).then((r) => r.data);
+
+  // An attacker-supplied destination is simply ignored — the body carries only
+  // a channel, and anything else in it has no route into the query.
+  await api('POST', '/api/auth/platform/verify/send', {
+    token,
+    body: { channel: 'email', identifier: 'attacker@example.com', email: 'attacker@example.com' },
+  });
+
+  /*
+   * Asserted as an absence, which holds whether or not the send itself could
+   * complete — the suite has no mail provider, and the property under test is
+   * about routing, not delivery. If the request body could steer the
+   * destination, a row for the attacker's address would exist.
+   */
+  const rows = await sql('ifqm_test_master',
+    `SELECT identifier FROM ifqm_test_master.login_otps
+      WHERE identifier = 'attacker@example.com'`);
+  assert.equal(rows.length, 0,
+    'no code may ever be issued to an address supplied by the caller');
+});
+
+/*
+ * Existing accounts are grandfathered, deliberately.
+ *
+ * Leaving them unverified would lock every current platform admin out of the
+ * console on the next deploy — including the only account that can create
+ * another one, and there is no way back in without editing SQL by hand. An
+ * outage of the vendor console is not a security improvement.
+ */
+test('platform admins that predate the rule keep working', async () => {
+  const list = await api('GET', '/api/platform/admins', { token: PA });
+  assert.equal(list.status, 200, 'the seeded admin can still use the console');
+
+  const seeded = list.data.admins.find((a) => a.email === 'platform@ifqm.io');
+  assert.ok(seeded, 'the seed account is there');
+  assert.equal(seeded.verified, true, 'and is treated as verified');
+  assert.ok(seeded.email_verified_at, 'with a timestamp, not a NULL that reads as unproven');
+});
+
+/*
+ * The SMS purpose must resolve to a template the carrier will actually accept.
+ *
+ * Indian DLT compares the body to a registered template character for character
+ * and silently drops anything that does not match — no error, no delivery
+ * report. A new purpose with no registered wording would therefore produce a
+ * verification step that cannot verify, and would look like it was working from
+ * every direction except the recipient's.
+ */
+test('the platform admin SMS purpose resolves to a registered DLT template', async () => {
+  const { resolveTemplate } = await import('../src/config/smsTemplates.js');
+  const r = resolveTemplate('platform_admin_phone');
+
+  assert.equal(r.sendable, true,
+    'the purpose must be sendable today, not once a DLT queue clears');
+  assert.ok(r.id, 'and carry a real template id');
+  assert.equal(r.usingFallback, 'registration_phone',
+    'via the registration template, which is the closest registered wording');
+  // The pair has to match: the id and the text are approved together, so taking
+  // one without the other is exactly the mismatch the carrier drops.
+  assert.match(r.text, /complete your registration/,
+    'the body sent must be the fallback template\'s own approved wording');
+});
+
+/*
+ * Every platform admin is told, every time a company applies — and a notice
+ * that fails is retried rather than lost.
+ *
+ * The admins do not sit refreshing the console; that is the entire reason this
+ * email exists. It was sent once, immediately, and not recorded — so an
+ * application submitted while mail was down waited in the queue with nobody
+ * aware of it. That is not hypothetical: notification mail on this platform was
+ * dead for weeks (migrations 037 and 038).
+ */
+test('an unsent registration notice is retried, and a sent one is not resent', async () => {
+  const svc = await import('../src/services/registrationService.js');
+
+  /*
+   * Seeded directly. Submitting one end to end needs a consumed email code AND
+   * a consumed phone code, which needs a mail provider and an SMS gateway the
+   * suite does not have — and none of that is what this test is about. What it
+   * is about is the retry pass picking the right rows.
+   */
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.tenant_registrations
+       (company_name, proposed_slug, email_domain, contact_name, contact_email,
+        contact_phone, accepted_terms, status, notified_at)
+     VALUES ('Unnotified Works', 'unnotified', 'unnotified.test', 'Nobody Told',
+             'told@unnotified.test', '+919812350099', 1, 'pending', NULL)`);
+  const [reg] = await sql('ifqm_test_master',
+    `SELECT id FROM ifqm_test_master.tenant_registrations
+      WHERE email_domain = 'unnotified.test' ORDER BY id DESC LIMIT 1`);
+  assert.ok(reg, 'the fixture exists');
+
+  const first = await svc.retryUnsentRegistrationNotices();
+  assert.ok(first.checked >= 1,
+    `the retry pass must find an unnotified application — got ${JSON.stringify(first)}`);
+
+  /*
+   * Whether it SENT depends on a mail provider the suite does not have, so the
+   * assertion is on the selection, which is the part that can be wrong in a way
+   * nobody would notice. Stamping only happens on a real delivery, so with no
+   * provider the row stays NULL and would be retried again — which is the
+   * behaviour wanted during an outage.
+   */
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.tenant_registrations SET notified_at = NOW() WHERE id = ${reg.id}`);
+  const second = await svc.retryUnsentRegistrationNotices();
+  assert.ok(!second.checked || second.checked < first.checked,
+    'an application already announced is not announced again');
+});

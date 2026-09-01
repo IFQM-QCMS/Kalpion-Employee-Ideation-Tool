@@ -22,7 +22,8 @@ import { resolveTenant, getTenantPool, sanitizeSlug } from '../database/tenant.j
 import {
   resolveTenantByLogin, indexUser, isEmail, normalizePhone, normalizeUsername,
 } from './directoryService.js';
-import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
+import { getOrgSettings, sendSmtpEmail, maskEmail } from './mailerService.js';
+import { maskPhone } from './smsService.js';
 import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import * as verification from './verificationService.js';
 import { assertNotInMaintenance } from './maintenanceService.js';
@@ -142,6 +143,26 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     if (pa) {
       const passwordOk = await bcrypt.compare(password, pa.password_hash);
       if (passwordOk) {
+        /*
+         * ── An account that has not proved itself gets in, and no further ──
+         *
+         * A platform admin reaches every tenant on the platform. Until both the
+         * address and the number are proven, the session is issued but the
+         * middleware refuses everything except the two verify endpoints — the
+         * same shape as must_change_password, and for the same reason: a gate
+         * that lives in the UI is bypassed by anybody who calls the API with
+         * the token they were just handed.
+         *
+         * Signing in is allowed rather than refused because the codes have to
+         * go somewhere, and "somewhere" is decided by this row. Refusing the
+         * login outright would leave the new admin with a password that works
+         * on nothing and no way to ask for a code — and would leak, to anybody
+         * guessing addresses, which accounts exist but are not yet set up.
+         */
+        const pending = [];
+        if (!pa.email_verified_at) pending.push('email');
+        if (!pa.phone_verified_at) pending.push('phone');
+
         const session = {
           id: `pa_${pa.id}`,
           name: pa.name,
@@ -149,10 +170,21 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
           role: 'platform_admin',
           avatar_initials: initialsFrom(pa.name) || 'PA',
           points: 0,
+          ...(pending.length ? {
+            must_verify: true,
+            pending_verification: pending,
+            // Shown on the verification screen so somebody can tell at a glance
+            // that a code is going to an address they can actually open. Masked,
+            // because the screen is reachable with only a password.
+            verify_email: maskEmail(pa.email),
+            verify_phone: maskPhone(pa.phone),
+          } : {}),
         };
         await clearFailedAttempts(loginId);
         const token = signToken({ user: session, platform_admin: true });
-        logger.info(`auth: platform admin login ok (${email})`);
+        logger.info(pending.length
+          ? `auth: platform admin login ok, awaiting ${pending.join(' and ')} verification (${email})`
+          : `auth: platform admin login ok (${email})`);
         recordLogin({
           actorType: 'platform_admin', actorId: pa.id, actorName: pa.name,
           actorEmail: pa.email, outcome: 'success', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,

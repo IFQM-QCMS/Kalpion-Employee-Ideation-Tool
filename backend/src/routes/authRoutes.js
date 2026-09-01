@@ -35,4 +35,20 @@ router.get('/check-reset-token', auth.checkResetToken);
 // the allowlist in the auth middleware, and is the only way out of that state.
 router.post('/change-password', requireAuth, auth.changePassword);
 
+/*
+ * ── Platform admin account verification ────────────────────────────────────
+ *
+ * requireAuth, so the password has already been proved — without it these would
+ * send a code to any address somebody cared to name, and would answer whether
+ * an account exists. The verification gate in the middleware allows exactly
+ * this prefix through for an unverified session, which is what makes the flow
+ * completable while everything else stays shut.
+ *
+ * authLimiter because each send costs a real email or a real SMS, and an
+ * unthrottled resend is somebody else's phone bill.
+ */
+router.get('/platform/verify/status', requireAuth, auth.platformVerifyStatus);
+router.post('/platform/verify/send', requireAuth, authLimiter, auth.platformVerifySend);
+router.post('/platform/verify/confirm', requireAuth, authLimiter, auth.platformVerifyConfirm);
+
 export default router;

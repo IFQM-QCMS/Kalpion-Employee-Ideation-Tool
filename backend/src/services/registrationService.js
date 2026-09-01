@@ -469,7 +469,7 @@ export function validateApplication(body) {
  * logged loudly instead, because a notification that silently stopped working
  * is exactly the thing nobody notices.
  */
-export async function notifyPlatformOfApplication(reg, reference) {
+export async function notifyPlatformOfApplication(reg, reference, registrationId = null) {
   const { sendViaPlatform } = await import('./mailerService.js');
   const master = masterDb();
 
@@ -525,8 +525,32 @@ export async function notifyPlatformOfApplication(reg, reference) {
     [...recipients].map(([email, name]) => sendViaPlatform(email, name, subject, html))
   );
   const sent = results.filter((r) => r.status === 'fulfilled' && r.value && r.value.success !== false).length;
+
+  /*
+   * Stamped only when somebody actually accepted the message.
+   *
+   * Left NULL on failure so the hourly pass picks it up again. The notice used
+   * to be sent once and forgotten: an application submitted while mail was down
+   * sat in the queue with nobody aware of it, which is exactly what this notice
+   * exists to prevent — the admins do not sit refreshing the console. That is
+   * not hypothetical, mail on this platform was dead for weeks.
+   *
+   * Best-effort in its own right: failing to record a success is far better
+   * than failing the send, and the worst case is one duplicate notice.
+   */
+  if (sent && registrationId) {
+    try {
+      await master.execute(
+        'UPDATE tenant_registrations SET notified_at = NOW() WHERE id = ? AND notified_at IS NULL',
+        [registrationId]
+      );
+    } catch (e) {
+      logger.warn(`registration notice: ${reference} sent but not stamped — ${e.message}`);
+    }
+  }
+
   if (sent) logger.info(`registration notice: ${reference} sent to ${sent} platform recipient(s)`);
-  else logger.error(`registration notice: ${reference} reached nobody — check platform mail`);
+  else logger.error(`registration notice: ${reference} reached nobody — will retry hourly`);
   // Returned rather than only logged so the recipient selection can be asserted
   // on without a mail server: who it goes to is the part worth testing, and it
   // is decided entirely before anything is sent.
@@ -616,7 +640,7 @@ export async function submitRegistration(body, meta = {}) {
 
   // Deliberately not awaited. The application is committed; the applicant
   // should not wait on our outbound mail server to be told so.
-  notifyPlatformOfApplication(row, reference).catch((e) =>
+  notifyPlatformOfApplication(row, reference, res.insertId).catch((e) =>
     logger.error(`registration notice: ${reference} failed — ${e.message}`));
 
   return {
@@ -625,6 +649,62 @@ export async function submitRegistration(body, meta = {}) {
     reference,
     message: 'Application received. We will email you once it has been reviewed.',
   };
+}
+
+/**
+ * Try again for applications the platform was never told about.
+ *
+ * Run hourly. Every platform admin is emailed the moment a company applies, but
+ * that is one attempt on a channel that can be down — and when it is down,
+ * nothing about the failure is visible to the people who needed the message.
+ * They are not watching the console; that is the entire reason the email exists.
+ *
+ * ── The bounds, and why each one is there ──────────────────────────────────
+ *
+ * Only PENDING applications. One that has since been approved or rejected has
+ * been seen by a human, and announcing it now would be noise about a decision
+ * already taken.
+ *
+ * Only the last 14 days. An application nobody acted on for a fortnight has a
+ * problem this email will not solve, and a retry loop with no horizon means a
+ * permanently misconfigured mail sender re-reads the whole table every hour
+ * forever.
+ *
+ * A handful per pass, oldest first. A backlog drains over a few hours rather
+ * than arriving as one indistinguishable burst — which is how a real
+ * notification gets deleted along with the rest.
+ */
+export async function retryUnsentRegistrationNotices() {
+  const master = masterDb();
+  let rows = [];
+  try {
+    [rows] = await master.query(
+      `SELECT * FROM tenant_registrations
+        WHERE notified_at IS NULL
+          AND status = 'pending'
+          AND created_at > DATE_SUB(NOW(), INTERVAL 14 DAY)
+        ORDER BY created_at ASC
+        LIMIT 10`
+    );
+  } catch (e) {
+    // A registry without migration 040 has no such column. Nothing to do, and
+    // certainly nothing worth failing the scheduler over.
+    logger.warn(`registration notice retry: skipped — ${e.message}`);
+    return { checked: 0, sent: 0 };
+  }
+  if (!rows.length) return { checked: 0, sent: 0 };
+
+  let sent = 0;
+  for (const reg of rows) {
+    try {
+      const r = await notifyPlatformOfApplication(reg, `REG-${reg.id}`, reg.id);
+      if (r.sent) sent += 1;
+    } catch (e) {
+      logger.warn(`registration notice retry: REG-${reg.id} failed again — ${e.message}`);
+    }
+  }
+  if (sent) logger.info(`registration notice retry: ${sent} of ${rows.length} delivered`);
+  return { checked: rows.length, sent };
 }
 
 /** GET /api/platform/registrations — platform admin. */
