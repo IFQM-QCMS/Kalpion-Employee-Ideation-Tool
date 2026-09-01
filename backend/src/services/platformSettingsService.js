@@ -480,6 +480,204 @@ export async function changeOwnPassword(currentAdmin, body) {
   return { success: true };
 }
 
+/**
+ * Step one of moving your own number: prove you hold the new handset.
+ *
+ * ── Why a code and not just a form field ───────────────────────────────────
+ *
+ * The number is where a sign-in code and a password reset go, so whoever
+ * controls it controls the account — and this account reaches every tenant on
+ * the platform. Writing it straight from a form would mean a borrowed, still
+ * signed-in browser could redirect the recovery channel and keep the account
+ * after the real owner changed their password.
+ *
+ * The current password is required for the same reason it is required to change
+ * the password itself: it is what distinguishes the owner from somebody who
+ * walked past an unlocked screen.
+ */
+export async function requestOwnPhoneChange(currentAdmin, body) {
+  const id = Number(String(currentAdmin?.id || '').replace(/^pa_/, ''));
+  if (!id) throw badRequest('Not a platform admin account.');
+
+  const phone = String(body?.phone ?? '').trim();
+  if (!phone) throw badRequest('Enter the new mobile number.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
+
+  const [[row] = []] = await masterDb().execute(
+    'SELECT id, name, phone, password_hash FROM platform_admins WHERE id = ? LIMIT 1', [id]);
+  if (!row) throw notFound('Account no longer exists.');
+
+  if (!(await bcrypt.compare(String(body?.current_password ?? ''), row.password_hash))) {
+    throw badRequest('Current password is incorrect.');
+  }
+
+  const digits = (v) => String(v ?? '').replace(/\D/g, '');
+  if (digits(phone) === digits(row.phone)) throw badRequest('That is already your number.');
+
+  /*
+   * One number per platform account. Two admins sharing one handset makes a
+   * code ambiguous — and a code that could belong to either of two accounts
+   * that each reach every tenant is not a second factor at all.
+   */
+  const [[clash] = []] = await masterDb().execute(
+    "SELECT id FROM platform_admins WHERE id <> ? "
+    + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1",
+    [id, `%${digits(phone)}`]
+  );
+  if (clash) throw new ApiError(409, 'That number is already on another platform admin account.');
+
+  const verification = await import('./verificationService.js');
+  const sent = await verification.sendCode({
+    identifier: phone,
+    purpose: 'platform_admin_phone',
+    name: row.name,
+  });
+  logger.info(`platform: admin ${id} requested a number change`);
+  return { success: true, ...sent };
+}
+
+/**
+ * Step two: the code came back, so the handset is theirs. Save it.
+ *
+ * The OLD number and address are told afterwards. That notice is the whole
+ * point of the exercise — it is what makes a quietly stolen account visible to
+ * the person it was stolen from, on a channel the thief no longer controls.
+ */
+export async function confirmOwnPhoneChange(currentAdmin, body) {
+  const id = Number(String(currentAdmin?.id || '').replace(/^pa_/, ''));
+  if (!id) throw badRequest('Not a platform admin account.');
+
+  const phone = String(body?.phone ?? '').trim();
+  const [[row] = []] = await masterDb().execute(
+    'SELECT id, name, email, phone FROM platform_admins WHERE id = ? LIMIT 1', [id]);
+  if (!row) throw notFound('Account no longer exists.');
+
+  const verification = await import('./verificationService.js');
+  await verification.verifyCode({
+    identifier: phone, code: body?.code, purpose: 'platform_admin_phone',
+  });
+
+  const previous = String(row.phone || '').trim();
+  /*
+   * The new number is verified by the code that just came back, so the proof
+   * timestamp moves with it. Leaving the old timestamp in place would claim a
+   * number had been proved that nobody has ever sent anything to.
+   */
+  await masterDb().execute(
+    'UPDATE platform_admins SET phone = ?, phone_verified_at = NOW() WHERE id = ?',
+    [phone, id]
+  );
+
+  notifyPlatformAdminPhoneChanged(row, previous, phone).catch((e) =>
+    logger.warn(`platform: number-change notice failed for admin ${id} — ${e.message}`));
+  logger.info(`platform: admin ${id} changed their mobile number`);
+  return { success: true, phone, message: 'Your mobile number has been updated.' };
+}
+
+/** Tell the old address and the old handset that the number moved. */
+async function notifyPlatformAdminPhoneChanged(admin, previous, next) {
+  const { sendViaPlatform } = await import('./mailerService.js');
+  const { sendSms, messageFor } = await import('./smsService.js');
+  const tail = String(next).replace(/\D/g, '').slice(-4);
+  const safe = String(admin.name || '').replace(/[<>&]/g, '');
+
+  if (admin.email) {
+    await sendViaPlatform(
+      admin.email, admin.name, 'Your Kalpion administrator mobile number was changed',
+      `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
+  <p>Hello ${safe},</p>
+  <p>The mobile number on your Kalpion platform administrator account was changed.
+  Sign-in codes and password resets will now go to the number ending <b>${tail}</b>.</p>
+  <p style="color:#b91c1c"><b>If this was not you</b>, this account can reach every
+  organisation on the platform. Change your password immediately and tell the other
+  platform administrators.</p>
+</div>`
+    ).catch(() => {});
+  }
+
+  /*
+   * To the OLD handset, under the alert's own registered template
+   * (1277178823569994190). Sent to the number being moved AWAY from, because
+   * that is the one the rightful owner still holds — telling the new number is
+   * telling whoever just took it.
+   */
+  if (previous) {
+    const { text } = messageFor('phone_changed', tail);
+    await sendSms(previous, text, { purpose: 'phone_changed' }).catch(() => {});
+  }
+}
+
+/**
+ * Correct another administrator's number.
+ *
+ * ── The dead end this exists for ───────────────────────────────────────────
+ *
+ * A new account is created by somebody else typing the number in. Typed wrongly,
+ * no code can ever arrive — and the verification gate allows an unverified
+ * session to reach nothing except the verify endpoints, so the person it belongs
+ * to cannot correct it themselves. Without this the only remedy is deleting the
+ * account and making it again.
+ *
+ * Self-service change is deliberately NOT opened to unverified sessions instead.
+ * That would let anybody holding the password of an unproven account point the
+ * number at their own handset and verify it — turning a stolen password into a
+ * complete account, which is exactly what the two-channel rule is for.
+ *
+ * This is safe where that is not, because the caller is an already-verified
+ * platform admin, and every platform admin already holds every power the target
+ * has. It escalates nothing. It is logged, and the target's proof is cleared so
+ * the number still has to answer a code before it counts.
+ */
+export async function updateAdminPhone(currentAdmin, id, body) {
+  const targetId = Number(id) || 0;
+  const phone = String(body?.phone ?? '').trim();
+  if (!targetId) throw badRequest('Which administrator?');
+  if (!phone) throw badRequest('Enter the mobile number.');
+  if (!isValidPhone(phone)) {
+    throw badRequest('Enter a valid mobile number, including the country or area code.');
+  }
+
+  const [[target] = []] = await masterDb().execute(
+    'SELECT id, name, email, phone FROM platform_admins WHERE id = ? LIMIT 1', [targetId]);
+  if (!target) throw notFound('Platform admin not found.');
+
+  const digits = (v) => String(v ?? '').replace(/\D/g, '');
+  const [[clash] = []] = await masterDb().execute(
+    "SELECT id FROM platform_admins WHERE id <> ? "
+    + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1",
+    [targetId, `%${digits(phone)}`]
+  );
+  if (clash) throw new ApiError(409, 'That number is already on another platform admin account.');
+
+  /*
+   * Cleared, not carried over. The new number has been asserted by a third
+   * party and proved by nobody, so it must answer a code before the account
+   * works again — otherwise this route would be a way to hand somebody else's
+   * account a number of your choosing and leave it fully live.
+   */
+  await masterDb().execute(
+    'UPDATE platform_admins SET phone = ?, phone_verified_at = NULL WHERE id = ?',
+    [phone, targetId]
+  );
+
+  const actorId = String(currentAdmin?.id || '').replace(/^pa_/, '');
+  logger.warn(`platform: admin ${actorId} changed the number on admin ${targetId} `
+    + `(${target.email}); that account must verify again`);
+
+  // The owner is told, on the channel that did not just change.
+  notifyPlatformAdminPhoneChanged(target, '', phone).catch(() => {});
+
+  return {
+    success: true,
+    id: targetId,
+    phone,
+    message: `${target.name} must verify the new number by one-time code before `
+      + 'the console will work for them again.',
+  };
+}
+
 // ── 4. Health ──────────────────────────────────────────────────────
 
 /** Total bytes under a directory. Counts size; never reads content. */

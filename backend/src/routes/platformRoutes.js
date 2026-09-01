@@ -95,6 +95,23 @@ router.get('/admins', platform.listAdmins);
 router.post('/admins', platform.createAdmin);
 router.delete('/admins/:id', platform.deleteAdmin);
 router.post('/admins/change-password', platform.changeOwnPassword);
+/*
+ * Moving your own number: a code to the new handset, then confirm.
+ *
+ * Declared before '/admins/:id/phone' for the usual reason — a literal segment
+ * has to be matched before a parameter that would swallow it, or 'me' is read
+ * as an id.
+ */
+router.post('/admins/me/phone/request-code', platform.requestOwnPhoneChange);
+router.post('/admins/me/phone/confirm', platform.confirmOwnPhoneChange);
+/*
+ * Correcting another administrator's number. For the account created with a
+ * mistyped one, which can never receive a code and — because the verification
+ * gate allows an unverified session nothing but the verify endpoints — cannot
+ * fix it for itself. The target's proof is cleared, so the new number still has
+ * to answer a code.
+ */
+router.put('/admins/:id/phone', platform.updateAdminPhone);
 
 // MSME self-registration queue. Approving one provisions a tenant, so these sit
 // behind the same platform-admin guard as create_tenant.

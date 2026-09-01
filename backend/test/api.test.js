@@ -5897,3 +5897,140 @@ test('changing your mobile number requires a code, and tells the old one', async
       'and goes to the OLD number — the handset the rightful owner still holds');
   }
 });
+
+/*
+ * A platform admin moving their own number.
+ *
+ * The same reasoning as the tenant flow, with more at stake: this account
+ * reaches every organisation on the platform, and the number is where a sign-in
+ * code and a password reset go. Writing it straight from a form would let a
+ * borrowed, still signed-in browser redirect the recovery channel and keep the
+ * account after the real owner changed their password — so the current password
+ * starts it and a code to the new handset finishes it.
+ */
+test('a platform admin moves their own number by code, not by editing a field', async () => {
+  const email = `mover${Date.now() % 100000}@ifqm.io`;
+  const password = 'PlatformMoverPass12345';
+  const FIRST = '+919812370001';
+  const SECOND = '+919812370002';
+
+  const created = await api('POST', '/api/platform/admins', {
+    token: PA, body: { name: 'Console Mover', email, phone: FIRST, password },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+
+  // Verified up front, so this test is about CHANGING a number rather than
+  // about the first-run verification gate, which has its own test.
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.platform_admins
+        SET email_verified_at = NOW(), phone_verified_at = NOW()
+      WHERE email = '${email}'`);
+  const { token } = await api('POST', '/api/auth/login', { body: { email, password } })
+    .then((r) => r.data);
+  assert.ok(token, 'the account signs in');
+
+  // ── The password gates the request ──
+  const wrongPw = await api('POST', '/api/platform/admins/me/phone/request-code', {
+    token, body: { phone: SECOND, current_password: 'not-the-password' },
+  });
+  assert.notEqual(wrongPw.status, 200,
+    'a borrowed session must not be able to redirect the recovery channel');
+
+  // ── A number already on another admin account is refused ──
+  const taken = await api('POST', '/api/platform/admins/me/phone/request-code', {
+    token, body: { phone: FIRST, current_password: password },
+  });
+  assert.notEqual(taken.status, 200, 'their existing number is not a change');
+
+  /*
+   * ── Confirming without a valid code changes nothing ──
+   *
+   * The assertion the whole flow rests on. If the UPDATE ran before the code
+   * was checked, the screen would look identical and the number would move on
+   * the caller's say-so alone.
+   */
+  const noCode = await api('POST', '/api/platform/admins/me/phone/confirm', {
+    token, body: { phone: SECOND, code: '000000' },
+  });
+  assert.notEqual(noCode.status, 200, 'a wrong code must not move the number');
+  const [afterWrong] = await sql('ifqm_test_master',
+    `SELECT phone FROM ifqm_test_master.platform_admins WHERE email = '${email}'`);
+  assert.match(afterWrong.phone, /370001$/, 'and the old number still stands');
+
+  // ── The right code moves it ──
+  const bcrypt = (await import('bcryptjs')).default;
+  const { classify } = await import('../src/services/verificationService.js');
+  const c = classify(SECOND);
+  await sql('ifqm_test_master',
+    `INSERT INTO ifqm_test_master.login_otps
+       (identifier, id_type, channel, code_hash, purpose, expires_at)
+     VALUES ('${c.key}', '${c.idType}', '${c.channel}', '${await bcrypt.hash('778899', 10)}',
+             'platform_admin_phone', DATE_ADD(NOW(), INTERVAL 10 MINUTE))`);
+
+  const ok = await api('POST', '/api/platform/admins/me/phone/confirm', {
+    token, body: { phone: SECOND, code: '778899' },
+  });
+  assert.equal(ok.status, 200, `the right code must move it — ${JSON.stringify(ok.data)}`);
+
+  const [moved] = await sql('ifqm_test_master',
+    `SELECT phone, phone_verified_at FROM ifqm_test_master.platform_admins WHERE email = '${email}'`);
+  assert.match(moved.phone, /370002$/, 'the new number is saved');
+  /*
+   * And the proof moves with it. Carrying the old timestamp over would claim a
+   * number had been verified that nobody has ever sent anything to.
+   */
+  assert.ok(moved.phone_verified_at, 'the new number counts as proved — it just answered a code');
+});
+
+/*
+ * Correcting an account whose number was mistyped when it was created.
+ *
+ * That account can never receive a code, and the verification gate allows an
+ * unverified session nothing except the verify endpoints — so it cannot fix
+ * itself. Without this the only remedy is deleting the account and making it
+ * again.
+ *
+ * Self-service change is deliberately NOT opened to unverified sessions
+ * instead: that would let anybody holding the password of an unproven account
+ * point the number at their own handset and verify it, turning a stolen
+ * password into a complete account. This route is safe where that is not,
+ * because the caller is an already-verified admin who holds every power the
+ * target holds.
+ */
+test('a mistyped number on a new admin can be corrected, and must be re-proved', async () => {
+  const email = `typo${Date.now() % 100000}@ifqm.io`;
+  const created = await api('POST', '/api/platform/admins', {
+    token: PA,
+    body: { name: 'Typo Victim', email, phone: '+919812370011', password: 'TypoVictimPass12345' },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+
+  const [before] = await sql('ifqm_test_master',
+    `SELECT id, phone_verified_at FROM ifqm_test_master.platform_admins WHERE email = '${email}'`);
+  assert.equal(before.phone_verified_at, null, 'a new account starts unproven');
+
+  // The account itself is shut out of everything but verification, which is why
+  // it cannot correct its own number.
+  const { token } = await api('POST', '/api/auth/login', {
+    body: { email, password: 'TypoVictimPass12345' },
+  }).then((r) => r.data);
+  const selfFix = await api('POST', '/api/platform/admins/me/phone/request-code', {
+    token, body: { phone: '+919812370012', current_password: 'TypoVictimPass12345' },
+  });
+  assert.equal(selfFix.status, 403,
+    'an unverified session must not be able to point the number at a new handset');
+
+  // Another platform admin can.
+  const fixed = await api('PUT', `/api/platform/admins/${before.id}/phone`, {
+    token: PA, body: { phone: '+919812370013' },
+  });
+  assert.equal(fixed.status, 200, JSON.stringify(fixed.data));
+
+  const [after] = await sql('ifqm_test_master',
+    `SELECT phone, phone_verified_at FROM ifqm_test_master.platform_admins WHERE email = '${email}'`);
+  assert.match(after.phone, /370013$/, 'the number is corrected');
+  assert.equal(after.phone_verified_at, null,
+    'and is still unproven — a number asserted by a third party has to answer a '
+    + 'code before the account works, or this route would be a way to hand '
+    + 'somebody else an account with a number of your choosing');
+});

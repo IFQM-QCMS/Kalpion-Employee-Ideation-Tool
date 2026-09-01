@@ -81,6 +81,29 @@ export const deleteAdmin = asyncHandler(async (req, res) =>
   respond(res, await settings.deleteAdmin(req.user, req.params.id))
 );
 
+/*
+ * ── Moving a platform admin's mobile number ────────────────────────────────
+ *
+ * The number is where a sign-in code and a password reset go, so it is a
+ * credential in its own right — hence a code to the new handset before it is
+ * written, and a notice to the old one afterwards.
+ */
+export const requestOwnPhoneChange = asyncHandler(async (req, res) =>
+  respond(res, await settings.requestOwnPhoneChange(req.user, req.body || {}))
+);
+
+export const confirmOwnPhoneChange = asyncHandler(async (req, res) =>
+  respond(res, await settings.confirmOwnPhoneChange(req.user, req.body || {}))
+);
+
+/*
+ * Correcting somebody else's, for the account whose number was typed wrongly
+ * when it was created and which therefore cannot verify itself out of the hole.
+ */
+export const updateAdminPhone = asyncHandler(async (req, res) =>
+  respond(res, await settings.updateAdminPhone(req.user, req.params.id, req.body || {}))
+);
+
 export const changeOwnPassword = asyncHandler(async (req, res) =>
   respond(res, await settings.changeOwnPassword(req.user, req.body || {}))
 );
@@ -107,5 +130,6 @@ export default {
   tenants, tenantDetail, createTenant, updateTenant, resetTenantAdminPassword, deleteTenant,
   getDefaults, updateDefaults, getTenantSettings, updateTenantSettings,
   listAdmins, createAdmin, deleteAdmin, changeOwnPassword, health,
+  requestOwnPhoneChange, confirmOwnPhoneChange, updateAdminPhone,
   getMaintenance, updateMaintenance,
 };

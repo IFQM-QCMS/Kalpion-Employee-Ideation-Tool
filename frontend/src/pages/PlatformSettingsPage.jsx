@@ -385,6 +385,14 @@ function AdminsTab() {
   const [admins, setAdmins] = useState([]);
   const [form, setForm] = useState({ name:'', email:'', phone:'', password:'' });
   const [pw, setPw] = useState({ current_password:'', new_password:'' });
+  /*
+   * Moving your own number, in two steps.
+   *
+   * `stage` is 'enter' until a code has gone out and 'verify' after, because
+   * the number and the code are asked for at different moments — showing both
+   * boxes at once invites somebody to type a code they have not been sent yet.
+   */
+  const [ph, setPh] = useState({ phone:'', current_password:'', code:'', stage:'enter' });
   const [busy, setBusy] = useState(false);
 
   useEffect(() => { load(); }, []);
@@ -420,6 +428,51 @@ function AdminsTab() {
     try {
       const res = await platformApi.deleteAdmin(a.id);
       if (res.data.success) { showToast(t('ps.admin_deleted'), 'success'); await load(); }
+      else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
+    setBusy(false);
+  }
+
+  async function sendPhoneCode() {
+    setBusy(true);
+    try {
+      const res = await platformApi.requestOwnPhoneChange({
+        phone: ph.phone, current_password: ph.current_password,
+      });
+      if (res.data.success) {
+        setPh({ ...ph, stage:'verify' });
+        showToast(t('ps.ph_sent'), 'success');
+      } else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
+    setBusy(false);
+  }
+
+  async function confirmPhone() {
+    setBusy(true);
+    try {
+      const res = await platformApi.confirmOwnPhoneChange({ phone: ph.phone, code: ph.code });
+      if (res.data.success) {
+        setPh({ phone:'', current_password:'', code:'', stage:'enter' });
+        showToast(res.data.message || t('ps.ph_changed'), 'success');
+        await load();
+      } else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
+    setBusy(false);
+  }
+
+  /*
+   * Correcting somebody else's. For the account created with a mistyped number,
+   * which can never receive a code and cannot fix it for itself — the
+   * verification gate allows an unverified session nothing but the verify
+   * endpoints.
+   */
+  async function fixAdminPhone(a) {
+    const next = window.prompt(t('ps.ph_fix_prompt', { name: a.name }), a.phone || '');
+    if (next == null || !next.trim()) return;
+    setBusy(true);
+    try {
+      const res = await platformApi.updateAdminPhone(a.id, { phone: next.trim() });
+      if (res.data.success) { showToast(res.data.message, 'success'); await load(); }
       else showToast(res.data.error || t('msg.server_error'), 'danger');
     } catch (err) { showToast(err?.response?.data?.error || t('msg.network_error'), 'danger'); }
     setBusy(false);
@@ -473,6 +526,15 @@ function AdminsTab() {
                 </td>
                 <td style={{ fontSize:12,color:'var(--subtext)' }}>{fmtDate(a.created_at)}</td>
                 <td style={{ textAlign:'right' }}>
+                  {/* Only for somebody else, and only when their number is
+                      unproven — a verified admin moves their own number
+                      themselves, with a code, which is the stronger path. */}
+                  {a.id !== meId && !a.phone_verified && (
+                    <button className="btn btn-outline btn-sm" style={{ marginRight:6 }}
+                      disabled={busy} onClick={() => fixAdminPhone(a)}>
+                      {t('ps.ph_fix')}
+                    </button>
+                  )}
                   <button className="btn btn-outline btn-sm" disabled={busy || a.id === meId} onClick={() => del(a)}>
                     {t('btn.remove')}
                   </button>
@@ -541,6 +603,58 @@ function AdminsTab() {
         <button className="btn btn-primary" disabled={busy || !pw.current_password || !pw.new_password} onClick={changePw}>
           {t('ps.change_own_pw')}
         </button>
+      </div>
+
+      {/*
+        Moving your own number.
+
+        Beside the password card because it is the same kind of act: the number
+        is where a sign-in code and a password reset go, so it is a credential,
+        not a contact detail. Hence the current password to start, a code to the
+        new handset before anything is written, and a notice to the old one after.
+      */}
+      <div className="card" style={{ marginTop:16,maxWidth:620 }}>
+        <div className="card-title">{t('ps.ph_title')}</div>
+        <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12,lineHeight:1.6 }}>
+          {t('ps.ph_hint')}
+        </div>
+
+        {ph.stage === 'enter' ? (
+          <>
+            <div className="form-row">
+              <div className="form-group"><label>{t('ps.ph_new')}</label>
+                <input className="form-control" type="tel" value={ph.phone}
+                  onChange={(e) => setPh({ ...ph, phone:e.target.value })}
+                  placeholder={t('admin.uf_phone_ph')} /></div>
+              <div className="form-group"><label>{t('ps.current_pw')}</label>
+                <input className="form-control" type="password" value={ph.current_password}
+                  onChange={(e) => setPh({ ...ph, current_password:e.target.value })} /></div>
+            </div>
+            <button className="btn btn-primary"
+              disabled={busy || !ph.phone.trim() || !ph.current_password}
+              onClick={sendPhoneCode}>
+              {t('ps.ph_send')}
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="form-group" style={{ maxWidth:220 }}>
+              <label>{t('ps.ph_code')}</label>
+              <input className="form-control" inputMode="numeric" autoComplete="one-time-code"
+                maxLength={8} style={{ letterSpacing:'.18em',fontWeight:700 }}
+                value={ph.code}
+                onChange={(e) => setPh({ ...ph, code:e.target.value.replace(/\D/g, '') })} />
+            </div>
+            <button className="btn btn-primary" disabled={busy || ph.code.length < 4}
+              onClick={confirmPhone}>
+              {t('ps.ph_confirm')}
+            </button>
+            <button className="btn btn-ghost" style={{ marginLeft:8 }} disabled={busy}
+              onClick={() => setPh({ ...ph, stage:'enter', code:'' })}>
+              {t('btn.cancel')}
+            </button>
+          </>
+        )}
       </div>
     </>
   );

@@ -576,6 +576,15 @@ export const platformApi = {
   createAdmin: (data) => api.post('/platform/admins', data),
   deleteAdmin: (id) => api.delete(`/platform/admins/${id}`),
   changeOwnPassword: (data) => api.post('/platform/admins/change-password', data),
+  /*
+   * Moving a platform admin's number. The new handset answers a code before the
+   * number is written, and the OLD one is told afterwards — that notice is what
+   * makes a quietly stolen account visible to the person it was stolen from.
+   */
+  requestOwnPhoneChange: (data) => api.post('/platform/admins/me/phone/request-code', data),
+  confirmOwnPhoneChange: (data) => api.post('/platform/admins/me/phone/confirm', data),
+  // Correcting somebody else's, for an account created with a mistyped number.
+  updateAdminPhone: (id, data) => api.put(`/platform/admins/${id}/phone`, data),
 
   health: () => api.get('/platform/health'),
 
