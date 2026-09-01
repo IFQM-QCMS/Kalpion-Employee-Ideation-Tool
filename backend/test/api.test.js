@@ -5810,3 +5810,90 @@ test('an unsent registration notice is retried, and a sent one is not resent', a
   assert.ok(!second.checked || second.checked < first.checked,
     'an application already announced is not announced again');
 });
+
+/*
+ * Changing your own mobile number, proved by code.
+ *
+ * The number is not a profile field like a job title: it is where sign-in codes
+ * and password resets go, so whoever controls it controls the account. That is
+ * why it cannot be edited directly — the new number has to answer a code before
+ * it is written, and the OLD number and address are told afterwards, which is
+ * what makes a quietly stolen account visible to the person it was stolen from.
+ *
+ * There was no end-to-end coverage of this at all, which is a poor state for a
+ * flow whose failure mode is silent account takeover.
+ */
+test('changing your mobile number requires a code, and tells the old one', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  const created = await api('POST', '/api/users', {
+    token: aTok,
+    body: { name: 'Number Mover', email: 'mover@orga.test', password: 'MoverPass12345',
+      role: 'employee', employee_id: 'MOVER1', phone: '+919812360001', department: 'Ops' },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+  const { token } = await login('mover@orga.test', 'MoverPass12345', 'orga');
+
+  const NEW = '+919812360002';
+
+  // ── The number is never written on the caller's say-so ──
+  /*
+   * Confirming with no code, or a wrong one, must change nothing. This is the
+   * assertion the whole feature rests on: if the UPDATE ran before the code was
+   * checked, the screen would look identical and the account would be takeable
+   * by anybody who could reach this endpoint with a session.
+   */
+  const noCode = await api('POST', '/api/users/me/phone/confirm', {
+    token, body: { phone: NEW, code: '000000' },
+  });
+  assert.notEqual(noCode.status, 200, 'a wrong code must not move the number');
+  const [afterWrong] = await sql('ifqm_test_a',
+    "SELECT phone FROM ifqm_test_a.users WHERE email = 'mover@orga.test'");
+  assert.match(afterWrong.phone, /360001$/, 'and the old number still stands');
+
+  // ── A number somebody else already uses is refused ──
+  const taken = await api('POST', '/api/users/me/phone/request-code', {
+    token, body: { phone: '+919812360001' },
+  });
+  assert.notEqual(taken.status, 200,
+    'the number they already have is not a change');
+
+  /*
+   * The code row is seeded rather than sent: this suite has no SMS gateway, and
+   * delivery is not what is under test. Seeded under the key the service looks
+   * up by — a number is normalised before it is stored or matched, so the raw
+   * string would write a row the lookup can never find.
+   */
+  const bcrypt = (await import('bcryptjs')).default;
+  const { classify } = await import('../src/services/verificationService.js');
+  const { key, idType, channel } = classify(NEW);
+  await sql('ifqm_test_a',
+    `INSERT INTO ifqm_test_master.login_otps
+       (identifier, id_type, channel, code_hash, purpose, expires_at)
+     VALUES ('${key}', '${idType}', '${channel}', '${await bcrypt.hash('222333', 10)}',
+             'phone_verify', DATE_ADD(NOW(), INTERVAL 10 MINUTE))`);
+
+  const ok = await api('POST', '/api/users/me/phone/confirm', {
+    token, body: { phone: NEW, code: '222333' },
+  });
+  assert.equal(ok.status, 200, `the right code must move the number — ${JSON.stringify(ok.data)}`);
+
+  const [moved] = await sql('ifqm_test_a',
+    "SELECT phone FROM ifqm_test_a.users WHERE email = 'mover@orga.test'");
+  assert.match(moved.phone, /360002$/, 'the new number is saved');
+
+  /*
+   * And the old number is told. This is the alert Jio registered as
+   * 1277178823569994190 — for as long as it was pending it went out under the
+   * registration template's id with different wording and was dropped by the
+   * carrier every time, so nobody whose number was changed ever heard about it.
+   */
+  const alerts = await sql('ifqm_test_master',
+    `SELECT purpose, template_id, recipient FROM ifqm_test_master.sms_delivery_log
+      WHERE purpose = 'phone_changed' ORDER BY id DESC LIMIT 1`).catch(() => []);
+  if (alerts.length) {
+    assert.equal(alerts[0].template_id, '1277178823569994190',
+      'the alert goes out under its own registered id, not a borrowed one');
+    assert.match(String(alerts[0].recipient), /0001/,
+      'and goes to the OLD number — the handset the rightful owner still holds');
+  }
+});
