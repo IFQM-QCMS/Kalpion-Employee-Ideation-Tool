@@ -383,8 +383,9 @@ export const rewardsApi = {
 export const exportApi = {
   // The product manual. Authenticated, so it cannot be a plain <a href> — it
   // goes through the same blob download as every other export here.
-  userGuide: () => downloadBlob('/export/user-guide',
-    'IFQM-Employee-Ideation-Tool-User-Guide.pdf'),
+  // Named for the product, not for what it was called before the rename — this
+  // is the filename that lands in somebody's Downloads folder and gets emailed on.
+  userGuide: () => downloadBlob('/export/user-guide', 'Kalpion-User-Guide.pdf'),
   ideasCsv: () => downloadBlob('/export/ideas', 'ideas.csv'),
   leaderboardCsv: () => downloadBlob('/export/leaderboard', 'leaderboard.csv'),
   /*

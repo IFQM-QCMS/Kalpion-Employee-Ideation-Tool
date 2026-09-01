@@ -213,14 +213,14 @@ const MANUALS = {
   // Platform staff — the vendor console.
   platform_admin: {
     file: 'Manual_PlatformAdmin.pdf',
-    name: 'IFQM-Platform-Admin-Manual.pdf',
+    name: 'Kalpion-Platform-Admin-Manual.pdf',
   },
   // Whoever runs one organisation: users, approval chain, analytics, billing.
-  admin: { file: 'Manual_OrgAdmin.pdf', name: 'IFQM-Organisation-Admin-Manual.pdf' },
-  super_admin: { file: 'Manual_OrgAdmin.pdf', name: 'IFQM-Organisation-Admin-Manual.pdf' },
+  admin: { file: 'Manual_OrgAdmin.pdf', name: 'Kalpion-Organisation-Admin-Manual.pdf' },
+  super_admin: { file: 'Manual_OrgAdmin.pdf', name: 'Kalpion-Organisation-Admin-Manual.pdf' },
   // Everybody else. Reviewers included: they submit and track like anyone else,
   // and the approval queue is covered in the employee manual.
-  employee: { file: 'Manual_Employee.pdf', name: 'IFQM-Employee-Manual.pdf' },
+  employee: { file: 'Manual_Employee.pdf', name: 'Kalpion-Employee-Manual.pdf' },
 };
 
 export const userGuide = asyncHandler(async (req, res) => {

@@ -66,26 +66,31 @@ export const DLT_TEMPLATES = {
   /*
    * 4. Mobile Number Changed — security alert.
    *
-   * PENDING. Jio classified it as Service Implicit rather than Transactional
-   * and it has no id yet, so `registered` is false and sendSms() refuses it.
+   * REGISTERED, 2026-09-01, after a re-submission for Transactional approval.
+   * Jio had first classified it as Service Implicit and granted no id.
    *
-   * Refusing is the point. This alert was already being sent, under the
-   * REGISTRATION template's id with completely different wording, which means
-   * the carrier has been dropping it silently for as long as it has existed —
-   * a security alert that never arrives is worse than one that was never
-   * built, because the code and the changelog both claim it works.
+   * Until now `registered` was false and sendSms() refused to send it, which
+   * was the right answer to a worse one: the alert had previously gone out
+   * under the REGISTRATION template's id carrying completely different wording,
+   * so the carrier dropped it silently for as long as it existed. A security
+   * alert that never arrives is worse than one that was never built, because
+   * the code and the changelog both claim it works.
    *
-   * When the id arrives: paste it in and set registered to true. Nothing else
-   * needs to change.
+   * The registered wording names its placeholder {#number#}; this file writes
+   * {#var#} for the reason set out at the top — it is the token fillTemplate()
+   * substitutes, and the body that actually goes out, with the digits already
+   * in it, is identical either way. That substituted body is what the carrier
+   * matches, so the two spellings are the same template.
+   *
+   * With the id in place this alert now genuinely sends. It is the first time
+   * somebody whose sign-in number was changed without their knowledge will
+   * actually hear about it.
    */
   phone_changed: {
-    id: '',
+    id: '1277178823569994190',
     text: 'Your IFQM Ideation sign-in number was changed to one ending {#var#}. If this was not you, contact your administrator.',
-    registered: false,
+    registered: true,
     label: 'Mobile Number Changed — Security Alert',
-    pendingReason:
-      'Jio classified this as Service Implicit rather than Transactional. '
-      + 'Awaiting re-submission for Transactional approval.',
   },
 
   /*

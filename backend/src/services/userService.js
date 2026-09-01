@@ -905,10 +905,11 @@ async function notifyPhoneChanged(actor, previous, next) {
      * alert has never once reached a handset while every layer above reported
      * it sent.
      *
-     * Its own template is still awaiting approval, so sendSms declines it and
-     * says why. That is a visible gap rather than an invisible one, and the
-     * email alert above still goes out. It starts working the moment the id is
-     * filled in.
+     * Its own template was registered on 2026-09-01
+     * (id 1277178823569994190), so this now genuinely sends — the first time
+     * somebody whose sign-in number was changed without their knowledge will
+     * actually hear about it on the handset they still hold. The email alert
+     * above goes out regardless, and did throughout.
      */
     const { text } = messageFor('phone_changed', tail);
     await sendSms(previous, text, { purpose: 'phone_changed' }).catch(() => {});

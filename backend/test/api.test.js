@@ -3283,33 +3283,83 @@ test('every OTP journey sends exactly the wording its template was approved unde
   }
 });
 
-test('a template awaiting DLT approval is not sent', async () => {
+/*
+ * The "mobile number changed" security alert, now that it has an id.
+ *
+ * Jio first classified it as Service Implicit rather than Transactional and
+ * granted nothing, so it sat unregistered and sendSms refused it. Before THAT
+ * was handled it went out under the REGISTRATION template's id carrying
+ * completely different text, which the carrier drops — so the alert had never
+ * once reached a handset while the log, the delivery table and the caller all
+ * recorded it as sent. For a security alert, silence that looks like success is
+ * the worst of the available failures.
+ *
+ * Registered 2026-09-01 as 1277178823569994190. What matters now is that the
+ * body on the wire is the approved body, exactly: a DLT carrier compares the
+ * two character for character and silently drops a mismatch.
+ */
+test('the mobile-number-changed alert sends under its own registered template', async () => {
   const { sendSms, messageFor } = await import('../src/services/smsService.js');
-  const { DLT_TEMPLATES } = await import('../src/config/smsTemplates.js');
+  const { DLT_TEMPLATES, resolveTemplate } = await import('../src/config/smsTemplates.js');
+
+  assert.equal(DLT_TEMPLATES.phone_changed.registered, true);
+  assert.equal(DLT_TEMPLATES.phone_changed.id, '1277178823569994190',
+    'the id from the DLT registration, not a borrowed one');
+
+  const r = resolveTemplate('phone_changed');
+  assert.equal(r.sendable, true);
+  assert.equal(r.usingFallback, null,
+    'it has its own template now and must not go out under another one');
 
   /*
-   * The "mobile number changed" alert has no id yet — Jio classified it as
-   * Service Implicit rather than Transactional.
+   * The rendered body, against the approved wording.
    *
-   * Before this was handled it went out under the REGISTRATION template's id
-   * carrying completely different text, which the carrier drops. So the alert
-   * has never reached a handset, while the log, the delivery table and the
-   * caller all recorded it as sent. For a security alert, silence that looks
-   * like success is the worst of the available failures.
+   * The registration names the placeholder {#number#} and this codebase writes
+   * {#var#}; they are the same template, because what the carrier matches is
+   * the text after substitution. Asserted by substituting into the registered
+   * string and comparing — so a reworded body fails here rather than going
+   * quiet in production.
    */
-  assert.equal(DLT_TEMPLATES.phone_changed.registered, false,
-    'if this template has been approved, set its id and flip this expectation');
-
   const m = messageFor('phone_changed', '5881');
-  assert.equal(m.registered, false, 'messageFor must report it as unsendable');
-  assert.ok(m.text.includes('5881'), 'the wording is ready for when it is approved');
+  assert.equal(m.templateId, '1277178823569994190');
+  assert.equal(m.registered, true);
+  const approved = 'Your IFQM Ideation sign-in number was changed to one ending {#number#}. '
+    + 'If this was not you, contact your administrator.';
+  assert.equal(m.text, approved.replace('{#number#}', '5881'),
+    'the body on the wire has drifted from the approved wording');
+});
+
+/*
+ * A template with no registration and no fallback is still refused.
+ *
+ * The guard is what stopped the alert above going out under somebody else's id
+ * for as long as it was pending, and it has to keep working — every future
+ * template starts life unregistered. Exercised through an unknown purpose
+ * because, as of today, every real one either has its own id or a registered
+ * fallback, so nothing else would reach this path.
+ */
+test('a template with no registration and no fallback is refused, not borrowed', async () => {
+  const { sendSms } = await import('../src/services/smsService.js');
+  const { resolveTemplate } = await import('../src/config/smsTemplates.js');
+
+  assert.equal(resolveTemplate('not_a_real_purpose').sendable, false);
 
   // 'kaleyra' rather than the default, because the log provider is the local
   // mock and is deliberately exempt from this refusal.
-  const r = await sendSms('9876500000', m.text,
-    { purpose: 'phone_changed', provider: 'kaleyra' });
+  const r = await sendSms('9876500000', 'Some body nobody registered.',
+    { purpose: 'not_a_real_purpose', provider: 'kaleyra' });
   assert.equal(r.sent, false, 'an unregistered template must not be reported as sent');
-  assert.match(String(r.detail), /not registered/i, 'and must say why');
+  /*
+   * Either wording is right, and which one appears says which branch caught it:
+   * a purpose the file has never heard of reports "not configured", a known one
+   * still awaiting its id reports "not registered". The property being pinned
+   * is the same in both cases and is the one that matters — sendSms refuses
+   * rather than reaching for an id that belongs to a different template.
+   */
+  assert.match(String(r.detail), /not registered|not configured/i,
+    'and must say why, rather than failing silently');
+  assert.ok(!/12771787/.test(String(r.detail)),
+    'and must not have borrowed a real template id on the way out');
 });
 
 test('the registered sender header is accepted', async () => {
