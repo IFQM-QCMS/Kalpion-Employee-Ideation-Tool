@@ -38,6 +38,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import HelpPage from './pages/HelpPage';
 import UserGuidePage from './pages/UserGuidePage';
 import RewardsPage from './pages/RewardsPage';
+import ErrorBoundary from './components/ErrorBoundary';
 import PageMeta from './components/PageMeta';
 
 function PrivateRoute({ children }) {
@@ -164,7 +165,18 @@ export default function App() {
           <LangProvider>
             <ToastProvider>
               <NotifProvider>
-                <AppRoutes />
+                {/*
+                  Inside the providers, not outside them.
+                  A crash in a screen should still be rendered with the app's
+                  theme, its toast host and its language in place — a fallback
+                  that loses all of that looks like a different site and reads
+                  as "you have been logged out of something broken". Placed
+                  here it also means a fault in one screen cannot take the
+                  session or the branding down with it.
+                */}
+                <ErrorBoundary>
+                  <AppRoutes />
+                </ErrorBoundary>
               </NotifProvider>
             </ToastProvider>
           </LangProvider>

@@ -267,6 +267,7 @@ export default function SubmitPage() {
     setSubmitting(true);
     setError('');
     const body = { ...buildPayload(), id: draftId };
+    let submitted = false;
     try {
       const res = await ideasApi.submit(body);
       if (res.data.success) {
@@ -275,13 +276,26 @@ export default function SubmitPage() {
         const msg = t('msg.idea_ok', { code: res.data.idea_code });
         const pts = res.data.points_added > 0 ? ' · ' + t('msg.pts_earned', { n: res.data.points_added }) : '';
         showToast(msg + pts, 'success');
-        // Reset form
-        resetForm();
-        navigate('/my-ideas');
+        /*
+         * Cleanup and navigation sit OUTSIDE the try.
+         *
+         * They ran inside it, so any fault in our own tidying-up was caught by
+         * the handler below and shown to the author as a server error — which
+         * is how a ReferenceError in resetForm spent months being reported as
+         * "the server is down" on submissions that had in fact succeeded. The
+         * try is for the request; once the server has said yes, nothing after
+         * it should be able to claim the server said no.
+         */
+        submitted = true;
       } else {
         setError(res.data.error || t('msg.submit_failed'));
       }
     } catch { setError(t('msg.server_error')); }
+
+    if (submitted) {
+      resetForm();
+      navigate('/my-ideas');
+    }
     setSubmitting(false);
   }
 
@@ -306,7 +320,19 @@ export default function SubmitPage() {
     setInvestment(''); setFeasibility(''); setImplDuration(''); setImplDate('');
     setBenefits(''); setSupport('');
     setCoSuggesters([]); setCoQuery(''); setCoResults([]);
-    setAnonymous(false); setPatentable(false); setChallengeId('');
+    /*
+     * `setAnonymous(false)` used to be here, and the setter no longer exists —
+     * anonymity was removed from this form under MOM §14.8 and the state went
+     * with it, but this line did not.
+     *
+     * It threw a ReferenceError on EVERY successful submission. The throw
+     * happened inside handleSubmit's try, so the catch reported it to the
+     * author as "server error" — after a success toast, and without the
+     * navigation to My Ideas. The idea was saved, which is exactly why this
+     * looked like an intermittent server fault rather than a bug on the happy
+     * path.
+     */
+    setPatentable(false); setChallengeId('');
     setDraftId(null); setStep(1); setError(''); setDupWarning([]);
   }
 

@@ -603,6 +603,11 @@ export default function AdminPage() {
         <UserFormModal
           user={editUser}
           managers={managers}
+          // Which one-per-organisation roles are already held. Loaded beside the
+          // manager list, and passed down because the form is a separate
+          // component — reaching for it from in there was a ReferenceError that
+          // blanked the whole page the moment "Add user" was pressed.
+          takenRoles={takenRoles}
           currentUserRole={user?.role}
           currentUserId={user?.id}
           onClose={() => setShowUserForm(false)}
@@ -1455,7 +1460,7 @@ function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onRe
   );
 }
 
-function UserFormModal({ user: editUser, managers, currentUserRole, currentUserId, onClose, onSaved, onRefresh, showToast, t }) {
+function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserRole, currentUserId, onClose, onSaved, onRefresh, showToast, t }) {
   const isEdit = !!editUser;
   const [name,    setName]    = useState(editUser?.name||'');
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
