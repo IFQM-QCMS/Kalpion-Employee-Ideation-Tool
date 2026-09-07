@@ -1,22 +1,4 @@
-/**
- * Single-idea "Closure Summary" PDF.
- *
- * Higher authorities in the review hierarchy export an individual employee's
- * idea as a printable, pre-formatted closure summary (the structured two-page
- * layout the business uses at project closure), filled with that idea's data.
- * Generated fresh on every request and streamed straight to the client — no
- * file is ever written to disk.
- *
- * The layout is a faithful reproduction of the closure-summary template
- * (sections A–G across two pages). Fields that an idea does not carry are left
- * as blank ruled lines, exactly as a printed form would be. No external
- * branding appears on the page. Colours follow the product's indigo/blue theme.
- *
- * Font: Noto Sans (SIL OFL, bundled under backend/assets/fonts) rather than
- * PDFKit's built-in Helvetica, because Helvetica's WinAnsi encoding has no
- * glyph for the Indian Rupee sign (₹) and every monetary figure here is INR.
- * Note: Noto Sans has no U+2192 arrow glyph, so labels use "»" instead of "→".
- */
+/** Single-idea "Closure Summary" PDF. */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import PDFDocument from 'pdfkit';
@@ -27,7 +9,7 @@ const FONT_DIR = path.join(__dirname, '..', '..', 'assets', 'fonts');
 const FONT_REG = path.join(FONT_DIR, 'NotoSans-Regular.ttf');
 const FONT_BOLD = path.join(FONT_DIR, 'NotoSans-Bold.ttf');
 
-// Product palette — indigo/blue (matches the app's --primary #4f46e5).
+// Product palette - indigo/blue (matches the app's --primary #4f46e5).
 const BLUE = '#4f46e5';
 const BLUE_DK = '#3730a3';
 const TAG = '#c7d2fe';       // light indigo for the right-aligned section tag
@@ -43,9 +25,9 @@ const RIGHT = PAGE_W - MARGIN;
 const CONTENT_W = RIGHT - MARGIN;
 
 const RUPEE = '₹';
-const ARROW = '»'; // Noto Sans has no → glyph; » is a safe forward indicator.
+const ARROW = '»'; // Noto Sans has no glyph; » is a safe forward indicator.
 
-// ── small formatting helpers ─────────────────────────────────────────
+// small formatting helpers
 const s = (v) => (v === null || v === undefined ? '' : String(v)).trim();
 
 function fmtDate(v) {
@@ -82,11 +64,11 @@ const IMPL_STATUS_LABEL = {
   not_started: 'Not started', in_progress: 'In progress', completed: 'Completed', on_hold: 'On hold',
 };
 
-// ── low-level drawing ────────────────────────────────────────────────
+// low-level drawing
 function titleBlock(doc) {
   doc.font('B').fontSize(15).fillColor(BLUE).text('IDEA CLOSURE SUMMARY', MARGIN, MARGIN);
   doc.font('R').fontSize(7.5).fillColor(MUTED)
-    .text('Completed at Closure — Structured for Fast Retrieval', MARGIN, MARGIN + 19);
+    .text('Completed at Closure - Structured for Fast Retrieval', MARGIN, MARGIN + 19);
   doc.font('B').fontSize(7.5).fillColor(BLUE)
     .text('CLOSURE SUMMARY TEMPLATE', MARGIN, MARGIN + 2, { width: CONTENT_W, align: 'right' })
     .text('2-PAGE FORMAT', MARGIN, MARGIN + 12, { width: CONTENT_W, align: 'right' });
@@ -94,8 +76,8 @@ function titleBlock(doc) {
   return MARGIN + 45;
 }
 
-// A 2-column label/value header grid with row heights sized to their content,
-// so a long Project Title or a wrapping label is never truncated.
+// A 2-column label/value header grid with row heights sized to their content, so a long
+// Project Title or a wrapping label is never truncated.
 function headerGrid(doc, y, pairs) {
   const colW = CONTENT_W / 2;
   const labelW = 94;
@@ -173,8 +155,8 @@ function notesBox(doc, y, h, text) {
   return y + h + 10;
 }
 
-// Height a callout box needs for its title + checkbox lines (measured, so the
-// content can never spill past the border into the next section).
+// Height a callout box needs for its title + checkbox lines (measured, so the content can
+// never spill past the border into the next section).
 function calloutHeight(doc, w, lines) {
   let h = 22;
   doc.font('R').fontSize(7.4);
@@ -182,11 +164,7 @@ function calloutHeight(doc, w, lines) {
   return h + 4;
 }
 
-/**
- * Role key → a readable job title, for entries recorded before the stage was.
- *
- * Only ever a fallback. See `positionOf`.
- */
+/** Role key a readable job title, for entries recorded before the stage was. */
 const ROLE_TITLE = {
   trainee: 'Trainee',
   employee: 'Employee',
@@ -201,20 +179,7 @@ const ROLE_TITLE = {
   super_admin: 'Administrator',
 };
 
-/**
- * What position this person was acting in, and whether we actually know.
- *
- * The recorded stage is preferred and is the truth: it was written at the
- * moment of the decision, so a team lead promoted to plant head six months
- * later still reads as the team lead who approved at step two.
- *
- * Where there is no recorded stage — every entry made before migration 036 —
- * the actor's CURRENT role is shown with a trailing "?" instead. That mark is
- * doing real work on an audit document: it is the difference between "this is
- * what happened" and "this is our best guess from who they are today", and
- * printing the guess unmarked would make the PDF assert something it cannot
- * support.
- */
+/** What position this person was acting in, and whether we actually know. */
 function positionOf(w, chain) {
   const stage = s(w.stage);
   if (stage) {
@@ -224,22 +189,10 @@ function positionOf(w, chain) {
   }
   if (/submitted/i.test(s(w.action))) return { text: 'Submitter', exact: true };
   const role = s(w.actor_role);
-  return { text: role ? `${ROLE_TITLE[role] || role.replace(/_/g, ' ')} ?` : '—', exact: false };
+  return { text: role ? `${ROLE_TITLE[role] || role.replace(/_/g, ' ')} ?` : '-', exact: false };
 }
 
-/**
- * The path this organisation configured, printed above what actually happened.
- *
- * The two are not the same document and both are needed. The history says an
- * idea went Jitesh → Elisa → Sunil; only the configured path tells a reader
- * whether that was the whole journey or whether two steps were skipped because
- * nobody held them. Without it, a chain that stopped early and one that ran to
- * completion look identical on paper.
- *
- * The steps are numbered, because that is what makes it a sequence rather than
- * a list of job titles — and it is the numbering the history's POSITION column
- * refers back to.
- */
+/** The path this organisation configured, printed above what actually happened. */
 function configuredPath(doc, y, chain) {
   if (!chain?.steps?.length) return y;
 
@@ -255,28 +208,9 @@ function configuredPath(doc, y, chain) {
   return y + h + 16;
 }
 
-/**
- * Every step the idea actually took, in order, and the position each person
- * held when they took it.
- *
- * Section G used to name one person: the last Approved or Implemented entry in
- * the workflow. On a closure document that is the wrong record. An idea that
- * reached the Plant Head passed through an immediate manager and a department
- * manager first, each of whom made a judgement and may have written a comment,
- * and a signed-off PDF that credits only the final signature loses the audit
- * trail that made the decision defensible.
- *
- * The POSITION column is what makes it readable as a journey rather than a list
- * of names — "Jitesh, Submitter → Elisa, Immediate Manager, approved → ...".
- * Without it a reader has to already know the organisation to follow the
- * document, which defeats the point of a record meant to outlive the people in
- * it.
- *
- * Rendered as a table rather than prose because that is what it is read for:
- * who, in what capacity, what they decided, when, and what they said.
- *
- * Returns the y after the block. Draws nothing when there is no history — an
- * empty ruled table is worse than an honest absence.
+/*
+ * Every step the idea actually took, in order, and the position each person held when they
+ * took it.
  */
 function approvalChain(doc, y, workflow, chain) {
   const steps = (workflow || []).filter((w) => s(w.action));
@@ -295,9 +229,7 @@ function approvalChain(doc, y, workflow, chain) {
   ];
   const commentW = CONTENT_W - cols.reduce((a, c) => a + c.w, 0);
 
-  // A closure PDF routinely runs the table onto a second page. Drawn as a
-  // function so the continuation gets a header too, instead of orphan rows
-  // under nothing.
+  // A closure PDF routinely runs the table onto a second page.
   const header = () => {
     doc.rect(MARGIN, y, CONTENT_W, 13).fill(LABEL_BG);
     let x = MARGIN + 4;
@@ -334,7 +266,7 @@ function approvalChain(doc, y, workflow, chain) {
       .text(String(i + 1), cx, y + 4, { width: cols[0].w - 4, lineBreak: false });
     cx += cols[0].w;
     doc.font('B').fontSize(7.6).fillColor(INK)
-      .text(s(w.actor_name) || '—', cx, y + 4, { width: cols[1].w - 4, lineBreak: false });
+      .text(s(w.actor_name) || '-', cx, y + 4, { width: cols[1].w - 4, lineBreak: false });
     cx += cols[1].w;
     doc.font('R').fontSize(7.4).fillColor(pos.exact ? BLUE_DK : MUTED)
       .text(pos.text, cx, y + 4, { width: cols[2].w - 4, lineBreak: false });
@@ -357,7 +289,7 @@ function approvalChain(doc, y, workflow, chain) {
   if (inferred) {
     y += 3;
     doc.font('R').fontSize(6.6).fillColor(MUTED).text(
-      '? — position inferred from that person’s current role. These entries were recorded '
+      '? - position inferred from that person’s current role. These entries were recorded '
       + 'before the position was stored alongside the decision.',
       MARGIN, y, { width: CONTENT_W });
     y += 11;
@@ -379,39 +311,18 @@ function calloutBox(doc, x, y, w, h, title, lines) {
   }
 }
 
-// ── summary sheet, for readers outside the idea ──────────────────────
-/**
- * A one-page gist.
- *
- * The closure summary above is a working document: it has a place for the root
- * cause, the corrective action, the money saved and who signed it off. Handing
- * that form to a colleague who may not read any of those fields produces two
- * pages of empty boxes - which looks like a broken export, and invites the
- * reader to wonder what was in them.
- *
- * So a bystander gets a different document instead: what the idea is, who
- * raised it, where it has got to, and a line or two of what it is about. It
- * says on its face that it is a summary, so nobody mistakes it for the whole
- * record or forwards it as one.
- *
- * The fields printed here are the ones the server already decided this reader
- * may see. Nothing is re-fetched and nothing is filtered a second time: if
- * ideaService withheld it, it is not in the object.
- */
+// summary sheet, for readers outside the idea
+/** A one-page gist. */
 export function buildIdeaGistPdf(idea, res, viewer = null) {
   const doc = new PDFDocument({
     size: 'A4', bufferPages: true,
     margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 12 },
   });
-  /*
-   * Noto Sans alone covers Latin, Devanagari and the Rupee sign — and NOT
-   * Kannada, Tamil, Telugu or Malayalam, whose glyphs resolve to a blank
-   * .notdef with a normal advance width. An idea titled in Kannada therefore
-   * printed as empty space of the right size, and nothing measured as wrong.
-   */
+  // Noto Sans alone covers Latin, Devanagari and the Rupee sign - and NOT Kannada, Tamil,
+  // Telugu or Malayalam, whose glyphs resolve to a blank.notdef with a normal advance width.
   registerFonts(doc, { regular: 'R', bold: 'B' });
-  // Roughly forty doc.text() calls in this file pick their font before they
-  // know the value they will draw, so the face is chosen at the draw itself.
+  // Roughly forty doc.text() calls in this file pick their font before they know the value
+  // they will draw, so the face is chosen at the draw itself.
   makeTextScriptAware(doc, { regular: 'R' });
   doc.font('R');
   doc.pipe(res);
@@ -473,8 +384,8 @@ export function buildIdeaGistPdf(idea, res, viewer = null) {
   doc.font('R').fontSize(8).fillColor(INK).text(note, MARGIN + 8, y + 8, { width: CONTENT_W - 16 });
   y += noteH + 12;
 
-  // Footer: who this copy was produced for, and when. A summary that leaks is
-  // then traceable to the person who exported it.
+  // Footer: who this copy was produced for, and when. A summary that leaks is then traceable
+  // to the person who exported it.
   doc.font('R').fontSize(6.8).fillColor(MUTED).text(
     `Produced ${fmtDateTimeLocal(new Date())}`
     + (viewer ? ` for ${viewer.name}${viewer.employee_id ? ` (${viewer.employee_id})` : ''}` : '')
@@ -484,44 +395,40 @@ export function buildIdeaGistPdf(idea, res, viewer = null) {
   doc.end();
 }
 
-// ── main ─────────────────────────────────────────────────────────────
+// main
 export function buildIdeaPdf(idea, res) {
   const doc = new PDFDocument({
     size: 'A4', bufferPages: true,
     margins: { top: MARGIN, left: MARGIN, right: MARGIN, bottom: 12 },
   });
-  /*
-   * Noto Sans alone covers Latin, Devanagari and the Rupee sign — and NOT
-   * Kannada, Tamil, Telugu or Malayalam, whose glyphs resolve to a blank
-   * .notdef with a normal advance width. An idea titled in Kannada therefore
-   * printed as empty space of the right size, and nothing measured as wrong.
-   */
+  // Noto Sans alone covers Latin, Devanagari and the Rupee sign - and NOT Kannada, Tamil,
+  // Telugu or Malayalam, whose glyphs resolve to a blank.notdef with a normal advance width.
   registerFonts(doc, { regular: 'R', bold: 'B' });
-  // Roughly forty doc.text() calls in this file pick their font before they
-  // know the value they will draw, so the face is chosen at the draw itself.
+  // Roughly forty doc.text() calls in this file pick their font before they know the value
+  // they will draw, so the face is chosen at the draw itself.
   makeTextScriptAware(doc, { regular: 'R' });
   doc.font('R');
   doc.pipe(res);
 
-  const submitter = s(idea.submitter_name) || '—';
+  const submitter = s(idea.submitter_name) || '-';
   const dept = s(idea.department);
   const bu = s(idea.business_unit);
   const areas = s(idea.impact_areas);
   const closureDate = fmtDate(idea.submitted_at || idea.updated_at || idea.created_at);
 
-  // ── PAGE 1 ──
+  // PAGE 1
   let y = titleBlock(doc);
   y = headerGrid(doc, y, [
     ['Project Title', idea.title],
     ['Case / Report No.', idea.idea_code],
-    ['Plant / Line', bu || dept || '—'],
-    ['Part / Process', areas || '—'],
+    ['Plant / Line', bu || dept || '-'],
+    ['Part / Process', areas || '-'],
     ['Date of Closure', closureDate],
     ['Prepared By (Team Leader)', submitter],
   ]);
 
-  // Section A — Problem Signature (fields left, chart box right)
-  y = sectionHeader(doc, y, 'SECTION A — PROBLEM SIGNATURE', 'DEFECT IDENTIFICATION');
+  // Section A - Problem Signature (fields left, chart box right)
+  y = sectionHeader(doc, y, 'SECTION A - PROBLEM SIGNATURE', 'DEFECT IDENTIFICATION');
   const colW = CONTENT_W * 0.6;
   const chartX = MARGIN + colW + 10;
   const chartW = RIGHT - chartX;
@@ -529,45 +436,45 @@ export function buildIdeaPdf(idea, res) {
   let ay = y;
   ay = field(doc, MARGIN, ay, colW, 'Theme / Defect Type', areas, { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Target Area / Line / Part No.', bu || dept, { labelW: 120 });
-  // When the reader is not entitled to the full write-up, ideaService sends the
-  // opening lines instead. Print those rather than an empty box, and say so.
+  // When the reader is not entitled to the full write-up, ideaService sends the opening
+  // lines instead. Print those rather than an empty box, and say so.
   ay = field(doc, MARGIN, ay, colW, 'Symptom (What / Where Observed)',
     idea.present_situation
-      || (idea.situation_summary ? `${idea.situation_summary}\n[Extract only — the full description is shown to reviewers.]` : ''),
+      || (idea.situation_summary ? `${idea.situation_summary}\n[Extract only - the full description is shown to reviewers.]` : ''),
     { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Scale (Impact Level)', s(idea.impact_level), { labelW: 120 });
   ay = field(doc, MARGIN, ay, colW, 'Keywords / Search Tags', [areas, s(idea.template_type)].filter(Boolean).join(', '), { labelW: 120 });
-  // chart box — caption INSIDE the box (never overlapping the section header)
+  // chart box - caption INSIDE the box (never overlapping the section header)
   const boxH = Math.max(ay - aTop - 6, 64);
   doc.rect(chartX, aTop, chartW, boxH).fillAndStroke(BOX_BG, LINE);
   doc.font('B').fontSize(6.6).fillColor(MUTED).text('PARETO / STRATIFICATION CHART', chartX + 6, aTop + 6, { width: chartW - 12 });
   const attN = (idea.attachments || []).length;
   doc.font('R').fontSize(7).fillColor(MUTED).text(
-    attN ? `See ${attN} attached document(s).` : '—',
+    attN ? `See ${attN} attached document(s).` : '-',
     chartX + 6, aTop + boxH / 2, { width: chartW - 12, align: 'center' });
   y = ay + 4;
 
-  // Section B — Verified Root Cause
-  y = sectionHeader(doc, y, 'SECTION B — VERIFIED ROOT CAUSE', 'ROOT CAUSE VALIDATION');
+  // Section B - Verified Root Cause
+  y = sectionHeader(doc, y, 'SECTION B - VERIFIED ROOT CAUSE', 'ROOT CAUSE VALIDATION');
   y = field(doc, MARGIN, y, CONTENT_W, 'Root Cause (5-Why, Level 5)', '', { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Failure Mode (Man / Machine / Material / Method)', '', { labelW: 220 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Validation Method Used', s(idea.ai_reason), { labelW: 170 });
   y = yesNo(doc, MARGIN, y + 1, 'Statistically Proven?', null) + 2;
 
-  // Section C — Solution Implemented
-  y = sectionHeader(doc, y, 'SECTION C — SOLUTION IMPLEMENTED', 'CORRECTIVE ACTION');
+  // Section C - Solution Implemented
+  y = sectionHeader(doc, y, 'SECTION C - SOLUTION IMPLEMENTED', 'CORRECTIVE ACTION');
   y = field(doc, MARGIN, y, CONTENT_W, 'Interim Containment (Use Today)', '', { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Permanent Corrective Action',
     idea.proposed_solution
-      || (idea.solution_summary ? `${idea.solution_summary}\n[Summary only — the full proposal is shown to reviewers.]` : ''),
+      || (idea.solution_summary ? `${idea.solution_summary}\n[Summary only - the full proposal is shown to reviewers.]` : ''),
     { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Redeployment Effort (Ease / Cost / Impact)',
     [s(idea.feasibility) && `Feasibility: ${s(idea.feasibility)}`, fmtMoney(idea.investment_required)].filter(Boolean).join('  ·  '),
     { labelW: 210 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Linked SOP / Standard Doc No.', '', { labelW: 170 });
 
-  // Section D — Proof of Result
-  y = sectionHeader(doc, y, 'SECTION D — PROOF OF RESULT', 'RESULTS VALIDATION');
+  // Section D - Proof of Result
+  y = sectionHeader(doc, y, 'SECTION D - PROOF OF RESULT', 'RESULTS VALIDATION');
   y = field(doc, MARGIN, y, CONTENT_W, `Baseline Metric ${ARROW} Post-Action Metric`, s(idea.tangible_benefit), { labelW: 200 });
   y = field(doc, MARGIN, y, CONTENT_W, '% Improvement', '', { labelW: 200 });
   y = field(doc, MARGIN, y, CONTENT_W, `Net Benefit Realized (${RUPEE} / yr)`,
@@ -575,7 +482,7 @@ export function buildIdeaPdf(idea, res) {
     { labelW: 200 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Still Holding? (Status)', IMPL_STATUS_LABEL[idea.implementation_status] || '', { labelW: 200 });
 
-  // ── PAGE 2 ──
+  // PAGE 2
   doc.addPage();
   y = MARGIN;
 
@@ -589,25 +496,17 @@ export function buildIdeaPdf(idea, res) {
   ].filter(Boolean).join('\n');
   y = notesBox(doc, y, 104, notes);
 
-  // Section E — Project Contacts
-  y = sectionHeader(doc, y, 'SECTION E — PROJECT CONTACTS', 'WHO TO CONTACT');
+  // Section E - Project Contacts
+  y = sectionHeader(doc, y, 'SECTION E - PROJECT CONTACTS', 'WHO TO CONTACT');
   y = field(doc, MARGIN, y, CONTENT_W, 'Facilitator / Leader Name', idea.is_anonymous ? 'Anonymous' : submitter, { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Department / Plant / Line', [dept, bu].filter(Boolean).join(' / '), { labelW: 170 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Contact (Email / Extension)', idea.is_anonymous ? '' : s(idea.submitter_email), { labelW: 170 });
   y = yesNo(doc, MARGIN, y + 1, 'Sponsor / Champion Sign-Off on File?', s(idea.manager_name) ? 'yes' : null) + 2;
 
-  // Section F — Reuse Potential
-  /*
-   * MOM §14.2 — attachments are listed by NAME ONLY, never embedded.
-   *
-   * Embedding them would balloon a one-page summary into whatever the
-   * photographs happen to weigh, and would hand every file to anyone entitled
-   * to the PDF — a wider audience than the people entitled to the files
-   * themselves, which are served individually behind an auth check. The name,
-   * size and section are enough for a reader to ask for the right one.
-   */
+  // Section F - Reuse Potential
+  // MOM §14.2 - attachments are listed by NAME ONLY, never embedded.
   const atts = idea.attachments || [];
-  y = sectionHeader(doc, y, 'ATTACHMENTS', `${atts.length} FILE(S) — NAMES ONLY`);
+  y = sectionHeader(doc, y, 'ATTACHMENTS', `${atts.length} FILE(S) - NAMES ONLY`);
   if (!atts.length) {
     y = field(doc, MARGIN, y, CONTENT_W, 'Files attached', 'None', { labelW: 170 });
   } else {
@@ -622,66 +521,48 @@ export function buildIdeaPdf(idea, res) {
   }
   y += 2;
 
-  y = sectionHeader(doc, y, 'SECTION F — REUSE POTENTIAL', 'APPLICABILITY');
+  y = sectionHeader(doc, y, 'SECTION F - REUSE POTENTIAL', 'APPLICABILITY');
   y = field(doc, MARGIN, y, CONTENT_W, 'Horizontal Deployment (Applied Elsewhere?)', '', { labelW: 230 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Known Limitations / Side Effects', '', { labelW: 230 });
   const boxY = y + 2;
   const halfW = (CONTENT_W - 14) / 2;
   const leftLines = [
-    'High — same part, same defect, proven root cause. Reuse as-is.',
-    'Medium — same root cause, different part/line. Adapt before deploying.',
-    'Low — symptom only matches. Use as reference; re-verify root cause.',
+    'High - same part, same defect, proven root cause. Reuse as-is.',
+    'Medium - same root cause, different part/line. Adapt before deploying.',
+    'Low - symptom only matches. Use as reference; re-verify root cause.',
   ];
   const rightLines = [
     'Reuse fix as-is',
     'Adapt & pilot on affected line',
     'Consult original team before acting',
-    'Not applicable — continue search',
+    'Not applicable - continue search',
   ];
   const boxH2 = Math.max(calloutHeight(doc, halfW, leftLines), calloutHeight(doc, halfW, rightLines));
   calloutBox(doc, MARGIN, boxY, halfW, boxH2, 'MATCH CONFIDENCE', leftLines);
   calloutBox(doc, MARGIN + halfW + 14, boxY, halfW, boxH2, 'RECOMMENDED NEXT ACTION', rightLines);
   y = boxY + boxH2 + 12;
 
-  // Section G — Team & Sign-Off
-  y = sectionHeader(doc, y, 'SECTION G — TEAM & SIGN-OFF', 'CLOSURE APPROVAL');
-  /*
-   * The final signature, with the position that made it final.
-   *
-   * "Approved by Sunil Rao" leaves the reader to work out whether Sunil was
-   * entitled to close the idea. "Sunil Rao, Plant Head" answers it on the line
-   * itself — which is what a sign-off box is for. The full journey is in
-   * Section H; this is the one name somebody looks for first.
-   */
+  // Section G - Team & Sign-Off
+  y = sectionHeader(doc, y, 'SECTION G - TEAM & SIGN-OFF', 'CLOSURE APPROVAL');
+  // The final signature, with the position that made it final.
   const approval = (idea.workflow || []).filter((w) => /Approved|Implemented/i.test(s(w.action))).slice(-1)[0];
   const approvedBy = approval
     ? `${s(approval.actor_name)}, ${positionOf(approval, idea.approval_chain).text}`
-      + ` — ${fmtDate(approval.created_at)}`
+      + ` - ${fmtDate(approval.created_at)}`
     : '';
   y = field(doc, MARGIN, y, CONTENT_W, 'Team Leader', idea.is_anonymous ? 'Anonymous' : submitter, { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Facilitator', s(idea.manager_name), { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Sponsor / Champion', '', { labelW: 150 });
   y = field(doc, MARGIN, y, CONTENT_W, 'Approved By (Name & Date)', approvedBy, { labelW: 150 });
 
-  // Section H — the route the idea actually took to get here.
+  // Section H - the route the idea actually took to get here.
   y += 4;
-  y = sectionHeader(doc, y, 'SECTION H — APPROVAL CHAIN', 'FULL HISTORY');
+  y = sectionHeader(doc, y, 'SECTION H - APPROVAL CHAIN', 'FULL HISTORY');
   y = configuredPath(doc, y, idea.approval_chain);
   y = approvalChain(doc, y, idea.workflow, idea.approval_chain);
 
-  // Footer on every page — generation stamp, no external branding.
-  /*
-   * The bottom margin is dropped while the footer is written.
-   *
-   * PDFKit starts a new page whenever text would cross the bottom margin, and
-   * it judges that from the y PLUS the line height. footerY sits below the
-   * margin by design, so writing there ADDED a page and then drew the footer
-   * on the new one — every export gained a trailing blank page, and the
-   * numbering described pages other than the ones it was printed on.
-   *
-   * The total is captured before the loop so the count cannot drift while the
-   * loop is running.
-   */
+  // Footer on every page - generation stamp, no external branding.
+  // The bottom margin is dropped while the footer is written.
   const range = doc.bufferedPageRange();
   const total = range.count;
   const footerY = doc.page.height - 26;

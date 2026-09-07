@@ -30,13 +30,7 @@ export default function ReviewQueuePage() {
   const [error,     setError]     = useState('');
   const [selected,  setSelected]  = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
-  /*
-   * The chain, as this organisation has it configured right now.
-   *
-   * Sent with the queue on every load rather than kept in the client, because
-   * an administrator can change the stages at any moment and a cached copy
-   * would label ideas with a journey the server is no longer taking.
-   */
+  // The chain, as this organisation has it configured right now.
   const [chain, setChain] = useState(null);
   const [openDetailId, setOpenDetailId] = useState(null);
   const [openReviewId,   setOpenReviewId]   = useState(null);
@@ -97,25 +91,13 @@ export default function ReviewQueuePage() {
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
 
-  // Twenty to a page: the list endpoints already bound what they return,
-  // but rendering every row was the browser's cost, not the server's.
+  // Twenty to a page: the list endpoints already bound what they return, but rendering every
+  // row was the browser's cost, not the server's.
   const pager = usePager(ideas);
 
-  // Org admins may not act on ideas, so they get no selection column at all -
-  // and the column count has to follow it, or every empty-state row runs short.
-  /*
-   * Administrators may READ this queue and may not act on it.
-   *
-   * The banner said so and the buttons were rendered anyway — Route to
-   * Committee, Review, and the bulk bar — so the only thing standing between an
-   * org admin and an approval was the server refusing the request they had just
-   * been invited to make. Offering a control that is guaranteed to fail is
-   * worse than not offering it: it reads as a bug rather than as a rule.
-   *
-   * super_admin is included because that account can promote people to admin;
-   * if it could also approve, the separation between administering the chain
-   * and answering to it would not exist.
-   */
+  // Org admins may not act on ideas, so they get no selection column at all - and the column
+  // count has to follow it, or every empty-state row runs short.
+  // Administrators may READ this queue and may not act on it.
   const canDecide = user?.role !== 'admin' && user?.role !== 'super_admin';
   const canSelect = canDecide;
   const colCount  = canSelect ? 12 : 11;   // +1 for the Stage column
@@ -140,11 +122,7 @@ export default function ReviewQueuePage() {
             onClick={() => submitBulk('Approved')}>{t('bulk.approve_all')}</button>
           <button className="btn btn-sm" style={{ background:'#ef4444',color:'#fff',border:'none' }}
             onClick={() => submitBulk('Rejected')}>{t('bulk.reject_all')}</button>
-          {/* Explicitly transparent.
-              This carried .btn-outline, whose background is a light surface
-              colour from the theme, while the inline style forced white text -
-              so the button rendered as a blank white pill with an invisible
-              label on a dark bar. It worked; nobody could tell it was there. */}
+          {/* Explicitly transparent. This carried.btn-outline, whose background is a light surface colour from the theme, while the inline style forced white text - so the button rendered as a blank white pill with an invisible label on a dark bar. */}
           <button className="btn btn-sm"
             style={{ background:'transparent',color:'#fff',border:'1px solid #ffffff66' }}
             onClick={() => { setSelected(new Set()); setSelectAll(false); }}>{t('bulk.clear')}</button>
@@ -154,15 +132,7 @@ export default function ReviewQueuePage() {
       {loading && <div className="empty-state"><div className="spinner"></div> {t('msg.loading')}</div>}
       {error   && <div className="alert alert-danger">{error}</div>}
 
-      {/*
-        A table, not a stack of cards.
-        A reviewer's question here is comparative — which of these is oldest,
-        which is overdue, which is high impact — and cards force that comparison
-        to be made from memory, because the same fact sits at a different height
-        in every card. Down a column it is one glance.
-        Select-all moved into the header cell, where it governs the column it
-        stands on instead of floating above the list.
-      */}
+      {/* A table, not a stack of cards. */}
       <div className="card" style={{ overflowX:'auto' }}>
         <table className="table">
           <thead>
@@ -217,9 +187,7 @@ export default function ReviewQueuePage() {
                   <td><strong>{i.idea_code}</strong></td>
                   <td title={i.title}>
                     <div className="cell-clamp" style={{ maxWidth:260 }}>{i.title}</div>
-                    {/* Committee tallies and this reviewer's own outstanding vote
-                        ride under the title: they qualify one idea rather than
-                        being facts anyone would scan a whole column of. */}
+                    {/* Committee tallies and this reviewer's own outstanding vote ride under the title: they qualify one idea rather than being facts anyone would scan a whole column of. */}
                     {isMultiRv && (
                       <div style={{ marginTop:3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap' }}>
                         <span className="chip chip-info">{t('review.committee_badge')}</span>
@@ -234,14 +202,14 @@ export default function ReviewQueuePage() {
                     {i.submitter_name}
                     {isSelf && <div style={{ fontSize:11,color:'var(--warning)' }}>{t('review.own_idea')}</div>}
                   </td>
-                  <td>{i.department||'–'}</td>
+                  <td>{i.department||'-'}</td>
                   <td>
-                    <span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'–'}</span>
+                    <span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'-'}</span>
                   </td>
                   <td style={{ whiteSpace:'nowrap' }}>
                     {i.ai_score > 0
                       ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
-                      : <span className="score-none score-badge">—</span>}
+                      : <span className="score-none score-badge">-</span>}
                     <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />
                   </td>
                   <td>
@@ -253,12 +221,11 @@ export default function ReviewQueuePage() {
                       </div>
                     )}
                   </td>
-                  {/* Which approval this idea is waiting for, and how far
-                      along it is. "Under Review" alone never said. */}
+                  {/* Which approval this idea is waiting for, and how far along it is. */}
                   <td style={{ whiteSpace:'nowrap' }}>
                     {(() => {
                       const step = chain?.steps?.find(x => x.stage === i.current_stage);
-                      if (!step) return <span style={{ color:'var(--subtle)' }}>—</span>;
+                      if (!step) return <span style={{ color:'var(--subtle)' }}>-</span>;
                       return (
                         <span title={t('review.at_stage', { stage: step.label, n: step.position, total: chain.total })}>
                           <span className="chip chip-primary">{step.label}</span>
@@ -274,9 +241,9 @@ export default function ReviewQueuePage() {
                       ? <span className={`chip ${isOverdue ? 'chip-danger' : ''}`}>
                           {isOverdue ? `⚠ ${t('review.overdue')} ` : ''}{fmtDate(i.review_due_date)}
                         </span>
-                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                      : <span style={{ color:'var(--subtle)' }}>-</span>}
                   </td>
-                  <td style={{ whiteSpace:'nowrap' }}>{i.submitted_at ? fmtDateTime(i.submitted_at) : '–'}</td>
+                  <td style={{ whiteSpace:'nowrap' }}>{i.submitted_at ? fmtDateTime(i.submitted_at) : '-'}</td>
                   <td>
                     <div style={{ display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end' }}>
                       {isSelf && (
@@ -304,9 +271,7 @@ export default function ReviewQueuePage() {
                             {t('review.route_committee')}
                           </button>
                           <button className="btn btn-outline btn-sm" onClick={() => setOpenDetailId(i.id)}>{t('btn.view')}</button>
-                          {/* Named for the outcome, not for the screen it
-                              opens: at the last stage this approves the idea,
-                              everywhere else it passes it on. */}
+                          {/* Named for the outcome, not for the screen it opens: at the last stage this approves the idea, everywhere else it passes it on. */}
                           <button className="btn btn-success btn-sm"
                             onClick={() => { setOpenReviewId(i.id); setOpenReviewCode(i.idea_code); }}>
                             {chain?.steps?.find(x => x.stage === i.current_stage)?.is_final

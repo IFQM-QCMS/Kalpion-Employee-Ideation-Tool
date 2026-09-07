@@ -31,10 +31,9 @@ export const IMPACT_KEYS = {
   'Low':'impact.low', 'Medium':'impact.medium',
   'High':'impact.high', 'Critical':'impact.critical',
 };
-// Organisations now own their own category list, so this map cannot be
-// exhaustive — it covers the seeded defaults plus the seven areas that shipped
-// hard-coded before them, so existing ideas keep translating. A category an org
-// invented has no key and renders as typed, in every language.
+// Organisations now own their own category list, so this map cannot be exhaustive - it
+// covers the seeded defaults plus the seven areas that shipped hard-coded before them, so
+// existing ideas keep translating.
 export const AREA_KEYS = {
   'Safety':'area.safety',
   'Quality':'area.quality',
@@ -74,8 +73,8 @@ export function getT(lang) {
         warned.add(lang + key);
         console.warn(
           s === undefined
-            ? `[i18n] Key "${key}" is missing from every locale — the raw key will render on screen.`
-            : `[i18n] Key "${key}" is missing from "${lang}" — falling back to English.`
+            ? `[i18n] Key "${key}" is missing from every locale - the raw key will render on screen.`
+            : `[i18n] Key "${key}" is missing from "${lang}" - falling back to English.`
         );
       }
     }
@@ -84,8 +83,8 @@ export function getT(lang) {
   };
 }
 
-// Dev-only completeness audit. A locale that drifts from `en` used to fail
-// silently as half-English UI; now it is reported the moment the app boots.
+// Dev-only completeness audit. A locale that drifts from `en` used to fail silently as
+// half-English UI; now it is reported the moment the app boots.
 if (import.meta.env.DEV) {
   const enKeys = Object.keys(en);
   for (const lang of SUPPORTED_LANGS) {

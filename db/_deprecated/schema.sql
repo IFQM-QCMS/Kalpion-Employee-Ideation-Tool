@@ -1,7 +1,4 @@
--- ============================================================
---  IFQM Per-Tenant Schema Template (no seed data)
---  Run this against a new tenant database.
--- ============================================================
+-- IFQM Per-Tenant Schema Template (no seed data) Run this against a new tenant database.
 
 CREATE TABLE IF NOT EXISTS users (
   id              INT AUTO_INCREMENT PRIMARY KEY,
@@ -18,12 +15,12 @@ CREATE TABLE IF NOT EXISTS users (
   points          INT NOT NULL DEFAULT 0,
   avatar_initials VARCHAR(4),
   status          ENUM('active','inactive') NOT NULL DEFAULT 'active',
-  -- Any JWT issued before this moment is rejected, so a password reset
-  -- actually terminates sessions opened with the old password.
+  -- Any JWT issued before this moment is rejected, so a password reset actually terminates
+  -- sessions opened with the old password.
   password_changed_at DATETIME NULL DEFAULT NULL,
   deactivated_at  DATETIME NULL DEFAULT NULL,
-  -- Bulk-imported employees start with a derived temporary password and must
-  -- replace it before they can use anything (enforced in the auth middleware).
+  -- Bulk-imported employees start with a derived temporary password and must replace it
+  -- before they can use anything (enforced in the auth middleware).
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   date_of_birth   DATE NULL DEFAULT NULL,
   activated_at    DATETIME NULL DEFAULT NULL,
@@ -34,10 +31,8 @@ CREATE TABLE IF NOT EXISTS users (
   INDEX idx_users_manager (manager_id)
 );
 
--- ── Bulk employee import ────────────────────────────────────────────────────
--- A 10,000-row import cannot run inside an HTTP request, so it runs as a
--- background job and the UI polls it. The job row doubles as the audit record
--- of a privileged action (who mass-created accounts, when, and how many).
+-- Bulk employee import A 10,000-row import cannot run inside an HTTP request, so it runs
+-- as a background job and the UI polls it.
 CREATE TABLE IF NOT EXISTS user_import_jobs (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   actor_id        INT NULL,
@@ -191,7 +186,7 @@ LEFT JOIN ideas i ON i.submitter_id = u.id AND i.status != 'Draft'
 GROUP BY u.id
 ORDER BY u.points DESC;
 
--- ── Org Settings ────────────────────────────────────────────────────────
+-- Org Settings
 CREATE TABLE IF NOT EXISTS org_settings (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   key_name   VARCHAR(100) NOT NULL UNIQUE,
@@ -217,12 +212,11 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('approval_final_approver_roles', 'executive,admin,super_admin'),
   ('approval_threshold',        '100');
 
--- ── Password Reset Tokens ────────────────────────────────────────────────
+-- Password Reset Tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   user_id     INT NOT NULL,
-  -- Tokens are <selector>.<verifier>. The selector is an indexed lookup so
-  -- verification runs exactly one bcrypt compare instead of one per row.
+  -- Tokens are <selector>.<verifier>.
   selector    CHAR(32) NOT NULL,
   token_hash  VARCHAR(255) NOT NULL,
   expires_at  DATETIME NOT NULL,
@@ -232,7 +226,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   INDEX idx_prt_expires (expires_at)
 );
 
--- ── Performance Indexes (idempotent — MariaDB supports IF NOT EXISTS) ──
+-- Performance Indexes (idempotent - MariaDB supports IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
 CREATE INDEX IF NOT EXISTS idx_ideas_submitted_at ON ideas(submitted_at);
 CREATE INDEX IF NOT EXISTS idx_ideas_submitter_status ON ideas(submitter_id, status);

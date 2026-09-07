@@ -4,25 +4,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/api';
 
-/*
- * A new platform administrator proving they hold the address and the number.
- *
- * ── Why this screen exists at all ──────────────────────────────────────────
- *
- * This account reaches every tenant on the platform. It used to be created by
- * typing a name, an address and a password into a form, and nothing checked
- * that the address existed or that anybody read it. A typo produced a fully
- * working account whose intended owner could never receive a password reset.
- *
- * ── Why both, and why neither can be skipped ───────────────────────────────
- *
- * Two independent channels. An address alone can be taken by whoever holds that
- * mailbox; a number alone leaves nobody to send a reset to. The server refuses
- * every other endpoint until both timestamps are recorded, so this screen is
- * not a suggestion — it is the only thing the session can do. That gate lives
- * in the middleware precisely because a gate in React is bypassed by anybody
- * who calls the API with the token they were just handed.
- */
+// A new platform administrator proving they hold the address and the number.
 
 const CHANNELS = [
   { key: 'email', labelKey: 'pv.email', sentKey: 'pv.sent_email' },
@@ -44,8 +26,8 @@ export default function PlatformVerifyPage() {
       const r = await authApi.platformVerifyStatus();
       if (r.data.success) setState(r.data);
     } catch {
-      /* The gate itself allows this endpoint; a failure here is a real outage,
-         and the buttons below will report it in terms the operator can act on. */
+      // The gate itself allows this endpoint; a failure here is a real outage, and the buttons
+      // below will report it in terms the operator can act on.
     }
   }, []);
 
@@ -74,11 +56,9 @@ export default function PlatformVerifyPage() {
         setState((s) => ({ ...s, ...r.data }));
         setCodes((c) => ({ ...c, [channel]: '' }));
         if (r.data.verified) {
-          /*
-           * Both done. The session is re-read rather than reloaded blindly:
-           * the middleware checks the row on every request, so the gate opens
-           * the moment the second code lands — no new sign-in needed.
-           */
+          // Both done. The session is re-read rather than reloaded blindly: the middleware checks
+          // the row on every request, so the gate opens the moment the second code lands - no new
+          // sign-in needed.
           showToast(t('pv.all_done'), 'success');
           await refreshUser?.();
           window.location.href = '/platform';
@@ -116,8 +96,7 @@ export default function PlatformVerifyPage() {
                 <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--heading)' }}>
                   {t(labelKey)}
                 </span>
-                {/* The masked destination, so somebody can tell at a glance that
-                    the code is going somewhere they can actually open. */}
+                {/* The masked destination, so somebody can tell at a glance that the code is going somewhere they can actually open. */}
                 {destFor(key) && (
                   <span style={{ fontSize: 12, color: 'var(--subtle)' }}>{destFor(key)}</span>
                 )}
@@ -159,11 +138,7 @@ export default function PlatformVerifyPage() {
         <p style={{ fontSize: 12, color: 'var(--subtle)', lineHeight: 1.6, marginTop: 4 }}>
           {t('pv.note')}
         </p>
-        {/*
-          A way out. Somebody who cannot receive either code — a wrong address
-          typed by whoever created the account — must be able to leave rather
-          than sit on a screen that cannot complete.
-        */}
+        {/* A way out. Somebody who cannot receive either code - a wrong address typed by whoever created the account - must be able to leave rather than sit on a screen that cannot complete. */}
         <button className="btn btn-ghost btn-sm" style={{ marginTop: 10 }} onClick={logout}>
           {t('nav.logout')}
         </button>

@@ -34,11 +34,11 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const [showRvDecision,  setShowRvDecision]  = useState(false);
   const [exporting,       setExporting]       = useState(false);
 
-  // §13.10 / §13.2 — org-admin controls. `pat` mirrors the idea so the select is
-  // controlled; it re-syncs whenever the idea reloads.
+  // §13.10 / §13.2 - org-admin controls. `pat` mirrors the idea so the select is controlled;
+  // it re-syncs whenever the idea reloads.
   const [pat, setPat] = useState('not_assessed');
-  // The person-raised patentable tick, separate from the admin's formal
-  // assessment above. Mirrored into state so the box is controlled.
+  // The person-raised patentable tick, separate from the admin's formal assessment above.
+  // Mirrored into state so the box is controlled.
   const [patentable, setPatentable] = useState(false);
   const [busyFlag, setBusyFlag] = useState(false);
   const [busyAdmin, setBusyAdmin] = useState(false);
@@ -120,9 +120,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
 
-  // Higher authorities in the review hierarchy can export the employee's idea as
-  // a pre-formatted Closure Summary PDF. Gated server-side too — the button just
-  // hides it from people who would get a 403.
+  // Higher authorities in the review hierarchy can export the employee's idea as a
+  // pre-formatted Closure Summary PDF.
   async function togglePatentable(value) {
     const prev = patentable;
     setPatentable(value);              // optimistic: the box responds at once
@@ -152,13 +151,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
   const isSelf   = idea ? parseInt(idea.submitter_id) === parseInt(user?.id) : false;
   const isPriv   = isPrivileged(user?.role);
-  /*
-   * Sections this organisation does not show to colleagues outside the idea.
-   * The server sends the list and has already emptied the fields; this only
-   * decides whether to draw a short explanation in their place. An empty box
-   * with no explanation reads as a badly filled-in idea, which is worse than
-   * saying plainly that the organisation keeps that part private.
-   */
+  // Sections this organisation does not show to colleagues outside the idea.
   const hiddenSections = idea?.hidden_sections || [];
   const isHidden = (name) => hiddenSections.includes(name);
   const HiddenNote = ({ section }) => (
@@ -168,8 +161,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
       <span>{t('idea.section_hidden').replace('{section}', t(`section.${section}`))}</span>
     </div>
   );
-  // The submitter may flag their own idea; anyone in the review hierarchy may
-  // flag any idea. Nobody else can move the tick.
+  // The submitter may flag their own idea; anyone in the review hierarchy may flag any idea.
+  // Nobody else can move the tick.
   const canFlagPatentable = isSelf || isPriv;
   const isMultiRv = idea?.workflow_type === 'multi_reviewer';
   const isAssignedReviewer = isPriv && user?.role !== 'admin' && !isSelf && idea && (idea.reviewers||[]).some(
@@ -220,19 +213,17 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
             {!loading && !error && idea && (
               <>
-                {/* Tab 0: Overview — who, when, and the idea in the author's own words. */}
+                {/* Tab 0: Overview - who, when, and the idea in the author's own words. */}
                 <div id="dtab1" className={`tab-content${activeTab===0?' active':''}`} style={{ display:activeTab===0?'block':'none' }}>
                   <div className="form-row" style={{ marginBottom:12 }}>
-                    <div><strong>{t('detail.submitted_by')}:</strong> {idea.submitter_name} ({idea.department||'–'})</div>
+                    <div><strong>{t('detail.submitted_by')}:</strong> {idea.submitter_name} ({idea.department||'-'})</div>
                     <div style={{ display:'flex',alignItems:'center',gap:8 }}>
                       <strong>{t('table.status')}:</strong>
                       <span className={`badge ${statusBadge(idea.status)}`}>{translateStatus(idea.status,t)}</span><QcBadge status={idea.qcms_push_status} />
                     </div>
                   </div>
 
-                  {/* Date and time of submission, shown to everybody. Two ideas
-                      filed on the same day are ordered by the clock, and people
-                      want to see which of theirs went in first. */}
+                  {/* Date and time of submission, shown to everybody. */}
                   <div className="form-row" style={{ marginBottom:12,alignItems:'center' }}>
                     <div><strong>{t('detail.submitted_at')}:</strong> {fmtDateTime(idea.submitted_at || idea.created_at)}</div>
                     <div>
@@ -245,8 +236,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     </div>
                   </div>
 
-                  {/* §13.13 — one line answering "where is this now?", rather
-                      than leaving the reader to reconstruct it from the timeline. */}
+                  {/* §13.13 - one line answering "where is this now?", rather than leaving the reader to reconstruct it from the timeline. */}
                   {idea.review_stage && (
                     <div style={{ display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',
                                   background:'var(--panel-bg)',border:'1px solid var(--border)',
@@ -269,8 +259,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     </div>
                   )}
 
-                  {/* §13.10 / §13.2 — org-admin decisions. The server enforces the
-                      role as well; this only decides whether to draw the controls. */}
+                  {/* §13.10 / §13.2 - org-admin decisions. */}
                   {isOrgAdmin && (
                     <div style={{ display:'flex',gap:10,flexWrap:'wrap',alignItems:'flex-end',marginBottom:14 }}>
                       <div style={{ flex:'1 1 220px' }}>
@@ -293,12 +282,10 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                   <div className="form-group">
                     <label>{t('detail.situation')}</label>
-                    {/* Colleagues who only submit ideas see the opening lines of the
-                        problem, not the whole write-up. As with the solution, the
-                        server makes the decision and never sends the rest. */}
+                    {/* Colleagues who only submit ideas see the opening lines of the problem, not the whole write-up. */}
                     {isHidden('situation') ? <HiddenNote section="situation" /> : idea.situation_redacted ? (
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
-                        <div>{idea.situation_summary || '—'}</div>
+                        <div>{idea.situation_summary || '-'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
                           <span aria-hidden="true">Protected</span>
                           <span>{t('idea.situation_hidden_hint')}</span>
@@ -310,12 +297,10 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   </div>
                   <div className="form-group">
                     <label>{t('detail.solution')}</label>
-                    {/* Colleagues who are neither the author nor a reviewer get the
-                        one-line gist. The server decides — the full text is never
-                        sent to them, so this is not a display-only restriction. */}
+                    {/* Colleagues who are neither the author nor a reviewer get the one-line gist. */}
                     {isHidden('solution') ? <HiddenNote section="solution" /> : idea.solution_redacted ? (
                       <div style={{ background:'var(--panel-bg)',padding:10,borderRadius:6,fontSize:13,overflowWrap:'anywhere' }}>
-                        <div>{idea.solution_summary || '—'}</div>
+                        <div>{idea.solution_summary || '-'}</div>
                         <div style={{ marginTop:8,fontSize:11.5,color:'var(--text-muted)',display:'flex',gap:6,alignItems:'flex-start' }}>
                           <span aria-hidden="true">Protected</span>
                           <span>{t('idea.solution_hidden_hint')}</span>
@@ -327,13 +312,11 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   </div>
                 </div>
 
-                {/* Tab 1: Impact and benefits — the figures that decide whether
-                    an idea is worth doing, kept apart from the narrative so a
-                    reviewer can compare them without scrolling past it. */}
+                {/* Tab 1: Impact and benefits - the figures that decide whether an idea is worth doing, kept apart from the narrative so a reviewer can compare them without scrolling past it. */}
                 <div className={`tab-content${activeTab===1?' active':''}`} style={{ display:activeTab===1?'block':'none' }}>
                   <div className="form-row" style={{ marginBottom:10 }}>
-                    <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'–'}</div>
-                    <div><strong>{t('detail.impact_level')}<InfoDot term="impact_level" />:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'–'}</span></div>
+                    <div><strong>{t('detail.impact_areas')}:</strong> {translateAreas(idea.impact_areas, t)||'-'}</div>
+                    <div><strong>{t('detail.impact_level')}<InfoDot term="impact_level" />:</strong> <span className={`badge ${impactBadge(idea.impact_level)}`}>{translateImpact(idea.impact_level,t)||'-'}</span></div>
                   </div>
                   {isHidden('benefits')
                     ? <div style={{ marginTop:8 }}><HiddenNote section="benefits" /></div>
@@ -345,9 +328,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                     <div style={{ marginTop:8 }}><strong>{t('detail.co_suggesters')}:</strong> {idea.co_suggesters_display || (idea.co1_name + (idea.co2_name?', '+idea.co2_name:''))}</div>
                   )}
 
-                  {/* Business case. Ideas submitted before these fields existed
-                      have none of them, so the whole panel stays out of the way
-                      rather than rendering five empty rows. */}
+                  {/* Business case. Ideas submitted before these fields existed have none of them, so the whole panel stays out of the way rather than rendering five empty rows. */}
                   {(() => {
                     const bc = [
                       [t('form.investment'),  idea.investment_required ? `₹ ${idea.investment_required}` : ''],
@@ -373,20 +354,12 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                 </div>
 
-                {/* Tab 2: Assessment — the machine's read on the idea. Its own
-                    tab because it is advisory: it belongs near the decision but
-                    must not sit above the author's own words. */}
+                {/* Tab 2: Assessment - the machine's read on the idea. */}
                 <div className={`tab-content${activeTab===2?' active':''}`} style={{ display:activeTab===2?'block':'none' }}>
                   {/* Quality evaluation panel */}
                   <div className="ai-panel" style={{ marginTop:14 }}>
                     <div className="ai-panel-title">{t('detail.ai_eval')}</div>
-                    {/* A horizontal bar rather than a badge or a dial.
-                        A number on its own says nothing about where it sits on
-                        the scale - 19/100 and 79/100 looked identical apart from
-                        the digits - and the ring it replaces spent a lot of
-                        space saying one number. A bar shows the reading against
-                        its range at a glance, and carries a word so the figure
-                        means something without a key. */}
+                    {/* A horizontal bar rather than a badge or a dial. */}
                     {idea.ai_score > 0 ? (
                       <div style={{ marginBottom:10 }}>
                         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:5 }}>
@@ -488,7 +461,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                   {isMultiRv && (idea.reviewers||[]).length > 0 && (
                     <div className="ai-panel" style={{ marginTop:14,borderLeftColor:'#0284c7',background:'linear-gradient(135deg,#eff6ff,var(--panel-bg))' }}>
                       <div className="ai-panel-title" style={{ color:'#0284c7' }}>
-                        ■ {t('review.committee_badge')} — {t('committee.approval_req')}
+                        ■ {t('review.committee_badge')} - {t('committee.approval_req')}
                       </div>
                       <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12 }}>
                         {(idea.reviewers||[]).filter(r=>r.decision==='approved').length} {t('committee.approved_count')} ·{' '}
@@ -554,9 +527,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
           <div className="modal-footer" id="idea-detail-footer">
             <button className="btn btn-outline" onClick={onClose}>{t('detail.close')}</button>
-            {/* Open to everyone. The server builds the PDF from what this
-                particular reader is allowed to see, so an employee's copy
-                carries the same extract they see on screen. */}
+            {/* Open to everyone. The server builds the PDF from what this particular reader is allowed to see, so an employee's copy carries the same extract they see on screen. */}
             {idea && (
               <button className="btn btn-outline" style={{ borderColor:'#1a7d6b',color:'#136052' }}
                 disabled={exporting} onClick={handleExportPdf}>
@@ -596,15 +567,7 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
 const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif'];
 
-/**
- * A single idea attachment.
- *
- * Attachments are private: they are streamed from an authenticated,
- * tenant-scoped endpoint rather than sitting on a public URL. A plain
- * <img src> / <a href> cannot send the Authorization header, so image previews
- * are fetched as a blob and shown via an object URL, and the download button
- * pulls the bytes through the API client.
- */
+/** A single idea attachment. */
 function Attachment({ att, t }) {
   const { showToast } = useToast();
   const [previewUrl, setPreviewUrl] = useState('');

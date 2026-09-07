@@ -3,19 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { isPrivileged, isAdmin, isPlatformAdmin } from '../utils/helpers';
 
-/*
- * The page for an address that does not exist.
- *
- * It used to redirect silently to the landing page, which is the worst of both
- * worlds: somebody following a stale link is dumped somewhere they did not ask
- * for, with no clue whether they mistyped, whether the page moved, or whether
- * they are simply not allowed in. A 404 that says what happened and offers the
- * places they might actually have wanted is a page, not a dead end.
- *
- * The links offered depend on who is signed in. A trainee has no use for a
- * shortcut to the review queue, and a signed-out visitor has no use for any of
- * them — they get the public routes instead.
- */
+// The page for an address that does not exist.
 export default function NotFoundPage() {
   const { user } = useAuth();
   const { t } = useLang();
@@ -44,7 +32,7 @@ export default function NotFoundPage() {
           ['/board', 'Idea board', 'What your colleagues are working on'],
           ...(isPrivileged(role) ? [['/review', 'Review queue', 'Ideas waiting on your decision']] : []),
           ...(isAdmin(role) ? [['/admin', 'Admin panel', 'People, settings and your organisation’s ideas']] : []),
-          ['/support', 'Support', 'Ask us — we reply within one working day'],
+          ['/support', 'Support', 'Ask us - we reply within one working day'],
         ];
 
   return (
@@ -73,7 +61,7 @@ export default function NotFoundPage() {
         </p>
         <p style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.65, margin: '0 0 24px' }}>
           It is usually a mistyped address, a link from an old email, or a page that has been renamed.
-          {!user && ' If you were signed in and got here, your session may have ended — signing in again will fix it.'}
+          {!user && ' If you were signed in and got here, your session may have ended - signing in again will fix it.'}
         </p>
 
         <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: .6,

@@ -5,20 +5,7 @@ import { impactBadge, translateImpact, fmtDate } from '../utils/helpers';
 import IdeaDetailModal from '../components/IdeaDetailModal';
 import ScreenGuard from '../components/ScreenGuard';
 
-/*
-  Rejected ideas — MOM §13.5 / §14.1.
-
-  Rejected was already a filter value on All Ideas, which is not the same thing:
-  a filter is something you have to think to apply, and nobody browsing their
-  pipeline thinks "let me go and read the failures". Giving it a screen makes
-  the rejections readable as a set, which is where the value is — the reason an
-  idea was turned down is the most reusable thing in the system, and re-filing a
-  near-identical idea six months later is the waste this prevents.
-
-  The list is scoped by the same role rules as every other idea view: an
-  employee sees their own, a lead sees their team's, an admin sees all of them.
-  That is enforced server-side in ideaService.list().
-*/
+// Rejected ideas - MOM §13.5 / §14.1.
 export default function RejectedIdeasPage() {
   const { t } = useLang();
   const [ideas, setIdeas] = useState([]);
@@ -71,18 +58,18 @@ export default function RejectedIdeasPage() {
             {ideas.map((i) => (
               <tr key={i.id} data-status={i.status}>
                 <td><strong>{i.idea_code}</strong></td>
-                <td title={i.title}>{i.title.length > 60 ? i.title.substring(0, 60) + '…' : i.title}</td>
+                <td title={i.title}>{i.title.length > 60 ? i.title.substring(0, 60) + '...' : i.title}</td>
                 <td style={{ maxWidth: 260, color: 'var(--text-muted)', fontSize: 12.5 }}>
-                  {i.solution_summary || <span style={{ color: 'var(--subtle)' }}>—</span>}
+                  {i.solution_summary || <span style={{ color: 'var(--subtle)' }}>-</span>}
                 </td>
                 <td>{i.submitter_name}</td>
-                <td>{i.department || '–'}</td>
+                <td>{i.department || '-'}</td>
                 <td>
                   <span className={`badge ${impactBadge(i.impact_level)}`}>
-                    {translateImpact(i.impact_level, t) || '–'}
+                    {translateImpact(i.impact_level, t) || '-'}
                   </span>
                 </td>
-                <td>{i.submitted_at ? fmtDate(i.submitted_at) : '–'}</td>
+                <td>{i.submitted_at ? fmtDate(i.submitted_at) : '-'}</td>
                 <td>
                   <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>
                     {t('btn.view')}
@@ -94,8 +81,7 @@ export default function RejectedIdeasPage() {
         </table>
       </div>
 
-      {/* The rejection reason lives in the idea's workflow timeline, which the
-          detail modal already renders — no separate fetch needed. */}
+      {/* The rejection reason lives in the idea's workflow timeline, which the detail modal already renders - no separate fetch needed. */}
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}
     </ScreenGuard>
   );

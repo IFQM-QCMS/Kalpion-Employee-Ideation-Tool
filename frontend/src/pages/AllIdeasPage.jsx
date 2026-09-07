@@ -13,8 +13,8 @@ import Pager, { usePager } from '../components/Pager';
 import VoteWidget from '../components/VoteWidget';
 import QcBadge from '../components/QcBadge';
 
-/* Escape for the print window — that HTML is built by string concatenation, so
-   React's automatic escaping does not apply to it. */
+// Escape for the print window - that HTML is built by string concatenation, so React's
+// automatic escaping does not apply to it.
 const esc = (v) => String(v ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
@@ -25,8 +25,8 @@ export default function AllIdeasPage() {
   const { showToast } = useToast();
   const [ideas,   setIdeas]   = useState([]);
 
-  /* Twenty to a page. The endpoint already bounds what it returns; rendering
-     every row of it was the browser's cost, not the server's. */
+  // Twenty to a page. The endpoint already bounds what it returns; rendering every row of it
+  // was the browser's cost, not the server's.
   const pager = usePager(ideas);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -38,15 +38,7 @@ export default function AllIdeasPage() {
   const pollRef = useRef(null);
   const canArchive = isAdmin(user?.role) || isSuperAdmin(user?.role);
 
-  /*
-   * Refresh while somebody is actually looking.
-   *
-   * This used to poll every 10 seconds and keep polling while the tab sat in
-   * the background — 360 requests an hour from one person, all day. Ideas do
-   * not change that fast. A minute is plenty, the timer stops while the tab is
-   * hidden, and returning to the tab fetches once immediately so nobody is
-   * looking at stale rows while waiting for the next tick.
-   */
+  // Refresh while somebody is actually looking.
   useEffect(() => {
     loadIdeas();
 
@@ -75,8 +67,8 @@ export default function AllIdeasPage() {
     setLoading(false);
   }
 
-  /* The one-page summary. Same endpoint as the full export - the server sends
-     whichever document this reader is entitled to. */
+  // The one-page summary. Same endpoint as the full export - the server sends whichever
+  // document this reader is entitled to.
   async function downloadGist(idea) {
     try {
       await exportApi.ideaPdf(idea.id, idea.idea_code);
@@ -93,15 +85,9 @@ export default function AllIdeasPage() {
     } catch { showToast(t('msg.network_error'), 'danger'); }
   }
 
-  /*
-   * CSV of the current view. Values are quoted and internal quotes doubled — an
-   * idea titled `Reduce "idle" time, phase 2` would otherwise split into extra
-   * columns and silently corrupt the file.
-   *
-   * The full solution is deliberately NOT exported: the server does not send it
-   * to this screen (see redactSolution), so an export that appeared to contain
-   * it would either be empty or a privacy hole depending on who clicked it.
-   */
+  // CSV of the current view. Values are quoted and internal quotes doubled - an idea titled
+  // `Reduce "idle" time, phase 2` would otherwise split into extra columns and silently
+  // corrupt the file.
   function exportCsv() {
     const cols = ['idea_code','title','solution_summary','patentable_flag','submitter_name','department',
       'impact_level','ai_score','status','submitted_at'];
@@ -110,9 +96,7 @@ export default function AllIdeasPage() {
     saveBlob(new Blob([csv], { type:'text/csv;charset=utf-8' }), 'ifqm-ideas.csv');
   }
 
-  /* PDF via the browser's own print-to-PDF. A dependency-free route that gives
-     the user their platform's real save dialogue, rather than shipping a PDF
-     library to every visitor for a button most never press. */
+  // PDF via the browser's own print-to-PDF.
   function exportPdf() {
     const rows = ideas.map(i => `<tr>
         <td>${esc(i.idea_code)}</td><td>${esc(i.title)}</td>
@@ -124,14 +108,14 @@ export default function AllIdeasPage() {
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-      <title>IFQM — Ideas</title><style>
+      <title>IFQM - Ideas</title><style>
         body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;padding:24px;color:#111}
         h1{font-size:17px;margin:0 0 4px} p{font-size:11px;color:#666;margin:0 0 16px}
         table{border-collapse:collapse;width:100%;font-size:10.5px}
         th,td{border:1px solid #ddd;padding:5px 7px;text-align:left;vertical-align:top}
         th{background:#f3f4f6}
       </style></head><body>
-      <h1>IFQM — Ideas</h1>
+      <h1>IFQM - Ideas</h1>
       <p>${ideas.length} idea(s) · exported ${new Date().toLocaleString()}</p>
       <table><thead><tr>
         <th>Code</th><th>Title</th><th>Solution (gist)</th><th>{t('table.patentable')}</th><th>{t('table.submitter')}</th><th>Dept</th>
@@ -160,7 +144,7 @@ export default function AllIdeasPage() {
           ))}
         </select>
 
-        {/* §13.2 — archived ideas are out of the way but never gone. */}
+        {/* §13.2 - archived ideas are out of the way but never gone. */}
         <label style={{ display:'flex',alignItems:'center',gap:6,fontSize:12.5,color:'var(--text-muted)',cursor:'pointer' }}>
           <input type="checkbox" checked={archived === '1'}
             onChange={e => setArchived(e.target.checked ? '1' : '')}
@@ -168,9 +152,7 @@ export default function AllIdeasPage() {
           {t('idea.show_archived')}<InfoDot term="archived" />
         </label>
 
-        {/* §13.3 — export what is on screen. Client-side: the rows are already
-            in the browser, so this needs no endpoint and honours the filters
-            exactly as the user set them. */}
+        {/* §13.3 - export what is on screen. */}
         <div style={{ display:'flex',gap:8,marginLeft:'auto' }}>
           <button className="btn btn-outline btn-sm" onClick={exportCsv} disabled={!ideas.length}>
             {t('btn.export_csv')}
@@ -181,8 +163,7 @@ export default function AllIdeasPage() {
         </div>
       </div>
 
-      {/* True archiving, not just a filter — an organisation admin can clear out
-          a whole year of ideas at once, and put them back the same way. */}
+      {/* True archiving, not just a filter - an organisation admin can clear out a whole year of ideas at once, and put them back the same way. */}
       {canArchive && (
         <BulkArchivePanel
           visibleIds={ideas.map(i => i.id)}
@@ -227,8 +208,7 @@ export default function AllIdeasPage() {
                   <td title={i.title}>
                     <div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div>
                   </td>
-                  {/* One line only. The full proposal is deliberately not sent to
-                      this screen — see redactSolution() in ideaService. */}
+                  {/* One line only. The full proposal is deliberately not sent to this screen - see redactSolution() in ideaService. */}
                   <td style={{ color:'var(--text-muted)',fontSize:12.5 }}>
                     {i.solution_summary
                       ? <div className="cell-clamp" style={{ maxWidth:260 }}
@@ -236,23 +216,23 @@ export default function AllIdeasPage() {
                           {i.solution_summary}
                           {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">Protected</span>}
                         </div>
-                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                      : <span style={{ color:'var(--subtle)' }}>-</span>}
                   </td>
                   <td className="text-center">
                     {i.patentable_flag
                       ? <span className="chip chip-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
-                      : <span style={{ color:'var(--subtle)' }}>—</span>}
+                      : <span style={{ color:'var(--subtle)' }}>-</span>}
                   </td>
                   <td>{i.submitter_name}</td>
-                  <td>{i.department||'–'}</td>
-                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'–'}</span></td>
+                  <td>{i.department||'-'}</td>
+                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'-'}</span></td>
                   <td>
                     {i.ai_score > 0
                       ? <span id={`cscore-${i.id}`} className={scoreBadgeClass(cScore)}
                           title={`AI Score: ${i.ai_score}/100 · Community adjustment: ${cScore-i.ai_score>=0?'+':''}${cScore-i.ai_score}`}>
                           {cScore}/100
                         </span>
-                      : <span className="score-none score-badge">—</span>
+                      : <span className="score-none score-badge">-</span>
                     }
                   </td>
                   <td>
@@ -260,15 +240,13 @@ export default function AllIdeasPage() {
                       ? <VoteWidget ideaId={i.id} isSelf={isSelf}
                           upvotes={i.upvotes||0} downvotes={i.downvotes||0}
                           userVote={i.user_community_vote||null} onVote={castVote} />
-                      : <span style={{ fontSize:11,color:'var(--subtle)' }}>—</span>
+                      : <span style={{ fontSize:11,color:'var(--subtle)' }}>-</span>
                     }
                   </td>
                   <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} /></td>
                   <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.submitted_at)}</td>
                   <td>
-                    {/* Outside the idea? No full view is offered - the overlay
-                        would be a title and a row of locked notices. The gist
-                        they are entitled to is downloadable instead. */}
+                    {/* Outside the idea? No full view is offered - the overlay would be a title and a row of locked notices. */}
                     {i.viewer_inside === false ? (
                       <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
                         onClick={() => downloadGist(i)}>

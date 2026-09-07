@@ -5,17 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { supportApi } from '../services/api';
 import { isAdmin, isSuperAdmin, fmtDate } from '../utils/helpers';
 
-/*
- * Support — the tenant's side of the channel to IFQM.
- *
- * A normal user sees only the tickets they raised. A tenant admin sees every
- * ticket raised inside their own organisation, because they are the one IFQM
- * will talk to about the account. Both are enforced server-side; this component
- * only decides what to *label* the list.
- *
- * Raising a ticket is the one action that shows a user's name and words to the
- * vendor — so the form says so plainly rather than burying it in a policy page.
- */
+// Support - the tenant's side of the channel to IFQM.
 export const STATUS_STYLE = {
   open:        { background:'var(--info-light)',    color:'var(--info)' },
   in_progress: { background:'var(--warning-light)', color:'var(--warning)' },
@@ -253,7 +243,7 @@ function TicketThreadModal({ id, onClose, t, showToast }) {
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth:640 }}>
         <div className="modal-header">
-          <span>{tk ? `${tk.ticket_code} · ${tk.subject}` : '…'}</span>
+          <span>{tk ? `${tk.ticket_code} · ${tk.subject}` : '...'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">

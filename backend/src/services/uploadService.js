@@ -1,19 +1,4 @@
-/**
- * Upload service — Node port of PHP api/upload.php (idea attachments).
- *
- *   upload          → validate params + ownership + size + extension, write the
- *                     file to the per-tenant uploads dir, record it in
- *                     idea_attachments.
- *   getDownloadable → authorise a read and resolve the file on disk.
- *   remove          → verify ownership, unlink the file, delete the row.
- *
- * Files live under backend/uploads/<slug>/ and are NOT web-accessible. They used
- * to be served straight off disk by express.static at /api/uploads/<file>, with
- * no authentication and no tenant check — every employee's uploaded document was
- * downloadable by anyone who had the URL. Reads now go through
- * GET /api/upload/:id/download, which authenticates the caller and resolves the
- * attachment inside their own tenant's database.
- */
+/** Upload service - Node port of PHP api/upload.php (idea attachments). */
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
@@ -36,17 +21,9 @@ export async function tenantUploadDir(slug) {
   return dir;
 }
 
-/**
- * @param file { originalname, buffer, size } (from multer memoryStorage)
- * @returns { safeName, filename }
- */
 
-/**
- * Bytes currently used by one tenant's uploads.
- *
- * A flat directory per tenant, so a single readdir is enough — no recursion,
- * and no reason for this to get slower as other tenants grow.
- */
+
+/** Bytes currently used by one tenant's uploads. */
 async function dirSize(dir) {
   try {
     const names = await fs.readdir(dir);
@@ -59,10 +36,9 @@ async function dirSize(dir) {
   }
 }
 
-/**
- * This tenant's storage cap in MB: its own override, else the platform default,
- * else 0 meaning unlimited. Failures return 0 rather than blocking uploads — a
- * registry hiccup must not stop people attaching files.
+/*
+ * This tenant's storage cap in MB: its own override, else the platform default, else 0
+ * meaning unlimited.
  */
 async function tenantStorageQuotaMb(slug) {
   try {
@@ -81,9 +57,9 @@ async function tenantStorageQuotaMb(slug) {
 
 export async function upload(db, slug, user, { ideaId, section, file }) {
   ideaId = Number(ideaId) || 0;
-  // 'support' and 'benefits' let an employee attach the document(s) that back up
-  // the Support Required and Benefits Expected they described on the business-case
-  // step — alongside the existing situation/solution attachments.
+  // 'support' and 'benefits' let an employee attach the document(s) that back up the Support
+  // Required and Benefits Expected they described on the business-case step - alongside the
+  // existing situation/solution attachments.
   if (!ideaId || !['situation', 'solution', 'support', 'benefits'].includes(section)) {
     throw badRequest('Invalid parameters.');
   }
@@ -93,17 +69,10 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
 
   if (!file) throw badRequest('No file uploaded.');
 
-  /*
-   * Each organisation sets its own attachment ceiling, bounded by the
-   * platform-wide one. A workshop attaching phone photographs and a firm
-   * attaching CAD drawings do not want the same number, and neither of them
-   * should be able to raise it past what the server will accept - so the
-   * tenant value is clamped rather than trusted.
-   */
+  // Each organisation sets its own attachment ceiling, bounded by the platform-wide one.
   const settings = await getOrgSettings(db);
-  // The ceiling is the platform admin's, not the environment's — see
-  // platformFileCeilingMb(). Clamped here as well as on save, because a value
-  // stored before the ceiling was lowered must not go on being honoured.
+  // The ceiling is the platform admin's, not the environment's - see
+  // platformFileCeilingMb().
   const ceiling = await platformFileCeilingMb();
   const orgMb = Math.max(1, Math.min(ceiling, parseInt(settings.max_file_mb, 10) || ceiling));
   const maxBytes = orgMb * 1024 * 1024;
@@ -114,19 +83,7 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
 
   const dir = await tenantUploadDir(slug);
 
-  /*
-   * MOM §8.5 — an upper limit per organisation, not just per file.
-   *
-   * The per-file cap alone stops one enormous upload; it does nothing about ten
-   * thousand ordinary ones, which is how shared storage actually fills up. The
-   * quota is measured from the directory on disk rather than a running total in
-   * the database: a counter drifts the moment a file is removed by hand or a
-   * write fails halfway, and a storage limit that quietly disagrees with the
-   * storage is worse than none.
-   *
-   * Checked before the write, and the incoming file counts toward the total, so
-   * the limit cannot be stepped over by exactly one file.
-   */
+  // MOM §8.5 - an upper limit per organisation, not just per file.
   const quotaMb = await tenantStorageQuotaMb(slug);
   if (quotaMb > 0) {
     const usedBytes = await dirSize(dir);
@@ -152,9 +109,9 @@ export async function upload(db, slug, user, { ideaId, section, file }) {
   return { safeName, filename: file.originalname };
 }
 
-// Extension → content type. We serve a fixed type from this map rather than
-// sniffing the client-supplied name, and always as an attachment, so a file
-// can never be rendered inline in the app's origin.
+// Extension content type. We serve a fixed type from this map rather than sniffing the
+// client-supplied name, and always as an attachment, so a file can never be rendered
+// inline in the app's origin.
 const CONTENT_TYPES = {
   pdf: 'application/pdf',
   png: 'image/png',
@@ -168,16 +125,7 @@ const CONTENT_TYPES = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
-/**
- * Resolve an attachment for download, enforcing tenant + visibility rules.
- *
- * Attachments used to be served by express.static on /api/uploads with no auth
- * at all: every employee's uploaded document was readable by anyone who had (or
- * guessed) the URL, across every tenant. Downloads now go through this check.
- *
- * `db` is already the caller's tenant pool, so an attachment id from another
- * organisation simply doesn't resolve — cross-tenant reads are impossible.
- */
+/** Resolve an attachment for download, enforcing tenant + visibility rules. */
 export async function getDownloadable(db, slug, user, attachmentId) {
   const id = Number(attachmentId) || 0;
   if (!id) throw badRequest('Invalid attachment id.');
@@ -199,9 +147,8 @@ export async function getDownloadable(db, slug, user, attachmentId) {
     throw forbidden('This attachment is not available.');
   }
 
-  // filepath is a server-generated name (attach_<hex>.<ext>), but never trust a
-  // stored value as a path — resolve it and confirm it stayed inside the
-  // tenant's own directory.
+  // filepath is a server-generated name (attach_<hex>.<ext>), but never trust a stored value
+  // as a path - resolve it and confirm it stayed inside the tenant's own directory.
   const dir = await tenantUploadDir(slug);
   const abs = path.resolve(dir, path.basename(String(att.filepath)));
   if (!abs.startsWith(path.resolve(dir) + path.sep)) {

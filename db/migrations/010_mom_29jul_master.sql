@@ -1,17 +1,7 @@
--- ─────────────────────────────────────────────────────────────────────────────
---  Migration 010 — MOM 29 Jul 2026, MASTER database
---
---    mysql -u root -p ifqm_master < db/migrations/010_mom_29jul_master.sql
---
---  Idempotent: safe to re-run.
---  Covers MOM §12.3 (archive tickets), §12.12 (login activity), §8.3/§8.5
---  (per-tenant API quota and storage cap).
--- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 010 - MOM 29 Jul 2026, MASTER database
 
--- ── §12.3 Archive support tickets ────────────────────────────────────────────
--- Distinct from `closed`: closing is the outcome of the conversation, archiving
--- is the operator saying "stop showing me this". A closed ticket still belongs
--- in the recent list; an archived one does not.
+-- §12.3 Archive support tickets Distinct from `closed`: closing is the outcome of the
+-- conversation, archiving is the operator saying "stop showing me this".
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'support_tickets'
@@ -30,10 +20,8 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- ── §12.12 Platform login activity ───────────────────────────────────────────
--- login_attempts already exists but is lockout state: it is cleared on every
--- successful sign-in, so it can never answer "who signed in, and when". This is
--- the append-only record that can.
+-- §12.12 Platform login activity login_attempts already exists but is lockout state: it is
+-- cleared on every successful sign-in, so it can never answer "who signed in, and when".
 CREATE TABLE IF NOT EXISTS platform_login_activity (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   actor_type    ENUM('platform_admin','tenant_user') NOT NULL,
@@ -51,11 +39,8 @@ CREATE TABLE IF NOT EXISTS platform_login_activity (
   INDEX idx_pla_tenant (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── §8.3 / §8.5 Per-tenant API quota and storage cap ─────────────────────────
--- The MOM specifies 10,000 requests total and 2,000 per month. Both are counted
--- here rather than in memory: an in-process counter resets on every deploy and
--- does not exist for a second worker, which is the same mistake the brute-force
--- lockout already had to be moved out of.
+-- §8.3 / §8.5 Per-tenant API quota and storage cap The MOM specifies 10,000 requests total
+-- and 2,000 per month.
 CREATE TABLE IF NOT EXISTS tenant_api_usage (
   tenant_id     INT          NOT NULL,
   period        CHAR(7)      NOT NULL,   -- 'YYYY-MM', or 'total' for the lifetime counter
@@ -64,9 +49,7 @@ CREATE TABLE IF NOT EXISTS tenant_api_usage (
   PRIMARY KEY (tenant_id, period)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Per-tenant limits, overridable per organisation. NULL means "use the platform
--- default from platform_settings", so raising the default lifts every tenant
--- that has not been given a bespoke number.
+-- Per-tenant limits, overridable per organisation.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants'

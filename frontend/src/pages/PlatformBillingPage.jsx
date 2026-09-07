@@ -7,28 +7,7 @@ import { fmtDate } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 
-/*
- * Platform → Payments.
- *
- * ── Why this page exists ───────────────────────────────────────────────────
- *
- * Every control here already existed, one drill-down deep inside a single
- * organisation's profile panel. That is the right place to change one
- * customer's terms and the wrong place to answer the questions the platform
- * team actually asks — who is about to lapse, who has never been given a plan,
- * what are we owed — because answering those meant opening every customer in
- * turn and remembering what you saw.
- *
- * The per-organisation panel is unchanged and still there. This is the view
- * across all of them, with the same actions available inline.
- *
- * ── One thing this page is careful not to claim ────────────────────────────
- *
- * The money figures are labelled as the recurring value of plans, not as
- * revenue. Nothing here takes payment or reconciles a bank statement — a
- * platform admin records that somebody paid. Reporting that as income would be
- * how a finance conversation goes wrong.
- */
+// Platform Payments.
 
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
@@ -87,9 +66,8 @@ export default function PlatformBillingPage() {
       platformApi.billingOverview(),
       platformApi.plans({ include_inactive: 0 }),
     ]);
-    // allSettled, not all: a failure loading the plan catalogue must not leave
-    // the whole page blank. An earlier screen in this console rendered "no
-    // users" when its request 500'd, which read as an empty database.
+    // allSettled, not all: a failure loading the plan catalogue must not leave the whole page
+    // blank.
     if (ov.status === 'fulfilled') setData(ov.value.data);
     else showToast(ov.reason?.response?.data?.error || t('msg.fail_load'), 'danger');
     if (pl.status === 'fulfilled') setPlans(pl.value.data.plans || []);
@@ -112,28 +90,18 @@ export default function PlatformBillingPage() {
     });
   }, [data, filter, search]);
 
-  /* Twenty organisations to a page. At a thousand customers this table was
-     several thousand DOM nodes rebuilt on every filter keystroke, and that cost
-     lands on the browser rather than the server. */
+  // Twenty organisations to a page.
   const pager = usePager(rows);
 
-  /*
-   * Bulk selection.
-   *
-   * Every action on this screen was one organisation at a time, so recording a
-   * month of payments meant opening and closing the same dialog forty times.
-   * The set is keyed by id and survives paging - a selection made on page one
-   * is still a selection on page three, which is the whole point of selecting
-   * before acting.
-   */
+  // Bulk selection.
   const [picked, setPicked] = useState(() => new Set());
   const togglePick = (id) => setPicked((prev) => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  // "All" means every row the current filter matched, not merely the twenty on
-  // screen — selecting a page at a time would be a trap at a thousand rows.
+  // "All" means every row the current filter matched, not merely the twenty on screen -
+  // selecting a page at a time would be a trap at a thousand rows.
   const allPicked = rows.length > 0 && rows.every((o) => picked.has(o.id));
   const toggleAll = () => setPicked(allPicked ? new Set() : new Set(rows.map((o) => o.id)));
   useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [filter, search]);
@@ -177,7 +145,7 @@ export default function PlatformBillingPage() {
         <div style={{ fontSize: 13, color: 'var(--subtle)', marginTop: 4 }}>{t('msgb.sub')}</div>
       </div>
 
-      {/* ── Summary ───────────────────────────────────────────────── */}
+      {/* Summary */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 4 }}>
           <Stat label={t('msgb.st_orgs')} value={s.organisations} />
@@ -213,7 +181,7 @@ export default function PlatformBillingPage() {
       )}
 
 
-      {/* ── Controls ──────────────────────────────────────────────── */}
+      {/* Controls */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
         <div className="tab-bar" style={{ marginBottom: 0, flex: '1 1 auto' }}>
           {FILTERS.map(([key, label]) => (
@@ -233,7 +201,7 @@ export default function PlatformBillingPage() {
         <button className="btn" disabled={busy} onClick={() => sweep(false)}>{t('msgb.sweep_run')}</button>
       </div>
 
-      {/* ── The organisations ─────────────────────────────────────── */}
+      {/* The organisations */}
       <div className="card">
         {rows.length === 0 ? (
           <div className="empty-state">{t('msgb.none')}</div>
@@ -286,10 +254,10 @@ export default function PlatformBillingPage() {
                         )}
                       </td>
                       <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {o.plan ? money(o.plan.total_rupees) : '—'}
+                        {o.plan ? money(o.plan.total_rupees) : '-'}
                       </td>
                       <td><span className={`badge ${badge.cls}`}>{badge.label}</span></td>
-                      <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{until ? fmtDate(until) : '—'}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}>{until ? fmtDate(until) : '-'}</td>
                       <td>
                         <button className="btn" style={{ padding: '4px 10px', fontSize: 12 }}
                           onClick={() => setEditing(o)}>
@@ -318,18 +286,7 @@ export default function PlatformBillingPage() {
   );
 }
 
-/**
- * The Razorpay merchant account.
- *
- * Platform-wide, not per organisation: IFQM holds one account and every
- * customer pays into it. Turning it on is what puts a Pay button on every org
- * admin's billing page, which is why enabling it is refused while the keys are
- * incomplete — a Pay button that opens a checkout and fails is worse than none,
- * because the customer has then tried to pay and believes the fault is theirs.
- *
- * The key SECRET is never sent to this browser. The Key ID is, deliberately:
- * Razorpay's checkout script needs it, and it is public by design.
- */
+/** The Razorpay merchant account. */
 export function GatewayPanel() {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -348,13 +305,8 @@ export function GatewayPanel() {
       setKeyId(r.data.key_id || '');
       setName(r.data.business_name || '');
       setSecret('');
-      /*
-       * An incomplete gateway is announced as a notice in the corner rather
-       * than as a red block wedged into the card. It named the missing fields
-       * in the middle of the form used to fill them in, which read as an error
-       * about something the operator had just done rather than a reminder of
-       * what was still to do.
-       */
+      // An incomplete gateway is announced as a notice in the corner rather than as a red block
+      // wedged into the card.
       if (Array.isArray(r.data?.missing) && r.data.missing.length) {
         showToast(`${t('msgb.incomplete')} ${r.data.missing.join(' · ')}`, 'warning');
       }
@@ -458,7 +410,7 @@ export function GatewayPanel() {
 
           {g.last_test?.at && (
             <div style={{ marginTop: 12, fontSize: 12, color: 'var(--subtle)' }}>
-              {t('msgg.last_tested')}: {fmtDate(g.last_test.at)} — {g.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
+              {t('msgg.last_tested')}: {fmtDate(g.last_test.at)} - {g.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
               {g.last_test.note ? ` (${g.last_test.note})` : ''}
             </div>
           )}
@@ -468,15 +420,7 @@ export function GatewayPanel() {
   );
 }
 
-/**
- * Set one organisation's terms without leaving the list.
- *
- * The three actions are kept as three buttons rather than one Save, because
- * they are genuinely three decisions with three different consequences —
- * changing the plan, changing how long the free evaluation runs, and recording
- * that money arrived. Collapsing them into one form would make it possible to
- * record a payment as a side effect of correcting a typo in a plan.
- */
+/** Set one organisation's terms without leaving the list. */
 function TermsModal({ org, plans, onClose, onSaved }) {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -524,7 +468,7 @@ function TermsModal({ org, plans, onClose, onSaved }) {
             <option value="">{t('msgb.m_plan_none')}</option>
             {plans.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} — {money(p.total_rupees)} {p.cycle_label}
+                {p.name} - {money(p.total_rupees)} {p.cycle_label}
               </option>
             ))}
           </select>
@@ -532,7 +476,7 @@ function TermsModal({ org, plans, onClose, onSaved }) {
             <div style={{ fontSize: 11.5, color: 'var(--subtle)', marginTop: 6, lineHeight: 1.5 }}>
               {t('msgb.m_plan_hint', {
                 base: money(chosen.base_rupees), gst: money(chosen.gst_rupees),
-                total: money(chosen.total_rupees), users: chosen.max_users || '—',
+                total: money(chosen.total_rupees), users: chosen.max_users || '-',
               })}
             </div>
           )}

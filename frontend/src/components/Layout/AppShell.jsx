@@ -11,13 +11,8 @@ export default function AppShell({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const { user } = useAuth();
 
-  /*
-   * MOM §7.2 — content protection is a per-organisation setting, so the shell
-   * has to know whether it is on. Read once per session rather than per screen.
-   *
-   * A platform admin sits outside every tenant and has no org settings to read,
-   * so the call is skipped for them entirely — it would 404 and log noise.
-   */
+  // MOM §7.2 - content protection is a per-organisation setting, so the shell has to know
+  // whether it is on.
   const [protectContent, setProtectContent] = useState(false);
   useEffect(() => {
     if (!user || user.role === 'platform_admin') return;
@@ -37,10 +32,9 @@ export default function AppShell({ children }) {
       <div id="main">
         <Topbar onToggleSidebar={() => setCollapsed(v => !v)} />
         <div id="content">
-          {/* Where the organisation's account stands, if it is worth saying.
-              Renders nothing at all while there is plenty of time left. */}
+          {/* Where the organisation's account stands, if it is worth saying. */}
           <BillingBanner />
-          {/* Renders nothing on a top-level screen — see Breadcrumbs. */}
+          {/* Renders nothing on a top-level screen - see Breadcrumbs. */}
           <Breadcrumbs />
           {children}
         </div>

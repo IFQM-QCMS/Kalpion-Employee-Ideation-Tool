@@ -1,25 +1,6 @@
--- ─────────────────────────────────────────────────────────────────────────────
---  Migration 015 — approximate location on the sign-in record  (MASTER schema)
---
---    mysql -u root -p ifqm_master < db/migrations/015_login_activity_location.sql
---
---  Idempotent: safe to re-run.
--- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 015 - approximate location on the sign-in record (MASTER schema)
 
 -- Where the person appeared to be signing in from.
---
--- This is NOT looked up from the IP address. Doing that would mean sending our
--- administrators' addresses to somebody else's geolocation service on every
--- sign-in, and behind a hosting provider's proxy the address is a private one
--- (10.x) that no lookup could resolve anyway — which is exactly what the live
--- records show.
---
--- Instead the browser reports its own time zone at sign-in, which it already
--- knows and which no third party has to be told about. "Asia/Kolkata (UTC+5:30)"
--- is genuinely useful for spotting a sign-in from somewhere unexpected, and it
--- is honest about being approximate: a time zone is a band of the world, not a
--- place, and anyone using a VPN or travelling will report wherever their machine
--- is set to.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'platform_login_activity'
@@ -29,9 +10,8 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- The kind of network the request arrived on: 'public', 'private' (an office
--- LAN, or a hosting provider's internal proxy) or 'local'. Cheap to derive from
--- the address itself, and it explains at a glance why an address looks odd.
+-- The kind of network the request arrived on: 'public', 'private' (an office LAN, or a
+-- hosting provider's internal proxy) or 'local'.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'platform_login_activity'

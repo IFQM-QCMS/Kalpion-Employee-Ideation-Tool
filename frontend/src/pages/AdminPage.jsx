@@ -13,14 +13,7 @@ import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 import QcBadge from '../components/QcBadge';
 
-/*
- * React's `style` prop takes an object, not a CSS string. These were strings
- * ('background:#c8ccd1;color:#374151;...'), so rendering one threw
- * "The `style` prop expects a mapping from style properties to values, not a
- * string" — which crashed the whole component. That is why the Admin → User List
- * tab rendered as a blank page for any organisation that had users (i.e. always:
- * the org admin themselves matches `admin`).
- */
+// React's `style` prop takes an object, not a CSS string.
 const ROLE_BADGE_STYLE = {
   admin:          { background:'var(--primary-light)', color:'var(--primary)', border:'1px solid var(--primary-dim)' },
   executive:      { background:'var(--info-light)',    color:'var(--info)',    border:'1px solid var(--info-dim)' },
@@ -32,11 +25,8 @@ const ROLE_BADGE_STYLE = {
   trainee:        { background:'var(--success-light)', color:'var(--success)', border:'1px solid var(--success-dim)' },
 };
 
-/* Top to bottom, the way an organisation chart reads. Used for the User List
-   filter; super_admin is left out because it is a single built-in account. */
-/* Mirrors IDEA_SECTIONS in the backend's ideaSections.js. Order is the order
-   they appear on an idea, so the tick boxes read top to bottom the way the
-   screen does. */
+// Top to bottom, the way an organisation chart reads.
+// Mirrors IDEA_SECTIONS in the backend's ideaSections.js.
 const IDEA_SECTION_KEYS = ['situation', 'solution', 'benefits', 'business_case',
   'attachments', 'comments', 'co_suggesters', 'timeline'];
 
@@ -57,8 +47,8 @@ export default function AdminPage() {
   const [ideasStatus, setIdeasStatus] = useState('');
   const [users,       setUsers]       = useState([]);
   const [usersSearch, setUsersSearch] = useState('');
-  // Which sections of an idea an ordinary colleague may read. Held as an
-  // array because the form is a set of tick boxes; stored comma-separated.
+  // Which sections of an idea an ordinary colleague may read. Held as an array because the
+  // form is a set of tick boxes; stored comma-separated.
   const [empSections, setEmpSections] = useState(['solution']);
   const [usersRole,   setUsersRole]   = useState('');
   const [usersError,  setUsersError]  = useState('');
@@ -66,12 +56,12 @@ export default function AdminPage() {
   const [userPage,    setUserPage]    = useState(1);
   const [userMeta,    setUserMeta]    = useState({ total: 0, pages: 1 });
   const [managers,    setManagers]    = useState([]);
-  // Which one-per-organisation roles are already held, and by whom. See
-  // SINGLETON_ROLES in the backend userService for why plant_head is one.
+  // Which one-per-organisation roles are already held, and by whom. See SINGLETON_ROLES in
+  // the backend userService for why plant_head is one.
   const [takenRoles,  setTakenRoles]  = useState({});
   const [settings,    setSettings]    = useState(null);
-  // The platform-wide attachment ceiling, sent with the settings. Defaults to
-  // the old hard-coded bound until the first response arrives.
+  // The platform-wide attachment ceiling, sent with the settings. Defaults to the old
+  // hard-coded bound until the first response arrives.
   const [fileCeiling, setFileCeiling] = useState(50);
   const [loading,     setLoading]     = useState(false);
   const [openIdeaId,  setOpenIdeaId]  = useState(null);
@@ -87,10 +77,9 @@ export default function AdminPage() {
     if (tab === 5) loadSettings();
   }, [tab]);
 
-  // The user list is searched and paged on the SERVER — a tenant can hold
-  // 10,000 employees after a bulk import, so it can no longer be filtered
-  // client-side over a full in-memory copy. Debounced so typing doesn't fire a
-  // request per keystroke.
+  // The user list is searched and paged on the SERVER - a tenant can hold 10,000 employees
+  // after a bulk import, so it can no longer be filtered client-side over a full in-memory
+  // copy.
   useEffect(() => {
     if (tab !== 2) return undefined;
     const id = setTimeout(() => { loadUsers(); }, usersSearch ? 300 : 0);
@@ -114,15 +103,7 @@ export default function AdminPage() {
   async function loadUsers() {
     setLoading(true);
     setUsersError('');
-    /*
-     * These two used to be a single Promise.all inside an empty catch. One of
-     * them failing meant NEITHER result was applied and nothing was reported,
-     * so a server error rendered as "No users" - an organisation with four
-     * employees looked empty, and there was nothing on screen to say why.
-     *
-     * allSettled so the list still loads when only the manager dropdown fails,
-     * and the other way round.
-     */
+    // These two used to be a single Promise.all inside an empty catch.
     const [uRes, mRes] = await Promise.allSettled([
       usersApi.adminList({ q: usersSearch, role: usersRole, status: usersStatus, page: userPage, limit: 25 }),
       usersApi.managers(),
@@ -137,8 +118,8 @@ export default function AdminPage() {
       setUsersError(uRes.reason?.response?.data?.error || t('msg.fail_load'));
     }
 
-    // The manager dropdown is a convenience on the edit form; losing it must
-    // not take the list with it.
+    // The manager dropdown is a convenience on the edit form; losing it must not take the list
+    // with it.
     if (mRes.status === 'fulfilled') {
       setManagers(mRes.value.data.managers || []);
       setTakenRoles(mRes.value.data.taken_roles || {});
@@ -153,12 +134,10 @@ export default function AdminPage() {
       if (res.data.success) {
         const cfg = res.data.settings;
         setSettings(cfg);
-        // The bound the server will actually clamp to, set by IFQM in the
-        // platform console. Hard-coding max="50" here made the field promise a
-        // number the server would quietly trim.
+        // The bound the server will actually clamp to, set by IFQM in the platform console.
         if (res.data.platform_max_file_mb) setFileCeiling(res.data.platform_max_file_mb);
-        // An absent key means the built-in default; a stored empty string means
-        // the admin deliberately chose "title only". The two are not the same.
+        // An absent key means the built-in default; a stored empty string means the admin
+        // deliberately chose "title only". The two are not the same.
         const raw = cfg.employee_visible_sections;
         setEmpSections(raw === undefined || raw === null
           ? ['solution']
@@ -191,16 +170,11 @@ export default function AdminPage() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const data = {};
-    // The approval_* keys are deliberately NOT collected here any more — they
-    // are managed on the Hierarchy tab. Collecting them from a form that has
-    // no such fields sent '' / 'default' and silently wiped a tenant's custom
-    // approval chain every time SMTP or a flag was saved.
-    // This is an explicit allowlist, not Object.fromEntries — a new field on the
-    // form is invisible to the save until it is named here. solution_visibility
-    // (MOM §13.1) is one of them.
+    // The approval_* keys are deliberately NOT collected here any more - they are managed on
+    // the Hierarchy tab.
     ['review_sla_days','escalation_days','solution_visibility','prediction_visibility','max_file_mb','situation_preview_chars'].forEach(k => { data[k] = fd.get(k)||''; });
-    // Tick boxes, not a form field — and an empty list is a real answer meaning
-    // "title only", so it is sent as an empty string rather than skipped.
+    // Tick boxes, not a form field - and an empty list is a real answer meaning "title only",
+    // so it is sent as an empty string rather than skipped.
     data.employee_visible_sections = empSections.join(',');
     ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection','idea_screen_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
@@ -209,9 +183,8 @@ export default function AdminPage() {
       if (res.data.success) {
         setSettingsMsg(t('admin.settings_saved'));
         showToast(t('admin.settings_saved'),'success');
-        // Other screens cache these for the session; drop the cache so the
-        // submit form's attachment limit and the guard reflect the new values
-        // without anybody having to reload.
+        // Other screens cache these for the session; drop the cache so the submit form's
+        // attachment limit and the guard reflect the new values without anybody having to reload.
         resetOrgSettings();
       }
       else setSettingsMsg(res.data.error || t('admin.settings_failed'));
@@ -233,8 +206,8 @@ export default function AdminPage() {
            (!ideasStatus || i.status === ideasStatus);
   });
 
-  // `users` already arrives searched and paged from the server — filtering it
-  // again here would only hide rows from the current page.
+  // `users` already arrives searched and paged from the server - filtering it again here
+  // would only hide rows from the current page.
   const counts = dash?.counts || {};
 
   return (
@@ -293,10 +266,10 @@ export default function AdminPage() {
                 {filteredIdeas.map(i => (
                   <tr key={i.id}>
                     <td><strong>{i.idea_code}</strong></td>
-                    <td>{i.title.length>50?i.title.substring(0,50)+'…':i.title}</td>
+                    <td>{i.title.length>50?i.title.substring(0,50)+'...':i.title}</td>
                     <td>{i.submitter_name}</td>
                     <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span><QcBadge status={i.qcms_push_status} /></td>
-                    <td>{i.submitted_at?fmtDate(i.submitted_at):'–'}</td>
+                    <td>{i.submitted_at?fmtDate(i.submitted_at):'-'}</td>
                     <td><button className="btn btn-outline btn-sm" onClick={() => setOpenIdeaId(i.id)}>{t('btn.view')}</button></td>
                   </tr>
                 ))}
@@ -314,9 +287,7 @@ export default function AdminPage() {
               value={usersSearch}
               onChange={e => { setUsersSearch(e.target.value); setUserPage(1); }}
               style={{ maxWidth:280 }} id="admin-user-search" />
-            {/* Narrowing by level is the question an admin actually asks: "who
-                are my plant heads", "show me the trainees". Filtered in SQL, so
-                the paging stays correct. */}
+            {/* Narrowing by level is the question an admin actually asks: "who are my plant heads", "show me the trainees". */}
             <select className="form-control" style={{ width:190 }} value={usersRole}
               onChange={e => { setUsersRole(e.target.value); setUserPage(1); }} id="admin-user-role">
               <option value="">{t('filter.all_roles')}</option>
@@ -353,9 +324,7 @@ export default function AdminPage() {
                           <div className="avatar" style={{ width:30,height:30,fontSize:11 }}>{u.avatar_initials||u.name?.[0]||'?'}</div>
                           <div>
                             <div style={{ fontWeight:600,fontSize:13 }}>{u.name}</div>
-                            {/* Whichever sign-in identifier the account actually
-                                has. An account created without an address shows
-                                its username instead of a lonely bullet. */}
+                            {/* Whichever sign-in identifier the account actually has. */}
                             <div style={{ fontSize:11,color:'var(--subtle)' }}>
                               {[u.employee_id, u.username, u.email].filter(Boolean).join(' · ')}
                             </div>
@@ -363,8 +332,8 @@ export default function AdminPage() {
                         </div>
                       </td>
                       <td><span className="badge" style={ROLE_BADGE_STYLE[u.role]}>{formatRole(u.role, t)}</span></td>
-                      <td style={{ fontSize:12 }}>{u.department||'–'}</td>
-                      <td style={{ fontSize:12,color:'var(--subtle)' }}>{u.manager_name||'–'}</td>
+                      <td style={{ fontSize:12 }}>{u.department||'-'}</td>
+                      <td style={{ fontSize:12,color:'var(--subtle)' }}>{u.manager_name||'-'}</td>
                       <td><strong>{u.points}</strong></td>
                       <td>
                         <span style={{ fontSize:10,padding:'1px 8px',borderRadius:99,border:'1px solid',
@@ -373,8 +342,7 @@ export default function AdminPage() {
                           borderColor:u.status==='inactive'?'var(--danger-dim)':'var(--success-dim)' }}>
                           {t(u.status==='inactive' ? 'admin.inactive' : 'admin.active')}
                         </span>
-                        {/* Imported and never signed in: their password is still
-                            the derived one, i.e. guessable. Worth chasing. */}
+                        {/* Imported and never signed in: their password is still the derived one, i.e. guessable. */}
                         {!!u.must_change_password && (
                           <div style={{ marginTop:3 }}>
                             <span title={t('imp.pending_hint')} style={{ fontSize:10,padding:'1px 8px',borderRadius:99,
@@ -386,7 +354,7 @@ export default function AdminPage() {
                       </td>
                       <td>
                         {isProtected
-                          ? <span style={{ fontSize:11,color:'var(--subtle)' }}>—</span>
+                          ? <span style={{ fontSize:11,color:'var(--subtle)' }}>-</span>
                           : (
                             <div style={{ display:'flex',gap:6 }}>
                               <button className="btn btn-outline btn-sm" onClick={() => { setEditUser(u); setShowUserForm(true); }}>{t('btn.edit')}</button>
@@ -403,8 +371,7 @@ export default function AdminPage() {
             </table>
           </div>
 
-          {/* Pager. With 10,000 employees the list is no longer something the
-              browser can hold all of, so paging is not cosmetic. */}
+          {/* Pager. With 10,000 employees the list is no longer something the browser can hold all of, so paging is not cosmetic. */}
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:12,gap:10 }}>
             <span style={{ fontSize:12,color:'var(--subtle)' }}>
               {t('imp.showing', {
@@ -426,7 +393,7 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* Hierarchy — approval workflow + reporting structure */}
+      {/* Hierarchy - approval workflow + reporting structure */}
       {tab === 3 && <HierarchyTab t={t} showToast={showToast} currentUserId={user?.id} />}
 
       {/* Idea categories */}
@@ -441,11 +408,7 @@ export default function AdminPage() {
       {/* System */}
       {tab === 5 && <BrandingCard t={t} showToast={showToast} />}
 
-      {/* Grouped into a card and given room.
-          This was a bare 600px column on the page background: every field at the
-          same weight, section titles indistinguishable from the labels beneath
-          them, and two thirds of a wide screen left empty beside it. Nothing
-          here changed except how it is grouped and how much room it gets. */}
+      {/* Grouped into a card and given room. */}
       {tab === 5 && settings && (
         <div style={{ maxWidth:880,marginTop:16 }}>
           <form onSubmit={handleSaveSettings} className="card">
@@ -461,10 +424,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* MOM §13.1 — who may read the full proposal. This used to be a
-                constant in the backend; the organisation now owns it. Everyone
-                still sees title, impact, score and status in every mode — only
-                the proposal text is governed here. */}
+            {/* MOM §13.1 - who may read the full proposal. */}
             <div className="form-group" style={{ marginTop:8,maxWidth:420 }}>
               <label>{t('admin.solution_visibility')}<InfoDot term="solution_visibility" /></label>
               <select className="form-control" name="solution_visibility"
@@ -476,9 +436,7 @@ export default function AdminPage() {
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sv_hint')}</div>
             </div>
 
-            {/* MOM §14.10 — voting stays open to everyone; this is only the AI's
-                written assessment. The minutes said "confirm scope", so it is a
-                choice rather than a rule baked into the code. */}
+            {/* MOM §14.10 - voting stays open to everyone; this is only the AI's written assessment. */}
             <div className="form-group" style={{ maxWidth:420 }}>
               <label>{t('admin.prediction_visibility')}<InfoDot term="prediction_visibility" /></label>
               <select className="form-control" name="prediction_visibility"
@@ -488,10 +446,7 @@ export default function AdminPage() {
               </select>
             </div>
 
-            {/* What a colleague who is neither the author nor a reviewer may
-                read on somebody else's idea. The title, code, status, impact
-                and score are never hidden — they are what makes an idea
-                findable and what the leaderboard counts. */}
+            {/* What a colleague who is neither the author nor a reviewer may read on somebody else's idea. */}
             <div className="form-group" style={{ marginTop:8 }}>
               <label>{t('admin.employee_sections')}<InfoDot term="employee_sections" /></label>
               <div style={{ fontSize:11,color:'var(--subtle)',margin:'2px 0 8px' }}>{t('admin.employee_sections_hint')}</div>
@@ -512,9 +467,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* Each organisation sets its own attachment ceiling. The platform
-                keeps a hard maximum above this, so raising it here can never
-                exceed what the server itself will accept. */}
+            {/* Each organisation sets its own attachment ceiling. */}
             <div className="form-row">
               <div className="form-group">
                 <label>{t('admin.max_file_mb')}<InfoDot term="max_file_mb" /></label>
@@ -532,9 +485,7 @@ export default function AdminPage() {
               </div>
             </div>
 
-            {/* On by default. Blanks idea text when the window loses focus, and
-                stamps the reader's name across it. The hint is honest about the
-                limits — no web page can truly stop a screenshot. */}
+            {/* On by default. Blanks idea text when the window loses focus, and stamps the reader's name across it. */}
             <div className="form-group" style={{ maxWidth:520 }}>
               <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
                 <input type="checkbox" name="idea_screen_protection" value="1"
@@ -545,8 +496,7 @@ export default function AdminPage() {
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.sp_hint')}</div>
             </div>
 
-            {/* MOM §7.2 — a deterrent, not a control. The hint says so plainly
-                rather than letting an admin believe it stops screenshots. */}
+            {/* MOM §7.2 - a deterrent, not a control. */}
             <div className="form-group" style={{ maxWidth:520 }}>
               <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
                 <input type="checkbox" name="content_protection" value="1"
@@ -603,17 +553,14 @@ export default function AdminPage() {
         <UserFormModal
           user={editUser}
           managers={managers}
-          // Which one-per-organisation roles are already held. Loaded beside the
-          // manager list, and passed down because the form is a separate
-          // component — reaching for it from in there was a ReferenceError that
-          // blanked the whole page the moment "Add user" was pressed.
+          // Which one-per-organisation roles are already held.
           takenRoles={takenRoles}
           currentUserRole={user?.role}
           currentUserId={user?.id}
           onClose={() => setShowUserForm(false)}
           onSaved={() => { setShowUserForm(false); loadUsers(); }}
-          // Refresh the list behind a modal that is staying open to show a
-          // credential — the new employee should already be in it.
+          // Refresh the list behind a modal that is staying open to show a credential - the new
+          // employee should already be in it.
           onRefresh={loadUsers}
           showToast={showToast}
           t={t}
@@ -623,18 +570,8 @@ export default function AdminPage() {
   );
 }
 
-/*
- * ── Organization Branding ──────────────────────────────────────────
- * Lets a tenant admin set the name and PNG logo that everyone in their own
- * organisation sees in the app shell. Scope is implicit and cannot be widened
- * from here: the server resolves the tenant from the caller's token, so an admin
- * can only ever edit their own organisation.
- *
- * The name and the logo save independently. Uploading a logo is the slow,
- * failure-prone half (a multi-hundred-KB multipart request), and tying it to the
- * name field would mean a rejected file also discarded a rename the admin had
- * just typed.
- */
+// Organization Branding Lets a tenant admin set the name and PNG logo that everyone in
+// their own organisation sees in the app shell.
 const MAX_LOGO_BYTES = 1024 * 1024; // keep in step with brandingService
 
 function BrandingCard({ t, showToast }) {
@@ -645,8 +582,8 @@ function BrandingCard({ t, showToast }) {
   const [preview, setPreview]   = useState(null);
   const fileRef                  = useRef(null);
 
-  // Seed the field once branding has loaded, but never clobber what the admin is
-  // actively typing.
+  // Seed the field once branding has loaded, but never clobber what the admin is actively
+  // typing.
   useEffect(() => { setName((cur) => (cur ? cur : orgName || '')); }, [orgName]);
 
   async function saveName(e) {
@@ -671,8 +608,8 @@ function BrandingCard({ t, showToast }) {
   function pickFile(e) {
     const file = e.target.files?.[0];
     if (!file) { setPreview(null); return; }
-    // Checked again on the server against the file's actual magic bytes — this
-    // is only here to fail fast before a pointless upload.
+    // Checked again on the server against the file's actual magic bytes - this is only here to
+    // fail fast before a pointless upload.
     if (file.type !== 'image/png' || !/\.png$/i.test(file.name)) {
       showToast(t('admin.logo_not_png'), 'warning');
       e.target.value = '';
@@ -799,17 +736,8 @@ function BrandingCard({ t, showToast }) {
   );
 }
 
-/*
- * ── Idea categories tab ────────────────────────────────────────────
- * The list the submission wizard offers, owned by this organisation alone. The
- * server resolves the tenant from the caller's token, so an admin editing this
- * screen cannot reach another organisation's categories.
- *
- * Deleting is presented as "stop offering this", because that is all it does:
- * ideas already filed under a category keep it — the name is stored on the idea
- * as text, not as a reference to this row. The usage count is shown next to
- * every category so the decision is made with that in view.
- */
+// Idea categories tab The list the submission wizard offers, owned by this organisation
+// alone.
 function CategoriesTab({ t, showToast }) {
   const [cats,    setCats]    = useState([]);
   const [name,    setName]    = useState('');
@@ -901,60 +829,22 @@ function CategoriesTab({ t, showToast }) {
   );
 }
 
-/*
- * ── Hierarchy tab ──────────────────────────────────────────────────
- * The tenant admin's control panel for the hierarchical idea-submission
- * system. Two independently owned pieces:
- *
- *  1. Approval Workflow — which roles review (escalation chain), which roles
- *     give the final decision, and the committee threshold. Stored in the
- *     tenant's own org_settings, so every organisation configures its own
- *     chain without touching anyone else's. (This editor existed in the PHP
- *     Admin panel and was lost in the React migration.)
- *
- *  2. Reporting Structure — the manager tree ideas escalate through.
- *     Every card carries a "Reports to" selector that rewires that single
- *     edge; the server refuses assignments that would close a loop.
- */
+// Hierarchy tab The tenant admin's control panel for the hierarchical idea-submission
+// system.
 
-// Seniority ladder, junior → senior. Used to sort the roots of the reporting
-// tree; the approval chain no longer consults it.
+// Seniority ladder, junior senior. Used to sort the roots of the reporting tree; the
+// approval chain no longer consults it.
 const CHAIN_LADDER = ['team_lead','project_lead','manager','senior_manager','plant_head','executive','admin'];
 
-/*
- * ── The approval chain ─────────────────────────────────────────────
- * One ordered list of steps, and the only description of the chain there is.
- *
- * It used to be one of three: a built-in chain, this list, and a pair of
- * reviewer/final role checkbox sets. Every job title appeared in two or three
- * of them, so "Senior Manager" was three separate controls on one screen and
- * only the ones belonging to the selected mode did anything. The two role sets
- * and the mode selector are gone.
- *
- * Mirrors STAGE_CATALOG and DEFAULT_STAGES in
- * backend/src/services/approvalStages.js — the server derives the reviewer and
- * final roles from this list and validates every key it is sent, so this array
- * is the menu rather than the authority.
- *
- * `originator` is the person who submits. It is pinned first and cannot be
- * removed: an approval step cannot precede the idea existing.
- */
+// The approval chain One ordered list of steps, and the only description of the chain
+// there is.
 const STAGE_OPTIONS = [
   'team_lead','immediate_manager','project_lead',
   'department_manager','senior_manager','plant_head','executive',
 ];
 const DEFAULT_STAGES = ['originator','team_lead','immediate_manager','department_manager','plant_head'];
 
-/*
- * Which users.role fills each stage. Mirrors STAGE_CATALOG in
- * backend/src/services/approvalStages.js.
- *
- * `immediate_manager` is filled by plain `manager`: it is a level in the
- * reporting tree rather than a job title of its own, and that mismatch between
- * the stage name and the role name is exactly the kind of thing an admin
- * cannot be expected to hold in their head — which is why the count below is
- * shown rather than left to be discovered.
- */
+// Which users.role fills each stage.
 const STAGE_ROLE = {
   team_lead: 'team_lead',
   immediate_manager: 'manager',
@@ -965,8 +855,8 @@ const STAGE_ROLE = {
   executive: 'executive',
 };
 
-/* Section headings inside the settings form: a rule and a weight change, so a
-   heading is distinguishable from the field labels beneath it. */
+// Section headings inside the settings form: a rule and a weight change, so a heading is
+// distinguishable from the field labels beneath it.
 const SECTION_HEAD = {
   fontSize: 12, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase',
   color: 'var(--heading)', margin: '4px 0 14px',
@@ -992,14 +882,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
 
   // Approval workflow state
   const [stages,    setStages]    = useState(DEFAULT_STAGES);
-  /*
-   * What this organisation calls each stage.
-   *
-   * Keyed by stage key, and only the stages actually renamed are held here —
-   * an empty box means "use the built-in name", which is also how a rename is
-   * undone. The KEY never changes, so a rename cannot strand an idea that is
-   * sitting at that stage when it happens.
-   */
+  // What this organisation calls each stage.
   const [labels,    setLabels]    = useState({});
   const [renaming,  setRenaming]  = useState(false);
   const [addStage,  setAddStage]  = useState('');
@@ -1029,13 +912,13 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         const list = String(v || '').split(',').map(x => x.trim()).filter(Boolean);
         return list.length ? list : fb;
       };
-      // Whatever is stored, the originator leads and never repeats — the same
-      // normalisation the server applies on read.
+      // Whatever is stored, the originator leads and never repeats - the same normalisation the
+      // server applies on read.
       const stored = parse(s.approval_stages, DEFAULT_STAGES)
         .filter(x => x === 'originator' || STAGE_OPTIONS.includes(x));
 
-      // Bad JSON must not take the whole screen down — the built-in names are
-      // always a correct answer, so fall back to them and let the admin retype.
+      // Bad JSON must not take the whole screen down - the built-in names are always a correct
+      // answer, so fall back to them and let the admin retype.
       try {
         const raw = s.approval_stage_labels;
         const obj = raw && typeof raw === 'string' ? JSON.parse(raw) : (raw || {});
@@ -1046,7 +929,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
     setLoading(false);
   }
 
-  // ── stage list editing ──
+  // stage list editing
   function removeStage(stage) {
     if (stage === 'originator') return;   // pinned; the UI offers no button either
     setStages(list => list.filter(s => s !== stage));
@@ -1077,8 +960,8 @@ function HierarchyTab({ t, showToast, currentUserId }) {
     setWfSaving(true);
     setWfMsg(null);
     try {
-      // Blank entries are dropped here as well as on the server, so a cleared
-      // box is stored as "no override" rather than as an empty name.
+      // Blank entries are dropped here as well as on the server, so a cleared box is stored as
+      // "no override" rather than as an empty name.
       const cleanLabels = {};
       for (const [k, v] of Object.entries(labels)) {
         const name = String(v ?? '').trim();
@@ -1121,21 +1004,8 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
   if (error)   return <div className="alert alert-danger" style={{ marginTop:16 }}>{error}</div>;
 
-  /*
-   * The preview is the stage list read aloud. It is now a restatement of the
-   * one thing on screen rather than a fourth description of the chain: it used
-   * to branch three ways and two of those branches showed roles that were not
-   * in force, which is how an admin could read a chain the engine never walked.
-   */
-  /*
-   * How many active people hold each stage's role.
-   *
-   * A chain naming stages nobody occupies is the most consequential mistake
-   * that can be made on this screen and the least visible: ideas reaching an
-   * empty stage are stepped over, which is recorded but is not what the
-   * organisation asked for. Six ideas in one tenant sat at a stage with no
-   * holder before this was shown anywhere.
-   */
+  // The preview is the stage list read aloud.
+  // How many active people hold each stage's role.
   const holders = {};
   for (const u of users) {
     if (u.status === 'inactive') continue;
@@ -1145,9 +1015,9 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   const emptyStages = stages.filter(s => s !== 'originator' && holdersFor(s) === 0);
 
   const approverStages = stages.filter(s => s !== 'originator');
-  // The Approval Path reads back what an idea will actually do, in this
-  // organisation's own words — so a renamed stage must appear renamed here, or
-  // the one line meant to confirm the chain describes a different one.
+  // The Approval Path reads back what an idea will actually do, in this organisation's own
+  // words - so a renamed stage must appear renamed here, or the one line meant to confirm
+  // the chain describes a different one.
   const stageName = (k) => labels[k]?.trim() || t(`stage.${k}`);
   const chainPreview =
     [stageName('originator'), ...approverStages.map(stageName)].join('  →  ')
@@ -1168,21 +1038,17 @@ function HierarchyTab({ t, showToast, currentUserId }) {
 
   return (
     <div style={{ marginTop:16 }}>
-      {/* ── Approval Workflow ── */}
+      {/* Approval Workflow */}
       <div className="card" style={{ marginBottom:20 }}>
         <div className="card-title">{t('hier.approval_title')}</div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14 }}>{t('hier.approval_sub')}</div>
 
-        {/* The chain: add, remove and reorder the steps an idea travels
-            through. The originator is pinned at the top with no remove button:
-            it is the submission itself, not an approval. */}
+        {/* The chain: add, remove and reorder the steps an idea travels through. */}
         <div style={{ marginBottom:14 }}>
           <label style={{ fontWeight:500,marginBottom:6,display:'block' }}>{t('hier.stages_label')}<InfoDot term="approval_stages" /></label>
           <div style={{ fontSize:11,color:'var(--subtle)',marginBottom:10 }}>{t('hier.stages_hint')}</div>
 
-          {/* Shown before the list, because the fix is usually to change the
-              chain — and somebody who has scrolled past the warning to the
-              save button has already decided. */}
+          {/* Shown before the list, because the fix is usually to change the chain - and somebody who has scrolled past the warning to the save button has already decided. */}
           {emptyStages.length > 0 && (
             <div className="alert alert-warning" style={{ fontSize:12,marginBottom:12 }}>
               {t('hier.gap_warning', {
@@ -1202,11 +1068,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                   <span style={{ fontSize:11,color:'var(--subtle)',minWidth:16,textAlign:'right' }}>{i+1}</span>
                   <div style={{ flex:1,minWidth:0 }}>
                     <div style={{ fontSize:13,fontWeight:600,color:'var(--text)' }}>
-                      {/* "only for large companies" used to be appended here.
-                          MOM 24/08: removed. It was advice rather than fact —
-                          a five-person firm with one manager uses this stage
-                          perfectly well — and it read as a restriction on a
-                          stage that has none. */}
+                      {/* "only for large companies" used to be appended here. */}
                       {renaming && !isOriginator ? (
                         <input
                           className="form-control"
@@ -1214,7 +1076,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
                           value={labels[s] ?? ''}
                           placeholder={t(`stage.${s}`)}
                           maxLength={60}
-                          aria-label={`${t('hier.rename_stage')} — ${t(`stage.${s}`)}`}
+                          aria-label={`${t('hier.rename_stage')} - ${t(`stage.${s}`)}`}
                           onChange={e => setLabels(prev => ({ ...prev, [s]: e.target.value }))}
                         />
                       ) : (
@@ -1255,12 +1117,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
             })}
           </div>
 
-          {/*
-            Renaming is a mode rather than always-on boxes. The common visit to
-            this screen is to check or reorder the chain, and a column of text
-            inputs invites an accidental edit to something an organisation
-            depends on.
-          */}
+          {/* Renaming is a mode rather than always-on boxes. */}
           <div style={{ display:'flex',gap:8,alignItems:'center',marginBottom:12,flexWrap:'wrap' }}>
             <button type="button" className="btn btn-outline btn-sm"
               onClick={() => setRenaming(v => !v)}>
@@ -1275,7 +1132,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
             <div style={{ display:'flex',gap:8,flexWrap:'wrap',alignItems:'center' }}>
               <select className="form-control" style={{ width:230 }} value={addStage}
                 onChange={e => setAddStage(e.target.value)}>
-                <option value="">{t('hier.stage_add')}…</option>
+                <option value="">{t('hier.stage_add')}...</option>
                 {STAGE_OPTIONS.filter(s => !stages.includes(s)).map(s => (
                   <option key={s} value={s}>{t(`stage.${s}`)}</option>
                 ))}
@@ -1302,11 +1159,10 @@ function HierarchyTab({ t, showToast, currentUserId }) {
         </div>
       </div>
 
-      {/* Looking one person up is a different question from reading the whole
-          tree, and it is the one that gets asked. Kept above the chart. */}
+      {/* Looking one person up is a different question from reading the whole tree, and it is the one that gets asked. */}
       <ReportingLineLookup />
 
-      {/* ── Reporting Structure ── */}
+      {/* Reporting Structure */}
       <div className="card">
         <div className="card-title">{t('hier.org_structure')}<InfoDot term="reporting_structure" /></div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:14 }}>{t('hier.org_hint')}</div>
@@ -1315,12 +1171,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
             {t('sa.too_many_tree', { shown: limit, total })}
           </div>
         )}
-        {/* Find one person without reading the tree.
-            Scrolling a thousand nested cards to reach somebody is not a way to
-            find them, and it is the thing an admin actually came here to do.
-            A search shows matches as a flat list with their manager on the row,
-            because the branch above a person is not what you are looking for
-            when you already know their name. */}
+        {/* Find one person without reading the tree. */}
         <input
           className="form-control"
           style={{ marginBottom: 12, maxWidth: 340 }}
@@ -1361,23 +1212,7 @@ function HierarchyTab({ t, showToast, currentUserId }) {
   );
 }
 
-/*
- * One person in the reporting tree.
- *
- * Two things made this unusable once an organisation had real numbers in it.
- *
- * Every row mounted a <select> listing every possible manager. At a thousand
- * employees that is a thousand selects each holding a thousand options - a
- * million DOM nodes for a screen showing forty. The browser, not the server,
- * was what stopped responding. The selector is now mounted only for the row
- * being changed; every other row shows the manager's name as text.
- *
- * And the tree drew itself in full, indenting 36px per level, so a deep
- * organisation ran off the side of the screen with no way to fold a branch.
- * Branches now collapse, and anything below the second level starts collapsed -
- * an admin opens the part they are working on rather than scrolling past all
- * of it.
- */
+// One person in the reporting tree.
 function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onReassign }) {
   const color = HIER_ROLE_COLORS[node.role] || '#888';
   const kids = [...(node.children || [])].sort((a, b) => {
@@ -1390,8 +1225,8 @@ function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onRe
   const manager = managers.find(m => m.id === node.manager_id);
   const options = managers.filter(m => m.id !== node.id);
 
-  // How many people sit under this person in total, not just directly. It is
-  // the number that decides whether a branch is worth opening.
+  // How many people sit under this person in total, not just directly. It is the number that
+  // decides whether a branch is worth opening.
   const countBelow = (n) => (n.children || []).reduce((a, c) => a + 1 + countBelow(c), 0);
   const below = countBelow(node);
 
@@ -1425,7 +1260,7 @@ function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onRe
               </span>
             )}
           </div>
-          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{node.employee_id} · {node.department||'–'}</div>
+          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{node.employee_id} · {node.department||'-'}</div>
         </div>
         <span className="badge" style={{ background:`${color}18`,color,border:`1px solid ${color}40`,fontWeight:700 }}>{formatRole(node.role, t)}</span>
 
@@ -1466,15 +1301,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
   const [email,   setEmail]   = useState(editUser?.email||'');
   const [uname,   setUname]   = useState(editUser?.username||'');
-  /*
-   * What became of the first-login credential, held until acknowledged.
-   *
-   * This used to be a toast, which was wrong for the case that matters: a
-   * derived password is something the administrator has to write down and pass
-   * on, and a toast takes it away after a few seconds whether they read it or
-   * not. There is no second chance — the password is hashed on the server and
-   * cannot be shown again. So it stays on screen until they dismiss it.
-   */
+  // What became of the first-login credential, held until acknowledged.
   const [issued,  setIssued]  = useState(null);
   const [phone,   setPhone]   = useState(editUser?.phone||'');
   const [role,    setRole]    = useState(editUser?.role||'employee');
@@ -1486,20 +1313,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
   const [error,   setError]   = useState('');
   const [saving,  setSaving]  = useState(false);
 
-  /*
-   * Mirrors ROLES_ADMIN_CAN_ASSIGN in backend/src/services/userService.js.
-   *
-   * department_manager and plant_head were missing from this list while the
-   * server accepted both, so neither could be handed out from the one screen
-   * that hands out roles. That was not a cosmetic gap: the DEFAULT approval
-   * chain is originator → immediate manager → department manager → plant head,
-   * so out of the box an organisation had two stages in its approval path that
-   * no employee could ever occupy. Ideas reaching either stage had nobody to
-   * escalate to.
-   *
-   * MOM 24/08 asked for Department Manager in the Approval Path; it was already
-   * a selectable STAGE, and this is what was actually missing.
-   */
+  // Mirrors ROLES_ADMIN_CAN_ASSIGN in backend/src/services/userService.js.
   const roleOptions = [
     'trainee','employee','team_lead','project_lead','manager',
     'department_manager','senior_manager','plant_head','executive',
@@ -1508,16 +1322,9 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
 
   async function handleSubmit() {
     setError('');
-    /*
-     * A mobile number is required of every account, however it is created.
-     * It is what a sign-in code, a password reset and any later confirmation
-     * are sent to; an employee added without one is fine until the morning
-     * they cannot get in. Checked on the server too — this is only so the
-     * admin is told before a round trip.
-     */
-    // \D, not D. This stripped literal capital Ds and counted everything else,
-    // so "abcdefghij" was accepted as a ten-digit mobile number. It matters more
-    // now than it did: the first-login password is built from these digits.
+    // A mobile number is required of every account, however it is created.
+    // \D, not D. This stripped literal capital Ds and counted everything else, so "abcdefghij"
+    // was accepted as a ten-digit mobile number.
     const digits = phone.replace(/\D/g, '');
     if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
     if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
@@ -1528,19 +1335,8 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
     try {
       const res = await usersApi[isEdit ? 'updateUser' : 'createUser'](payload);
       if (res.data.success) {
-        /*
-         * Three outcomes, and the admin has to be able to tell them apart —
-         * the difference decides whether they now have a job to do.
-         *
-         *   emailed         nothing to pass on; the employee has it already.
-         *   derived         they must read it out, so it is shown.
-         *   send failed     the account exists with a password nobody knows,
-         *                   so it is shown too, with the failure said plainly.
-         *                   Silently hiding it here would strand the employee.
-         *
-         * The last one is a warning rather than a success: the account was
-         * created, but something still needs doing about it.
-         */
+        // Three outcomes, and the admin has to be able to tell them apart - the difference decides
+        // whether they now have a job to do.
         const d = res.data;
         const panel = isEdit ? null
           : d.password_emailed ? { kind:'emailed', to: d.emailed_to }
@@ -1549,8 +1345,8 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
                 : null;
 
         if (panel) {
-          // Stay open. The list behind refreshes so the new employee is
-          // already there when the panel is dismissed.
+          // Stay open. The list behind refreshes so the new employee is already there when the panel
+          // is dismissed.
           setIssued(panel);
           onRefresh?.();
         } else {
@@ -1599,8 +1395,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
                       {t('btn.copy')}
                     </button>
                   </div>
-                  {/* Said plainly, because it is the part people assume is not
-                      true: there is no way to look this up again later. */}
+                  {/* Said plainly, because it is the part people assume is not true: there is no way to look this up again later. */}
                   <div className="alert alert-warning" style={{ fontSize:12,marginTop:14 }}>
                     {t('admin.uf_pw_once')}
                   </div>
@@ -1619,10 +1414,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
             <div className="form-group"><label>{t('admin.uf_name')} *</label><input className="form-control" value={name} onChange={e=>setName(e.target.value)} id="uf-name" /></div>
             <div className="form-group"><label>{t('admin.uf_emp_id')} *<InfoDot term="employee_id" /></label><input className="form-control" value={empId} onChange={e=>setEmpId(e.target.value)} id="uf-emp-id" /></div>
           </div>
-          {/* Username OR email — at least one, because one of them is how the
-              person signs in. Neither is starred: starring both would say
-              "both required", and starring neither says "your choice", which
-              is what the hint underneath spells out. */}
+          {/* Username OR email - at least one, because one of them is how the person signs in. */}
           <div className="form-row">
             <div className="form-group">
               <label>{t('admin.uf_username')}</label>
@@ -1639,23 +1431,12 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
               <label>{t('admin.uf_phone')} <span style={{ color:'var(--danger)' }}>*</span></label>
               <input className="form-control" type="tel" value={phone} id="uf-phone" required
                 onChange={e => setPhone(e.target.value)} placeholder={t('admin.uf_phone_ph')} />
-              {/* The placeholder read "Optional" under a field marked required.
-                  The server has refused a blank number since the temporary
-                  password started being built from it, so the form was
-                  contradicting both the asterisk beside it and the rule. */}
+              {/* The placeholder read "Optional" under a field marked required. */}
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_phone_hint')}</div>
             </div>
             <div className="form-group" />
           </div>
-          {/*
-            Date of birth used to be here, and it was required.
-            It fed one thing — the first-login password — and nothing else in
-            the product ever read it. That password is built from the phone
-            number above now, so the field has no reason to exist and asking
-            for it would be collecting a personal identifier for nothing.
-            What happens to the credential is explained below instead, since
-            it depends on whether an address was given.
-          */}
+          {/* Date of birth used to be here, and it was required. */}
           {!isEdit && (
             <div className="alert alert-info" style={{ fontSize:12,marginBottom:12 }}>
               {email.trim() ? t('admin.uf_pw_will_email') : t('admin.uf_pw_will_derive')}
@@ -1664,17 +1445,14 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
           <div className="form-row">
             <div className="form-group"><label>{t('admin.uf_role')}</label>
               <select className="form-control" id="uf-role" value={role} onChange={e=>setRole(e.target.value)}>
-                {/* An organisation has one Plant Head. Saying so in the option
-                    beats a 409 after the form is filled in — the server still
-                    refuses, but the admin should not have to discover the rule
-                    by breaking it. */}
+                {/* An organisation has one Plant Head. */}
                 {roleOptions.map(r => {
                   const heldBy = takenRoles[r];
                   const mine = heldBy && editUser && heldBy.user_id === editUser.id;
                   return (
                     <option key={r} value={r} disabled={!!heldBy && !mine}>
                       {formatRole(r, t)}
-                      {heldBy && !mine ? ` — ${t('admin.uf_role_taken', { name: heldBy.name })}` : ''}
+                      {heldBy && !mine ? ` - ${t('admin.uf_role_taken', { name: heldBy.name })}` : ''}
                     </option>
                   );
                 })}
@@ -1685,11 +1463,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
                 <option value="">{t('admin.uf_none')}</option>
                 {managers.filter(m=>m.id!==editUser?.id).map(m => <option key={m.id} value={m.id}>{m.name} ({formatRole(m.role, t)})</option>)}
               </select>
-              {/* This field used to be documentation. It is now what decides
-                  which approver an idea goes to — Jitesh's idea reaches Elisa
-                  because Elisa is on this line, and reaches no other manager.
-                  Left blank, the idea falls back to being offered to every
-                  holder of the stage's role. */}
+              {/* This field used to be documentation. */}
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
                 {t('admin.uf_manager_hint')}
               </div>
@@ -1722,7 +1496,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
   );
 }
 
-// ── Approved Ideas tab — this tenant's approved ideas, pushable to QCMS ──────
+// Approved Ideas tab - this tenant's approved ideas, pushable to QCMS
 const QCMS_BADGE = {
   imported:  ['#16a34a', '#dcfce7'],
   duplicate: ['#2563eb', '#dbeafe'],
@@ -1741,8 +1515,7 @@ function ApprovedIdeasTab({ t, showToast }) {
   const [pushing, setPushing] = useState(false);
   const [viewId,  setViewId]  = useState(null);
 
-  /* Twenty to a page, like the other lists. An organisation with years of
-     approved ideas otherwise renders every one of them at once. */
+  // Twenty to a page, like the other lists.
   const pager = usePager(ideas);
 
   useEffect(() => { load(); }, []);
@@ -1806,7 +1579,7 @@ function ApprovedIdeasTab({ t, showToast }) {
                     <td style={{ padding:'9px 12px',fontWeight:600 }}>{i.idea_code}</td>
                     <td style={{ padding:'9px 12px' }}>{i.title}</td>
                     <td style={{ padding:'9px 12px' }}>{i.is_anonymous ? t('form.anonymous') : i.submitter_name}</td>
-                    <td style={{ padding:'9px 12px' }}>{i.department || '–'}</td>
+                    <td style={{ padding:'9px 12px' }}>{i.department || '-'}</td>
                     <td style={{ padding:'9px 12px' }}>{qcmsBadge(i.qcms_push_status, t)}</td>
                     <td style={{ padding:'9px 12px',whiteSpace:'nowrap' }}>
                       <button className="btn btn-outline btn-sm" onClick={() => setViewId(i.id)}>{t('admin.view')}</button>{' '}
@@ -1825,7 +1598,7 @@ function ApprovedIdeasTab({ t, showToast }) {
   );
 }
 
-// ── API & Integration tab — paste the QCMS key; push approved ideas ─────────
+// API & Integration tab - paste the QCMS key; push approved ideas
 function IntegrationTab({ t, showToast }) {
   const [config,  setConfig]  = useState(null);
   const [apiKey,  setApiKey]  = useState('');
@@ -1872,9 +1645,8 @@ function IntegrationTab({ t, showToast }) {
   }
 
   if (loading) return <div className="empty-state"><div className="spinner"></div></div>;
-  // Preview the endpoint from what is typed (falling back to the server default),
-  // so the admin sees where ideas will go before saving. Tolerate a base that
-  // already ends in /ideas so we never show /ideas/ideas.
+  // Preview the endpoint from what is typed (falling back to the server default), so the
+  // admin sees where ideas will go before saving.
   const rawBase = (baseUrl.trim() || config?.default_base_url || '').replace(/\/+$/, '');
   const ideasUrl = /\/ideas$/i.test(rawBase) ? rawBase : `${rawBase}/ideas`;
   const endpoint = `POST ${ideasUrl}\nAuthorization: Bearer qcms_live_...\nContent-Type: application/json`;

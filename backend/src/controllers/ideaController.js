@@ -1,6 +1,4 @@
-/**
- * Idea controller — HTTP layer over ideaService. Maps to PHP api/ideas.php.
- */
+/** Idea controller - HTTP layer over ideaService. */
 import * as ideaService from '../services/ideaService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -8,11 +6,9 @@ import asyncHandler from '../utils/asyncHandler.js';
 export const list = asyncHandler(async (req, res) =>
   respond(res, await ideaService.list(req.db, req.user, {
     status: req.query.status, search: req.query.search, impact: req.query.impact,
-    // These three were missing, which made the service-side filters
-    // unreachable: the screen sent ?archived=1 and the server quietly ignored
-    // it, so "Archived only" showed the live list instead. A filter that is
-    // silently dropped is worse than one that errors, because it looks like it
-    // worked.
+    // These three were missing, which made the service-side filters unreachable: the screen
+    // sent ?archived=1 and the server quietly ignored it, so "Archived only" showed the live
+    // list instead.
     archived: req.query.archived, tag: req.query.tag,
     time_required: req.query.time_required,
   }))
@@ -70,8 +66,8 @@ export const updateImplementation = asyncHandler(async (req, res) =>
   respond(res, await ideaService.updateImplementation(req.db, req.user, req.body || {}))
 );
 
-// MOM §13.2 / §13.10 — org-admin only; the service enforces the role itself so
-// the rule holds no matter which route reaches it.
+// MOM §13.2 / §13.10 - org-admin only; the service enforces the role itself so the rule
+// holds no matter which route reaches it.
 export const setArchived = asyncHandler(async (req, res) =>
   respond(res, await ideaService.setArchived(req.db, req.user, req.body || {}))
 );

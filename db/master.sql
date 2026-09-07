@@ -1,6 +1,4 @@
--- ============================================================
---  IFQM Master Database – Tenant Registry
--- ============================================================
+-- IFQM Master Database - Tenant Registry
 CREATE DATABASE IF NOT EXISTS ifqm_master CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE ifqm_master;
 
@@ -16,29 +14,20 @@ CREATE TABLE IF NOT EXISTS tenants (
   status        ENUM('active','suspended','pending') NOT NULL DEFAULT 'active',
   is_default    TINYINT(1) NOT NULL DEFAULT 0,
   logo_url      VARCHAR(500) NULL,
-  -- The logo BYTES, not just its filename (migration 023, folded in so a new
-  -- registry starts complete). The file on disk is a cache: this deployment's
-  -- disk is ephemeral, so a logo that lived only there reverted to the default
-  -- mark on every restart while its row sat there looking correct. Capped at
-  -- 1MB on upload, against a 16MB column.
+  -- The logo BYTES, not just its filename (migration 023, folded in so a new registry starts
+  -- complete).
   logo_blob     MEDIUMBLOB   NULL DEFAULT NULL,
   primary_color VARCHAR(7)   NOT NULL DEFAULT '#4f46e5',
-  -- When anybody from this organisation last signed in. Reported, never
-  -- enforced: the platform console shows which organisations have gone quiet
-  -- without anything being switched off behind their back. `status` stays the
-  -- operator's deliberate choice; inactivity is derived from this.
+  -- When anybody from this organisation last signed in.
   last_login_at DATETIME NULL DEFAULT NULL,
-  -- Per-organisation limits. NULL means "use the platform default", so raising
-  -- the default lifts every organisation that has not been given its own number.
+  -- Per-organisation limits. NULL means "use the platform default", so raising the default
+  -- lifts every organisation that has not been given its own number.
   api_quota_total   INT NULL DEFAULT NULL,
   api_quota_monthly INT NULL DEFAULT NULL,
   storage_quota_mb  INT NULL DEFAULT NULL,
-  -- ── Billing ──
-  -- Which plan this organisation is on, where the money stands, and until when.
-  -- billing_status is held apart from `status` above on purpose: `status` is
-  -- what a PERSON did to this organisation, billing_status is where the money
-  -- stands. An operator may suspend an account for a reason unrelated to
-  -- payment, and paying must not silently undo that.
+  -- Billing Which plan this organisation is on, where the money stands, and until when.
+  -- billing_status is held apart from `status` above on purpose: `status` is what a PERSON
+  -- did to this organisation, billing_status is where the money stands.
   plan_id        INT NULL DEFAULT NULL,
   billing_status ENUM('trial','active','past_due','expired','exempt') NOT NULL DEFAULT 'trial',
   trial_days     INT NOT NULL DEFAULT 14,
@@ -55,44 +44,22 @@ CREATE TABLE IF NOT EXISTS tenants (
 INSERT IGNORE INTO tenants (name, slug, domain, db_host, db_name, db_user, db_pass, status, is_default)
 VALUES ('IFQM', 'ifqm', 'localhost', 'localhost', 'ifqm_ideation', 'root', '', 'active', 1);
 
--- ── Platform Admins (IFQM vendor staff — NOT tenant users) ────────────────
--- These are the SaaS platform operators. They live in ifqm_master,
--- not inside any tenant database, and can only see aggregate stats.
+-- Platform Admins (IFQM vendor staff - NOT tenant users) These are the SaaS platform
+-- operators.
 CREATE TABLE IF NOT EXISTS platform_admins (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(100) NOT NULL,
   email         VARCHAR(150) NOT NULL UNIQUE,
-  -- Required of every account created through the console. Nullable only
-  -- because the seed below and any pre-migration-039 row has none.
+  -- Required of every account created through the console.
   phone         VARCHAR(20)  NULL,
   password_hash VARCHAR(255) NOT NULL,
-  /*
-   * Both proofs, as timestamps (migration 039).
-   *
-   * This is the widest credential the product issues — it reaches every tenant's
-   * people, ideas, billing and support history — and it used to be created by
-   * typing an address into a form that nothing checked. A typo produced a
-   * working account its intended owner could never receive a reset for.
-   *
-   * Until both are set the account can sign in and do exactly one thing:
-   * verify itself. Timestamps rather than booleans, because "verified" happened
-   * at a moment, and knowing when is what lets somebody later ask whether it
-   * was before or after an incident.
-   */
+  -- Both proofs, as timestamps (migration 039).
   email_verified_at DATETIME NULL,
   phone_verified_at DATETIME NULL,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-/*
- * Seed: password = "password".
- *
- * Verified on both counts from the start, because this row is how a fresh
- * install reaches the console at all — an unverifiable bootstrap account that
- * cannot sign in is an installation nobody can finish. It is a development and
- * first-boot credential; the password policy and the deployment guide both say
- * to replace it.
- */
+-- Seed: password = "password".
 INSERT IGNORE INTO platform_admins (name, email, password_hash, email_verified_at, phone_verified_at)
 VALUES (
   'IFQM Platform Admin',
@@ -101,11 +68,9 @@ VALUES (
   NOW(), NOW()
 );
 
--- ── Brute-force lockout state ────────────────────────────────────────────────
--- Persisted rather than held in process memory: an in-memory counter reset on
--- every restart or deploy, did not exist for a second worker process, and grew
--- without bound. Keyed '<email>|<org-slug>' so a single account locks, not an
--- entire office behind one NAT'd IP.
+-- Brute-force lockout state Persisted rather than held in process memory: an in-memory
+-- counter reset on every restart or deploy, did not exist for a second worker process, and
+-- grew without bound.
 CREATE TABLE IF NOT EXISTS login_attempts (
   login_id      VARCHAR(191) NOT NULL PRIMARY KEY,
   attempts      INT          NOT NULL DEFAULT 0,
@@ -115,18 +80,10 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   INDEX idx_login_attempts_last (last_attempt)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Global login directory ──────────────────────────────────────────────────
--- Login no longer asks for an organisation code. A user signs in with just their
--- email OR their registered phone number; this table maps that globally-unique
--- identifier (lowercased email, or a phone reduced to its last 10 digits) to the
--- tenant that owns it. Maintained as users are created/imported/updated, and
--- self-healed for pre-existing users on their first sign-in (see directoryService).
+-- Global login directory Login no longer asks for an organisation code.
 CREATE TABLE IF NOT EXISTS login_directory (
   identifier   VARCHAR(190) NOT NULL,
-  -- 'username' added by migration 025. All three share this one keyspace, and
-  -- the format rules keep them apart structurally: an email contains '@', a
-  -- phone reduces to digits, a username must contain a letter and may not
-  -- contain '@'. See directoryService.isUsername().
+  -- 'username' added by migration 025.
   id_type      ENUM('email','phone','username') NOT NULL,
   tenant_id    INT NOT NULL,
   tenant_slug  VARCHAR(50)  NOT NULL,
@@ -136,16 +93,9 @@ CREATE TABLE IF NOT EXISTS login_directory (
   KEY idx_login_dir_tenant_user (tenant_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Tenant branding (organisation display name + PNG logo) ───────────────────
--- `name` and `logo_url` already exist above. logo_url was declared but never
--- populated; it now holds the *stored filename* of the tenant's uploaded PNG,
--- not a public URL. The bytes live under backend/uploads/<slug>/ next to idea
--- attachments, which is deliberately NOT web-accessible — they are served
--- inline (as a data: URI) from the authenticated GET /api/branding.
--- logo_updated_at is what lets a client tell that an admin replaced the file.
--- `ADD COLUMN IF NOT EXISTS` is MariaDB-only — it parses on a local XAMPP box
--- and is a syntax error on real MySQL 8. Guard on information_schema instead so
--- this file stays idempotent on both engines (same idiom as migration 001).
+-- Tenant branding (organisation display name + PNG logo) `name` and `logo_url` already
+-- exist above. logo_url was declared but never populated; it now holds the *stored
+-- filename* of the tenant's uploaded PNG, not a public URL.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants'
@@ -155,17 +105,9 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- ── Support tickets ─────────────────────────────────────────────────────────
--- These live in the MASTER registry, not in tenant databases, and that is the
--- whole point: a platform admin must be able to read and answer them without
--- ever opening a customer's database. A ticket is also the one place a tenant
--- user's name and words are deliberately shown to the vendor — the user chose to
--- contact support, so it is disclosure by consent rather than a back door. It
--- stays scoped to what they typed: no ideas, no files, no directory.
---
--- requester_user_id is the user's id INSIDE their tenant DB. It is intentionally
--- not a foreign key — master cannot reference a table in another schema, and the
--- name/email are denormalised so a ticket survives the account being deleted.
+-- Support tickets These live in the MASTER registry, not in tenant databases, and that is
+-- the whole point: a platform admin must be able to read and answer them without ever
+-- opening a customer's database.
 CREATE TABLE IF NOT EXISTS support_tickets (
   id               INT AUTO_INCREMENT PRIMARY KEY,
   ticket_code      VARCHAR(20)  NOT NULL UNIQUE,
@@ -189,14 +131,13 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   INDEX idx_tickets_tenant (tenant_id),
   INDEX idx_tickets_requester (tenant_id, requester_user_id),
   INDEX idx_tickets_updated (updated_at),
-  -- Archiving is not closing. Closing is the outcome of the conversation;
-  -- archiving is the operator saying "stop showing me this". Reversible.
+  -- Archiving is not closing.
   archived_at DATETIME NULL DEFAULT NULL,
   INDEX idx_tickets_archived (archived_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- The conversation. is_internal marks a note only IFQM staff may read; every
--- read path for a tenant user MUST filter it out (see supportService).
+-- The conversation. is_internal marks a note only IFQM staff may read; every read path for
+-- a tenant user MUST filter it out (see supportService).
 CREATE TABLE IF NOT EXISTS support_ticket_messages (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   ticket_id   INT NOT NULL,
@@ -209,22 +150,9 @@ CREATE TABLE IF NOT EXISTS support_ticket_messages (
   INDEX idx_ticket_messages (ticket_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Platform settings (defaults applied to newly provisioned tenants) ────────
--- createTenant() used to seed a hardcoded APPROVAL_DEFAULTS list, so changing
--- what a new organisation starts with meant editing JavaScript and redeploying.
--- These rows are that list, made editable. They are DEFAULTS ONLY: an existing
--- tenant's org_settings are its own, and changing a default here never reaches
--- back into an organisation that already exists.
--- Exceptions to the corporate-email rule on self-registration (migration 027).
---
--- registrationService refuses an application from a consumer mailbox provider,
--- because the work email domain is the strongest remaining signal that an
--- applicant is a real business. A genuine small firm very often has no domain
--- and runs on Gmail, so the rule ships with a way for a platform admin to let
--- one through without a deployment.
---
--- An entry is one exact address ('ravi@gmail.com' — that person only) or a
--- whole domain ('gmail.com' — the provider reopened for everybody).
+-- Platform settings (defaults applied to newly provisioned tenants) createTenant() used to
+-- seed a hardcoded APPROVAL_DEFAULTS list, so changing what a new organisation starts with
+-- meant editing JavaScript and redeploying.
 CREATE TABLE IF NOT EXISTS email_whitelist (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   entry       VARCHAR(190) NOT NULL,
@@ -249,32 +177,17 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('anonymous_allowed',             '1'),
   ('public_board_enabled',          '1'),
   ('challenges_enabled',            '1'),
-  -- The approval chain, as one ordered sequence of steps. See migration 024:
-  -- the mode / reviewer-role / final-role / threshold keys that used to sit
-  -- here were three competing descriptions of this same chain plus a percentage
-  -- that overrode all of them.
+  -- The approval chain, as one ordered sequence of steps.
   ('approval_stages',               'originator,immediate_manager,department_manager,plant_head');
 
 
--- ═══════════════════════════════════════════════════════════════════════════
--- Tables introduced by migrations 009, 010 and 012, folded in so a new
--- registry starts complete. An existing registry gets them from the migration
--- files instead; the two definitions are kept identical on purpose.
--- ═══════════════════════════════════════════════════════════════════════════
+-- Tables introduced by migrations 009, 010 and 012, folded in so a new registry starts
+-- complete.
 
--- MSME applications for a workspace. Nothing here becomes a tenant until a
--- platform admin approves it.
+-- MSME applications for a workspace.
 CREATE TABLE IF NOT EXISTS tenant_registrations (
   id                    INT AUTO_INCREMENT PRIMARY KEY,
-  /*
-   * When the platform admins were successfully told about this (migration 040).
-   *
-   * NULL means nobody has been reached yet, and the hourly job will try again.
-   * The notice used to be sent once and forgotten, so an application submitted
-   * during a mail outage waited in the queue with nobody aware of it — which is
-   * the exact situation the notice exists to prevent, since the admins do not
-   * sit refreshing the console.
-   */
+  -- When the platform admins were successfully told about this (migration 040).
   notified_at           DATETIME     NULL,
   company_name          VARCHAR(150) NOT NULL,
   proposed_slug         VARCHAR(50)  NOT NULL,
@@ -301,11 +214,8 @@ CREATE TABLE IF NOT EXISTS tenant_registrations (
   contact_designation   VARCHAR(120) NULL,
   contact_email         VARCHAR(255) NOT NULL,
   contact_phone         VARCHAR(20)  NULL,
-  -- Whether the applicant proved they hold the address and the number they gave
-  -- (migration 022, folded in here so a new registry starts complete). Recorded
-  -- on the application rather than inferred later: the codes expire and are
-  -- pruned, so an approver reading the queue next week would otherwise have no
-  -- way to tell a verified application from an unverified one.
+  -- Whether the applicant proved they hold the address and the number they gave (migration
+  -- 022, folded in here so a new registry starts complete).
   contact_email_verified TINYINT(1)  NOT NULL DEFAULT 0,
   contact_phone_verified TINYINT(1)  NOT NULL DEFAULT 0,
   accepted_terms        TINYINT(1)   NOT NULL DEFAULT 0,
@@ -315,8 +225,8 @@ CREATE TABLE IF NOT EXISTS tenant_registrations (
   reviewed_at           DATETIME     NULL,
   tenant_id             INT          NULL,
   submitted_ip          VARCHAR(45)  NULL,
-  -- Chosen by the approver at the moment they say yes, when the company's size
-  -- and turnover are in front of them.
+  -- Chosen by the approver at the moment they say yes, when the company's size and turnover
+  -- are in front of them.
   assigned_plan_id      INT          NULL,
   assigned_trial_days   INT          NULL,
   created_at            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -325,9 +235,9 @@ CREATE TABLE IF NOT EXISTS tenant_registrations (
   KEY idx_treg_email (contact_email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Append-only record of every sign-in attempt, across every organisation.
--- `login_attempts` above is lockout STATE and is cleared on success, so it can
--- never answer "who signed in, and when". This can.
+-- Append-only record of every sign-in attempt, across every organisation. `login_attempts`
+-- above is lockout STATE and is cleared on success, so it can never answer "who signed in,
+-- and when".
 CREATE TABLE IF NOT EXISTS platform_login_activity (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   actor_type    ENUM('platform_admin','tenant_user') NOT NULL,
@@ -339,13 +249,10 @@ CREATE TABLE IF NOT EXISTS platform_login_activity (
   outcome       ENUM('success','failure','lockout') NOT NULL,
   ip            VARCHAR(45)  NULL,
   user_agent    VARCHAR(255) NULL,
-  -- Roughly where the sign-in came from, from the time zone the browser reports
-  -- about itself. The IP is deliberately not looked up anywhere: that would mean
-  -- sending administrators addresses to a third-party service on every sign-in,
-  -- and behind a hosting proxy the address is private and unresolvable anyway.
+  -- Roughly where the sign-in came from, from the time zone the browser reports about
+  -- itself.
   location      VARCHAR(120) NULL,
-  -- public / private / local, derived from the address itself. Explains at a
-  -- glance why every sign-in appears to come from 10.x behind a load balancer.
+  -- public / private / local, derived from the address itself.
   network       VARCHAR(16)  NULL,
   created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_pla_created (created_at),
@@ -354,9 +261,7 @@ CREATE TABLE IF NOT EXISTS platform_login_activity (
   INDEX idx_pla_tenant (tenant_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Request counters per organisation. Counted here rather than in memory: an
--- in-process counter resets on every deploy and does not exist for a second
--- worker, which is the same mistake the brute-force lockout had to be moved out of.
+-- Request counters per organisation.
 CREATE TABLE IF NOT EXISTS tenant_api_usage (
   tenant_id     INT          NOT NULL,
   period        CHAR(7)      NOT NULL,   -- 'YYYY-MM', or 'total' for the lifetime counter
@@ -370,31 +275,18 @@ CREATE TABLE IF NOT EXISTS login_otps (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   identifier    VARCHAR(255) NOT NULL,
   id_type       ENUM('phone','email') NOT NULL DEFAULT 'phone',
-  -- How the code actually travelled, which is a different question from what
-  -- the identifier looks like: somebody who typed a number can still be sent an
-  -- email when the gateway is down. Stamped after the send, so it records what
-  -- happened rather than what was intended.
+  -- How the code actually travelled, which is a different question from what the identifier
+  -- looks like: somebody who typed a number can still be sent an email when the gateway is
+  -- down.
   channel       VARCHAR(16)  NULL DEFAULT NULL,
   code_hash     VARCHAR(255) NOT NULL,
   tenant_id     INT          NULL,
   tenant_slug   VARCHAR(50)  NULL,
   user_id       INT          NULL,
-  /*
-   * VARCHAR rather than an ENUM (migration 022, folded in here so a new
-   * registry starts complete).
-   *
-   * This was ENUM('login','dev_access'). Every later use of a one-time code —
-   * registration_verify, registration_phone, password_reset, phone_verify —
-   * then failed at the database with "Data truncated for column 'purpose'" and
-   * answered 500, at the far end of a feature that looked finished. A fresh
-   * install built from this file alone reproduced that bug even after the
-   * migration existed, because the migration only ever ran on registries that
-   * predated it. The accepted set is enforced in verificationService, where it
-   * can name the values it allows.
-   */
+  -- VARCHAR rather than an ENUM (migration 022, folded in here so a new registry starts
+  -- complete).
   purpose       VARCHAR(32)  NOT NULL DEFAULT 'login',
-  -- Wrong guesses against THIS code. Without a per-code counter a six-digit
-  -- code is a million guesses and an attacker has the whole window to try them.
+  -- Wrong guesses against THIS code.
   attempts      TINYINT      NOT NULL DEFAULT 0,
   consumed_at   DATETIME     NULL,
   expires_at    DATETIME     NOT NULL,
@@ -402,37 +294,27 @@ CREATE TABLE IF NOT EXISTS login_otps (
   created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_otp_identifier (identifier, expires_at),
   INDEX idx_otp_expiry (expires_at),
-  -- Registration asks "was this address verified in the last half hour", which
-  -- is a lookup by identifier + purpose over consumed rows.
+  -- Registration asks "was this address verified in the last half hour", which is a lookup
+  -- by identifier + purpose over consumed rows.
   INDEX idx_otp_purpose (identifier, purpose, consumed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- One-time-code policy. Settings rather than constants so the validity window
--- can be tuned during acceptance testing without a deploy.
+-- One-time-code policy. Settings rather than constants so the validity window can be tuned
+-- during acceptance testing without a deploy.
 INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('otp_enabled',        '0'),
   ('otp_length',         '6'),
   ('otp_ttl_seconds',    '300'),
   ('otp_max_attempts',   '5'),
   ('otp_resend_seconds', '60'),
-  -- 'log' writes the code to the server log instead of sending it, which is
-  -- what makes testing possible before an SMS contract exists. It is refused
-  -- outright under NODE_ENV=production: a provider that logs sign-in codes in a
-  -- live system is a credential leak, not a fallback.
+  -- 'log' writes the code to the server log instead of sending it, which is what makes
+  -- testing possible before an SMS contract exists.
   ('otp_provider',       'log');
 
 
--- ═══════════════════════════════════════════════════════════════════════════
 -- Billing (migration 016), folded in so a new registry starts complete.
--- ═══════════════════════════════════════════════════════════════════════════
 
 -- What IFQM sells.
---
--- Money is stored in paise as a whole number, never as a decimal. A price is an
--- exact quantity and floating point is not: 2500.10 has no exact binary form,
--- and the error compounds the moment 18% tax is applied to it and part of it is
--- later refunded. Everything monetary here is an integer count of the smallest
--- unit, converted only for display.
 CREATE TABLE IF NOT EXISTS plans (
   id             INT AUTO_INCREMENT PRIMARY KEY,
   code           VARCHAR(40)  NOT NULL UNIQUE,
@@ -443,29 +325,19 @@ CREATE TABLE IF NOT EXISTS plans (
                  NOT NULL DEFAULT 'starter',
   amount_paise   BIGINT       NOT NULL DEFAULT 0,
   -- 'lifetime' (migration 026) is the only cycle with no end date at all.
-  -- 'one_time' is a long fixed term, not a perpetual one: it still expires.
   billing_cycle  ENUM('monthly','quarterly','half_yearly','yearly','one_time','lifetime','payg')
                  NOT NULL DEFAULT 'yearly',
   gst_percent    DECIMAL(5,2) NOT NULL DEFAULT 18.00,
-  -- Whether the stored amount already contains the tax or the tax is added to
-  -- it. Recorded per plan rather than assumed: getting it wrong is an 18% error
-  -- on every invoice.
+  -- Whether the stored amount already contains the tax or the tax is added to it.
   gst_mode       ENUM('included','excluded') NOT NULL DEFAULT 'included',
   is_custom      TINYINT(1)   NOT NULL DEFAULT 0,
-  -- NULL means no limit. Zero would be a real limit meaning nobody may join,
-  -- which is never what an operator means by leaving a box empty.
+  -- NULL means no limit. Zero would be a real limit meaning nobody may join, which is never
+  -- what an operator means by leaving a box empty.
   max_users      INT          NULL DEFAULT NULL,
   max_departments INT         NULL DEFAULT NULL,
   max_ideas      INT          NULL DEFAULT NULL,
   storage_gb     INT          NULL DEFAULT NULL,
-  -- How many API requests this plan allows an organisation per month, and in
-  -- total. NULL means unlimited.
-  --
-  -- Sized from the user cap at roughly 15,000 per permitted user per month —
-  -- about thirty times what ordinary use costs. The figure is large by design:
-  -- an earlier flat cap of 2,000 a month was applied to ordinary page loads and
-  -- took a live customer offline within days, because one signed-in employee
-  -- generates several hundred requests in a working day.
+  -- How many API requests this plan allows an organisation per month, and in total.
   api_quota_monthly INT       NULL DEFAULT NULL,
   api_quota_total   INT       NULL DEFAULT NULL,
   support_level  ENUM('basic','standard','priority','dedicated') NOT NULL DEFAULT 'standard',
@@ -479,30 +351,27 @@ INSERT IGNORE INTO plans
   (code, name, description, tier, amount_paise, billing_cycle, gst_percent, gst_mode,
    max_users, max_departments, storage_gb, api_quota_monthly, support_level, status)
 VALUES
-  -- The trial has no request allowance on purpose: an organisation deciding
-  -- whether to buy the product should never meet a limit while deciding.
+  -- The trial has no request allowance on purpose: an organisation deciding whether to buy
+  -- the product should never meet a limit while deciding.
   ('TRIAL',   'Free Trial',   'Full access while the organisation evaluates the platform.',
    'trial',        0,        'monthly',   18.00, 'included', NULL, NULL, 5,  NULL,     'standard', 'active'),
   ('STARTER', 'Starter',      'For a single plant getting started with structured ideation.',
    'starter',      250000,   'monthly',   18.00, 'included', 100,  10,   10, 1500000,  'standard', 'active'),
   ('PRO',     'Professional', 'For multi-plant MSMEs running ideation across departments.',
    'professional', 5000000,  'quarterly', 18.00, 'included', 1500, 50,   50, 22500000, 'priority', 'active'),
-  -- Permanent and free. This is what IFQM's founding members are held on --
-  -- the companies that backed the platform before it had customers were
-  -- promised lifetime access, and this row is the only place that promise is
-  -- recorded. planService refuses to retire it for that reason (PERMANENT_PLANS).
-  -- Assigning it marks the tenant exempt with no period end, so the nightly
-  -- lapse sweep never examines it.
+  -- Permanent and free. This is what IFQM's founding members are held on -- the companies
+  -- that backed the platform before it had customers were promised lifetime access, and this
+  -- row is the only place that promise is recorded. planService refuses to retire it for
+  -- that reason (PERMANENT_PLANS).
   ('LIFETIME','Lifetime (Founding Member)','Permanent free access for IFQM founding members. Never expires and is never billed.',
    'custom',       0,        'lifetime',  18.00, 'included', NULL, NULL, 25, NULL,     'priority', 'active'),
-  -- Pay as you go (migration 030). amount_paise here is the price of ONE active
-  -- user for ONE month, not the price of the plan — usageBillingService
-  -- multiplies it by however many people actually signed in.
+  -- Pay as you go (migration 030). amount_paise here is the price of ONE active user for ONE
+  -- month, not the price of the plan - usageBillingService multiplies it by however many
+  -- people actually signed in.
   ('PAYG',    'Pay As You Go','Billed monthly for the people who actually signed in. No seat count to manage.',
    'custom',       4900,     'payg',      18.00, 'included', NULL, NULL, 25, NULL,     'standard', 'active');
 
--- Who changed an organisation's plan, when, from what to what, and why. A
--- billing dispute is answered from a record or it is answered from memory.
+-- Who changed an organisation's plan, when, from what to what, and why.
 CREATE TABLE IF NOT EXISTS tenant_billing_events (
   id             INT AUTO_INCREMENT PRIMARY KEY,
   tenant_id      INT          NOT NULL,
@@ -523,30 +392,24 @@ CREATE TABLE IF NOT EXISTS tenant_billing_events (
 INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('default_trial_days',    '14'),
   ('billing_warn_days',     '5'),
-  -- Off in a fresh install: nobody should be locked out of a system whose
-  -- prices have not been set yet.
+  -- Off in a fresh install: nobody should be locked out of a system whose prices have not
+  -- been set yet.
   ('billing_enforce',       '0'),
   ('billing_contact_email', ''),
   ('billing_contact_phone', ''),
-  -- Request allowances. Enforced, but with a grace band above the line and an
-  -- allowlist that always answers, so reaching a limit can never take a
-  -- workspace fully offline.
+  -- Request allowances. Enforced, but with a grace band above the line and an allowlist that
+  -- always answers, so reaching a limit can never take a workspace fully offline.
   ('quota_enforce',        '1'),
   ('quota_grace_percent',  '20'),
   ('quota_warn_percent',   '80'),
   -- The attachment ceiling every organisation is bounded by (migration 028).
-  -- Named apart from the tenant's own max_file_mb: this is the most any
-  -- organisation may be allowed, that is what one has chosen for itself.
   ('platform_max_file_mb', '10'),
-  -- How many months of ACCESS logs to keep (migration 029). Approval history
-  -- and billing records are never purged — see retentionService.
+  -- How many months of ACCESS logs to keep (migration 029).
   ('log_retention_months',  '24');
 
--- ── SMS / DLT delivery (migration 019) ──────────────────────────────────────
--- Migration 012 built one-time-code sign-in and seeded its policy, but nothing
--- could write those rows: `otp_*` was on no whitelist, so the feature shipped
--- switched off with no way to switch it on. These are the settings the console
--- edits, plus what an Indian DLT gateway requires on every message.
+-- SMS / DLT delivery (migration 019) Migration 012 built one-time-code sign-in and seeded
+-- its policy, but nothing could write those rows: `otp_*` was on no whitelist, so the
+-- feature shipped switched off with no way to switch it on.
 INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('sms_dlt_enabled',       '0'),
   ('sms_dlt_entity_id',     ''),
@@ -559,23 +422,14 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('sms_dlt_last_test_ok',  ''),
   ('sms_dlt_last_test_note', '');
 
--- Every send attempt. Never the message body — it carries the code — and the
--- recipient is masked to its last four digits before it is written, so this
--- cannot become a phone directory either.
--- What each organisation on pay as you go was metered, month by month
--- (migration 030).
---
--- Written once when a month closes and never recomputed. It is derived from
--- platform_login_activity, which is purged on a retention window — recomputing
--- an old month would silently return a smaller number once its sign-in rows had
--- gone, and an invoice that quietly shrinks when re-opened is worse than one
--- that is wrong, because nobody can tell which figure was charged.
+-- Every send attempt. Never the message body - it carries the code - and the recipient is
+-- masked to its last four digits before it is written, so this cannot become a phone
+-- directory either.
 CREATE TABLE IF NOT EXISTS tenant_active_users (
   tenant_id     INT      NOT NULL,
   period        CHAR(7)  NOT NULL,
   active_users  INT      NOT NULL DEFAULT 0,
-  -- The rate in force when the month closed. A price rise must not rewrite
-  -- what an earlier month was charged.
+  -- The rate in force when the month closed.
   unit_paise    BIGINT   NOT NULL DEFAULT 0,
   computed_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (tenant_id, period),
@@ -585,10 +439,9 @@ CREATE TABLE IF NOT EXISTS tenant_active_users (
 CREATE TABLE IF NOT EXISTS sms_delivery_log (
   id            INT AUTO_INCREMENT PRIMARY KEY,
   provider      VARCHAR(32)  NOT NULL,
-  -- The DLT header the message actually went out under (migration 033).
-  -- template_id alone could not answer "accepted but never arrived": that is
-  -- always about the id and the header agreeing, and the row held only one of
-  -- the two. Stored as sent, with any category annotation already stripped.
+  -- The DLT header the message actually went out under (migration 033). template_id alone
+  -- could not answer "accepted but never arrived": that is always about the id and the
+  -- header agreeing, and the row held only one of the two.
   sender        VARCHAR(16)  NULL DEFAULT NULL,
   purpose       VARCHAR(32)  NOT NULL DEFAULT 'login',
   recipient     VARCHAR(32)  NOT NULL,
@@ -603,10 +456,8 @@ CREATE TABLE IF NOT EXISTS sms_delivery_log (
   INDEX idx_sms_log_ok (ok, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Platform mail provider (migration 020) ──────────────────────────────────
--- Per-tenant SMTP still wins where a customer has configured it. This covers
--- what SMTP cannot: mail with no tenant behind it (a code sent to an email
--- address, a registration acknowledgement) and hosts that block outbound SMTP.
+-- Platform mail provider (migration 020) Per-tenant SMTP still wins where a customer has
+-- configured it.
 INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('mail_provider',             'smtp'),
   ('mail_zepto_enabled',        '0'),
@@ -619,9 +470,9 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('mail_zepto_last_test_note', ''),
   ('otp_email_enabled',         '0');
 
--- ── Payment grace, reminders and Razorpay (migration 021) ───────────────────
--- period_end reached -> still working, admins reminded daily -> grace expires
--- -> the organisation is put on hold and nobody in it can sign in.
+-- Payment grace, reminders and Razorpay (migration 021) period_end reached -> still
+-- working, admins reminded daily -> grace expires -> the organisation is put on hold and
+-- nobody in it can sign in.
 INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('billing_grace_days',      '2'),
   ('billing_reminder_hours',  '20'),
@@ -633,18 +484,15 @@ INSERT IGNORE INTO platform_settings (key_name, value) VALUES
   ('razorpay_last_test_ok',   ''),
   ('razorpay_last_test_note', '');
 
--- `ADD COLUMN IF NOT EXISTS` is MariaDB-only and is a syntax error on MySQL 8,
--- which is what the live registry runs on. Same guard the migrations use.
+-- `ADD COLUMN IF NOT EXISTS` is MariaDB-only and is a syntax error on MySQL 8, which is
+-- what the live registry runs on.
 SET @sql := IF((SELECT COUNT(*) FROM information_schema.COLUMNS
                  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants'
                    AND COLUMN_NAME = 'last_reminder_at') = 0,
   'ALTER TABLE tenants ADD COLUMN last_reminder_at DATETIME NULL DEFAULT NULL', 'SELECT 1');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Every order raised and every outcome. In the registry rather than a tenant
--- database because it is IFQM's financial record — and because an organisation
--- on hold still has to be able to pay, which means reading this while its own
--- database is off limits.
+-- Every order raised and every outcome.
 CREATE TABLE IF NOT EXISTS payment_attempts (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   tenant_id       INT          NOT NULL,

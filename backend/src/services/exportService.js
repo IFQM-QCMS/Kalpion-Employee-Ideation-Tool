@@ -1,17 +1,7 @@
-/**
- * Export service — Node port of PHP api/export.php.
- *
- *   ideasCsv       → ideas list as CSV (role-scoped, filtered), with UTF-8 BOM.
- *   leaderboardCsv → leaderboard as CSV.
- *   analyticsHtml  → printable analytics report as standalone HTML.
- *
- * CSV formatting matches PHP fputcsv (comma-delimited, fields quoted when they
- * contain a comma/quote/newline, quotes doubled) with a leading UTF-8 BOM so
- * Excel opens it correctly.
- */
+/** Export service - Node port of PHP api/export.php. */
 const INDIVIDUAL_ROLES = ['trainee', 'employee'];
-// Kept in step with ideaService's list of the same name — an export must show
-// exactly what the screen it was launched from shows.
+// Kept in step with ideaService's list of the same name - an export must show exactly what
+// the screen it was launched from shows.
 const TEAM_ROLES = ['team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager'];
 
 // Role-based visibility clause (mirrors ideas.php list / export.php).
@@ -41,7 +31,7 @@ function stamp() {
   return `${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
 }
 
-// ── EXPORT IDEAS CSV ────────────────────────────────────────────────
+// EXPORT IDEAS CSV
 export async function ideasCsv(db, user, { status, search, impact } = {}) {
   const params = [];
   const where = [`(${buildVisibilityClause(user, params)})`];
@@ -61,9 +51,8 @@ export async function ideasCsv(db, user, { status, search, impact } = {}) {
   const [ideas] = await db.execute(sql, params);
 
   let csv = BOM;
-  // The business-case columns trail the original nine, so any spreadsheet or
-  // script built against the old export keeps finding its columns where it left
-  // them.
+  // The business-case columns trail the original nine, so any spreadsheet or script built
+  // against the old export keeps finding its columns where it left them.
   csv += csvRow(['Idea Code', 'Title', 'Status', 'Submitter', 'Department', 'Impact Level', 'Categories', 'AI Score', 'Submitted At',
     'Investment Required', 'Feasibility', 'Time to Implement', 'Expected Implementation Date', 'Benefits Expected', 'Support Required']);
   for (const r of ideas) {
@@ -73,7 +62,7 @@ export async function ideasCsv(db, user, { status, search, impact } = {}) {
   return { csv, filename: `ideas_${stamp()}.csv` };
 }
 
-// ── EXPORT LEADERBOARD CSV ──────────────────────────────────────────
+// EXPORT LEADERBOARD CSV
 export async function leaderboardCsv(db) {
   const [rows] = await db.query(
     `SELECT u.name, u.department, u.points,
@@ -96,7 +85,7 @@ export async function leaderboardCsv(db) {
   return { csv, filename: `leaderboard_${stamp()}.csv` };
 }
 
-// ── EXPORT ANALYTICS HTML (printable report) ────────────────────────
+// EXPORT ANALYTICS HTML (printable report)
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
   'August', 'September', 'October', 'November', 'December'];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
@@ -196,7 +185,7 @@ ${drows}
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Analytics Report – ${esc(orgName)}</title>
+<title>Analytics Report - ${esc(orgName)}</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1e293b; background: #fff; padding: 32px 40px; line-height: 1.5; }
@@ -231,7 +220,7 @@ ${drows}
 </head>
 <body>
 
-<h1>${esc(orgName)} – Analytics Report</h1>
+<h1>${esc(orgName)} - Analytics Report</h1>
 <p class="meta">Generated on ${esc(generatedAt)}</p>
 
 <h2>Idea Quality Overview</h2>
@@ -254,7 +243,7 @@ ${drows}
   <div class="card">
     <div class="label">Medium Quality</div>
     <div class="value" style="color:#f59e0b">${med}</div>
-    <div class="sub">50 – 74</div>
+    <div class="sub">50 - 74</div>
   </div>
   <div class="card">
     <div class="label">Low Quality</div>

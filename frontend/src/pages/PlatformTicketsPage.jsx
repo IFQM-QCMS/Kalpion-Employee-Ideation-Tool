@@ -7,17 +7,7 @@ import { STATUS_STYLE, PRIORITY_COLOR } from './SupportPage';
 import BulkArchivePanel from '../components/BulkArchivePanel';
 import OrgPicker from '../components/OrgPicker';
 
-/*
- * Platform → Support Tickets. IFQM's queue across every organisation.
- *
- * This is the one screen where a tenant user's name and words appear in the
- * vendor console — because they wrote them to IFQM. It still shows nothing else
- * about them: no directory, no ideas, no files.
- *
- * Internal notes are marked unmistakably. A reply that the customer will read
- * and a note only IFQM sees must never look alike; the cost of confusing them is
- * saying something to a customer you meant to say about them.
- */
+// Platform Support Tickets.
 const STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed'];
 const PRIORITIES = ['urgent', 'high', 'normal', 'low'];
 
@@ -34,14 +24,7 @@ export default function PlatformTicketsPage() {
   const [openId,  setOpenId]  = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [archived, setArchived] = useState('');   // '' = live only, '1' = archived only
-  /*
-   * Tickets ticked by hand.
-   *
-   * The bulk panel could take everything on screen or everything before a date,
-   * which are both all-or-nothing against a filter. Clearing three specific
-   * tickets out of a list of forty meant opening each one — the thing bulk
-   * archiving was added to stop.
-   */
+  // Tickets ticked by hand.
   const [picked, setPicked] = useState(new Set());
   // Which statuses a one-click sweep should take.
   const [sweepStatuses, setSweepStatuses] = useState([]);
@@ -116,8 +99,7 @@ export default function PlatformTicketsPage() {
         <button className="btn btn-outline" onClick={load}>{t('pt.search')}</button>
       </div>
 
-      {/* Clearing out an old queue in one go, rather than opening each ticket.
-          Resolved and closed tickets only, unless the operator opts in. */}
+      {/* Clearing out an old queue in one go, rather than opening each ticket. */}
       <BulkArchivePanel
         visibleIds={tickets.map((tk) => tk.id)}
         onRun={(payload) => platformApi.bulkArchiveTickets({ ...payload, include_open: includeOpen })}
@@ -130,19 +112,13 @@ export default function PlatformTicketsPage() {
           </label>
         } />
 
-      {/*
-        Archive by status.
-        The question at the end of a quarter is "clear out everything resolved",
-        and answering it with the date option means choosing a date that happens
-        to separate them — a guess. Naming the status says what is meant.
-      */}
+      {/* Archive by status. The question at the end of a quarter is "clear out everything resolved", and answering it with the date option means choosing a date that happens to separate them - a guess. */}
       <div className="card" style={{ marginTop:12,padding:'14px 16px' }}>
         <div style={{ fontSize:13,fontWeight:650,color:'var(--heading)',marginBottom:8 }}>
           {t('pt.sweep_title')}
         </div>
         <div style={{ display:'flex',gap:14,flexWrap:'wrap',alignItems:'center' }}>
-          {/* Same vocabulary and same labels as the filter above, so the
-              status someone filtered by is the status they can sweep. */}
+          {/* Same vocabulary and same labels as the filter above, so the status someone filtered by is the status they can sweep. */}
           {STATUSES.map((value) => (
             <label key={value} style={{ display:'flex',alignItems:'center',gap:6,fontSize:12.5 }}>
               <input
@@ -158,12 +134,7 @@ export default function PlatformTicketsPage() {
             className="btn btn-outline btn-sm"
             disabled={!sweepStatuses.length || sweeping}
             onClick={async () => {
-              /*
-               * Confirmed by count before anything moves. "Archive every open
-               * ticket" is a sentence somebody can tick their way into without
-               * meaning it, and archiving an unanswered ticket is how a
-               * customer gets forgotten.
-               */
+              // Confirmed by count before anything moves.
               const names = sweepStatuses.map(v => t('sup.status_' + v)).join(', ');
               if (!window.confirm(t('pt.sweep_confirm', { statuses: names }))) return;
               setSweeping(true);
@@ -193,14 +164,8 @@ export default function PlatformTicketsPage() {
             {t('pt.n_selected', { n: picked.size })}
           </span>
           <button className="btn btn-primary btn-sm" onClick={async () => {
-            /*
-             * Archiving an unanswered ticket is how a customer gets forgotten,
-             * so the server leaves open ones alone by default. Ticking a row is
-             * a clear enough choice to override that — but not silently: if
-             * some of the ticked tickets are still awaiting an answer, say so
-             * and let the operator decide, rather than either dropping them
-             * from the count or filing them away without a word.
-             */
+            // Archiving an unanswered ticket is how a customer gets forgotten, so the server leaves
+            // open ones alone by default.
             const unanswered = tickets.filter(
               (tk) => picked.has(tk.id) && !['resolved', 'closed'].includes(tk.status));
             if (unanswered.length && !window.confirm(
@@ -255,8 +220,7 @@ export default function PlatformTicketsPage() {
               <tbody>
                 {tickets.map((tk) => (
                   <tr key={tk.id} style={{ cursor:'pointer' }} onClick={() => setOpenId(tk.id)}>
-                    {/* stopPropagation: the row opens the ticket, and ticking
-                        the box must not do that as well. */}
+                    {/* stopPropagation: the row opens the ticket, and ticking the box must not do that as well. */}
                     <td onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
@@ -269,7 +233,7 @@ export default function PlatformTicketsPage() {
                       />
                     </td>
                     <td style={{ fontWeight:700,whiteSpace:'nowrap' }}>{tk.ticket_code}</td>
-                    <td style={{ fontSize:12 }}>{tk.tenant_slug || '—'}</td>
+                    <td style={{ fontSize:12 }}>{tk.tenant_slug || '-'}</td>
                     <td>
                       {tk.subject}
                       {tk.raised_by === 'platform' && (
@@ -345,7 +309,7 @@ function PlatformThread({ id, onClose, t, showToast }) {
     <div className="modal-overlay open" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth:680 }}>
         <div className="modal-header">
-          <span>{tk ? `${tk.ticket_code} · ${tk.subject}` : '…'}</span>
+          <span>{tk ? `${tk.ticket_code} · ${tk.subject}` : '...'}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -453,9 +417,7 @@ function OutboundModal({ onClose, onCreated, t }) {
           <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12 }}>{t('pt.new_hint')}</div>
           <div className="form-group">
             <label>{t('pt.to_org')} *</label>
-            {/* A typeahead, not a <select>. The dropdown listed every
-                organisation at once, which is fine at five and unusable at a
-                thousand — there is no way to search a native option list. */}
+            {/* A typeahead, not a <select>. */}
             <OrgPicker orgs={tenants} value={tenantId} onChange={setTenantId}
               placeholder={t('pt.to_org_ph')} />
           </div>

@@ -1,7 +1,4 @@
-/**
- * Leaderboard controller — HTTP layer over leaderboardService.
- * Maps to the `leaderboard` action of PHP api/users.php.
- */
+/** Leaderboard controller - HTTP layer over leaderboardService. */
 import * as leaderboardService from '../services/leaderboardService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

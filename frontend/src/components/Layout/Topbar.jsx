@@ -34,8 +34,8 @@ const PAGE_TITLES = {
   '/billing':                'nav.billing',
 };
 
-// Anything not in the map above still gets a properly capitalised heading
-// rather than the raw path, which used to read "rejected".
+// Anything not in the map above still gets a properly capitalised heading rather than the
+// raw path, which used to read "rejected".
 function titleFromPath(path) {
   const last = path.split('/').filter(Boolean).pop() || '';
   const s = last.replace(/-/g, ' ');
@@ -53,21 +53,13 @@ export default function Topbar({ onToggleSidebar }) {
   const [isDark, setIsDark]         = useState(document.documentElement.getAttribute('data-theme') === 'dark');
   const [showNotif, setShowNotif]   = useState(false);
   const [showLang, setShowLang]     = useState(false);
-  // The idea a notification points at, opened as an overlay from wherever the
-  // reader happens to be. Navigating to a list page and hoping it opens the
-  // right row would depend on that page's own state; this does not.
+  // The idea a notification points at, opened as an overlay from wherever the reader happens
+  // to be.
   const [notifIdeaId, setNotifIdeaId] = useState(null);
   const langMenuRef                  = useRef(null);
   const notifPanelRef                = useRef(null);
 
-  /**
-   * Open what a notification is about.
-   *
-   * Every notification the server writes carries the idea it concerns —
-   * submitted, escalated, assigned, committee-routed, approved, rejected,
-   * implemented — so this is not special-cased per type. Reading it also marks
-   * that one read, which is what a person means by opening it.
-   */
+  /** Open what a notification is about. */
   function openNotification(n) {
     markOneRead(n.id);
     if (n.idea_id) {
@@ -90,8 +82,8 @@ export default function Topbar({ onToggleSidebar }) {
 
   async function doLogout() {
     await logout();
-    // Signing out returns you to the sign-in screen, not to the public pitch
-    // page that now lives at "/".
+    // Signing out returns you to the sign-in screen, not to the public pitch page that now
+    // lives at "/".
     navigate('/login');
   }
 
@@ -157,10 +149,7 @@ export default function Topbar({ onToggleSidebar }) {
           )}
         </div>
 
-        {/* Notifications bell.
-            The panel is a child of this wrapper so it opens beneath the bell
-            rather than at the window's right edge — see .notif-wrap in the
-            stylesheet for why that changed. */}
+        {/* Notifications bell. The panel is a child of this wrapper so it opens beneath the bell rather than at the window's right edge - see.notif-wrap in the stylesheet for why that changed. */}
         <div className="notif-wrap">
           <div
             id="notif-bell-btn"
@@ -199,10 +188,8 @@ export default function Topbar({ onToggleSidebar }) {
                 {!notifs.length
                   ? <div className="empty-state">{t('msg.no_notif')}</div>
                   : notifs.map(n => {
-                    // Every notification the server writes carries the idea it
-                    // is about, so every one of them can be opened — not just
-                    // "new idea submitted". Where the link is genuinely absent
-                    // the row is rendered as text rather than a dead button.
+                    // Every notification the server writes carries the idea it is about, so every one of them
+                    // can be opened - not just "new idea submitted".
                     const canOpen = !!n.idea_id;
                     return (
                       <button
@@ -240,11 +227,7 @@ export default function Topbar({ onToggleSidebar }) {
           )}
         </div>
 
-        {/* User chip.
-            MOM §12.10 — a platform admin sees "Superadmin signed in as <name>"
-            rather than a bare name plus a role pill. These accounts can reach
-            every tenant on the platform, so which one you are currently acting
-            as should be a sentence, not something inferred from a chip. */}
+        {/* User chip. MOM §12.10 - a platform admin sees "Superadmin signed in as <name>" rather than a bare name plus a role pill. */}
         <div className="user-chip" onClick={() => navigate('/profile')}>
           <div className="avatar">{user?.avatar_initials || user?.name?.[0] || '?'}</div>
           {user?.role === 'platform_admin' ? (

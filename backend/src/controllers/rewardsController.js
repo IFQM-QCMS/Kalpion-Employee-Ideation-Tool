@@ -1,10 +1,4 @@
-/**
- * Rewards & Recognition — the org admin's reward pack.
- *
- * Three endpoints over one dataset: read it on screen, take it away as a
- * workbook, take it away as a PDF. The two downloads go through the same
- * service call as the screen, so what HR receives is what the admin saw.
- */
+/** Rewards & Recognition - the org admin's reward pack. */
 import * as rewards from '../services/rewardsService.js';
 import { buildRewardsWorkbook, buildRewardsPdf } from '../services/rewardsExportService.js';
 import { respond } from '../utils/respond.js';
@@ -22,19 +16,12 @@ const opts = (req) => ({
 /** A filename somebody can find again in a folder of thirty of them. */
 const stem = (range) => `rewards_${range.period}_${range.start}_to_${range.end}`;
 
-/*
- * The screen. Leaderboard only — the per-idea dossiers can run to thousands of
- * rows for a year, and a browser table is not where anybody reads those. The
- * downloads carry them.
- */
+// The screen. Leaderboard only - the per-idea dossiers can run to thousands of rows for a
+// year, and a browser table is not where anybody reads those.
 export const leaderboard = asyncHandler(async (req, res) =>
   respond(res, await rewards.rewardsLeaderboard(req.db, opts(req))));
 
-/*
- * The full pack as JSON, for a client that wants to render the detail itself.
- * Same shape the exports are built from, so a third format never has to
- * re-derive anything.
- */
+// The full pack as JSON, for a client that wants to render the detail itself.
 export const detail = asyncHandler(async (req, res) =>
   respond(res, await rewards.rewardsDetail(req.db, opts(req))));
 

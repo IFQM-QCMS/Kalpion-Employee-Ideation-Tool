@@ -1,7 +1,4 @@
-/**
- * Challenge routes — /api/challenges/*
- * Ported from PHP api/challenges.php. Role guards mirror the PHP requireRole().
- */
+/** Challenge routes - /api/challenges/* Ported from PHP api/challenges.php. */
 import { Router } from 'express';
 import * as challenges from '../controllers/challengeController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';

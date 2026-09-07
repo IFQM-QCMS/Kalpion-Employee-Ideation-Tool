@@ -1,6 +1,4 @@
-/**
- * Challenge controller — HTTP layer over challengeService. Maps to api/challenges.php.
- */
+/** Challenge controller - HTTP layer over challengeService. */
 import * as challengeService from '../services/challengeService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

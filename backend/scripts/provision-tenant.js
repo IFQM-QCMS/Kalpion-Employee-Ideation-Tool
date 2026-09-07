@@ -1,15 +1,4 @@
-/**
- * IFQM Tenant Provisioning CLI — Node port of provision_tenant.php.
- *
- * Usage:
- *   node scripts/provision-tenant.js --name="Acme Corp" --slug="acme" --domain="acme.example.com" \
- *        [--db-pass="secret"] [--db-user="root"] [--db-host="localhost"] \
- *        [--admin-email="admin@acme.example.com"] [--admin-pass="changeme"]
- *
- * Creates the tenant database, applies schema.sql, seeds a super_admin user and
- * the default approval settings, registers the tenant in ifqm_master, and
- * creates the per-tenant uploads directory.
- */
+/** IFQM Tenant Provisioning CLI - Node port of provision_tenant.php. */
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -100,11 +89,7 @@ async function main() {
   let tenantConn;
   try {
     // Send the schema as one batch and let the driver parse it, exactly as
-    // platformService.createTenant does. Splitting the file on ';' shattered any
-    // statement whose body contained a semicolon inside a comment (the
-    // `-- …estimate; …` note in the ideas table), so provisioning died with a
-    // bare SQL syntax error. It also breaks the PREPARE/EXECUTE guards the
-    // schema now uses for indexes.
+    // platformService.createTenant does.
     tenantConn = await mysql.createConnection({
       host: dbHost, port: config.db.port, ssl: config.db.ssl,
       user: dbUser, password: dbPass, database: dbName, charset: 'utf8mb4',
@@ -151,10 +136,7 @@ async function main() {
   // 5. Register in master DB
   try {
     await master.execute(
-      // db_user/db_pass are written empty on purpose. Tenant pools take their
-      // credentials from config (APP_DB_*), never from this row — see
-      // src/database/tenant.js — so persisting the live password here would put
-      // a working database login in the registry for no benefit.
+      // db_user/db_pass are written empty on purpose.
       `INSERT INTO tenants (name, slug, domain, db_host, db_name, db_user, db_pass, status, is_default)
        VALUES (?, ?, ?, ?, ?, '', '', 'active', 0)`,
       [name, slug, domain, dbHost, dbName]

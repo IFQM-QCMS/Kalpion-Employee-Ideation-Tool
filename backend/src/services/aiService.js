@@ -1,19 +1,8 @@
-/**
- * AI idea-scoring service — Node port of PHP api/score.php.
- *
- * A deterministic 6-dimension heuristic model produces a 0–100 score and a
- * human-readable reason. An optional LLM provider (OpenAI or Gemini) can score
- * first; when no provider/key is configured (the default) the provider call
- * returns null and the heuristic runs — exactly as the PHP app behaves with an
- * empty GEMINI_API_KEY.
- *
- * Every regex, threshold, weight, and cap below is a 1:1 port of score.php so
- * scores are identical to the PHP implementation.
- */
+/** AI idea-scoring service - Node port of PHP api/score.php. */
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 
-// ── Heuristic helpers ──────────────────────────────────────────────
+// Heuristic helpers
 
 /** Numbers paired with a unit/suffix, or a stand-alone multi-digit number. */
 export function isQuantified(text) {
@@ -32,7 +21,7 @@ export function countSentences(text) {
   return Math.max(1, n || 1);
 }
 
-/** Type-token ratio: unique words / total words (0.0–1.0). */
+/** Type-token ratio: unique words / total words (0.0-1.0). */
 export function lexicalDiversity(text) {
   const words = String(text).trim().toLowerCase().split(/\s+/).filter(Boolean);
   const total = words.length;
@@ -53,7 +42,7 @@ export function hasActionableSteps(text) {
   return patterns.some((p) => p.test(text));
 }
 
-/** Penalty (0–9) for generic low-value phrases; each hit +3, capped at 9. */
+/** Penalty (0-9) for generic low-value phrases; each hit +3, capped at 9. */
 export function genericPhrasePenalty(text) {
   text = String(text).toLowerCase();
   const phrases = [
@@ -73,9 +62,9 @@ export function wordCount(text) {
   return String(text).trim().split(/\s+/).filter(Boolean).length;
 }
 
-// ── Dimension scorers ──────────────────────────────────────────────
+// Dimension scorers
 
-/** Dimension 1 — Problem Clarity (0–20). */
+/** Dimension 1 - Problem Clarity (0-20). */
 export function scoreProblemClarity(sit) {
   if (String(sit).trim() === '') return 0;
   let score = 0;
@@ -106,7 +95,7 @@ export function scoreProblemClarity(sit) {
   return Math.max(0, Math.min(20, score));
 }
 
-/** Dimension 2 — Solution Quality (0–20). */
+/** Dimension 2 - Solution Quality (0-20). */
 export function scoreSolutionQuality(sol) {
   if (String(sol).trim() === '') return 0;
   let score = 0;
@@ -138,7 +127,7 @@ export function scoreSolutionQuality(sol) {
   return Math.max(0, Math.min(20, score));
 }
 
-/** Dimension 3 — Feasibility (0–15). */
+/** Dimension 3 - Feasibility (0-15). */
 export function scoreFeasibility(sol, sit, impactLevel) {
   let score = 0;
   const combined = `${String(sol)} ${String(sit)}`.toLowerCase();
@@ -167,7 +156,7 @@ export function scoreFeasibility(sol, sit, impactLevel) {
   return Math.max(0, Math.min(15, score));
 }
 
-/** Dimension 4 — Business Impact (0–20). */
+/** Dimension 4 - Business Impact (0-20). */
 export function scoreBusinessImpact(impactLevel, impAreas, tangible) {
   let score = 0;
 
@@ -188,7 +177,7 @@ export function scoreBusinessImpact(impactLevel, impAreas, tangible) {
   return Math.max(0, Math.min(20, score));
 }
 
-/** Dimension 5 — Measurability (0–10). */
+/** Dimension 5 - Measurability (0-10). */
 export function scoreMeasurability(tangible, sit, sol) {
   let score = 0;
 
@@ -205,7 +194,7 @@ export function scoreMeasurability(tangible, sit, sol) {
   return Math.max(0, Math.min(10, score));
 }
 
-/** Dimension 6 — Innovation / Uniqueness (0–15). */
+/** Dimension 6 - Innovation / Uniqueness (0-15). */
 export function scoreInnovation(sol, sit, impAreas) {
   let score = 0;
   const combined = `${String(sol)} ${String(sit)}`.toLowerCase();
@@ -238,9 +227,9 @@ export function scoreInnovation(sol, sit, impAreas) {
   return Math.max(0, Math.min(15, score));
 }
 
-// ── Core scoring engine ────────────────────────────────────────────
+// Core scoring engine
 
-/** Full breakdown + total (0–100). Mirrors scoreIdeaWithBreakdown(). */
+/** Full breakdown + total (0-100). Mirrors scoreIdeaWithBreakdown(). */
 export function scoreIdeaWithBreakdown(idea) {
   const sit = String(idea.present_situation ?? '').trim();
   const sol = String(idea.proposed_solution ?? '').trim();
@@ -285,7 +274,7 @@ export function buildFallbackReason(bd) {
   else if (bd.solution < 8) weaknesses.push('solution could be more detailed and concrete');
 
   if (bd.feasibility >= 10) strengths.push('implementation appears realistic');
-  else if (bd.feasibility < 5) weaknesses.push('feasibility is unclear — consider naming resources or timelines');
+  else if (bd.feasibility < 5) weaknesses.push('feasibility is unclear - consider naming resources or timelines');
 
   if (bd.impact >= 15) strengths.push('strong and broad business impact');
 
@@ -302,7 +291,7 @@ export function buildFallbackReason(bd) {
   return `Heuristic: ${body}`;
 }
 
-// ── Optional LLM provider ──────────────────────────────────────────
+// Optional LLM provider
 
 /** Build the evaluation prompt (identical text to score.php). */
 function buildPrompt(idea) {
@@ -313,7 +302,7 @@ function buildPrompt(idea) {
   const level = String(idea.impact_level ?? 'Medium');
   return `Evaluate this employee improvement idea for an operations/manufacturing company.
 
-Return ONLY valid JSON in this exact format — no markdown, no code fences, no extra text:
+Return ONLY valid JSON in this exact format - no markdown, no code fences, no extra text:
 {"score": <integer 0-100>, "reason": "<one sentence explanation>"}
 
 The reason must be a single sentence (max 20 words) summarising the key strength or weakness that most influenced the score.
@@ -359,7 +348,7 @@ async function callProvider(prompt) {
   } catch (e) {
     logger.error('AI provider call failed', e.message);
   }
-  return null; // no provider configured → heuristic fallback
+  return null; // no provider configured heuristic fallback
 }
 
 async function fetchJson(url, body, headers = {}) {
@@ -382,11 +371,7 @@ async function fetchJson(url, body, headers = {}) {
   }
 }
 
-/**
- * Primary scoring entry point. Tries the provider first, falls back to the
- * heuristic model. Mirrors computeAIScoreWithReason().
- * @returns {Promise<{score:number, reason:string, source:string, breakdown:object}>}
- */
+/** Primary scoring entry point. */
 export async function computeAIScoreWithReason(idea) {
   const content = await callProvider(buildPrompt(idea));
 
@@ -428,7 +413,7 @@ export async function saveIdeaScore(db, ideaId, score, reason = '') {
   await db.execute('UPDATE ideas SET ai_score = ?, ai_reason = ? WHERE id = ?', [score, reason, ideaId]);
 }
 
-// ── small utils ────────────────────────────────────────────────────
+// small utils
 function ucfirst(s) {
   s = String(s);
   return s.charAt(0).toUpperCase() + s.slice(1);

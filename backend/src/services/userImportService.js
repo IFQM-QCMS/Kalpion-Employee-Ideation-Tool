@@ -1,38 +1,4 @@
-/**
- * Bulk employee import — spreadsheet in, user accounts out.
- *
- * The flow an org admin sees:
- *   1. Download a template (.xlsx) — pre-filled with headers, an example row,
- *      and a role dropdown containing ONLY the roles they are allowed to assign.
- *   2. Fill one row per employee.
- *   3. Upload. The file is validated and a preview is shown (dry run) — nothing
- *      is written yet.
- *   4. Confirm. Accounts are created as a background job the UI polls.
- *
- * Design notes that matter (each of these is load-bearing):
- *
- *  • RBAC. Every row's role is checked against userService.assignableRoles(actor)
- *    — the same function single-user creation uses. A tenant admin typing
- *    "super_admin" into a cell gets that row rejected, not a promotion.
- *
- *  • Create-only, never upsert. If an employee_id or email already exists the
- *    row is SKIPPED and reported. Silently updating an existing user would let a
- *    careless sheet overwrite somebody's role or reset their password — an
- *    upload should never be able to do that.
- *
- *  • Hashing happens off the main thread, BEFORE the transaction opens.
- *    bcryptjs blocks; 10k hashes inline would freeze the server for ~39 minutes
- *    (see hashPool). And a transaction must never be held open for the minutes
- *    that hashing takes.
- *
- *  • Manager cycles are rejected. The super-admin hierarchy screen renders the
- *    reporting tree by recursion — a sheet where A reports to B and B reports to
- *    A would send it into infinite recursion and hang the browser.
- *
- *  • Every field is length-checked before insert. A single over-long value would
- *    otherwise abort an entire multi-row INSERT under MySQL strict mode, failing
- *    999 good rows because of one bad one.
- */
+/** Bulk employee import - spreadsheet in, user accounts out. */
 import ExcelJS from 'exceljs';
 import { Readable } from 'node:stream';
 import { assignableRoles } from './userService.js';
@@ -42,29 +8,25 @@ import { badRequest, notFound, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 import { isUsername, claimUsername, indexUser } from './directoryService.js';
 
-// ── Limits ──────────────────────────────────────────────────────────────────
+// Limits
 export const MAX_ROWS = 20000;      // hard ceiling per upload
 const INSERT_CHUNK = 500;           // rows per multi-row INSERT
 const TEMP_PASSWORD_ROUNDS = 10;    // see tempPasswordFor() for why not 12
 const STALE_JOB_MINUTES = 30;
 
-// ── Sheet definition (drives BOTH the template and the parser) ──────────────
+// Sheet definition (drives BOTH the template and the parser)
 export const COLUMNS = [
   { key: 'employee_id', header: 'employee_id', required: true,  max: 20,  width: 16,
     note: 'Unique ID for the employee. Required. This is the key the import de-duplicates on.' },
-  // MOM §13.4 — salutation / first name / last name. Date of birth used to sit
-  // in this list, first as a full date and then narrowed to a year, because the
-  // first-login password was built from it. Nothing is built from it any more
-  // and nothing else ever read it, so it is not collected at all.
+  // MOM §13.4 - salutation / first name / last name.
   { key: 'salutation',  header: 'salutation',  required: false, max: 10,  width: 11,
     note: 'Optional. Mr / Ms / Mrs / Dr / Prof.' },
   { key: 'first_name',  header: 'first_name',  required: true,  max: 60,  width: 18,
     note: 'Required.' },
   { key: 'last_name',   header: 'last_name',   required: false, max: 60,  width: 18,
-    note: 'Optional, but recommended — it is part of the displayed name.' },
-  // Since migration 025 an account signs in with a username OR an address, so
-  // neither is required on its own — the pair is, and that is checked per row.
-  // A workforce with no company mailboxes is the normal case this serves.
+    note: 'Optional, but recommended - it is part of the displayed name.' },
+  // Since migration 025 an account signs in with a username OR an address, so neither is
+  // required on its own - the pair is, and that is checked per row.
   { key: 'username',    header: 'username',    required: false, max: 50,  width: 18,
     note: 'Sign-in name, e.g. yashas123. Give this OR an email. Unique across the whole platform.' },
   { key: 'email',       header: 'email',       required: false, max: 150, width: 28,
@@ -74,14 +36,11 @@ export const COLUMNS = [
   { key: 'department',  header: 'department',  required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'business_unit', header: 'business_unit', required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'location',    header: 'location',    required: false, max: 100, width: 16, note: 'Optional.' },
-  // Required, like every other route that creates a user. A mobile number is
-  // what a sign-in code, a password reset and any later confirmation are sent
-  // to, and an import is precisely where a few hundred accounts would otherwise
-  // arrive without one — invisibly, until somebody cannot get in.
+  // Required, like every other route that creates a user.
   { key: 'phone',       header: 'phone',       required: true,  max: 20,  width: 16,
-    note: 'Required. Mobile number — sign-in codes and password resets are sent to it.' },
+    note: 'Required. Mobile number - sign-in codes and password resets are sent to it.' },
   { key: 'manager_employee_id', header: 'manager_employee_id', required: false, max: 20, width: 20,
-    note: "Optional. The employee_id of this person's manager — either an existing employee or another row in this sheet." },
+    note: "Optional. The employee_id of this person's manager - either an existing employee or another row in this sheet." },
 ];
 
 const HEADER_ALIASES = new Map();
@@ -92,15 +51,7 @@ for (const c of COLUMNS) {
 }
 // A few forgiving spellings, so a hand-edited header doesn't fail the upload.
 [['emp id', 'employee_id'], ['empid', 'employee_id'], ['employee code', 'employee_id'],
- // 'name' is a pre-MOM header. Kept as an alias so a sheet an organisation
- // already has on disk still imports — first_name absorbs a full name and is
- // split below.
- //
- // Birth columns are deliberately aliased to NOTHING. takeHeader() keeps only
- // the columns it recognises, so a year_of_birth or date_of_birth column left
- // in a sheet an organisation already has is dropped where it stands. That is
- // the behaviour we want: an old template must keep uploading, and the column
- // must not come back in through a side door.
+ // 'name' is a pre-MOM header.
  ['full name', 'first_name'], ['employee name', 'first_name'], ['name', 'first_name'],
  ['first name', 'first_name'], ['last name', 'last_name'], ['surname', 'last_name'],
  ['title', 'salutation'],
@@ -115,93 +66,28 @@ function normaliseHeader(s) {
   return String(s ?? '').toLowerCase().replace(/[\s_\-.]+/g, ' ').trim();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Temporary password
-// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * First 4 letters of the NAME + the last 4 digits of the phone number.
- * "Yashas" / 7975495881 -> "yash5881".
- *
- * ── The name, not the username ─────────────────────────────────────────────
- *
- * This read the username for a while, on the reasoning that the username is the
- * other thing the employee types on the same screen, so a password derived from
- * it is easier to dictate without confusion.
- *
- * The name is what is wanted, and it is the better answer for the situation
- * this credential actually exists in. These accounts belong to people with no
- * mailbox, so the password is passed on out loud — by a supervisor, on a shop
- * floor, often to somebody who has not yet been told what their username is.
- * "The first four letters of your name" is an instruction that needs no
- * lookup and survives being repeated down a noisy line; "the first four
- * characters of your username" needs the username to hand before it means
- * anything at all.
- *
- * Only newly created accounts are affected. An existing password is a stored
- * hash, not a formula re-evaluated at sign-in, so nobody is locked out by this.
- *
- * ── Letters, not characters ────────────────────────────────────────────────
- *
- * Digits and punctuation are stripped from the name before slicing, so
- * "R. Kumar" gives "rkum" — the first four LETTERS, in the order they appear.
- * A name that is left with nothing
- * — a non-Latin script, say — falls back through the username and then the
- * employee id, so the result stays per-person rather than becoming a shared
- * default.
- *
- * ── This is still a bootstrap credential ───────────────────────────────────
- *
- * It is guessable, deliberately: a colleague who knows the username and the
- * number can compute it. That is tolerable ONLY because `must_change_password`
- * is set and the auth middleware refuses every other endpoint until it is
- * replaced. It is exempt from the password policy for the same reason; what the
- * employee then chooses is not.
- *
- * It is hashed at cost 10 rather than 12. Stretching a password that is
- * guessable by design buys nothing, and cost 12 would double the time of a
- * 20,000-row import for no security gain.
- */
+
+/** First 4 letters of the NAME + the last 4 digits of the phone number. */
 export function tempPasswordFor(username, phone, name, employeeId) {
-  /*
-   * Letters only for the name, because "the first four LETTERS of your name" is
-   * what the employee is told, and that is a sentence somebody can follow with
-   * no reference material. Non-letters simply do not count: "R. Kumar" gives
-   * "rkum" — r, k, u, m — and "Mary-Anne" gives "mary".
-   */
+  // Letters only for the name, because "the first four LETTERS of your name" is what the
+  // employee is told, and that is a sentence somebody can follow with no reference material.
   const letters = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z]/g, '').toLowerCase();
-  /*
-   * The fallbacks keep digits, because a username or an employee id may be
-   * mostly numeric and dropping those would collapse different people onto the
-   * same password. Punctuation still comes out — a dot read down a phone line
-   * is a word, not a character.
-   */
+  // The fallbacks keep digits, because a username or an employee id may be mostly numeric
+  // and dropping those would collapse different people onto the same password.
   const alnum = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
 
   let base = letters(name).slice(0, 4);
   if (!base) base = alnum(username).slice(0, 4);
   if (!base) {
-    /*
-     * A name in a non-Latin script with no username leaves nothing to slice, so
-     * the employee id is the last thing that can keep this per-person.
-     *
-     * Taken from the END of the id, not the start. Employee ids are almost
-     * always a shared prefix and a serial — EMP001, EMP002 — so the first four
-     * characters collapse a whole workforce onto "emp0" and hand colleagues
-     * each other's passwords. The last four are the part that actually varies.
-     * (The phone suffix usually differs too, but two people can share a
-     * number on a shop floor, and this should not depend on that.)
-     */
+    // A name in a non-Latin script with no username leaves nothing to slice, so the employee
+    // id is the last thing that can keep this per-person.
     base = alnum(employeeId).slice(-4);
   }
   if (!base) base = 'user';
 
-  /*
-   * The LAST four digits, after stripping everything that is not a digit, so
-   * +91 79754 95881 and 07975495881 and 7975495881 all land on the same four.
-   * Taking them from the end is what makes that true — a country code changes
-   * the front of the string and never the back.
-   */
+  // The LAST four digits, after stripping everything that is not a digit, so +91 79754 95881
+  // and 07975495881 and 7975495881 all land on the same four.
   const digits = String(phone ?? '').replace(/\D/g, '');
   const tail = digits.slice(-4);
   const suffix = tail.length === 4 ? tail : tail.padStart(4, '0');
@@ -209,16 +95,7 @@ export function tempPasswordFor(username, phone, name, employeeId) {
   return `${base.padEnd(4, 'x')}${suffix}`;
 }
 
-/**
- * A password nobody can derive, for accounts we can actually deliver one to.
- *
- * Where there is an address, the credential travels privately, so there is no
- * reason to hand out a guessable one — the derived formula exists only because
- * a shop-floor account has no channel and someone has to read it aloud.
- *
- * Ambiguous characters are left out on purpose. This gets retyped by hand from
- * an email, and O/0 and l/1/I are where that goes wrong.
- */
+/** A password nobody can derive, for accounts we can actually deliver one to. */
 export function randomTempPassword() {
   const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   const bytes = randomBytes(12);
@@ -227,11 +104,9 @@ export function randomTempPassword() {
   return out;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Template
-// ─────────────────────────────────────────────────────────────────────────────
 
-/** Build the .xlsx template. The role dropdown is scoped to the actor's rights. */
+
+/** Build the.xlsx template. The role dropdown is scoped to the actor's rights. */
 export async function buildTemplate(actorRole) {
   const roles = assignableRoles(actorRole);
 
@@ -265,8 +140,8 @@ export async function buildTemplate(actorRole) {
   });
   ws.getRow(2).font = { italic: true, color: { argb: 'FF6B7280' } };
 
-  // Role dropdown, restricted to what THIS admin may assign. A super_admin sees
-  // 'admin' in the list; an admin does not.
+  // Role dropdown, restricted to what THIS admin may assign. A super_admin sees 'admin' in
+  // the list; an admin does not.
   const roleCol = COLUMNS.findIndex((c) => c.key === 'role') + 1;
   const letter = ws.getColumn(roleCol).letter;
   for (let r = 2; r <= 5000; r++) {
@@ -278,15 +153,7 @@ export async function buildTemplate(actorRole) {
       errorTitle: 'Invalid role',
       error: `Choose one of: ${roles.join(', ')}`,
     };
-    /*
-     * Phone numbers as TEXT.
-     *
-     * This pin used to be here for the birth date. It matters at least as much
-     * for a phone number, and for a nastier reason: Excel reads 9876543210 as a
-     * number, and a leading zero on 07975495881 is dropped on sight. The last
-     * four digits still survive that, but the number itself no longer reaches
-     * the employee's handset — which is where their sign-in codes go.
-     */
+    // Phone numbers as TEXT.
     const phoneCol = COLUMNS.findIndex((c) => c.key === 'phone') + 1;
     ws.getCell(`${ws.getColumn(phoneCol).letter}${r}`).numFmt = '@';
   }
@@ -299,18 +166,18 @@ export async function buildTemplate(actorRole) {
     if (bold) row.font = { bold: true };
     row.alignment = { vertical: 'top', wrapText: true };
   };
-  h('IFQM — Bulk employee import', '', true);
+  h('IFQM - Bulk employee import', '', true);
   h('', '');
-  h('How it works', 'Fill in one row per employee on the "Employees" sheet, then upload this file in Admin → User List → Bulk Import. Delete the grey example row before uploading (or leave it — EMP001 will simply be reported as invalid if the data is not real).');
+  h('How it works', 'Fill in one row per employee on the "Employees" sheet, then upload this file in Admin → User List → Bulk Import. Delete the grey example row before uploading (or leave it - EMP001 will simply be reported as invalid if the data is not real).');
   h('', '');
   h('First-time password', 'It depends on whether the row has an email address, and you do not have to do anything either way.');
   h('  With an email', 'A random password is generated and emailed to them directly. You never see it and do not need to pass anything on. Tell them to check their inbox.');
   h('  Without an email', 'The password is the first 4 LETTERS of their name, lowercased, followed by the LAST 4 DIGITS of their phone number. Example: "Yashas" on 7975495881 → yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. This one is shown to you after the import, because you have to pass it on yourself.');
-  h('Either way', 'They MUST change it the first time they sign in — until they do, they cannot use any other part of the app.');
+  h('Either way', 'They MUST change it the first time they sign in - until they do, they cannot use any other part of the app.');
   h('Important', 'A password built from a name and a phone number can be worked out by any colleague who knows both. Ask those employees to sign in and change it promptly, and treat the account as not-yet-secure until they have.');
-  h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored — you do not need to delete it before uploading.');
+  h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored - you do not need to delete it before uploading.');
   h('', '');
-  h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe — it will not touch anyone who already has an account.');
+  h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe - it will not touch anyone who already has an account.');
   h('Roles', `You may assign: ${roles.join(', ')}. Anything else will be rejected. Leave the cell blank for "employee".`);
   h('Plant Head', 'One per organisation. The approval chain ends there, so a second one would '
     + 'mean an idea\'s final approval depended on which plant head it happened to reach. A row '
@@ -324,9 +191,7 @@ export async function buildTemplate(actorRole) {
   return wb.xlsx.writeBuffer();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Parsing
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 /** ExcelJS hands back strings, numbers, Dates, rich text, formulas or links. */
 function cellToString(v) {
@@ -343,11 +208,7 @@ function cellToString(v) {
   return String(v).trim();
 }
 
-/**
- * Read the sheet into raw {rowNumber, values} objects.
- * Streams, so a hostile file cannot be expanded into memory — we bail the moment
- * the row cap is passed rather than after parsing the whole thing.
- */
+/** Read the sheet into raw {rowNumber, values} objects. */
 async function parseSheet(buffer, filename) {
   const isCsv = /\.csv$/i.test(filename || '');
   const rows = [];
@@ -377,19 +238,7 @@ async function parseSheet(buffer, filename) {
       throw badRequest(`This file has more than ${MAX_ROWS.toLocaleString()} rows. Split it into smaller files.`);
     }
   } else {
-    /*
-     * Load the whole workbook rather than stream it.
-     *
-     * The streaming WorkbookReader was intermittently blowing up inside exceljs
-     * with "Cannot read properties of undefined (reading 'sheets')" — it depends
-     * on the order entries come out of the zip, and reads the workbook model
-     * before that model has necessarily been parsed. The same file parsed fine
-     * one minute and 500'd the next. A parser that works most of the time is
-     * worse than one that is merely slower, so: deterministic load.
-     *
-     * Memory is bounded by the 15 MB upload cap plus the MAX_ROWS check below;
-     * a legitimate 20,000-row sheet is only a few MB of cell data.
-     */
+    // Load the whole workbook rather than stream it.
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buffer);
 
@@ -427,24 +276,13 @@ async function parseSheet(buffer, filename) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Validation
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/*
- * Roles an organisation may fill exactly once. Mirrors SINGLETON_ROLES in
- * userService, which is where the reasoning lives — the chain ends at the plant
- * head, so two of them means final approval depends on which one an idea
- * happened to reach.
- */
+// Roles an organisation may fill exactly once.
 const SINGLETON_ROLES_LIST = ['plant_head'];
-/**
- * Validate every row against the DB, the sheet itself, and the actor's rights.
- * Pure: touches no state, writes nothing. Used by both the dry run and the
- * commit, so the preview can never disagree with what actually happens.
- */
+/** Validate every row against the DB, the sheet itself, and the actor's rights. */
 export async function validateRows(db, actor, records) {
   const allowedRoles = assignableRoles(actor.role);
 
@@ -453,18 +291,7 @@ export async function validateRows(db, actor, records) {
     'SELECT id, employee_id, LOWER(email) AS email, LOWER(username) AS username FROM users'
   );
 
-  /*
-   * Roles this organisation may fill only once, and who has them.
-   *
-   * The console refuses a second plant head; a spreadsheet is the other door
-   * into this table and would otherwise walk straight past that rule. Worse
-   * than the console case, too: an import can appoint two in the same upload,
-   * so the sheet is checked against itself as well as against the database.
-   *
-   * Keyed by employee_id rather than row id, because that is what the sheet
-   * uses to say "this is the same person" — re-importing a sheet that contains
-   * the sitting plant head must not be rejected for containing them.
-   */
+  // Roles this organisation may fill only once, and who has them.
   const [heldRows] = await db.query(
     `SELECT role, employee_id, name FROM users
       WHERE status = 'active' AND role IN (?)`, [SINGLETON_ROLES_LIST]);
@@ -499,12 +326,7 @@ export async function validateRows(db, actor, records) {
   for (const rec of records) {
     const employeeId = (rec.employee_id || '').trim();
     const salutation = (rec.salutation || '').trim();
-    /*
-     * MOM §13.4 — the sheet now carries first and last name separately. An old
-     * sheet with a single `name` column maps onto first_name via the header
-     * alias, so split it back out here rather than storing someone's full name
-     * as their first name.
-     */
+    // MOM §13.4 - the sheet now carries first and last name separately.
     let firstName = (rec.first_name || '').trim();
     let lastName  = (rec.last_name  || '').trim();
     if (!lastName && firstName.includes(' ')) {
@@ -512,25 +334,25 @@ export async function validateRows(db, actor, records) {
       firstName = parts.shift();
       lastName = parts.join(' ');
     }
-    // `name` stays the displayed identity everywhere else in the product, so it
-    // is composed rather than replaced — nothing downstream has to change.
+    // `name` stays the displayed identity everywhere else in the product, so it is composed
+    // rather than replaced - nothing downstream has to change.
     const name = [firstName, lastName].filter(Boolean).join(' ').trim();
     const email = (rec.email || '').trim().toLowerCase();
     const username = (rec.username || '').trim().toLowerCase();
 
-    // ── required ──
+    // required
     if (!employeeId) { reject(rec, 'employee_id is required.'); continue; }
     if (!name)       { reject(rec, 'name is required.'); continue; }
     if (!email && !username) {
-      reject(rec, 'Give a username or an email — one of the two is how this person signs in.');
+      reject(rec, 'Give a username or an email - one of the two is how this person signs in.');
       continue;
     }
     if (username && !isUsername(username)) {
-      reject(rec, `"${username}" is not a valid username — 3-30 characters of letters, numbers, dot, underscore or hyphen, including at least one letter.`);
+      reject(rec, `"${username}" is not a valid username - 3-30 characters of letters, numbers, dot, underscore or hyphen, including at least one letter.`);
       continue;
     }
 
-    // ── lengths (a single over-long value would abort the whole batch INSERT) ──
+    // lengths (a single over-long value would abort the whole batch INSERT)
     let tooLong = null;
     for (const c of COLUMNS) {
       const v = (rec[c.key] || '').trim();
@@ -540,34 +362,21 @@ export async function validateRows(db, actor, records) {
 
     if (email && !EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
 
-    /*
-     * ── The first-login credential, decided once, here ────────────────────
-     *
-     * It used to be recomputed from the row in three separate places (preview,
-     * insert, and the result report). That was safe only while the formula was
-     * a pure function of the sheet. It no longer is: an account with an address
-     * gets a RANDOM password, so recomputing it would produce a different one
-     * in each of those places — the admin would be shown a password that was
-     * never actually set.
-     *
-     * So it is decided on the row and carried. `temp_password_derived` records
-     * WHICH rule produced it, because that is what decides whether the value is
-     * safe to show the admin: a derived password they must read out to somebody
-     * is meant to be shown, and a random one that was emailed privately is not.
-     */
+    // It used to be recomputed from the row in three separate places (preview, insert, and the
+    // result report).
     const phoneDigits = (rec.phone || '').replace(/\D/g, '');
     const hasEmail = !!email;
     const tempPassword = hasEmail ? randomTempPassword()
       : tempPasswordFor(username, phoneDigits, name, employeeId);
 
-    // ── role: the RBAC gate ──
+    // role: the RBAC gate
     const role = (rec.role || '').trim().toLowerCase() || 'employee';
     if (!allowedRoles.includes(role)) {
       reject(rec, `You are not allowed to assign the role "${role}". Allowed: ${allowedRoles.join(', ')}.`);
       continue;
     }
 
-    // ── one per organisation: plant head ──
+    // one per organisation: plant head
     if (singletonHeldBy.has(role)) {
       const held = singletonHeldBy.get(role);
       if (held.employee_id !== employeeId.toLowerCase()) {
@@ -577,50 +386,47 @@ export async function validateRows(db, actor, records) {
         continue;
       }
     } else if (SINGLETON_ROLES_LIST.includes(role)) {
-      // Nobody holds it yet — this row takes it, and any later row asking for
-      // the same role is now the duplicate. Recorded here so two rows in one
-      // sheet cannot both be accepted.
+      // Nobody holds it yet - this row takes it, and any later row asking for the same role is
+      // now the duplicate.
       singletonHeldBy.set(role, { employee_id: employeeId.toLowerCase(), name });
     }
 
-    // ── duplicates: inside the sheet ──
+    // duplicates: inside the sheet
     const empKey = employeeId.toLowerCase();
     if (seenEmpId.has(empKey)) {
-      reject(rec, `Duplicate employee_id "${employeeId}" — already used on row ${seenEmpId.get(empKey)}.`);
+      reject(rec, `Duplicate employee_id "${employeeId}" - already used on row ${seenEmpId.get(empKey)}.`);
       continue;
     }
     if (email && seenEmail.has(email)) {
-      reject(rec, `Duplicate email "${email}" — already used on row ${seenEmail.get(email)}.`);
+      reject(rec, `Duplicate email "${email}" - already used on row ${seenEmail.get(email)}.`);
       continue;
     }
 
-    // ── duplicates: against existing users (SKIP, never overwrite) ──
+    // duplicates: against existing users (SKIP, never overwrite)
     if (byEmpId.has(empKey)) {
-      reject(rec, `An employee with ID "${employeeId}" already exists — row skipped (existing users are never modified by an import).`);
+      reject(rec, `An employee with ID "${employeeId}" already exists - row skipped (existing users are never modified by an import).`);
       continue;
     }
     if (email && emails.has(email)) {
-      reject(rec, `A user with email "${email}" already exists — row skipped (existing users are never modified by an import).`);
+      reject(rec, `A user with email "${email}" already exists - row skipped (existing users are never modified by an import).`);
       continue;
     }
 
     seenEmpId.set(empKey, rec.__row);
     if (email) seenEmail.set(email, rec.__row);
 
-    /*
-     * Usernames, twice over. Within the sheet and within this tenant is what can
-     * be answered here; the platform-wide claim happens at insert time, because
-     * a name may be held by a different customer entirely and this function is
-     * deliberately pure — it reads nothing outside the tenant and writes
-     * nothing at all, so the preview and the commit cannot disagree.
-     */
+    // Usernames, twice over. Within the sheet and within this tenant is what can be answered
+    // here; the platform-wide claim happens at insert time, because a name may be held by a
+    // different customer entirely and this function is deliberately pure - it reads nothing
+    // outside the tenant and writes nothing at all, so the preview and the commit cannot
+    // disagree.
     if (username) {
       if (seenUsername.has(username)) {
-        reject(rec, `Duplicate username "${username}" — already used on row ${seenUsername.get(username)}.`);
+        reject(rec, `Duplicate username "${username}" - already used on row ${seenUsername.get(username)}.`);
         continue;
       }
       if (usernames.has(username)) {
-        reject(rec, `A user with username "${username}" already exists — row skipped (existing users are never modified by an import).`);
+        reject(rec, `A user with username "${username}" already exists - row skipped (existing users are never modified by an import).`);
         continue;
       }
       seenUsername.set(username, rec.__row);
@@ -646,20 +452,15 @@ export async function validateRows(db, actor, records) {
     });
   }
 
-  // ── managers: resolve, then reject cycles ──
+  // managers: resolve, then reject cycles
   resolveManagers(valid, byEmpId, reject);
 
   return { valid: valid.filter((r) => !r.__rejected), errors };
 }
 
-/**
- * A manager may be an existing employee or another row in this same sheet
- * (forward references are fine). Anything unresolvable, self-referential, or
- * circular is rejected.
- *
- * Cycles matter beyond tidiness: the org-hierarchy screen renders the reporting
- * tree by recursing into each node's children, so A→B→A would recurse until the
- * browser tab dies.
+/*
+ * A manager may be an existing employee or another row in this same sheet (forward
+ * references are fine).
  */
 function resolveManagers(valid, existingByEmpId, reject) {
   const inSheet = new Map(valid.map((r) => [r.employee_id.toLowerCase(), r]));
@@ -681,12 +482,12 @@ function resolveManagers(valid, existingByEmpId, reject) {
     } else {
       r.__rejected = true;
       reject({ __row: r.__row, employee_id: r.employee_id, email: r.email },
-        `Manager "${r.manager_employee_id}" was not found — it must be an existing employee_id or another row in this sheet.`);
+        `Manager "${r.manager_employee_id}" was not found - it must be an existing employee_id or another row in this sheet.`);
     }
   }
 
-  // Cycles can only form among NEW rows: an existing user's manager was set
-  // before this import and can never point at somebody who does not exist yet.
+  // Cycles can only form among NEW rows: an existing user's manager was set before this
+  // import and can never point at somebody who does not exist yet.
   const state = new Map(); // 0 = visiting, 1 = done
   const inCycle = new Set();
 
@@ -719,27 +520,14 @@ function resolveManagers(valid, existingByEmpId, reject) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Commit
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 function avatarInitials(name) {
   return String(name || '').split(' ').filter(Boolean).slice(0, 2)
     .map((w) => w[0].toUpperCase()).join('').slice(0, 4);  // column is VARCHAR(4)
 }
 
-/**
- * Insert the validated rows.
- *
- * Hashing happens first, on worker threads, OUTSIDE the transaction — holding a
- * transaction open for the minutes bcrypt needs would pin locks and undo log for
- * no reason.
- *
- * Then one transaction: insert everyone with manager_id NULL, then link managers
- * in a second pass. The two passes sidestep insert-ordering entirely — a row can
- * reference a manager that appears later in the same sheet without us having to
- * topologically sort anything.
- */
+/** Insert the validated rows. */
 async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
   const hashes = await hashMany(
     rows.map((r) => ({ key: r.employee_id, password: r.temp_password })),
@@ -753,7 +541,7 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
   try {
     await conn.beginTransaction();
 
-    // Pass 1 — everyone, manager_id NULL for now.
+    // Pass 1 - everyone, manager_id NULL for now.
     for (let i = 0; i < rows.length; i += INSERT_CHUNK) {
       const chunk = rows.slice(i, i + INSERT_CHUNK);
       const values = chunk.map((r) => [
@@ -767,13 +555,13 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
             location, role, avatar_initials, salutation, first_name, last_name,
             status, points, must_change_password, password_changed_at)
          VALUES ?`,
-        // The trailing constants are appended per-row below via map, so keep the
-        // shape in sync with the column list above.
+        // The trailing constants are appended per-row below via map, so keep the shape in sync
+        // with the column list above.
         [values.map((v) => [...v, 'active', 0, 1, new Date()])]
       );
     }
 
-    // Pass 2 — resolve manager ids now that every row has one.
+    // Pass 2 - resolve manager ids now that every row has one.
     const [created] = await conn.query(
       'SELECT id, employee_id FROM users WHERE employee_id IN (?)',
       [rows.map((r) => r.employee_id)]
@@ -803,18 +591,7 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
 
     await conn.commit();
 
-    /*
-     * Claim the imported usernames platform-wide, now that the rows exist.
-     *
-     * validateRows() already refused any name held inside this tenant, but a
-     * username is unique across every customer and that question can only be
-     * answered by the registry. Any name lost here — because another
-     * organisation claimed it between the preview and now — is cleared from the
-     * account rather than left in place: a username that resolves to somebody
-     * else's database would send this employee to a stranger's login, which is
-     * far worse than an account that signs in by email or has to be given a
-     * name by hand.
-     */
+    // Claim the imported usernames platform-wide, now that the rows exist.
     if (tenant) {
       const named = rows.filter((r) => r.username);
       for (const r of named) {
@@ -822,12 +599,12 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
         if (!userId) continue;
         const won = await claimUsername(tenant, userId, r.username).catch(() => false);
         if (!won) {
-          logger.warn(`import: username "${r.username}" was already taken — cleared on ${r.employee_id}`);
+          logger.warn(`import: username "${r.username}" was already taken - cleared on ${r.employee_id}`);
           await db.execute('UPDATE users SET username = NULL WHERE id = ?', [userId]).catch(() => {});
         }
       }
-      // Addresses and numbers go in the directory the ordinary way, so imported
-      // accounts can sign in without an org code like any other.
+      // Addresses and numbers go in the directory the ordinary way, so imported accounts can
+      // sign in without an org code like any other.
       for (const r of rows) {
         const userId = idByEmp.get(r.employee_id.toLowerCase());
         if (userId) indexUser(tenant, { id: userId, email: r.email, phone: r.phone }).catch(() => {});
@@ -843,9 +620,7 @@ async function insertUsers(db, rows, onProgress, onPhase, tenant = null) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Jobs
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 /** Dry run: validate and report, write nothing. */
 export async function preview(db, actor, buffer, filename) {
@@ -857,15 +632,7 @@ export async function preview(db, actor, buffer, filename) {
     valid_count: valid.length,
     invalid_count: errors.length,
     // enough to show a table without shipping 20k rows to the browser
-    /*
-     * Enough to show a table without shipping 20k rows to the browser.
-     *
-     * The password shown here is the DERIVED one only. A preview is a separate
-     * parse from the import that follows it, so a random password generated now
-     * is not the one the import will set — showing it would be showing a
-     * credential that never existed. Emailed accounts are reported as emailed
-     * instead, which is the fact the admin actually needs.
-     */
+    // Enough to show a table without shipping 20k rows to the browser.
     sample: valid.slice(0, 10).map((r) => ({
       employee_id: r.employee_id, name: r.name, email: r.email, role: r.role,
       temp_password: r.temp_password_derived ? r.temp_password : null,
@@ -877,8 +644,8 @@ export async function preview(db, actor, buffer, filename) {
 
 /** Kick off a real import. Returns immediately; the work happens in background. */
 export async function startImport(db, actor, buffer, filename, tenant = null) {
-  // One at a time per tenant: two concurrent imports of the same file would race
-  // on the same employee_ids and one would die on the unique index.
+  // One at a time per tenant: two concurrent imports of the same file would race on the same
+  // employee_ids and one would die on the unique index.
   const [running] = await db.query(
     "SELECT id FROM user_import_jobs WHERE status IN ('pending','running') ORDER BY id DESC LIMIT 1"
   );
@@ -886,8 +653,8 @@ export async function startImport(db, actor, buffer, filename, tenant = null) {
     throw new ApiError(409, 'An import is already running for this organisation. Wait for it to finish.');
   }
 
-  // Parse + validate up-front so an unusable file fails fast, with a real error,
-  // instead of "succeeding" into a background job that then fails.
+  // Parse + validate up-front so an unusable file fails fast, with a real error, instead of
+  // "succeeding" into a background job that then fails.
   const records = await parseSheet(buffer, filename);
   const { valid, errors } = await validateRows(db, actor, records);
 
@@ -903,15 +670,7 @@ export async function startImport(db, actor, buffer, filename, tenant = null) {
   if (errors.length) await saveErrors(db, jobId, errors);
 
   // Run detached. Never await: the HTTP response must not wait minutes.
-  /*
-   * `tenant` is passed explicitly.
-   *
-   * runJob already referred to it and never received it — in an ES module that
-   * is a ReferenceError, thrown the moment the job reached insertUsers, so the
-   * import failed every time with a message that named a variable rather than
-   * anything an administrator could act on. It failed into the .catch below, so
-   * the job was marked failed and the HTTP request had already returned 200.
-   */
+  // `tenant` is passed explicitly.
   runJob(db, jobId, valid, tenant).catch(async (err) => {
     logger.error(`user import job ${jobId} failed`, err);
     await db.execute(
@@ -952,32 +711,15 @@ async function runJob(db, jobId, valid, tenant = null) {
 
   const created = await insertUsers(db, valid, onProgress, onPhase, tenant);
 
-  /*
-   * ── Hand out the credentials we can hand out ourselves ──────────────────
-   *
-   * Everybody in `valid` with an address was given a random password that is
-   * deliberately not reported back to the admin, because it goes to the person
-   * it belongs to instead. If this step did not run, those accounts would exist
-   * with a password nobody alive knows — unopenable, and only recoverable
-   * through a password reset the employee has no reason to think of.
-   *
-   * It runs AFTER the insert and outside its transaction. Sending mail inside
-   * the transaction would hold locks open for the length of an SMTP
-   * conversation per row, and a failed send would roll back accounts that were
-   * created perfectly well.
-   *
-   * A send that fails is logged and counted, never thrown: the accounts are
-   * already real, and failing the whole job here would tell the admin their
-   * import did not work when it did. The count is reported on the job so the
-   * failure is visible rather than silent.
-   */
+  // Everybody in `valid` with an address was given a random password that is deliberately
+  // not reported back to the admin, because it goes to the person it belongs to instead.
   await onPhase?.('emailing');
   const emailedRows = valid.filter((r) => r.email && !r.temp_password_derived);
   let emailedOk = 0;
   if (emailedRows.length) {
     const { sendTemporaryPassword } = await import('./mailerService.js');
-    // A few at a time. One at a time is needlessly slow over a few hundred
-    // rows; all at once opens a few hundred sockets and gets us rate-limited.
+    // A few at a time. One at a time is needlessly slow over a few hundred rows; all at once
+    // opens a few hundred sockets and gets us rate-limited.
     const BATCH = 5;
     for (let i = 0; i < emailedRows.length; i += BATCH) {
       const results = await Promise.all(emailedRows.slice(i, i + BATCH).map((r) =>
@@ -1000,26 +742,7 @@ async function runJob(db, jobId, valid, tenant = null) {
     }
   }
 
-  /*
-   * ── Two writes, and the order matters ──────────────────────────────────
-   *
-   * The job is marked complete FIRST, using only columns that have always
-   * existed. The email counters go in a second statement that is allowed to
-   * fail.
-   *
-   * This is about deploy order, which this project has been bitten by before.
-   * Code reaches production the moment it is pushed — Render deploys from main
-   * — while a migration is applied by hand, so for some window the new code is
-   * running against the old schema. If the completion UPDATE named
-   * emailed_count, that window would be one where a bulk import created every
-   * account, sent every welcome email, and then reported itself FAILED because
-   * of a column that exists only to report a number.
-   *
-   * Splitting them means the worst case is a job that succeeded and cannot say
-   * how much mail it sent, which is a missing detail rather than a lie. Once
-   * migration 031 is applied the second statement starts working with no code
-   * change and no restart.
-   */
+  // The job is marked complete FIRST, using only columns that have always existed.
   await db.execute(
     `UPDATE user_import_jobs
         SET status='completed', phase=NULL, processed_rows=?, created_count=?, finished_at=NOW()
@@ -1058,8 +781,8 @@ async function isStale(db, jobId) {
   const idle = Number(rows[0]?.idle_min ?? 0);
   if (idle < STALE_JOB_MINUTES) return false;
 
-  // The insert runs in a single transaction, so a crashed job created nothing —
-  // marking it failed is safe and leaves no half-imported users behind.
+  // The insert runs in a single transaction, so a crashed job created nothing - marking it
+  // failed is safe and leaves no half-imported users behind.
   await db.execute(
     "UPDATE user_import_jobs SET status='failed', finished_at=NOW(), error_message='Interrupted (server restarted or crashed). No accounts were created.' WHERE id=? AND status IN ('pending','running')",
     [jobId]
@@ -1084,8 +807,7 @@ export async function getJob(db, jobId) {
 
 async function topErrors(db, jobId, limit = 200) {
   // The row cap is built into the text, not bound: MySQL 8.4 rejects LIMIT as a
-  // prepared-statement parameter. Clamped to an integer first, so nothing but a
-  // number can reach the statement.
+  // prepared-statement parameter.
   const n = Math.min(Math.max(parseInt(limit, 10) || 200, 1), 1000);
   const [rows] = await db.execute(
     'SELECT `row_number`, employee_id, email, message FROM user_import_errors '
@@ -1103,10 +825,7 @@ export async function errorsCsv(db, jobId) {
     [id]
   );
 
-  // These values came from an uploaded spreadsheet and are going straight back
-  // into one. A cell starting with = + - or @ is executed as a formula by Excel,
-  // so neutralise it — otherwise we would be handing the admin a CSV-injection
-  // payload authored by whoever supplied the sheet.
+  // These values came from an uploaded spreadsheet and are going straight back into one.
   const esc = (v) => {
     let s = String(v ?? '');
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;

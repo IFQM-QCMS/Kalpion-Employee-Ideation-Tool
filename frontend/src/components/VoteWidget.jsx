@@ -1,16 +1,4 @@
-/*
- * Up/down voting, sized to sit inside a table cell.
- *
- * This lived privately inside AllIdeasPage. The idea board now shows the same
- * rows in the same table shape and needs the same control, and two copies of a
- * voting button is how the two screens start disagreeing about what a vote
- * looks like — or worse, about whether you may vote for your own idea.
- *
- * `isSelf` disables both buttons rather than hiding them, so the row keeps its
- * column width and an author can still see the tally their idea has attracted.
- * The server enforces the same rule; this only avoids offering a click that
- * would be refused.
- */
+// Up/down voting, sized to sit inside a table cell.
 export default function VoteWidget({ ideaId, isSelf, upvotes, downvotes, userVote, onVote }) {
   return (
     <div style={{ display:'inline-flex',alignItems:'center',gap:4 }}>

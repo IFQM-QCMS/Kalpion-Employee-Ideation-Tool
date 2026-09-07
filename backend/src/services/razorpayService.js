@@ -1,25 +1,4 @@
-/**
- * Razorpay — raising an order, and verifying that a payment really happened.
- *
- * ── The one rule that matters ──────────────────────────────────────────────
- *
- * The browser tells us a payment succeeded. The browser is not a source of
- * truth. Razorpay's checkout hands back a payment id, an order id and a
- * signature; the signature is an HMAC of the first two, keyed with our secret,
- * and it is the ONLY thing that distinguishes a real payment from a forged
- * callback typed into a console.
- *
- * So: an order is created server-side with the amount WE computed, the callback
- * is verified against the signature, and the amount is re-read from our own
- * stored order rather than from anything the client sent. Without that, an
- * organisation could pay ₹1 for a ₹50,000 plan by editing one number.
- *
- * ── Test mode ──────────────────────────────────────────────────────────────
- *
- * Razorpay keys come in rzp_test_… and rzp_live_… pairs. Both work here. The
- * console shows which is in use, because "we took a real payment in test mode"
- * and "we took a test payment in live mode" are both bad afternoons.
- */
+/** Razorpay - raising an order, and verifying that a payment really happened. */
 import crypto from 'node:crypto';
 import { masterDb } from '../database/master.js';
 import { badRequest, ApiError } from '../utils/respond.js';
@@ -69,13 +48,7 @@ export function razorpayMode(keyId) {
 
 const auth = (cfg) => `Basic ${Buffer.from(`${cfg.key_id}:${cfg.key_secret}`).toString('base64')}`;
 
-/**
- * Raise an order for a tenant's current plan.
- *
- * The amount is computed here, from the plan on file, and stored. Nothing the
- * caller sends influences what is charged — the client picks how many periods
- * and that is all.
- */
+/** Raise an order for a tenant's current plan. */
 export async function createOrder({ tenant, plan, periods = 1, actor = null }) {
   const cfg = await razorpayConfig();
   if (!cfg.enabled) throw new ApiError(503, 'Online payment is not switched on for this platform.');
@@ -97,8 +70,8 @@ export async function createOrder({ tenant, plan, periods = 1, actor = null }) {
       body: JSON.stringify({
         amount,                    // paise, which is Razorpay's own unit too
         currency: 'INR',
-        // Shown on the Razorpay dashboard, so a finance person can match a
-        // payment to a customer without opening this application.
+        // Shown on the Razorpay dashboard, so a finance person can match a payment to a customer
+        // without opening this application.
         receipt: `ifqm-${tenant.slug}-${Date.now()}`.slice(0, 40),
         notes: {
           tenant: tenant.slug,
@@ -144,13 +117,7 @@ export async function createOrder({ tenant, plan, periods = 1, actor = null }) {
   };
 }
 
-/**
- * Verify a completed checkout and, only then, extend the subscription.
- *
- * `timingSafeEqual` rather than `===`: comparing HMACs with a normal string
- * compare leaks how many leading bytes matched through timing, which is enough
- * to forge one byte at a time.
- */
+/** Verify a completed checkout and, only then, extend the subscription. */
 export async function verifyPayment({ orderId, paymentId, signature, tenant, actor }) {
   const cfg = await razorpayConfig();
   if (!cfg.key_secret) throw new ApiError(503, 'Payment gateway is not configured.');
@@ -160,8 +127,8 @@ export async function verifyPayment({ orderId, paymentId, signature, tenant, act
     'SELECT * FROM payment_attempts WHERE order_ref = ? LIMIT 1', [orderId]
   );
   if (!attempt) throw badRequest('That order is not one we raised.');
-  // The order has to belong to the organisation claiming it, or one customer
-  // could settle their bill by replaying another's payment.
+  // The order has to belong to the organisation claiming it, or one customer could settle
+  // their bill by replaying another's payment.
   if (Number(attempt.tenant_id) !== Number(tenant.id)) {
     throw new ApiError(403, 'That order belongs to a different organisation.');
   }
@@ -181,7 +148,7 @@ export async function verifyPayment({ orderId, paymentId, signature, tenant, act
       ['Signature did not verify', attempt.id]
     );
     logger.error(`razorpay: signature mismatch on order ${orderId}`);
-    throw new ApiError(400, 'That payment could not be verified. Nothing has been charged to your account by us — if money left your account, contact IFQM with the payment reference.');
+    throw new ApiError(400, 'That payment could not be verified. Nothing has been charged to your account by us - if money left your account, contact IFQM with the payment reference.');
   }
 
   await masterDb().execute(
@@ -189,8 +156,8 @@ export async function verifyPayment({ orderId, paymentId, signature, tenant, act
     [paymentId, attempt.id]
   );
 
-  // Extend the subscription by exactly what was paid for — read from OUR row,
-  // never from the callback.
+  // Extend the subscription by exactly what was paid for - read from OUR row, never from the
+  // callback.
   const { markPaid } = await import('./subscriptionService.js');
   const result = await markPaid(tenant.id, {
     periods: attempt.periods,
@@ -217,13 +184,7 @@ export async function paymentHistory(tenantId, limit = 20) {
   }
 }
 
-/**
- * Prove the keys work, without taking money.
- *
- * Fetching the (empty) payments list is an authenticated read that costs
- * nothing and fails loudly on a wrong key — which is exactly what a
- * "Test connection" button should do.
- */
+/** Prove the keys work, without taking money. */
 export async function testConnection() {
   const cfg = await razorpayConfig();
   const missing = razorpayMissing(cfg);
@@ -237,7 +198,7 @@ export async function testConnection() {
     });
     const body = await res.text();
     out = res.ok
-      ? { ok: true, detail: `Keys accepted — ${razorpayMode(cfg.key_id)} mode.` }
+      ? { ok: true, detail: `Keys accepted - ${razorpayMode(cfg.key_id)} mode.` }
       : { ok: false, detail: explain(body) || `Razorpay answered ${res.status}.` };
   } catch (e) {
     const { networkReason } = await import('./smsService.js');

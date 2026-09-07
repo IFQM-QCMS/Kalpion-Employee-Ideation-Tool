@@ -57,12 +57,7 @@ export default function DashboardPage() {
   const maxCount = Math.max(...Object.values(counts), 1);
   const isReviewer = isPrivileged(user?.role);
 
-  /*
-   * Time of day from the browser, not the server. The server runs in UTC on a
-   * host in another country; greeting somebody "good evening" over their
-   * morning tea is the kind of small wrongness that makes software feel like it
-   * was built for somebody else.
-   */
+  // Time of day from the browser, not the server.
   const hour = new Date().getHours();
   const greetKey = hour < 12 ? 'dash.greet_morning'
     : hour < 17 ? 'dash.greet_afternoon'
@@ -71,12 +66,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      {/*
-        The page used to open on a wall of counters. A dashboard's first job is
-        to tell somebody what to do next, and for almost everybody here that is
-        "raise the thing you came to raise" — so the action is at the top, in
-        front of the numbers, rather than behind a sidebar link.
-      */}
+      {/* The page used to open on a wall of counters. */}
       <div style={{ display:'flex',alignItems:'flex-end',justifyContent:'space-between',
         gap:16,flexWrap:'wrap',marginBottom:18 }}>
         <div>
@@ -99,8 +89,7 @@ export default function DashboardPage() {
           <button className="btn btn-primary btn-sm" onClick={() => navigate('/submit')}>
             {t('dash.go_submit')}
           </button>
-          {/* Which manual arrives is decided by the server from the session
-              role, so this is the same component on all three dashboards. */}
+          {/* Which manual arrives is decided by the server from the session role, so this is the same component on all three dashboards. */}
         </div>
       </div>
 
@@ -176,8 +165,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Status Distribution Bar Chart */}
-      {/* auto-fit rather than 1fr 1fr: on a narrow screen the two panels stack
-          instead of being squeezed into unreadable halves. */}
+      {/* auto-fit rather than 1fr 1fr: on a narrow screen the two panels stack instead of being squeezed into unreadable halves. */}
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',
         gap:20,marginTop:20 }}>
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
@@ -215,7 +203,7 @@ export default function DashboardPage() {
                 <div className="tl-item" key={i}>
                   <div className="tl-dot tl-dot-blue">{actionLabel(r.action)}</div>
                   <div>
-                    <div className="tl-title">{r.idea_code} — {translateStatus(r.action, t)}</div>
+                    <div className="tl-title">{r.idea_code} - {translateStatus(r.action, t)}</div>
                     <div className="tl-meta">{r.actor_name} · {timeAgo(r.created_at, t)}</div>
                     {r.comment && <div className="tl-comment">{r.comment}</div>}
                   </div>

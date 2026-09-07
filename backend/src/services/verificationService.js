@@ -1,26 +1,4 @@
-/**
- * One-time codes for proving somebody holds an address or a number.
- *
- * ── Why this is not otpService ─────────────────────────────────────────────
- *
- * otpService signs people IN: every path through it starts by finding an
- * existing user in a tenant, and ends by minting a session. None of that is
- * true here. An applicant filling in the registration form has no account, no
- * organisation and no session to mint, and the whole point of the code is to
- * establish something about them BEFORE any of that exists.
- *
- * So this issues and checks codes and stops there. What a verified code then
- * entitles you to — submit an application, set a new password, save a changed
- * number — is decided by the caller, which is the only place that knows.
- *
- * ── The rules, which are the same ones otpService enforces ─────────────────
- *
- * Codes are stored bcrypt-hashed, never in clear. Wrong guesses are counted per
- * code and burn it at the limit, so six digits cannot be walked at network
- * speed. Issuing a new code expires the previous one, so resending does not
- * widen the target. Requesting a code says nothing about whether the identifier
- * is known — with one deliberate exception noted on sendCode.
- */
+/** One-time codes for proving somebody holds an address or a number. */
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import config from '../config/index.js';
@@ -32,14 +10,7 @@ import { sendSms, messageFor, smsReady, maskPhone } from './smsService.js';
 import { badRequest, tooMany, unauthorized, ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
-/**
- * What a code may be issued for, and what it says on the way out.
- *
- * A closed set, checked on every call. The column behind it is a VARCHAR now
- * (see migration 022) precisely so a new purpose cannot fail at the database
- * with a truncation error; the trade is that the validation has to live
- * somewhere, and here it can name the values it accepts.
- */
+/** What a code may be issued for, and what it says on the way out. */
 export const PURPOSES = {
   registration_verify: {
     channel: 'email',
@@ -62,14 +33,7 @@ export const PURPOSES = {
     lead: 'Use this code to confirm your mobile number:',
   },
 
-  /*
-   * A new IFQM staff account proving it holds both the address and the number.
-   *
-   * Two purposes rather than one with channel:'any', because both have to
-   * happen — the point is that the account is reachable on two independent
-   * channels, and a single 'any' purpose would let one of them stand in for
-   * the other and call the job done.
-   */
+  // A new IFQM staff account proving it holds both the address and the number.
   platform_admin_email: {
     channel: 'email',
     subject: (code) => `${code} is your Kalpion administrator verification code`,
@@ -106,13 +70,8 @@ export function classify(raw) {
   if (isEmail(s)) return { key: s.toLowerCase(), idType: 'email', channel: 'email' };
   const phone = normalizePhone(s);
   if (phone) return { key: phone, idType: 'phone', channel: 'sms' };
-  /*
-   * A username identifies the account but is not somewhere a code can be sent,
-   * so it carries no channel — the caller has to look the person up and decide
-   * where to send it. Callers that only ever deliver to the identifier itself
-   * (registration, confirming a number) still see an empty channel and refuse,
-   * which is correct: you cannot verify a username by sending it a code.
-   */
+  // A username identifies the account but is not somewhere a code can be sent, so it carries
+  // no channel - the caller has to look the person up and decide where to send it.
   const username = normalizeUsername(s);
   if (username) return { key: username, idType: 'username', channel: '' };
   return { key: '', idType: '', channel: '' };
@@ -130,17 +89,7 @@ const codeEmailHtml = (name, lead, code, minutes) => {
 </div>`;
 };
 
-/**
- * Issue a code and send it.
- *
- * `announce` decides whether the caller is told the send actually happened.
- * Sign-in and password reset say nothing either way, because answering
- * truthfully turns them into a membership oracle: type addresses, learn who
- * works here. Registration is the exception and answers honestly — the person
- * is typing their OWN address into a form they are filling in, they already
- * know whether they own it, and a form that cannot say "that didn't send"
- * leaves them staring at a field that will never fill in.
- */
+/** Issue a code and send it. */
 export async function sendCode({
   identifier, purpose, name = '', tenantSlug = null, userId = null, ip = null, announce = false,
 } = {}) {
@@ -157,7 +106,7 @@ export async function sendCode({
 
   const ready = channel === 'sms' ? smsReady(purpose) : { ready: platformMailReady(), reason: 'No mail sender configured.' };
   if (!ready.ready) {
-    logger.error(`verify: cannot send ${purpose} by ${channel} — ${ready.reason}`);
+    logger.error(`verify: cannot send ${purpose} by ${channel} - ${ready.reason}`);
     throw new ApiError(503, channel === 'sms'
       ? 'Codes by SMS are not available right now. Please use email, or contact IFQM.'
       : 'Codes by email are not available right now. Please contact IFQM.');
@@ -168,8 +117,8 @@ export async function sendCode({
   const wait = num(p.otp_resend_seconds, 60);
   const master = masterDb();
 
-  // Throttle before anything else, so response timing cannot separate a known
-  // identifier from an unknown one.
+  // Throttle before anything else, so response timing cannot separate a known identifier
+  // from an unknown one.
   const [[recent] = []] = await master.execute(
     `SELECT TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age FROM login_otps
       WHERE identifier = ? AND purpose = ? ORDER BY id DESC LIMIT 1`,
@@ -197,9 +146,9 @@ export async function sendCode({
   const minutes = Math.max(1, Math.round(ttl / 60));
   let sent;
   if (channel === 'sms') {
-    // The wording comes from the registered template, never from a literal
-    // here: text that has drifted from its registration is accepted by the
-    // gateway and dropped by the carrier, with nothing to see at either end.
+    // The wording comes from the registered template, never from a literal here: text that has
+    // drifted from its registration is accepted by the gateway and dropped by the carrier,
+    // with nothing to see at either end.
     const { text } = messageFor(purpose, code, minutes);
     const r = await sendSms(key, text, { purpose, tenantSlug });
     sent = { sent: r.sent, detail: r.detail, provider: r.provider };
@@ -212,11 +161,11 @@ export async function sendCode({
     }
   }
 
-  if (!sent.sent) logger.error(`verify: ${purpose} code to ${maskPhone(key)} failed — ${sent.detail || ''}`);
+  if (!sent.sent) logger.error(`verify: ${purpose} code to ${maskPhone(key)} failed - ${sent.detail || ''}`);
   else logger.info(`verify: ${purpose} code sent to ${maskPhone(key)} by ${channel}`);
 
-  // A registration form that cannot report a failed send leaves the applicant
-  // waiting for a code that is never coming.
+  // A registration form that cannot report a failed send leaves the applicant waiting for a
+  // code that is never coming.
   if (announce && !sent.sent) {
     throw new ApiError(502, 'We could not send the code. Check the address or number and try again.');
   }
@@ -236,13 +185,7 @@ export async function sendCode({
   };
 }
 
-/**
- * Check a code and consume it.
- *
- * The consumed row is left in place rather than deleted: it is the evidence a
- * caller later reads with wasVerified() to decide whether an application may be
- * submitted, and housekeeping prunes it on its own schedule.
- */
+/** Check a code and consume it. */
 export async function verifyCode({ identifier, code, purpose } = {}) {
   if (!PURPOSES[purpose]) throw badRequest(`Unknown verification purpose "${purpose}".`);
   const supplied = String(code || '').replace(/\D/g, '').trim();
@@ -292,14 +235,7 @@ export async function verifyCode({ identifier, code, purpose } = {}) {
   return { success: true, verified: true, identifier: key, row };
 }
 
-/**
- * Was this identifier proved recently, for this purpose?
- *
- * The registration form asks this about the email and the number before it will
- * accept an application. Deliberately checked on the server from the consumed
- * row: a browser that says "verified: true" is a browser saying it, and the
- * whole point of the exercise is not to take its word for it.
- */
+/** Was this identifier proved recently, for this purpose? */
 export async function wasVerified(identifier, purpose, withinMinutes = PROOF_WINDOW_MINUTES) {
   const { key } = classify(identifier);
   if (!key) return false;

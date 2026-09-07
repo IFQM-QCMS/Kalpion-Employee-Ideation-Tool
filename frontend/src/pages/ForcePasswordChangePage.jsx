@@ -4,13 +4,9 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 
-/**
- * Shown to a user who is still holding the temporary password they were given by
- * a bulk import. They cannot reach any other screen until they replace it.
- *
- * This is a convenience, not the enforcement: the server refuses every other
- * endpoint while `must_change_password` is set, so skipping this screen (or
- * calling the API directly) gets you nowhere.
+/*
+ * Shown to a user who is still holding the temporary password they were given by a bulk
+ * import.
  */
 export default function ForcePasswordChangePage() {
   const { user, changePassword, logout } = useAuth();
@@ -91,8 +87,7 @@ export default function ForcePasswordChangePage() {
           <div className="separator"></div>
           <div style={{ textAlign:'center',display:'flex',gap:8,justifyContent:'center' }}>
             <button className="btn btn-outline btn-sm" onClick={logout}>{t('topbar.logout')}</button>
-            {/* The one other place a gated user may go: someone whose temporary
-                password doesn't work needs a way to say so. */}
+            {/* The one other place a gated user may go: someone whose temporary password doesn't work needs a way to say so. */}
             <button className="btn btn-outline btn-sm" onClick={() => navigate('/support')}>
               {t('pw.need_help')}
             </button>

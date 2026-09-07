@@ -5,32 +5,11 @@ import { platformApi } from '../services/api';
 import { fmtDateTime } from '../utils/helpers';
 import InfoDot from './InfoDot';
 
-/*
- * Platform → Settings → Messaging.
- *
- * One screen for everything that leaves the building as a message: the SMS
- * gateway, the one-time-code policy that rides on it, and the state of the
- * email queue.
- *
- * ── Two things this screen is careful about ────────────────────────────────
- *
- * The gateway API key is never sent to the browser. The field therefore starts
- * empty even when a key is stored, and an empty field on save means "keep the
- * one you have". That is the same contract as the SMTP password elsewhere in
- * this console, and the reason is the same: a screen that has to round-trip a
- * credential to avoid erasing it is a screen that puts the credential in a
- * response body, a browser cache and a devtools panel.
- *
- * "Test Connection" sends a real message and says so. A test that only checked
- * the fields parse would pass on a template ID the carrier has never approved —
- * which is the exact failure this button exists to find, because that failure
- * has no error, no delivery report, and no symptom other than a user saying
- * nothing arrived.
- */
+// Platform Settings Messaging.
 
 const PROVIDERS = [
   ['jio_dlt', 'Jio DLT gateway'],
-  ['log', 'Mock — write to server log'],
+  ['log', 'Mock - write to server log'],
   ['msg91', 'MSG91 (from environment)'],
   ['twilio', 'Twilio (from environment)'],
 ];
@@ -109,7 +88,7 @@ export default function MessagingConnector() {
         mail_zepto_from_name: r.data.mail.from_name,
         otp_email_enabled: r.data.mail.otp_email_enabled,
       });
-      // Never prefilled — the server does not send it back.
+      // Never prefilled - the server does not send it back.
       setApiKey('');
       setClearKey(false);
     } catch (err) {
@@ -123,10 +102,9 @@ export default function MessagingConnector() {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
 
-  /**
-   * `extra` carries the secrets, which are never held in `form` — they are not
-   * part of the loaded state and must not survive a reload. The mail panel
-   * hands its token through here so both panels save in one request.
+  /*
+   * `extra` carries the secrets, which are never held in `form` - they are not part of the
+   * loaded state and must not survive a reload.
    */
   async function save(extra = {}) {
     setBusy(true);
@@ -169,9 +147,9 @@ export default function MessagingConnector() {
   const ready = data.readiness || {};
   const usingDlt = form.otp_provider === 'jio_dlt';
 
-  // Three states, not two: configured-and-off is a real and useful position to
-  // be in, and showing it as "not configured" would send somebody to re-enter
-  // credentials that are already correct.
+  // Three states, not two: configured-and-off is a real and useful position to be in, and
+  // showing it as "not configured" would send somebody to re-enter credentials that are
+  // already correct.
   const status = !dlt.enabled ? { label: t('msgg.st_off'), cls: 'badge-draft' }
     : dlt.missing.length ? { label: t('msgg.st_incomplete'), cls: 'badge-rejected' }
       : { label: t('msgg.st_connected'), cls: 'badge-approved' };
@@ -179,7 +157,7 @@ export default function MessagingConnector() {
   return (
     <div style={{ marginTop: 16, display: 'grid', gap: 16 }}>
 
-      {/* ── Connector ─────────────────────────────────────────────── */}
+      {/* Connector */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 4 }}>
           <div style={{
@@ -282,7 +260,7 @@ export default function MessagingConnector() {
         </button>
       </div>
 
-      {/* ── Test ──────────────────────────────────────────────────── */}
+      {/* Test */}
       <div className="card">
         <div className="card-title">{t('msgg.test_title')}</div>
         <div style={{ fontSize: 12, color: 'var(--subtle)', marginBottom: 14, lineHeight: 1.6 }}>
@@ -306,7 +284,7 @@ export default function MessagingConnector() {
             border: `1px solid ${testResult.sent ? 'var(--success)' : 'var(--danger)'}`,
           }}>
             <b>{testResult.sent ? t('msgg.test_accepted') : t('msgg.test_refused')}</b>
-            {testResult.detail ? <> — {testResult.detail}</> : null}
+            {testResult.detail ? <> - {testResult.detail}</> : null}
             {testResult.reference ? <div style={{ marginTop: 4, opacity: .85 }}>{t('msgg.gateway_ref')}: <code>{testResult.reference}</code></div> : null}
             {testResult.note ? <div style={{ marginTop: 6, opacity: .9 }}>{testResult.note}</div> : null}
           </div>
@@ -314,13 +292,13 @@ export default function MessagingConnector() {
 
         {data.last_test?.at && !testResult && (
           <div style={{ marginTop: 12, fontSize: 12, color: 'var(--subtle)' }}>
-            {t('msgg.last_tested')}: {fmtDateTime(data.last_test.at)} — {data.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
+            {t('msgg.last_tested')}: {fmtDateTime(data.last_test.at)} - {data.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
             {data.last_test.note ? ` (${data.last_test.note})` : ''}
           </div>
         )}
       </div>
 
-      {/* ── One-time-code policy ──────────────────────────────────── */}
+      {/* One-time-code policy */}
       <div className="card">
         <div className="card-title">{t('msgg.otp_title')}</div>
         <div style={{ fontSize: 12, color: 'var(--subtle)', marginBottom: 16, lineHeight: 1.6 }}>
@@ -378,12 +356,12 @@ export default function MessagingConnector() {
         </button>
       </div>
 
-      {/* ── Email provider ────────────────────────────────────────── */}
+      {/* Email provider */}
       <MailProvider data={data} form={form} set={set} busy={busy} onSave={save} onReload={load} />
 
-      {/* ── Email queue ───────────────────────────────────────────── */}
+      {/* Email queue */}
 
-      {/* ── Recent sends ──────────────────────────────────────────── */}
+      {/* Recent sends */}
       <div className="card">
         <div className="card-title">{t('msgg.recent')}</div>
         <div style={{ fontSize: 12, color: 'var(--subtle)', marginBottom: 12, lineHeight: 1.6 }}>
@@ -427,15 +405,7 @@ export default function MessagingConnector() {
   );
 }
 
-/**
- * The platform-wide email provider.
- *
- * Per-tenant SMTP is unchanged and still wins where a customer has set it up —
- * mail that appears to come from the customer's own domain is a feature. This
- * covers the two cases SMTP cannot: mail with no tenant behind it (a code to an
- * email address, a registration acknowledgement) and hosts that block outbound
- * SMTP ports, where a perfectly correct mail server simply cannot be reached.
- */
+/** The platform-wide email provider. */
 function MailProvider({ data, form, set, busy, onSave, onReload }) {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -452,8 +422,8 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
       : { label: t('msgg.st_connected'), cls: 'badge-approved' };
 
   async function save() {
-    // Handed to the parent so both panels write in one request — two separate
-    // saves would let the enable check see a half-applied configuration.
+    // Handed to the parent so both panels write in one request - two separate saves would let
+    // the enable check see a half-applied configuration.
     await onSave(clearToken
       ? { mail_zepto_token_clear: true }
       : token.trim() ? { mail_zepto_token: token.trim() } : {});
@@ -516,9 +486,9 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
         <Row label={t('msgg.mail_endpoint')} hint={t('msgg.mail_endpoint_hint')}>
           <select className="form-control" value={form.mail_zepto_endpoint}
             onChange={(e) => set('mail_zepto_endpoint', e.target.value)}>
-            <option value="https://api.zeptomail.in/v1.1/email">India — api.zeptomail.in</option>
-            <option value="https://api.zeptomail.com/v1.1/email">Global — api.zeptomail.com</option>
-            <option value="https://api.zeptomail.eu/v1.1/email">Europe — api.zeptomail.eu</option>
+            <option value="https://api.zeptomail.in/v1.1/email">India - api.zeptomail.in</option>
+            <option value="https://api.zeptomail.com/v1.1/email">Global - api.zeptomail.com</option>
+            <option value="https://api.zeptomail.eu/v1.1/email">Europe - api.zeptomail.eu</option>
           </select>
         </Row>
         <Row
@@ -529,7 +499,7 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
           <div style={{ display: 'flex', gap: 6 }}>
             <input className="form-control" type={showToken ? 'text' : 'password'}
               value={token} disabled={clearToken} autoComplete="new-password"
-              placeholder={mail.token_set ? '••••••••••••' : 'Zoho-enczapikey …'}
+              placeholder={mail.token_set ? '••••••••••••' : 'Zoho-enczapikey ...'}
               onChange={(e) => setToken(e.target.value)} />
             <button type="button" className="btn" onClick={() => setShowToken((v) => !v)}
               title={showToken ? t('msgg.hide') : t('msgg.show')} style={{ flex: '0 0 auto' }}>
@@ -587,25 +557,17 @@ function MailProvider({ data, form, set, busy, onSave, onReload }) {
           border: `1px solid ${result.sent ? 'var(--success)' : 'var(--danger)'}`,
         }}>
           <b>{result.sent ? t('msgg.mail_test_ok') : t('msgg.mail_test_fail')}</b>
-          {result.detail ? <> — {result.detail}</> : null}
+          {result.detail ? <> - {result.detail}</> : null}
         </div>
       )}
 
       {mail.last_test?.at && !result && (
         <div style={{ marginTop: 12, fontSize: 12, color: 'var(--subtle)' }}>
-          {t('msgg.last_tested')}: {fmtDateTime(mail.last_test.at)} — {mail.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
+          {t('msgg.last_tested')}: {fmtDateTime(mail.last_test.at)} - {mail.last_test.ok ? t('msgg.passed') : t('msgg.failed')}
         </div>
       )}
     </div>
   );
 }
 
-/**
- * Email, reported as two separate questions.
- *
- * "Is SMTP configured" and "is anything actually sending" are different, and
- * the second is the one that was silently false: notifications were queued for
- * months with nothing draining them, which no settings screen would ever show.
- * A backlog with a stale oldest-pending timestamp is the symptom, so it is what
- * this panel leads with.
- */
+/** Email, reported as two separate questions. */

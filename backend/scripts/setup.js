@@ -1,23 +1,8 @@
-/**
- * One-command environment setup:  npm run setup   (from backend/)
- *
- * Exists because a fresh clone used to require four ordered manual steps
- * (master.sql, then a schema per tenant, then migrations 001 and 002 against
- * every database) — and the documented schema file was incomplete, so "works on
- * my machine / broken on the clone" was the default outcome. This script is the
- * whole procedure, idempotent, so it is equally a first-time setup and a
- * repair tool for a half-built database.
- *
- * What it does, in order:
- *   1. backend/.env          created from .env.example if missing (never overwritten)
- *   2. ifqm_master           created/updated from db/master.sql
- *   3. every registry tenant schema created from backend/schema/tenant_schema.sql
- *      (CREATE TABLE IF NOT EXISTS throughout — existing data untouched)
- *   4. migrations            db/migrations/*.sql applied to master + each tenant
- *                            (guarded ALTERs — safe to re-run)
- *
- * Credentials come from backend/.env (MASTER_DB_*), so it works on any box
- * where the MySQL account can create databases.
+/*
+ * Exists because a fresh clone used to require four ordered manual steps (master.sql, then
+ * a schema per tenant, then migrations 001 and 002 against every database) - and the
+ * documented schema file was incomplete, so "works on my machine / broken on the clone"
+ * was the default outcome.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,24 +16,23 @@ const ROOT = path.resolve(BACKEND, '..');
 const log = (m) => console.log(`[setup] ${m}`);
 const die = (m) => { console.error(`[setup] FATAL: ${m}`); process.exit(1); };
 
-// ── 1. .env ──────────────────────────────────────────────────────────────────
+// 1..env
 const envPath = path.join(BACKEND, '.env');
 const examplePath = path.join(BACKEND, '.env.example');
 if (!fs.existsSync(envPath)) {
   if (!fs.existsSync(examplePath)) die('backend/.env.example is missing from the repo.');
   fs.copyFileSync(examplePath, envPath);
-  log('created backend/.env from .env.example — review it (JWT_SECRET, DB password) before production.');
+  log('created backend/.env from .env.example - review it (JWT_SECRET, DB password) before production.');
 } else {
-  log('backend/.env already exists — left untouched.');
+  log('backend/.env already exists - left untouched.');
 }
 
 // Load it AFTER the copy so a first run picks the fresh file up.
 const { default: dotenv } = await import('dotenv');
 dotenv.config({ path: envPath });
 
-// Port and TLS mirror src/config/index.js, re-read here because this script
-// runs before (and without) the app config so it can also repair a half-built
-// database. Defaults are the local XAMPP ones: 3306, plaintext.
+// Port and TLS mirror src/config/index.js, re-read here because this script runs before
+// (and without) the app config so it can also repair a half-built database.
 const DB = {
   host: process.env.MASTER_DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT, 10) || 3306,
@@ -59,7 +43,7 @@ const DB = {
     : undefined,
   user: process.env.MASTER_DB_USER || 'root',
   password: process.env.MASTER_DB_PASS || '',
-  multipleStatements: true, // the .sql files are multi-statement by nature
+  multipleStatements: true, // the.sql files are multi-statement by nature
   charset: 'utf8mb4',
 };
 
@@ -77,13 +61,13 @@ try {
 }
 
 try {
-  // ── 2. master registry ─────────────────────────────────────────────────────
-  log('applying db/master.sql (registry, platform admin seed, tickets, settings)…');
+  // 2. master registry
+  log('applying db/master.sql (registry, platform admin seed, tickets, settings)...');
   await conn.query(read(MASTER_SQL));
 
-  // ── 3. tenant schemas ──────────────────────────────────────────────────────
+  // 3. tenant schemas
   const [tenants] = await conn.query('SELECT slug, db_name FROM ifqm_master.tenants');
-  if (!tenants.length) log('registry has no tenants yet — nothing to provision.');
+  if (!tenants.length) log('registry has no tenants yet - nothing to provision.');
   const schemaSql = read(TENANT_SCHEMA);
 
   for (const t of tenants) {
@@ -97,15 +81,14 @@ try {
     await conn.query(schemaSql);
   }
 
-  // ── 4. migrations ──────────────────────────────────────────────────────────
-  // Shared with `npm run migrate` — one code path, one applied-ledger
-  // (ifqm_master.schema_migrations), so setup and migrate can never disagree
-  // about what has run where.
+  // 4. migrations Shared with `npm run migrate` - one code path, one applied-ledger
+  // (ifqm_master.schema_migrations), so setup and migrate can never disagree about what has
+  // run where.
   const { runMigrations } = await import('./migrate.js');
   await runMigrations(conn, log);
 
   log('done. Start the backend with:  node server.js');
-  log('NOTE: a fresh .env still holds example values — set JWT_SECRET and DB credentials before production.');
+  log('NOTE: a fresh .env still holds example values - set JWT_SECRET and DB credentials before production.');
 } catch (e) {
   die(e.message);
 } finally {

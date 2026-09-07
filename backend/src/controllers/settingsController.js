@@ -1,6 +1,4 @@
-/**
- * Settings controller — HTTP layer over settingsService. Maps to api/settings.php.
- */
+/** Settings controller - HTTP layer over settingsService. */
 import * as settingsService from '../services/settingsService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

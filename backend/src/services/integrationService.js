@@ -1,9 +1,4 @@
-/**
- * Integration service — the org-admin "Approved Ideas" + "API & Integration"
- * screens. Reads/writes the per-tenant QCMS credentials (in org_settings, the
- * key masked exactly like smtp_pass), lists this tenant's approved ideas, and
- * pushes them to QCMS via qcmsService.
- */
+/** Integration service - the org-admin "Approved Ideas" + "API & Integration" screens. */
 import config from '../config/index.js';
 import { getOrgSettings } from './mailerService.js';
 import { pushIdeaToQcms } from './qcmsService.js';
@@ -12,11 +7,7 @@ import logger from '../utils/logger.js';
 
 const KEY_MASK = '••••••••';
 
-/**
- * Validate/clean an admin-typed QCMS base URL. Returns '' for a blank value
- * (meaning "fall back to the .env default"), throws for anything that is not a
- * plain http(s) URL — a typo here would silently send ideas nowhere.
- */
+/** Validate/clean an admin-typed QCMS base URL. */
 function normalizeBaseUrl(raw) {
   const v = String(raw ?? '').trim().replace(/\/+$/, '');
   if (!v) return '';
@@ -28,19 +19,19 @@ function normalizeBaseUrl(raw) {
   return v;
 }
 
-// ── Config (get / save) ──────────────────────────────────────────────
+// Config (get / save)
 export async function getQcmsConfig(db) {
   const s = await getOrgSettings(db);
-  // The base URL defaults to the operator's .env value (QCMS_BASE_URL); an org
-  // admin may override it for this tenant from the dashboard.
+  // The base URL defaults to the operator's.env value (QCMS_BASE_URL); an org admin may
+  // override it for this tenant from the dashboard.
   const override = (s.qcms_base_url || '').trim();
   return {
     success: true,
     config: {
       enabled: s.qcms_enabled === '1',
       base_url: override || config.qcms.baseUrl,
-      // What the field falls back to when the admin clears it, plus whether an
-      // override is currently in force (the UI shows the default as a placeholder).
+      // What the field falls back to when the admin clears it, plus whether an override is
+      // currently in force (the UI shows the default as a placeholder).
       default_base_url: config.qcms.baseUrl,
       base_url_custom: !!override,
       api_key_set: !!(s.qcms_api_key || '').trim(),
@@ -56,12 +47,10 @@ export async function saveQcmsConfig(db, body) {
 
   if (body.enabled !== undefined) writes.push(['qcms_enabled', body.enabled ? '1' : '0']);
 
-  // Base URL: a blank value clears the override so the .env default applies again.
+  // Base URL: a blank value clears the override so the.env default applies again.
   if (body.base_url !== undefined) writes.push(['qcms_base_url', normalizeBaseUrl(body.base_url)]);
 
-  // The key is written only when a real one is typed. An empty field or the mask
-  // means "leave it alone" (same rule as smtp_pass), so saving the toggle can
-  // never wipe a stored key. An explicit clear is opt-in.
+  // The key is written only when a real one is typed.
   if (body.api_key_clear) {
     writes.push(['qcms_api_key', '']);
   } else if (body.api_key !== undefined) {
@@ -79,7 +68,7 @@ export async function saveQcmsConfig(db, body) {
   return getQcmsConfig(db);
 }
 
-// ── Approved ideas for this tenant (with QCMS push status) ───────────
+// Approved ideas for this tenant (with QCMS push status)
 export async function listApprovedIdeas(db) {
   const [rows] = await db.query(
     `SELECT i.id, i.idea_code, i.title, i.impact_areas, i.impact_level, i.status,
@@ -99,11 +88,11 @@ export async function listApprovedIdeas(db) {
   return { success: true, ideas: rows };
 }
 
-// ── Push ─────────────────────────────────────────────────────────────
+// Push
 async function resolvePushContext(db) {
   const s = await getOrgSettings(db);
   const apiKey = (s.qcms_api_key || '').trim();
-  // This tenant's saved override wins; otherwise the operator's .env default.
+  // This tenant's saved override wins; otherwise the operator's.env default.
   const baseUrl = (s.qcms_base_url || '').trim() || config.qcms.baseUrl;
   const enabled = s.qcms_enabled === '1';
   return { apiKey, baseUrl, enabled };
@@ -126,11 +115,7 @@ async function loadApprovedForPush(db, ideaIds) {
   return ideas;
 }
 
-/**
- * Push one or more approved ideas to QCMS.
- * @param {number[]|null} ideaIds  specific ideas, or null/empty for all approved
- * @param {object} opts  { onlyPending } — skip ideas already imported/duplicate
- */
+/** Push one or more approved ideas to QCMS. */
 export async function pushApprovedIdeas(db, ideaIds = null, { onlyPending = false } = {}) {
   const { apiKey, baseUrl, enabled } = await resolvePushContext(db);
   if (!enabled) throw badRequest('QCMS integration is turned off. Enable it and save your API key first.');

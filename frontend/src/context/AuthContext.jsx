@@ -27,14 +27,14 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []);
 
-  // Session expiry guard — check when tab becomes visible
+  // Session expiry guard - check when tab becomes visible
   useEffect(() => {
     const check = async () => {
       if (!user) return;
       try {
         const res = await authApi.me();
         if (!res.data.authenticated) logout();
-      } catch { /* network error — don't force logout */ }
+      } catch { /* network error - don't force logout */ }
     };
     const onVisible = () => { if (document.visibilityState === 'visible') check(); };
     document.addEventListener('visibilitychange', onVisible);
@@ -50,16 +50,8 @@ export function AuthProvider({ children }) {
     try {
       res = await authApi.login({ email, password, org_slug });
     } catch (err) {
-      /*
-       * A rejected sign-in comes back as 401/429, and axios *throws* on any
-       * non-2xx — so this branch, not the one below, is what actually runs for a
-       * wrong password. It used to be left to LoginPage's catch-all, which
-       * showed "Server error. Please try again." for every failure.
-       *
-       * That threw away the only messages that matter here: "Invalid email or
-       * password — 3 attempt(s) remaining" and "Too many failed attempts, try
-       * again in 15 minutes". Users were being locked out with no idea why.
-       */
+      // A rejected sign-in comes back as 401/429, and axios *throws* on any non-2xx - so this
+      // branch, not the one below, is what actually runs for a wrong password.
       const data = err?.response?.data;
       if (data?.error) return { success: false, error: data.error };
       return { success: false, error: null }; // genuine network/server failure
@@ -75,12 +67,8 @@ export function AuthProvider({ children }) {
     return { success: false, error: res.data.error || null };
   }, []);
 
-  /*
-   * Adopt a session minted by some route other than the password form — today
-   * that is the one-time code (MOM §4.1). The server returns exactly the same
-   * { user, token } either way, so this is the same three lines the password
-   * branch runs and nothing downstream can tell them apart.
-   */
+  // Adopt a session minted by some route other than the password form - today that is the
+  // one-time code (MOM §4.1).
   const adoptSession = useCallback((user, token, orgSlug) => {
     localStorage.setItem('ifqm_token', token);
     if (orgSlug) localStorage.setItem('ifqm_org', orgSlug);
@@ -96,13 +84,7 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
-  /**
-   * Change the signed-in user's password.
-   *
-   * The server revokes every token issued before the change — including the one
-   * we are holding — and hands back a fresh one. Storing that new token is what
-   * keeps the user signed in; drop it and the next request 401s.
-   */
+  /** Change the signed-in user's password. */
   const changePassword = useCallback(async ({ current_password, new_password }) => {
     const res = await authApi.changePassword({ current_password, new_password });
     if (res.data?.success && res.data.token) {

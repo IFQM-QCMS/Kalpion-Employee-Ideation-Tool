@@ -1,18 +1,4 @@
-/*
- * Draws the leaderboard as a picture people can actually post.
- *
- * A line of text pasted into WhatsApp is not something anybody shares. An image
- * is. This paints one on a canvas — no library, no server round trip, nothing
- * to install — and hands back a PNG blob.
- *
- * Two cards:
- *   personal   one person's own standing, for "look where I finished"
- *   podium     the organisation's top five, for an internal announcement
- *
- * Nothing confidential goes on either. Names, points and idea counts only:
- * never an idea's title, its text, or anything about a proposal. Somebody who
- * posts one of these on LinkedIn has not leaked their employer's ideas.
- */
+// Draws the leaderboard as a picture people can actually post.
 
 const W = 1080;
 const H = 1080;
@@ -20,8 +6,8 @@ const H = 1080;
 const INK = {
   bg1: '#0b2545', bg2: '#123157',
   gold: '#fbbf24', silver: '#cbd5e1', bronze: '#d97706',
-  // Drawn on a <canvas>, which cannot read CSS variables — the palette is
-  // duplicated here on purpose and has to be updated with the brand.
+  // Drawn on a <canvas>, which cannot read CSS variables - the palette is duplicated here on
+  // purpose and has to be updated with the brand.
   text: '#f8fafc', dim: '#94a3b8', accent: '#c9a961',
 };
 
@@ -38,8 +24,8 @@ function roundRect(ctx, x, y, w, h, r) {
 function ellipsis(ctx, text, maxWidth) {
   let s = String(text ?? '');
   if (ctx.measureText(s).width <= maxWidth) return s;
-  while (s.length > 1 && ctx.measureText(s + '…').width > maxWidth) s = s.slice(0, -1);
-  return s + '…';
+  while (s.length > 1 && ctx.measureText(s + '...').width > maxWidth) s = s.slice(0, -1);
+  return s + '...';
 }
 
 function background(ctx, orgName) {
@@ -113,7 +99,7 @@ export function drawPersonalCard(canvas, { orgName, name, rank, points, ideas, p
 
   ctx.fillStyle = medalColour(rank);
   ctx.font = '800 92px Inter, system-ui, "Segoe UI", sans-serif';
-  ctx.fillText(rank > 0 ? `#${rank}` : '—', cx, cy + 32);
+  ctx.fillText(rank > 0 ? `#${rank}` : '-', cx, cy + 32);
 
   ctx.fillStyle = INK.text;
   ctx.font = '700 54px Inter, system-ui, "Segoe UI", sans-serif';
@@ -211,16 +197,7 @@ export function canvasToBlob(canvas) {
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.95));
 }
 
-/**
- * Hand the image to whatever the device offers.
- *
- * A phone gets its native share sheet with the picture attached (Web Share
- * Level 2). A desktop browser that cannot share files gets the file downloaded
- * instead, which is what somebody there would do with it anyway.
- *
- * @returns {'shared'|'downloaded'} what actually happened, so the caller can
- *          tell the user the truth rather than guessing.
- */
+/** Hand the image to whatever the device offers. */
 export async function shareImage(blob, filename, text) {
   const file = new File([blob], filename, { type: 'image/png' });
   if (navigator.canShare?.({ files: [file] }) && navigator.share) {

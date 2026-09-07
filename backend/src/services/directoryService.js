@@ -1,17 +1,6 @@
-/**
- * Global login directory — maps a login identifier (email, phone or username)
- * to the tenant that owns it, so a user can sign in with no organisation code.
- *
- * The table is keyed on `identifier` alone, across every tenant. That single
- * primary key is the whole design: one point lookup finds the organisation, and
- * one indexed lookup inside it finds the person. It is also why a username is
- * unique platform-wide rather than per organisation — see migration 025.
- *
- * The directory is an optimisation and the source of truth for phone→tenant
- * resolution. It is maintained as users are created/updated/deleted/imported,
- * and `resolveTenantByLogin` self-heals it for pre-existing users by scanning
- * active tenants once and caching what it finds — so no data back-fill is
- * required.
+/*
+ * Global login directory - maps a login identifier (email, phone or username) to the
+ * tenant that owns it, so a user can sign in with no organisation code.
  */
 import { masterDb } from '../database/master.js';
 import { resolveTenant, getTenantPool, heldForNonPayment } from '../database/tenant.js';
@@ -28,22 +17,9 @@ export function normalizePhone(v) {
   return digits.slice(-10);
 }
 
-/**
- * A valid sign-in username: 3-30 characters of a-z, 0-9, dot, underscore or
- * hyphen, containing at least one letter.
- *
- * The two rules are not cosmetic — they are what stop the three identifier
- * kinds colliding, since email, phone and username all share ONE keyspace
- * (login_directory is keyed on `identifier` alone, which is what allows signing
- * in without an org code):
- *
- *   no '@'                 an email always has one, so no username can equal an
- *                          email
- *   at least one letter    a phone key is digits only, so no username can equal
- *                          a phone key
- *
- * Anything looser and 'rkumar@acme.com' or '9812345678' could be claimed as a
- * username and take over somebody else's sign-in.
+/*
+ * A valid sign-in username: 3-30 characters of a-z, 0-9, dot, underscore or hyphen,
+ * containing at least one letter.
  */
 const USERNAME_RE = /^(?=.*[a-z])[a-z0-9._-]{3,30}$/;
 
@@ -66,9 +42,7 @@ export function directoryKey(raw) {
   if (phone) return { key: phone, type: 'phone' };
   const username = normalizeUsername(id);
   if (username) return { key: username, type: 'username' };
-  // Neither a valid address, number nor username. Treated as an email so the
-  // caller answers "no such login" through its normal path rather than a
-  // different-shaped error that would tell an attacker the input was malformed.
+  // Neither a valid address, number nor username.
   return { key: id.toLowerCase(), type: 'email' };
 }
 
@@ -79,9 +53,8 @@ export async function indexUser(tenant, user) {
   if (user.email) rows.push([String(user.email).toLowerCase(), 'email']);
   const phone = normalizePhone(user.phone);
   if (phone) rows.push([phone, 'phone']);
-  // Usernames are deliberately absent: they are claimed through claimUsername(),
-  // which is allowed to fail. Upserting one here would hand it to whoever
-  // re-indexed last — see the note on that function.
+  // Usernames are deliberately absent: they are claimed through claimUsername(), which is
+  // allowed to fail.
   if (!rows.length) return;
   try {
     const master = masterDb();
@@ -95,32 +68,13 @@ export async function indexUser(tenant, user) {
       );
     }
   } catch (e) {
-    // Never fail a user operation because the directory write failed — login
-    // self-heals via the tenant scan.
+    // Never fail a user operation because the directory write failed - login self-heals via
+    // the tenant scan.
     logger.warn('login_directory index failed', e.message);
   }
 }
 
-/**
- * Claim a username for one user, platform-wide. Returns true on success, false
- * when somebody else already holds it.
- *
- * This is NOT the upsert indexUser() uses, and the difference matters. That one
- * ends `ON DUPLICATE KEY UPDATE tenant_id=VALUES(tenant_id), user_id=...`,
- * which is right for an address or a number — those are re-indexed constantly
- * and the newest owner is the correct one, because the tenant's own UNIQUE
- * index already stopped two people holding the same address.
- *
- * A username has no such guard: its uniqueness is only platform-wide, and the
- * directory row IS the record of who owns it. Upserting would mean the second
- * organisation to type 'yashas123' silently took it from the first, and the
- * theft would show up as the original owner's sign-in resolving to a stranger's
- * database. So the insert is allowed to fail, and ownership is then read back.
- *
- * INSERT IGNORE rather than a SELECT-then-INSERT: the check and the claim are
- * one statement against a primary key, so two organisations claiming the same
- * name at the same moment cannot both win.
- */
+/** Claim a username for one user, platform-wide. */
 export async function claimUsername(tenant, userId, rawUsername) {
   const username = normalizeUsername(rawUsername);
   if (!username || !tenant || !userId) return false;
@@ -140,7 +94,7 @@ export async function claimUsername(tenant, userId, rawUsername) {
   return Number(row.tenant_id) === Number(tenant.id) && Number(row.user_id) === Number(userId);
 }
 
-/** Is this username free, or already this user's own? Advisory — claim decides. */
+/** Is this username free, or already this user's own? Advisory - claim decides. */
 export async function usernameAvailable(rawUsername, { tenantId, userId } = {}) {
   const username = normalizeUsername(rawUsername);
   if (!username) return false;
@@ -152,8 +106,8 @@ export async function usernameAvailable(rawUsername, { tenantId, userId } = {}) 
     if (!row) return true;
     return Number(row.tenant_id) === Number(tenantId) && Number(row.user_id) === Number(userId);
   } catch {
-    // The registry is unreachable. Report "taken" rather than "free": letting a
-    // claim through unchecked is the one outcome that cannot be undone later.
+    // The registry is unreachable. Report "taken" rather than "free": letting a claim through
+    // unchecked is the one outcome that cannot be undone later.
     return false;
   }
 }
@@ -184,11 +138,7 @@ export async function deindexUser(tenantId, userId) {
   }
 }
 
-/**
- * Resolve the tenant for a login identifier (email or phone).
- * 1) exact directory lookup; 2) scan active tenants and self-heal.
- * Returns a tenant row, or null when the identifier matches nobody.
- */
+/** Resolve the tenant for a login identifier (email or phone). */
 export async function resolveTenantByLogin(rawIdentifier) {
   const parsed = directoryKey(rawIdentifier);
   if (!parsed) return null;
@@ -197,7 +147,7 @@ export async function resolveTenantByLogin(rawIdentifier) {
   let master;
   try { master = masterDb(); } catch { return null; }
 
-  // 1) Fast path — directory row.
+  // 1) Fast path - directory row.
   try {
     const [rows] = await master.execute(
       'SELECT tenant_slug FROM login_directory WHERE identifier = ? LIMIT 1',
@@ -211,11 +161,7 @@ export async function resolveTenantByLogin(rawIdentifier) {
     logger.warn('login_directory lookup failed', e.message);
   }
 
-  // 2) Fallback — scan the tenants a person may still sign in to, then cache
-  // the hit. That includes organisations on hold for non-payment: they can
-  // reach their own bill and nothing else (see enforceBilling), and finding
-  // them here is what lets somebody sign in without typing an org code to do
-  // it. The fast path above already accepts them, via resolveTenant.
+  // 2) Fallback - scan the tenants a person may still sign in to, then cache the hit.
   let tenants;
   try {
     const [rows] = await master.execute("SELECT * FROM tenants WHERE status IN ('active','suspended')");

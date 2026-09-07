@@ -12,9 +12,8 @@ export function NotifProvider({ children }) {
   const [busy, setBusy] = useState(false);
 
   const loadNotifications = useCallback(async () => {
-    // A platform administrator belongs to no organisation, so this endpoint
-    // has no database to answer from and correctly refuses. Skipping the call
-    // avoids a pointless request and a 403 in the log every 60 seconds.
+    // A platform administrator belongs to no organisation, so this endpoint has no database to
+    // answer from and correctly refuses.
     if (!user || user.role === 'platform_admin') return;
     try {
       const res = await notifApi.list();
@@ -30,12 +29,7 @@ export function NotifProvider({ children }) {
   useEffect(() => {
     if (!user || user.role === 'platform_admin') return;
     loadNotifications();
-    /*
-     * Notifications kept polling in every background tab, for every signed-in
-     * person, all day. Two minutes is more than responsive enough for "somebody
-     * commented on your idea", and the timer stops entirely while the tab is
-     * hidden — a laptop left open overnight now costs nothing.
-     */
+    // Notifications kept polling in every background tab, for every signed-in person, all day.
     const interval = setInterval(loadNotifications, 120000);
     const onVisibility = () => {
       if (document.visibilityState === 'visible') loadNotifications();
@@ -47,20 +41,7 @@ export function NotifProvider({ children }) {
     };
   }, [user, loadNotifications]);
 
-  /**
-   * Mark everything read.
-   *
-   * Two things went wrong here before. The optimistic update was applied and
-   * then the next poll — up to two minutes later — could overwrite it with
-   * whatever the server still believed, so the badge came back. And the whole
-   * thing was skipped when `ids` came out empty, which happens whenever the
-   * page in hand is all read but older unread ones exist beyond it, so the
-   * badge showed a number that no button could clear.
-   *
-   * Now: no ids are sent (the server marks all for this account, including the
-   * ones not on this page), and the server's own answer is re-read afterwards
-   * rather than assumed.
-   */
+  /** Mark everything read. */
   const markAllRead = useCallback(async () => {
     if (busy) return;
     setBusy(true);
@@ -76,7 +57,7 @@ export function NotifProvider({ children }) {
     setBusy(false);
   }, [busy, loadNotifications]);
 
-  /** Mark one read — used when a notification is opened. */
+  /** Mark one read - used when a notification is opened. */
   const markOneRead = useCallback(async (id) => {
     const n = notifs.find((x) => x.id === id);
     if (!n || n.is_read) return;

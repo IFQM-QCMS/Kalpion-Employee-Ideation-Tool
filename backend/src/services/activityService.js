@@ -1,28 +1,11 @@
-/**
- * Login activity — MOM 29 Jul 2026 §12.12.
- *
- * `login_attempts` already existed but is lockout STATE: it is cleared on every
- * successful sign-in, so it can never answer "who signed in, and when". This is
- * the append-only record that can, and it is what the platform console's
- * notifications read.
- *
- * Every write here is best-effort. An audit trail that can fail a login is worse
- * than no audit trail: it turns a logging outage into an outage.
- */
+/** Login activity - MOM 29 Jul 2026 §12.12. */
 import { masterDb } from '../database/master.js';
 import logger from '../utils/logger.js';
 
 /** Keep the table from growing without bound on a busy platform. */
 const RETENTION_DAYS = 180;
 
-/**
- * What kind of network an address belongs to.
- *
- * Worth recording because behind a hosting provider's load balancer the address
- * we see is often the provider's own internal one (10.x), and an operator
- * looking at "10.29.78.132" with no explanation reasonably concludes the field
- * is broken. Naming the network says it is not.
- */
+/** What kind of network an address belongs to. */
 function classifyNetwork(ip) {
   const a = String(ip || '').trim().replace(/^::ffff:/, '');
   if (!a) return null;
@@ -35,26 +18,8 @@ function classifyNetwork(ip) {
   return 'public';
 }
 
-/**
- * A readable, approximate location.
- *
- * The browser tells us its own time zone; we do not look the IP address up
- * anywhere. An IP lookup would mean handing our administrators' addresses to a
- * third-party service on every sign-in, and behind a proxy the address is
- * private and unresolvable regardless.
- *
- * A time zone is a band of the world rather than a place, and it follows the
- * machine's own setting, so this is a signal ("someone signed in on a European
- * clock at 3am") and not evidence of where anybody was.
- */
-/*
- * The country a time zone belongs to, for the zones this platform actually
- * sees. Not exhaustive and not meant to be — anything unlisted falls back to
- * the city, which is still a place.
- *
- * Calcutta and Kolkata are the same zone under two names; browsers disagree
- * about which they report, and showing both made one person look like two.
- */
+/** A readable, approximate location. */
+// The country a time zone belongs to, for the zones this platform actually sees.
 const ZONE_COUNTRY = {
   'Asia/Kolkata': 'India', 'Asia/Calcutta': 'India',
   'Asia/Colombo': 'Sri Lanka', 'Asia/Kathmandu': 'Nepal', 'Asia/Dhaka': 'Bangladesh',
@@ -64,19 +29,7 @@ const ZONE_COUNTRY = {
   'Australia/Sydney': 'Australia', 'Asia/Tokyo': 'Japan', 'Asia/Shanghai': 'China',
 };
 
-/**
- * A readable place from the browser's time zone.
- *
- * This used to store the zone itself with its offset - "Asia/Calcutta
- * (GMT+5:30)" - under a column headed Location. That is a time zone, not a
- * location: it names an offset rule, it reads as machine output, and every
- * Indian user looked identical to every other. The city inside the zone is a
- * real place and is what the column claims to show, so that is what is stored.
- *
- * Still approximate, and deliberately so. It comes from a setting the browser
- * volunteers, not from tracing the address, so no third-party geolocation
- * service is ever asked where anybody is.
- */
+/** A readable place from the browser's time zone. */
 function describeLocation(timeZone) {
   const tz = String(timeZone || '').trim().slice(0, 60);
   if (!tz || !/^[A-Za-z_+\-0-9/]+$/.test(tz)) return null;
@@ -87,11 +40,7 @@ function describeLocation(timeZone) {
   return country ? `${city}, ${country}` : city;
 }
 
-/**
- * Record one sign-in attempt.
- * @param {object} entry
- * @param {'platform_admin'|'tenant_user'} entry.actorType
- */
+/** Record one sign-in attempt. */
 export function recordLogin({
   actorType, actorId = null, actorName = null, actorEmail = null,
   tenantId = null, tenantSlug = null, outcome = 'success', ip = null, userAgent = null,
@@ -117,19 +66,7 @@ export function recordLogin({
     .catch((e) => logger.warn('login activity write failed', e.message));
 }
 
-/**
- * Recent sign-in activity for the platform console.
- *
- * IFQM staff only, by default and in practice. The page is there to answer "who
- * has been in the platform console" — mixing in every employee sign-in across
- * every customer buried that in noise, and a customer's staff movements are
- * their business, not something to browse from here.
- *
- * `actorType: 'all'` still exists for the notification feed, which legitimately
- * wants both.
- *
- * @param {{ limit?: number, outcome?: string, tenantId?: number, actorType?: string }} opts
- */
+/** Recent sign-in activity for the platform console. */
 export async function recentActivity({
   limit = 50, outcome = '', tenantId = null, actorType = 'platform_admin',
 } = {}) {
@@ -172,8 +109,8 @@ export async function recentActivity({
       },
     };
   } catch (e) {
-    // The table does not exist until migration 010 runs. A missing audit feed
-    // must not take the console down with it.
+    // The table does not exist until migration 010 runs. A missing audit feed must not take
+    // the console down with it.
     logger.warn('login activity unavailable', e.message);
     return { success: true, activity: [], last_24h: { successes: 0, failures: 0, lockouts: 0 } };
   }

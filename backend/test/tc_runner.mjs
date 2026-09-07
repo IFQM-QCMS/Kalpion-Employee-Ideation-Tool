@@ -1,27 +1,4 @@
-/**
- * IFQM — Test Case Runner
- * ----------------------------------------------------------------------------
- * The IFQM counterpart to QCMS's qcms_test_runner.py. Boots the REAL Express app
- * on scratch tenant databases (via the existing test harness) and drives it over
- * HTTP exactly as a client would, recording for every case:
- *
- *   Test Case ID | Module | Functionality | Expected Output | Actual Output | Result | Timestamp
- *
- * Results are written as JSON; docs/gen_testcases_doc.py turns them into
- * Kalpion_TestCases_Simple.pdf. Nothing here is mocked — Actual Output is whatever
- * the running instance did, so a genuine defect shows up as Fail rather than
- * being hidden. (Three real ones did in the cycle that added the deep modules:
- * a concurrent-submission collision on idea_code, an approval that could be
- * recorded five times over, and an anonymous submitter identifiable from the
- * approval timeline.)
- *
- * Beyond the feature modules it covers safety, reliability under injected
- * faults and real concurrency, horizontal scalability against a second live
- * application process, vertical scalability against a 5,000-idea dataset, data
- * integrity and recovery, extensibility, and operability.
- *
- *   node test/tc_runner.mjs          # then: python ../docs/gen_testcases_doc.py
- */
+/** The IFQM counterpart to QCMS's qcms_test_runner.py. */
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -61,11 +38,11 @@ async function tc(modKey, modName, functionality, expected, fn) {
 
 const ok = (cond, actual) => ({ actual, pass: !!cond });
 
-/**
- * Databases this run provisions through the product itself (Platform → new
- * organisation creates `ifqm_<slug>`). setupSuite only owns the three scratch
- * schemas, so these are dropped here — otherwise the next run finds a populated
- * database under the same slug and tenant creation legitimately fails.
+/*
+ * Databases this run provisions through the product itself (Platform new organisation
+ * creates `ifqm_<slug>`). setupSuite only owns the three scratch schemas, so these are
+ * dropped here - otherwise the next run finds a populated database under the same slug and
+ * tenant creation legitimately fails.
  */
 const PROVISIONED_DBS = ['ifqm_acme', 'ifqm_growth'];
 async function dropProvisionedDbs() {
@@ -82,20 +59,13 @@ async function main() {
   await setupSuite();
   await dropProvisionedDbs();
 
-  // ── Sessions ───────────────────────────────────────────────────────────
+  // Sessions
   const PA     = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
   const AADMIN = (await login('admin@orga.test', PASSWORDS.orgaAdmin)).token;
   const AUSER  = (await login('user@orga.test',  PASSWORDS.orgaUser)).token;
   const BADMIN = (await login('admin@orgb.test', PASSWORDS.orgbAdmin)).token;
 
-  /*
-   * A manager, because an organisation admin may no longer decide on an idea.
-   *
-   * The rule changed under this runner: administration and adjudication were
-   * separated, so the org admin now gets a 403 from review-action and every
-   * approval case that used AADMIN was failing on the product working as
-   * intended. Approvals are driven by this account instead.
-   */
+  // A manager, because an organisation admin may no longer decide on an idea.
   const REVIEWER_PW = 'AReviewerPass123';
   await sql('ifqm_test_a', `INSERT INTO __DB__.users
       (employee_id, name, email, phone, password_hash, role, status, password_changed_at)
@@ -116,7 +86,7 @@ async function main() {
   const IDEA1 = await mkIdea(AUSER, 'Recirculate coolant on line 3');
   const IDEA2 = await mkIdea(AUSER, 'Laser-mark part numbers instead of ink stamping');
 
-  // ══════════════════════════════ AUTHENTICATION ══════════════════════════
+  // AUTHENTICATION
   const M = 'AUTH', Mn = 'Authentication';
   await tc(M, Mn, 'Org Admin logs in with correct email/password',
     'Login succeeds, JWT issued, role = admin', async () => {
@@ -140,8 +110,8 @@ async function main() {
     });
   await tc(M, Mn, 'User enters an email that does not exist',
     'Same generic error as wrong-password (no account-existence leak)', async () => {
-      // The volatile "N attempt(s) remaining" counter differs by design; the
-      // security property is that the BASE message is identical either way.
+      // The volatile "N attempt(s) remaining" counter differs by design; the security property
+      // is that the BASE message is identical either way.
       const strip = (s) => (s || '').replace(/\d+\s+attempt\(s\)\s+remaining\.?/i, '').trim();
       const wrong = await login('admin@orga.test', 'WrongPassword999');
       const missing = await login('nobody@orga.test', 'WrongPassword999');
@@ -166,7 +136,7 @@ async function main() {
       return ok(!r.token, r.token ? 'Logged in while inactive (LEAK)' : `Blocked ${r.status}: ${r.error}`);
     });
   await tc(M, Mn, 'Tampered JWT used on a protected endpoint',
-    'Rejected 401 — invalid signature grants no access', async () => {
+    'Rejected 401 - invalid signature grants no access', async () => {
       const good = signToken({ user: { id: 1, role: 'employee' }, org_slug: 'orga', pwd_ts: 0 });
       const tampered = good.slice(0, -4) + (good.endsWith('AAAA') ? 'BBBB' : 'AAAA');
       const r = await api('GET', '/api/notifications', { token: tampered });
@@ -190,17 +160,9 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}: ${r.data?.error || 'ok'}`);
     });
 
-  // ═══════════════════════ ONE-TIME CODES (SMS & EMAIL) ═══════════════════
-  /*
-   * Sign-in by code, and the codes that prove an applicant holds the address
-   * and the number they typed. The SMS provider is the mock one (see
-   * helpers.js) so the whole path runs — row written, delivery recorded — with
-   * nothing reaching a handset and nothing billed.
-   *
-   * The properties under test are the ones that make a six-digit secret safe:
-   * it is stored hashed, it says nothing about who is registered, it survives
-   * only minutes, it dies after a few wrong guesses, and it works exactly once.
-   */
+  // ONE-TIME CODES (SMS & EMAIL)
+  // Sign-in by code, and the codes that prove an applicant holds the address and the number
+  // they typed.
   const O = 'OTP', On = 'One-Time Codes (SMS & Email)';
   const OTP_PHONE = '9812345670';
   await sql('ifqm_test_a', `UPDATE __DB__.users SET phone = '${OTP_PHONE}' WHERE email = 'user@orga.test'`);
@@ -213,20 +175,8 @@ async function main() {
       [identifier, purpose]);
     return rows[0] || null;
   };
-  /*
-   * The issued code is bcrypt-hashed and never returned by the API — which is
-   * the property under test, and equally the reason a case cannot simply read
-   * one back. Recovering it by brute force would mean up to a million bcrypt
-   * comparisons per case: exactly why the storage is safe, and exactly why it
-   * is no way to run a test.
-   *
-   * So the stored hash is replaced with the hash of a code chosen here.
-   * Everything downstream of issuance is then exercised as a real code would
-   * exercise it — the comparison, single use, the attempt counter, expiry and
-   * supersession. What this deliberately does not prove is that the digits the
-   * recipient received match the row; the storage side is covered separately by
-   * the hashing case above.
-   */
+  // The issued code is bcrypt-hashed and never returned by the API - which is the property
+  // under test, and equally the reason a case cannot simply read one back.
   const KNOWN_CODE = '424242';
   const plantCode = async (identifier, purpose = 'login') => {
     await sql('ifqm_test_master',
@@ -246,19 +196,19 @@ async function main() {
     'A bcrypt hash is stored and no column anywhere holds the digits', async () => {
       const row = await latestOtp(OTP_PHONE);
       const isHash = !!row && /^\$2[aby]\$/.test(row.code_hash) && row.code_hash.length >= 55;
-      // Read access to this table must not be enough to sign in as anybody, so
-      // no column may hold the code itself — the hash is the only copy.
+      // Read access to this table must not be enough to sign in as anybody, so no column may
+      // hold the code itself - the hash is the only copy.
       const cols = await sql('ifqm_test_master',
         `SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '__DB__'
            AND TABLE_NAME = 'login_otps' AND COLUMN_NAME IN ('code','otp','code_plain','plain_code')`);
       const anyDigits = !!row && /^\d{4,8}$/.test(String(row.code_hash));
       return ok(isHash && !cols.length && !anyDigits,
-        isHash ? `bcrypt hash stored (${String(row.code_hash).slice(0, 7)}…), no clear-code column` : 'Code not hashed (CRITICAL)');
+        isHash ? `bcrypt hash stored (${String(row.code_hash).slice(0, 7)}...), no clear-code column` : 'Code not hashed (CRITICAL)');
     });
   await tc(O, On, 'Request a code for a number that belongs to nobody',
-    'Reply is identical to the registered case — no membership oracle', async () => {
-      // Age the existing row first, or the resend throttle answers the known
-      // number with a 429 and the two replies differ for an unrelated reason.
+    'Reply is identical to the registered case - no membership oracle', async () => {
+      // Age the existing row first, or the resend throttle answers the known number with a 429
+      // and the two replies differ for an unrelated reason.
       await sql('ifqm_test_master',
         `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
       const known = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
@@ -281,7 +231,7 @@ async function main() {
         r.data?.token ? `Signed in, role=${r.data.user.role}` : `No token (${r.status}: ${r.data?.error})`);
     });
   await tc(O, On, 'Re-use a code that has already been redeemed',
-    'Refused — a code works exactly once', async () => {
+    'Refused - a code works exactly once', async () => {
       const r = await api('POST', '/api/auth/otp/verify', { body: { identifier: OTP_PHONE, code: KNOWN_CODE } });
       return ok(r.status === 401 && !r.data?.token, `Status ${r.status}: ${r.data?.error}`);
     });
@@ -304,7 +254,7 @@ async function main() {
       return ok(r.status === 401 && !r.data?.token, `Correct code after limit: ${r.status} ${r.data?.error}`);
     });
   await tc(O, On, 'Request a second code while one is still live',
-    'The earlier code stops working — resending does not widen the target', async () => {
+    'The earlier code stops working - resending does not widen the target', async () => {
       await sql('ifqm_test_master', `UPDATE __DB__.login_otps SET created_at = DATE_SUB(NOW(), INTERVAL 5 MINUTE) WHERE identifier = ?`, [OTP_PHONE]);
       await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
       const first = await plantCode(OTP_PHONE);
@@ -330,13 +280,7 @@ async function main() {
     });
   await tc(O, On, 'Registration: an email code is accepted and then spent',
     'Applicant proves they hold the address; the code works once', async () => {
-      /*
-       * The row is created directly rather than through send-otp. The suite
-       * deliberately has no mail account configured (helpers.js) so that a test
-       * run cannot post to the internet, which makes the SEND half unavailable
-       * here — it is covered by the case below. What matters for security is
-       * the redemption half, and that is exercised in full.
-       */
+      // The row is created directly rather than through send-otp.
       const addr = 'applicant@registration.test';
       await sql('ifqm_test_master',
         `INSERT INTO __DB__.login_otps (identifier, id_type, channel, code_hash, purpose, expires_at)
@@ -402,7 +346,7 @@ async function main() {
       return ok(named, named ? `Names each gap: ${missing.length} reported` : `Unhelpful: ${missing.join(', ')}`);
     });
   await tc(O, On, 'Code sign-in while the platform is in maintenance',
-    'Refused — the code route is shut with the password route', async () => {
+    'Refused - the code route is shut with the password route', async () => {
       const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
       await api('PUT', '/api/platform/maintenance', { token: pa, body: { enabled: true } });
       const r = await api('POST', '/api/auth/otp/request', { body: { identifier: OTP_PHONE } });
@@ -410,7 +354,7 @@ async function main() {
       return ok(r.status === 503 && r.data?.maintenance === true, `Status ${r.status}: ${r.data?.error || ''}`);
     });
 
-  // ══════════════════════════════ PLATFORM ADMIN ══════════════════════════
+  // PLATFORM ADMIN
   const P = 'PLAT', Pn = 'Platform Admin';
   let newTenantId = null;
   await tc(P, Pn, 'Create a new organization with valid details',
@@ -423,7 +367,7 @@ async function main() {
       return ok(r.data?.success || r.status === 200 || r.status === 201, `Status ${r.status}: ${r.data?.error || 'created'}`);
     });
   await tc(P, Pn, 'Create an organization with a duplicate slug',
-    'Rejected — slug already in use', async () => {
+    'Rejected - slug already in use', async () => {
       const r = await api('POST', '/api/platform/tenants', { token: PA, body: {
         org_name: 'Dup', slug: 'acme', admin_name: 'D', admin_email: 'd@dup.test', admin_password: 'DupAdminPass123',
       }});
@@ -450,7 +394,7 @@ async function main() {
       return ok(s.status === 200 && a.status === 200, `suspend=${s.status}, reactivate=${a.status}`);
     });
   await tc(P, Pn, 'Delete a tenant with a wrong confirmation slug',
-    'Blocked — confirmation mismatch', async () => {
+    'Blocked - confirmation mismatch', async () => {
       const t = (await api('GET', '/api/platform/tenants', { token: PA })).data;
       const list = t?.tenants || t || [];
       const orgb = list.find(x => x.slug === 'orgb');
@@ -458,7 +402,7 @@ async function main() {
       return ok(r.status >= 400, `Blocked ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(P, Pn, 'Reset a tenant admin password targeting a non-admin email',
-    'Rejected — target is not that org\'s admin', async () => {
+    'Rejected - target is not that org\'s admin', async () => {
       const t = (await api('GET', '/api/platform/tenants', { token: PA })).data;
       const list = t?.tenants || t || [];
       const orga = list.find(x => x.slug === 'orga');
@@ -466,7 +410,7 @@ async function main() {
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(P, Pn, 'Org Admin tries to reach the platform tenants endpoint',
-    'Forbidden — platform scope only', async () => {
+    'Forbidden - platform scope only', async () => {
       const r = await api('GET', '/api/platform/tenants', { token: AADMIN });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
@@ -476,7 +420,7 @@ async function main() {
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(P, Pn, 'Platform admin tries to delete their own account',
-    'Blocked — cannot remove self', async () => {
+    'Blocked - cannot remove self', async () => {
       const admins = (await api('GET', '/api/platform/admins', { token: PA })).data;
       const listA = admins?.admins || admins || [];
       const me = listA.find(a => a.email === 'platform@ifqm.io');
@@ -484,7 +428,7 @@ async function main() {
       return ok(r.status >= 400, `Blocked ${r.status}: ${r.data?.error || ''}`);
     });
 
-  // ══════════════════════════════ USERS / ORG ADMIN ═══════════════════════
+  // USERS / ORG ADMIN
   const U = 'USER', Un = 'Org Admin / Users';
   await tc(U, Un, 'Admin creates a user with valid details',
     'User created with a derived temporary password', async () => {
@@ -495,19 +439,19 @@ async function main() {
       return ok(r.data?.success || r.status === 200 || r.status === 201, `Status ${r.status}: ${r.data?.error || 'created'}`);
     });
   await tc(U, Un, 'Create a user with a missing email',
-    'Validation error — email required', async () => {
+    'Validation error - email required', async () => {
       const r = await api('POST', '/api/users', { token: AADMIN, body: { name: 'No Email', employee_id: 'A-101' } });
       return ok(r.status >= 400 && r.status < 500, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(U, Un, 'Create a user with an email already in use',
-    'Rejected — email already registered', async () => {
+    'Rejected - email already registered', async () => {
       const r = await api('POST', '/api/users', { token: AADMIN, body: {
         name: 'Dup', email: 'neha@orga.test', employee_id: 'A-102', role: 'employee', date_of_birth: '1990',
       }});
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(U, Un, 'Employee (non-admin) tries to create a user',
-    'Forbidden — admin only', async () => {
+    'Forbidden - admin only', async () => {
       const r = await api('POST', '/api/users', { token: AUSER, body: {
         name: 'Sneaky', email: 'sneaky@orga.test', employee_id: 'A-103', role: 'admin', date_of_birth: '1990',
       }});
@@ -528,7 +472,7 @@ async function main() {
       return ok(r.status !== 500, `Status ${r.status}: ${r.data?.error || 'previewed'}`);
     });
 
-  // ══════════════════════════════ IDEAS ═══════════════════════════════════
+  // IDEAS
   const I = 'IDEA', In = 'Ideas';
   await tc(I, In, 'Employee submits a valid idea',
     'Idea accepted, id returned', async () => {
@@ -539,7 +483,7 @@ async function main() {
       return ok(r.data?.success && r.data?.idea_id, `Status ${r.status}: id=${r.data?.idea_id}`);
     });
   await tc(I, In, 'Submit an idea with a missing title',
-    'Validation error — title required', async () => {
+    'Validation error - title required', async () => {
       const r = await api('POST', '/api/ideas/submit', { token: AUSER, body: { present_situation: 'x', proposed_solution: 'y' } });
       return ok(r.status >= 400 && r.status < 500, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
@@ -579,7 +523,7 @@ async function main() {
       return ok(r.status === 401, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ VOTING & COMMUNITY ══════════════════════
+  // VOTING & COMMUNITY
   const V = 'VOTE', Vn = 'Voting & Community';
   await tc(V, Vn, 'Community upvote on an idea',
     'Upvote recorded', async () => {
@@ -591,18 +535,18 @@ async function main() {
       const r = await api('POST', '/api/votes/community', { token: AADMIN, body: { idea_id: IDEA1, vote_type: 'up' } });
       return ok(r.status === 200, `Status ${r.status}`);
     });
-  await tc(V, Vn, 'Rate an idea 1–5',
+  await tc(V, Vn, 'Rate an idea 1-5',
     'Rating stored', async () => {
       const r = await api('POST', '/api/votes/rate', { token: AADMIN, body: { idea_id: IDEA1, rating: 4 } });
       return ok(r.status === 200, `Status ${r.status}: ${r.data?.error || 'rated'}`);
     });
   await tc(V, Vn, 'Rate an idea with an out-of-range value (6)',
-    'Rejected — rating must be 1–5', async () => {
+    'Rejected - rating must be 1-5', async () => {
       const r = await api('POST', '/api/votes/rate', { token: AADMIN, body: { idea_id: IDEA1, rating: 6 } });
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(V, Vn, 'Community vote with an invalid vote_type',
-    'Rejected — vote_type must be up/down', async () => {
+    'Rejected - vote_type must be up/down', async () => {
       const r = await api('POST', '/api/votes/community', { token: AADMIN, body: { idea_id: IDEA1, vote_type: 'sideways' } });
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
@@ -612,7 +556,7 @@ async function main() {
       return ok(r.status === 401, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ COMMENTS ════════════════════════════════
+  // COMMENTS
   const C = 'CMNT', Cn = 'Comments';
   await tc(C, Cn, 'Add a comment to an idea',
     'Comment created', async () => {
@@ -620,12 +564,12 @@ async function main() {
       return ok(r.status === 200 && (r.data?.success ?? true), `Status ${r.status}: ${r.data?.error || 'added'}`);
     });
   await tc(C, Cn, 'Add an empty comment',
-    'Rejected — content required', async () => {
+    'Rejected - content required', async () => {
       const r = await api('POST', '/api/comments', { token: AADMIN, body: { idea_id: IDEA1, content: '   ' } });
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(C, Cn, 'Add a comment over 1000 characters',
-    'Rejected — length cap enforced', async () => {
+    'Rejected - length cap enforced', async () => {
       const r = await api('POST', '/api/comments', { token: AADMIN, body: { idea_id: IDEA1, content: 'z'.repeat(1200) } });
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
@@ -640,7 +584,7 @@ async function main() {
       return ok(r.status !== 500, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ REVIEW & APPROVAL ═══════════════════════
+  // REVIEW & APPROVAL
   const R = 'RVW', Rn = 'Review & Approval';
   await tc(R, Rn, 'Reviewer approves an idea',
     'Idea moves to Approved with a workflow entry', async () => {
@@ -648,12 +592,12 @@ async function main() {
       return ok(r.status === 200 && (r.data?.success ?? true), `Status ${r.status}: ${r.data?.error || 'approved'}`);
     });
   await tc(R, Rn, 'Submitter tries to approve their own idea',
-    'Forbidden — cannot review own idea', async () => {
+    'Forbidden - cannot review own idea', async () => {
       const r = await api('POST', '/api/ideas/review-action', { token: AUSER, body: { idea_id: IDEA1, decision: 'Approved', comment: 'me' } });
       return ok(r.status === 403 || r.status >= 400, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(R, Rn, 'Review with an invalid decision value',
-    'Rejected — invalid decision', async () => {
+    'Rejected - invalid decision', async () => {
       const r = await api('POST', '/api/ideas/review-action', { token: AADMIN, body: { idea_id: IDEA1, decision: 'Maybe', comment: '' } });
       return ok(r.status >= 400, `Rejected ${r.status}: ${r.data?.error || ''}`);
     });
@@ -663,13 +607,13 @@ async function main() {
       return ok(r.status === 404 || r.status >= 400, `Status ${r.status}`);
     });
   await tc(R, Rn, 'Duplicate identical approval within 10 seconds',
-    'Idempotency guard — no duplicate workflow entry', async () => {
+    'Idempotency guard - no duplicate workflow entry', async () => {
       await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: IDEA2, decision: 'Approved', comment: 'again' } });
       const rows = await sql('ifqm_test_a', `SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id=? AND action='Approved'`, [IDEA2]);
       return ok(Number(rows[0].c) <= 1, `Approved workflow rows: ${rows[0].c}`);
     });
 
-  // ══════════════════════════════ CATEGORIES & CHALLENGES ═════════════════
+  // CATEGORIES & CHALLENGES
   const K = 'CAT', Kn = 'Categories & Challenges';
   await tc(K, Kn, 'Admin creates a category',
     'Category created', async () => {
@@ -682,7 +626,7 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}`);
     });
   await tc(K, Kn, 'Non-admin tries to create a category',
-    'Forbidden — admin only', async () => {
+    'Forbidden - admin only', async () => {
       const r = await api('POST', '/api/categories', { token: AUSER, body: { name: 'Sneak' } });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
@@ -692,7 +636,7 @@ async function main() {
       return ok(r.status !== 500 && (r.status < 400 || r.data?.success), `Status ${r.status}: ${r.data?.error || 'created'}`);
     });
 
-  // ══════════════════════════════ ANALYTICS & REPORTS ═════════════════════
+  // ANALYTICS & REPORTS
   const AN = 'ANL', ANn = 'Analytics & Reports';
   await tc(AN, ANn, 'Admin loads analytics aggregates',
     'Returns aggregate metrics', async () => {
@@ -715,7 +659,7 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ NOTIFICATIONS ═══════════════════════════
+  // NOTIFICATIONS
   const N = 'NTF', Nn = 'Notifications';
   await tc(N, Nn, 'List notifications for the signed-in user',
     'Returns the notification list', async () => {
@@ -733,7 +677,7 @@ async function main() {
       return ok(r.status === 401, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ REPORTS & EXPORT ════════════════════════
+  // REPORTS & EXPORT
   const E = 'EXP', En = 'Reports & Export';
   await tc(E, En, 'Export all ideas as CSV (admin)',
     'Returns a CSV download', async () => {
@@ -746,12 +690,12 @@ async function main() {
       return ok(r.status === 200 && /pdf/i.test(r.contentType), `Status ${r.status}, type=${r.contentType}`);
     });
   await tc(E, En, 'Single-idea PDF requested from another tenant',
-    'Blocked — tenant boundary', async () => {
+    'Blocked - tenant boundary', async () => {
       const r = await api('GET', `/api/export/idea/${IDEA2}/pdf`, { token: BADMIN });
       return ok(r.status >= 400, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ BRANDING & SETTINGS ═════════════════════
+  // BRANDING & SETTINGS
   const B = 'BRND', Bn = 'Branding & Settings';
   await tc(B, Bn, 'Admin reads branding',
     'Returns branding config', async () => {
@@ -759,7 +703,7 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}`);
     });
   await tc(B, Bn, 'Employee tries to update branding',
-    'Forbidden — admin only', async () => {
+    'Forbidden - admin only', async () => {
       const r = await api('PUT', '/api/branding', { token: AUSER, body: { org_name: 'Hacked' } });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
@@ -771,7 +715,7 @@ async function main() {
       return ok(!leaked, leaked ? 'Secret echoed back (LEAK)' : 'Secret not echoed');
     });
 
-  // ══════════════════════════════ SUPPORT ═════════════════════════════════
+  // SUPPORT
   const S = 'SUP', Sn = 'Support';
   let ticketId = null;
   await tc(S, Sn, 'User raises a support ticket',
@@ -781,7 +725,7 @@ async function main() {
       return ok(r.status === 200 || r.status === 201, `Status ${r.status}: id=${ticketId}`);
     });
   await tc(S, Sn, 'Another org cannot read this org\'s ticket',
-    'Blocked — tenant isolation', async () => {
+    'Blocked - tenant isolation', async () => {
       const r = await api('GET', `/api/support/tickets/${ticketId}`, { token: BADMIN });
       return ok(r.status >= 400, `Status ${r.status}`);
     });
@@ -793,7 +737,7 @@ async function main() {
       return ok(!leaked, leaked ? 'Internal note leaked' : 'Internal note hidden');
     });
 
-  // ══════════════════════════════ QCMS INTEGRATION ════════════════════════
+  // QCMS INTEGRATION
   const Q = 'QCMS', Qn = 'QCMS Integration';
   await tc(Q, Qn, 'Admin saves the QCMS API key',
     'Saved and enabled', async () => {
@@ -816,14 +760,14 @@ async function main() {
       return ok(saved && back, saved ? (back ? 'Override saved and cleared' : 'Blank did not restore the default') : `Not saved: ${set.data?.error || set.status}`);
     });
   await tc(Q, Qn, 'A malformed QCMS base URL is rejected',
-    'Rejected (400) — ideas are never sent to a bad endpoint', async () => {
+    'Rejected (400) - ideas are never sent to a bad endpoint', async () => {
       const r = await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { base_url: 'not a url' } });
       const cfg = await api('GET', '/api/integrations/qcms', { token: AADMIN });
       const stored = JSON.stringify(cfg.data || {}).includes('not a url');
       return ok(r.status === 400 && !stored, stored ? 'Malformed URL stored (RISK)' : `Status ${r.status}`);
     });
   await tc(Q, Qn, 'Non-admin cannot change the QCMS base URL',
-    'Forbidden — admin only', async () => {
+    'Forbidden - admin only', async () => {
       const r = await api('PUT', '/api/integrations/qcms', { token: AUSER, body: { base_url: 'https://evil.example' } });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
@@ -833,17 +777,17 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}`);
     });
   await tc(Q, Qn, 'Non-admin attempts to push to QCMS',
-    'Forbidden — admin only', async () => {
+    'Forbidden - admin only', async () => {
       const r = await api('POST', '/api/integrations/push', { token: AUSER, body: { idea_ids: [IDEA2] } });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ SECURITY & MULTI-TENANCY ════════════════
+  // SECURITY & MULTI-TENANCY
   const SEC = 'SEC', SECn = 'Security & Multi-Tenancy';
   await tc(SEC, SECn, 'Org A user cannot see Org B idea content',
     'Cross-tenant content never exposed (own-tenant record or 404)', async () => {
-      // IDs auto-increment per tenant, so the same number exists in both DBs.
-      // Proof of isolation is by CONTENT: Org A must never receive Org B's idea.
+      // IDs auto-increment per tenant, so the same number exists in both DBs. Proof of isolation
+      // is by CONTENT: Org A must never receive Org B's idea.
       const bIdea = await mkIdea(BADMIN, 'ORGB-SECRET-MARKER coolant recipe');
       const r = await api('GET', `/api/ideas/${bIdea}`, { token: AUSER });
       const leaked = JSON.stringify(r.data || {}).includes('ORGB-SECRET-MARKER');
@@ -871,19 +815,13 @@ async function main() {
       return ok(h.status === 200 && (rd.status === 200 || rd.status === 503), `health=${h.status}, ready=${rd.status}`);
     });
 
-  // ════════════════════════════════════════════════════════════════════════
-  //  DEEP ASSURANCE MODULES
-  //  Everything above proves the features work. What follows is the harder
-  //  question a buyer's IT department asks: is it SAFE, does it STAY UP, does
-  //  it GROW, and can it be EXTENDED without a rewrite. Same rules — real HTTP
-  //  against the real app, Actual Output is whatever happened.
-  // ════════════════════════════════════════════════════════════════════════
+  // DEEP ASSURANCE MODULES Everything above proves the features work.
 
   const { default: config, validateConfig } = await import('../src/config/index.js');
   const jwtlib = (await import('jsonwebtoken')).default;
   const { mapIdeaToQcms, pushIdeaToQcms } = await import('../src/services/qcmsService.js');
 
-  /** Wall-clock a call → [result, ms]. Latency is an assertion here, not a note. */
+  /** Wall-clock a call [result, ms]. Latency is an assertion here, not a note. */
   const timed = async (fn) => { const t0 = Date.now(); const r = await fn(); return [r, Date.now() - t0]; };
   const rawFetch = (p, init = {}) => fetch(getBaseUrl() + p, init);
   const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -919,17 +857,17 @@ async function main() {
 
   const AUSER_ROW = await userRow('user@orga.test');
 
-  // ══════════════════════════════ SAFETY & DATA PROTECTION ════════════════
+  // SAFETY & DATA PROTECTION
   const SF = 'SAFE', SFn = 'Safety & Data Protection';
 
   await tc(SF, SFn, 'Unsigned token (alg=none) presented as a session',
-    'Rejected 401 — the verifier pins HS256, the token cannot choose', async () => {
+    'Rejected 401 - the verifier pins HS256, the token cannot choose', async () => {
       const t = `${b64u({ alg: 'none', typ: 'JWT' })}.${b64u({ user: { id: AUSER_ROW.id, role: 'admin' }, org_slug: 'orga', pwd_ts: AUSER_ROW.pwd_ts })}.`;
       const r = await api('GET', '/api/users', { token: t });
       return ok(r.status === 401, `Status ${r.status}`);
     });
   await tc(SF, SFn, 'Token signed with an attacker-chosen secret',
-    'Rejected 401 — signature must verify against the server secret', async () => {
+    'Rejected 401 - signature must verify against the server secret', async () => {
       const forged = jwtlib.sign({ user: { id: AUSER_ROW.id, role: 'admin' }, org_slug: 'orga', pwd_ts: AUSER_ROW.pwd_ts },
         'attacker-secret-attacker-secret-0123456789', { algorithm: 'HS256' });
       const r = await api('GET', '/api/users', { token: forged });
@@ -943,18 +881,18 @@ async function main() {
       return ok(r.status === 401, `Status ${r.status}: ${r.data?.error || ''}${r.data?.expired ? ' (expired flag)' : ''}`);
     });
   await tc(SF, SFn, 'Valid token whose role claim was raised to admin',
-    'Role is read from the database row, not the token — forbidden', async () => {
+    'Role is read from the database row, not the token - forbidden', async () => {
       const r = await api('GET', '/api/users/admin', { token: tokenFor(AUSER_ROW, { role: 'admin' }) });
       return ok(r.status === 403, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(SF, SFn, 'Employee edits their own user record to become admin',
-    'Forbidden — role change is admin-only and the stored role is unchanged', async () => {
+    'Forbidden - role change is admin-only and the stored role is unchanged', async () => {
       const r = await api('PUT', `/api/users/${AUSER_ROW.id}`, { token: AUSER, body: { role: 'admin' } });
       const after = await userRow('user@orga.test');
       return ok((r.status === 403 || r.status === 401) && after.role === 'employee', `Status ${r.status}, stored role=${after.role}`);
     });
   await tc(SF, SFn, 'Employee posts role/points through the profile endpoint',
-    'Mass-assignment ignored — role and points unchanged', async () => {
+    'Mass-assignment ignored - role and points unchanged', async () => {
       const before = await userRow('user@orga.test');
       await api('POST', '/api/users/profile', { token: AUSER, body: { name: 'Orga Employee', role: 'super_admin', points: 999999 } });
       const after = await userRow('user@orga.test');
@@ -962,7 +900,7 @@ async function main() {
       return ok(held, held ? `role=${after.role}, points=${after.points} (unchanged)` : `ESCALATED to role=${after.role}, points=${after.points}`);
     });
   await tc(SF, SFn, 'Session opened before a password change is reused',
-    'Rejected 401 — a password change kills tokens issued earlier', async () => {
+    'Rejected 401 - a password change kills tokens issued earlier', async () => {
       const u = await seedUser('pwdchange@orga.test');
       const old = tokenFor(u);
       const before = await api('GET', '/api/notifications', { token: old });
@@ -971,7 +909,7 @@ async function main() {
       return ok(before.status === 200 && after.status === 401, `before=${before.status}, after password change=${after.status}`);
     });
   await tc(SF, SFn, 'Offboarded (deactivated) employee reuses a live token',
-    'Rejected 401 on the very next request — status is re-read per request', async () => {
+    'Rejected 401 on the very next request - status is re-read per request', async () => {
       const u = await seedUser('offboard@orga.test');
       const t = tokenFor(u);
       const before = await api('GET', '/api/notifications', { token: t });
@@ -980,7 +918,7 @@ async function main() {
       return ok(before.status === 200 && after.status === 401, `before=${before.status}, after deactivation=${after.status}`);
     });
   await tc(SF, SFn, 'Token for an account that has since been deleted',
-    'Rejected 401 — no ghost sessions', async () => {
+    'Rejected 401 - no ghost sessions', async () => {
       const u = await seedUser('deleted@orga.test');
       const t = tokenFor(u);
       await sql('ifqm_test_a', 'DELETE FROM __DB__.users WHERE email = ?', ['deleted@orga.test']);
@@ -996,7 +934,7 @@ async function main() {
       return ok(blocked.status === 403 && allowed.status === 200, `ideas=${blocked.status} (${blocked.data?.error || ''}), me=${allowed.status}`);
     });
   await tc(SF, SFn, 'Password hashes in any authenticated response',
-    'Never present — no hash or bcrypt prefix is ever serialised', async () => {
+    'Never present - no hash or bcrypt prefix is ever serialised', async () => {
       const bodies = [
         (await api('GET', '/api/auth/me', { token: AADMIN })).text,
         (await api('GET', '/api/users', { token: AADMIN })).text,
@@ -1031,7 +969,7 @@ async function main() {
       return ok(res.status === 400, `Status ${res.status}: ${body.slice(0, 80)}`);
     });
   await tc(SF, SFn, 'SQL metacharacters stored in an idea title',
-    'Stored as literal text — the ideas table is untouched', async () => {
+    'Stored as literal text - the ideas table is untouched', async () => {
       const before = (await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.ideas'))[0].c;
       await api('POST', '/api/ideas/submit', { token: AUSER, body: {
         title: "x'; DROP TABLE ideas; --", present_situation: 'Injection probe situation text for the runner.',
@@ -1048,12 +986,12 @@ async function main() {
       return ok(isJson && noHtmlType, `content-type=${r.contentType}`);
     });
   await tc(SF, SFn, 'Attachment with a disallowed extension (.exe)',
-    'Rejected 400 — extension allow-list enforced server-side', async () => {
+    'Rejected 400 - extension allow-list enforced server-side', async () => {
       const r = await uploadFile(AUSER, IDEA1, 'payload.exe', Buffer.from('MZ fake executable'));
       return ok(r.status >= 400 && r.status < 500, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(SF, SFn, 'Attachment with a double extension (report.pdf.exe)',
-    'Rejected — the real (last) extension is what is checked', async () => {
+    'Rejected - the real (last) extension is what is checked', async () => {
       const r = await uploadFile(AUSER, IDEA1, 'report.pdf.exe', Buffer.from('MZ fake executable'));
       return ok(r.status >= 400 && r.status < 500, `Status ${r.status}: ${r.data?.error || ''}`);
     });
@@ -1072,35 +1010,35 @@ async function main() {
       return ok(r.status === 200 && ATTACH_ID, `Status ${r.status}, attachment id=${ATTACH_ID}`);
     });
   await tc(SF, SFn, 'Attaching a file to someone else\'s idea',
-    'Forbidden — ownership checked before the file is written', async () => {
+    'Forbidden - ownership checked before the file is written', async () => {
       const r = await uploadFile(AADMIN, IDEA1, 'notmine.png', tinyPng());
       return ok(r.status >= 400, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(SF, SFn, 'Downloading an attachment with no session',
-    'Rejected 401 — attachments are not public URLs', async () => {
+    'Rejected 401 - attachments are not public URLs', async () => {
       const r = await api('GET', `/api/upload/${ATTACH_ID}/download`, {});
       return ok(r.status === 401, `Status ${r.status}`);
     });
   await tc(SF, SFn, 'Downloading another organisation\'s attachment id',
-    'Not found — the lookup is scoped to the caller\'s tenant database', async () => {
+    'Not found - the lookup is scoped to the caller\'s tenant database', async () => {
       const r = await api('GET', `/api/upload/${ATTACH_ID}/download`, { token: BADMIN });
       return ok(r.status >= 400, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(SF, SFn, 'Legitimate attachment download by a permitted user',
-    'Streamed as an attachment with nosniff — never renderable in-origin', async () => {
+    'Streamed as an attachment with nosniff - never renderable in-origin', async () => {
       const r = await api('GET', `/api/upload/${ATTACH_ID}/download`, { token: AUSER });
       const h = r.headers || {};
       const safe = /attachment/i.test(h['content-disposition'] || '') && h['x-content-type-options'] === 'nosniff';
       return ok(r.status === 200 && safe, `Status ${r.status}, disposition=${(h['content-disposition'] || '').slice(0, 40)}, nosniff=${h['x-content-type-options']}`);
     });
   await tc(SF, SFn, 'Path traversal in the attachment id',
-    'Rejected — id is numeric, no filesystem path is ever taken from input', async () => {
+    'Rejected - id is numeric, no filesystem path is ever taken from input', async () => {
       const r = await api('GET', '/api/upload/..%2F..%2F..%2Fetc%2Fpasswd/download', { token: AUSER });
       const leaked = /root:|Windows Registry|\[boot loader\]/i.test(r.text || '');
       return ok(r.status >= 400 && !leaked, leaked ? 'File contents returned (CRITICAL)' : `Status ${r.status}`);
     });
   await tc(SF, SFn, 'Deleting an attachment belonging to another user',
-    'Forbidden — only the owner may remove their file', async () => {
+    'Forbidden - only the owner may remove their file', async () => {
       const r = await api('DELETE', `/api/upload/${ATTACH_ID}`, { token: AADMIN });
       return ok(r.status >= 400, `Status ${r.status}: ${r.data?.error || ''}`);
     });
@@ -1130,7 +1068,7 @@ async function main() {
       return ok(row?.submitter_id > 0 && row?.is_anonymous, `submitter_id=${row?.submitter_id}, is_anonymous=${row?.is_anonymous}`);
     });
   await tc(SF, SFn, 'Platform (vendor) admin reads a customer\'s ideas',
-    'Refused — vendor staff see counts, never tenant content', async () => {
+    'Refused - vendor staff see counts, never tenant content', async () => {
       const ideas = await api('GET', '/api/ideas', { token: PA });
       const users = await api('GET', '/api/users', { token: PA });
       const leaked = /Recirculate coolant/.test(ideas.text || '') || /orga\.test/.test(users.text || '');
@@ -1148,7 +1086,7 @@ async function main() {
       return ok(!during.token && !!after.token, `suspended: ${during.status} (${during.error || ''}); reactivated: ${after.token ? 'login ok' : 'still blocked'}`);
     });
   await tc(SF, SFn, 'Five wrong passwords then the CORRECT one',
-    'Account locked out — the right password does not clear a live lockout', async () => {
+    'Account locked out - the right password does not clear a live lockout', async () => {
       await seedUser('lockme@orga.test', { password: 'LockMeRightPass12' });
       await sql('ifqm_test_master', 'DELETE FROM __DB__.login_attempts');
       for (let i = 0; i < 5; i++) await login('lockme@orga.test', 'WrongOne' + i, 'orga');
@@ -1165,7 +1103,7 @@ async function main() {
       return ok(rows.length > 0, rows.length ? `${rows.length} row(s) persisted, attempts=${rows[0].attempts}` : 'Nothing persisted (counter would be per-process)');
     });
   await tc(SF, SFn, 'Server error body inspected for internals',
-    'Generic message only — no stack trace, SQL or file path', async () => {
+    'Generic message only - no stack trace, SQL or file path', async () => {
       const r = await api('GET', '/api/ideas/999999999', { token: AUSER });
       const body = r.text || '';
       const leak = /at\s+\w+\s+\(|SELECT\s|node_modules|C:\\\\|\/src\//.test(body);
@@ -1182,11 +1120,11 @@ async function main() {
       const h = r.headers || {};
       const has = h['ratelimit-limit'] || h['ratelimit-policy'] || h['ratelimit'];
       return ok(!!has, has
-        ? `RateLimit headers present (budget shown: ${h['ratelimit-limit'] || h['ratelimit-policy']}; the suite raises GLOBAL_RATE_LIMIT — the shipped default is 300/min per IP, 30/15min on auth)`
+        ? `RateLimit headers present (budget shown: ${h['ratelimit-limit'] || h['ratelimit-policy']}; the suite raises GLOBAL_RATE_LIMIT - the shipped default is 300/min per IP, 30/15min on auth)`
         : 'No RateLimit headers');
     });
   await tc(SF, SFn, 'Employee reads the integration (API key) screen',
-    'Forbidden — secrets are admin-only', async () => {
+    'Forbidden - secrets are admin-only', async () => {
       const r = await api('GET', '/api/integrations/qcms', { token: AUSER });
       return ok(r.status === 403 || r.status === 401, `Status ${r.status}`);
     });
@@ -1196,18 +1134,18 @@ async function main() {
       return ok(problems.length >= 3, `${problems.length} problem(s) reported, first: ${(problems[0] || '').slice(0, 90)}`);
     });
   await tc(SF, SFn, 'Password shorter than the policy minimum',
-    'Rejected — minimum length enforced server-side', async () => {
+    'Rejected - minimum length enforced server-side', async () => {
       const r = await api('POST', '/api/auth/reset-password', { body: { token: 'whatever', password: 'short1' } });
       return ok(r.status >= 400, `Status ${r.status}: ${r.data?.error || ''}`);
     });
   await tc(SF, SFn, 'CRLF injection through a user-supplied name',
-    'Stored as text — no header split, no 500', async () => {
+    'Stored as text - no header split, no 500', async () => {
       const r = await api('POST', '/api/users/profile', { token: AUSER, body: { name: 'Evil\r\nSet-Cookie: admin=1' } });
       await api('POST', '/api/users/profile', { token: AUSER, body: { name: 'Orga Employee' } });
       return ok(r.status !== 500, `Status ${r.status}`);
     });
 
-  // ══════════════════════════════ RELIABILITY ═════════════════════════════
+  // RELIABILITY
   const RL = 'REL', RLn = 'Reliability & Fault Tolerance';
 
   await tc(RL, RLn, 'Request body sent as text/plain to a JSON endpoint',
@@ -1257,7 +1195,7 @@ async function main() {
       return ok(r.status !== 500, `Status ${r.status}`);
     });
   await tc(RL, RLn, 'Ten simultaneous votes from one user on one idea',
-    'At most one stored vote — no double counting under concurrency', async () => {
+    'At most one stored vote - no double counting under concurrency', async () => {
       const target = await mkIdea(AUSER, 'Concurrency probe: vote race');
       await Promise.all(Array.from({ length: 10 }, () => api('POST', '/api/votes/community', { token: AADMIN, body: { idea_id: target, vote_type: 'up' } })));
       const rows = await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_community_votes WHERE idea_id = ?', [target]);
@@ -1272,7 +1210,7 @@ async function main() {
       return ok(errors === 0 && Number(rows[0].c) === 10, `${rows[0].c}/10 stored, ${errors} server errors`);
     });
   await tc(RL, RLn, 'Five simultaneous approvals of the same idea',
-    'Exactly one approval recorded — the guard holds under a race', async () => {
+    'Exactly one approval recorded - the guard holds under a race', async () => {
       const target = await mkIdea(AUSER, 'Concurrency probe: double approval');
       await Promise.all(Array.from({ length: 5 }, () => api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: target, decision: 'Approved', comment: 'Race probe' } })));
       const rows = await sql('ifqm_test_a', "SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id = ? AND action = 'Approved'", [target]);
@@ -1309,7 +1247,7 @@ async function main() {
       } finally { await new Promise((r) => hang.close(r)); }
     });
   await tc(RL, RLn, 'Idea submitted while the mail server is unreachable',
-    'Idea is still saved — notification failure never blocks the user', async () => {
+    'Idea is still saved - notification failure never blocks the user', async () => {
       await api('POST', '/api/settings', { token: AADMIN, body: { smtp_host: 'smtp.invalid.local', smtp_port: '2525', smtp_user: 'x', smtp_pass: 'y' } });
       const r = await api('POST', '/api/ideas/submit', { token: AUSER, body: {
         title: 'Submitted while mail is down', present_situation: 'The SMTP host is deliberately unreachable for this case.',
@@ -1337,7 +1275,7 @@ async function main() {
     'Stored and returned byte-identical (utf8mb4 end to end)', async () => {
       const title = 'सुरक्षा सुधार · பாதுகாப்பு · 安全 🚀🔧';
       const s = await api('POST', '/api/ideas/submit', { token: AUSER, body: {
-        title, present_situation: 'Multilingual round-trip probe — देवनागरी, தமிழ், 中文, emoji 🚀.',
+        title, present_situation: 'Multilingual round-trip probe - देवनागरी, தமிழ், 中文, emoji 🚀.',
         proposed_solution: 'Confirm the exact characters survive storage and retrieval.',
       } });
       const back = await api('GET', `/api/ideas/${s.data?.idea_id}`, { token: AUSER });
@@ -1351,13 +1289,13 @@ async function main() {
       return ok(r.status === 200 && /👍/.test(row?.content || ''), `Status ${r.status}, stored: ${(row?.content || '').slice(0, 30)}`);
     });
   await tc(RL, RLn, 'Marking notifications read twice',
-    'Idempotent — the second call is still a success', async () => {
+    'Idempotent - the second call is still a success', async () => {
       const a = await api('POST', '/api/notifications/mark-read', { token: AUSER, body: { ids: [] } });
       const b = await api('POST', '/api/notifications/mark-read', { token: AUSER, body: { ids: [] } });
       return ok(a.status === 200 && b.status === 200, `first=${a.status}, second=${b.status}`);
     });
   await tc(RL, RLn, 'Whitespace-only title',
-    'Rejected — trimmed validation, no blank ideas', async () => {
+    'Rejected - trimmed validation, no blank ideas', async () => {
       const r = await api('POST', '/api/ideas/submit', { token: AUSER, body: { title: '     ', present_situation: 'x'.repeat(40), proposed_solution: 'y'.repeat(40) } });
       return ok(r.status >= 400 && r.status < 500, `Status ${r.status}: ${r.data?.error || ''}`);
     });
@@ -1368,7 +1306,7 @@ async function main() {
       return ok(r.status === 200, `Status ${r.status}, ${n} similar idea(s) reported`);
     });
   await tc(RL, RLn, '60,000-character solution text',
-    'Accepted and returned intact, or rejected cleanly — never a 500', async () => {
+    'Accepted and returned intact, or rejected cleanly - never a 500', async () => {
       const long = 'The detailed rollout plan repeats across shifts. '.repeat(1250).slice(0, 60000);
       const r = await api('POST', '/api/ideas/submit', { token: AUSER, body: {
         title: 'Very long solution narrative', present_situation: 'Storage limit probe for long-form business cases.', proposed_solution: long,
@@ -1381,7 +1319,7 @@ async function main() {
       return ok(r.status !== 500, `Status ${r.status}, ${intact}`);
     });
   await tc(RL, RLn, 'Ten login/logout cycles in a row',
-    'Every cycle succeeds — no session leak or degradation', async () => {
+    'Every cycle succeeds - no session leak or degradation', async () => {
       let okCount = 0;
       for (let i = 0; i < 10; i++) {
         const l = await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga');
@@ -1399,11 +1337,9 @@ async function main() {
       return ok(exp.status === 200 && writes.every(Boolean), `export=${exp.status}, ${writes.filter(Boolean).length}/5 writes stored`);
     });
 
-  // ══════════════════════════════ SCALABILITY — HORIZONTAL ═══════════════
-  //  A second, genuinely separate OS process is started against the same
-  //  databases. That is what sits behind a load balancer, and it is the only
-  //  honest way to prove nothing depends on hitting the same instance twice.
-  const HS = 'SCLH', HSn = 'Scalability — Horizontal';
+  // SCALABILITY - HORIZONTAL A second, genuinely separate OS process is started against the
+  // same databases.
+  const HS = 'SCLH', HSn = 'Scalability - Horizontal';
 
   let inst2 = null; let base2 = ''; let spawnError = '';
   try {
@@ -1445,12 +1381,12 @@ async function main() {
       return ok(r.status === 200, base2 ? `Instance 2 on ${base2}, health=${r.status}` : `Could not start: ${spawnError}`);
     });
   await tc(HS, HSn, 'Readiness probe on the second instance',
-    'Reports ready — the load balancer may route to it', async () => {
+    'Reports ready - the load balancer may route to it', async () => {
       const r = await api2('GET', '/api/ready', {});
       return ok(r.status === 200, `Status ${r.status}: ${r.data?.status || ''}`);
     });
   await tc(HS, HSn, 'Session issued by instance 1 used on instance 2',
-    'Accepted — authentication is stateless, no sticky sessions needed', async () => {
+    'Accepted - authentication is stateless, no sticky sessions needed', async () => {
       const r = await api2('GET', '/api/ideas/dashboard', { token: AADMIN });
       return ok(r.status === 200, `Status ${r.status}`);
     });
@@ -1461,7 +1397,7 @@ async function main() {
       return ok(!!l.token && r.status === 200, `login on 2 = ${l.token ? 'ok' : l.error}, request on 1 = ${r.status}`);
     });
   await tc(HS, HSn, 'Idea created on instance 1 read from instance 2',
-    'Immediately visible — no per-process cache to go stale', async () => {
+    'Immediately visible - no per-process cache to go stale', async () => {
       const id = await mkIdea(AUSER, 'Cross-instance visibility probe (written on 1)');
       const r = await api2('GET', `/api/ideas/${id}`, { token: AUSER });
       return ok(r.status === 200 && /written on 1/.test(r.text || ''), `Status ${r.status}`);
@@ -1476,7 +1412,7 @@ async function main() {
       return ok(r.status === 200 && /written on 2/.test(r.text || ''), `Status ${r.status}`);
     });
   await tc(HS, HSn, 'Vote cast on instance 2, counted once on instance 1',
-    'One vote — shared state lives in the database, not in a process', async () => {
+    'One vote - shared state lives in the database, not in a process', async () => {
       const id = await mkIdea(AUSER, 'Cross-instance vote probe');
       await api2('POST', '/api/votes/community', { token: AADMIN, body: { idea_id: id, vote_type: 'up' } });
       const rows = await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_community_votes WHERE idea_id = ?', [id]);
@@ -1501,7 +1437,7 @@ async function main() {
       return ok(/Org A Renamed/.test(r.text || ''), `Instance 2 branding: ${(r.text || '').slice(0, 80)}`);
     });
   await tc(HS, HSn, 'Failed logins counted on 1 lock the account on 2',
-    'Brute-force state is central — an attacker cannot rotate instances', async () => {
+    'Brute-force state is central - an attacker cannot rotate instances', async () => {
       await seedUser('crosslock@orga.test', { password: 'CrossLockPass123' });
       await sql('ifqm_test_master', 'DELETE FROM __DB__.login_attempts');
       for (let i = 0; i < 5; i++) await login('crosslock@orga.test', 'Nope' + i, 'orga');
@@ -1519,7 +1455,7 @@ async function main() {
       return ok(created.status < 400 && !!l.token, `create=${created.status}, login on instance 2=${l.token ? 'ok' : l.error}`);
     });
   await tc(HS, HSn, 'Twenty requests alternating between the two instances',
-    'All succeed — any request may land on any instance', async () => {
+    'All succeed - any request may land on any instance', async () => {
       let good = 0;
       for (let i = 0; i < 20; i++) {
         const r = i % 2 ? await api2('GET', '/api/ideas/dashboard', { token: AADMIN }) : await api('GET', '/api/ideas/dashboard', { token: AADMIN });
@@ -1530,16 +1466,16 @@ async function main() {
   await tc(HS, HSn, 'Attachment uploaded through 1, downloaded through 2',
     'Served by either instance when the upload directory is shared storage', async () => {
       const r = await api2('GET', `/api/upload/${ATTACH_ID}/download`, { token: AUSER });
-      return ok(r.status === 200, `Status ${r.status} — note: requires shared/NFS storage or object storage across hosts`);
+      return ok(r.status === 200, `Status ${r.status} - note: requires shared/NFS storage or object storage across hosts`);
     });
   await tc(HS, HSn, 'Per-IP rate-limit counters across two instances',
-    'Counters are per process — a strict global cap needs a shared store', async () => {
+    'Counters are per process - a strict global cap needs a shared store', async () => {
       await Promise.all(Array.from({ length: 40 }, () => api('GET', '/api/health', {})));
       const r = await api2('GET', '/api/health', {});
-      return ok(r.status === 200, `Instance 2 unaffected by instance 1 traffic (health=${r.status}); documented limitation — use a Redis store for one global budget`);
+      return ok(r.status === 200, `Instance 2 unaffected by instance 1 traffic (health=${r.status}); documented limitation - use a Redis store for one global budget`);
     });
   await tc(HS, HSn, 'One instance is killed mid-service',
-    'The surviving instance keeps serving — no shared in-process state', async () => {
+    'The surviving instance keeps serving - no shared in-process state', async () => {
       if (inst2) inst2.kill('SIGKILL');
       await new Promise((r) => setTimeout(r, 400));
       const survivor = await api('GET', '/api/ideas/dashboard', { token: AADMIN });
@@ -1548,10 +1484,9 @@ async function main() {
       return ok(survivor.status === 200, `instance 1 = ${survivor.status} after instance 2 was killed (instance 2 = ${dead.status || 'down'})`);
     });
 
-  // ══════════════════════════════ SCALABILITY — VERTICAL ══════════════════
-  //  Load one tenant with a realistic multi-year dataset and then hold every
-  //  screen to a latency budget on that same box.
-  const VS = 'SCLV', VSn = 'Scalability — Vertical & Performance';
+  // SCALABILITY - VERTICAL Load one tenant with a realistic multi-year dataset and then hold
+  // every screen to a latency budget on that same box.
+  const VS = 'SCLV', VSn = 'Scalability - Vertical & Performance';
 
   const LOAD_IDEAS = 5000;
   const LOAD_USERS = 300;
@@ -1575,7 +1510,7 @@ async function main() {
         const rows = []; const params = [];
         for (let i = start; i < Math.min(LOAD_IDEAS, start + 500); i++) {
           rows.push('(?,?,?,?,?,?,?,DATE_SUB(NOW(), INTERVAL ? DAY),DATE_SUB(NOW(), INTERVAL ? DAY),DATE_SUB(NOW(), INTERVAL ? DAY))');
-          params.push(`LOAD-2026-${String(i).padStart(6, '0')}`, `Load test idea ${i} — reduce cycle time on line ${i % 12}`,
+          params.push(`LOAD-2026-${String(i).padStart(6, '0')}`, `Load test idea ${i} - reduce cycle time on line ${i % 12}`,
             'Baseline situation captured by the load generator for performance measurement.',
             'Proposed counter-measure captured by the load generator for performance measurement.',
             statuses[i % statuses.length], uid, ['Low', 'Medium', 'High'][i % 3], i % 700, i % 700, i % 700);
@@ -1590,13 +1525,13 @@ async function main() {
       return ok(Number(rows[0].c) >= LOAD_IDEAS, `${rows[0].c} ideas in ${ms(loadMs)} (${Math.round(LOAD_IDEAS / (loadMs / 1000))} rows/s)`);
     });
   await tc(VS, VSn, 'Idea list response size at 5,000 ideas',
-    'Bounded at 100 rows — response size does not grow with the dataset', async () => {
+    'Bounded at 100 rows - response size does not grow with the dataset', async () => {
       const r = await api('GET', '/api/ideas', { token: AADMIN });
       const n = (r.data?.ideas || []).length;
       return ok(r.status === 200 && n <= 100, `${n} rows returned, payload ${(r.text.length / 1024).toFixed(0)} KB`);
     });
   await tc(VS, VSn, 'Client attempts to raise the row cap (?limit=100000)',
-    'Cap is server-side — a client cannot ask for the whole table', async () => {
+    'Cap is server-side - a client cannot ask for the whole table', async () => {
       const r = await api('GET', '/api/ideas?limit=100000', { token: AADMIN });
       const n = (r.data?.ideas || []).length;
       return ok(n <= 100, `${n} rows returned`);
@@ -1621,7 +1556,7 @@ async function main() {
   await tc(VS, VSn, 'Index behind the list ordering exists',
     'idx_ideas_updated_at present so the top-100 read is an ordered index scan', async () => {
       const idx = await sql('ifqm_test_a', "SHOW INDEX FROM __DB__.ideas WHERE Key_name = 'idx_ideas_updated_at'");
-      return ok(idx.length > 0, idx.length ? `Index present on column ${idx[0].Column_name}` : 'Index missing — list would filesort the whole table');
+      return ok(idx.length > 0, idx.length ? `Index present on column ${idx[0].Column_name}` : 'Index missing - list would filesort the whole table');
     });
   await tc(VS, VSn, 'Query plan for the list query at 5,000 rows',
     'No full scan of ideas with a filesort of the entire table', async () => {
@@ -1638,7 +1573,7 @@ async function main() {
       return ok(r.status === 200 && took < 15000 && lines > LOAD_IDEAS, `${lines} lines, ${(r.text.length / 1024 / 1024).toFixed(1)} MB in ${ms(took)}`);
     });
   await tc(VS, VSn, 'Thirty concurrent requests against a pool of ' + config.dbPoolSize,
-    'All served — requests queue for a connection instead of failing', async () => {
+    'All served - requests queue for a connection instead of failing', async () => {
       const [res, took] = await timed(() => Promise.all(Array.from({ length: 30 }, () => api('GET', '/api/ideas/dashboard', { token: AADMIN }))));
       const good = res.filter((r) => r.status === 200).length;
       return ok(good === 30, `${good}/30 succeeded in ${ms(took)} with DB_POOL_SIZE=${config.dbPoolSize}`);
@@ -1655,12 +1590,12 @@ async function main() {
       return ok(bad === 0, `100 requests in ${ms(took)} → ${(100 / (took / 1000)).toFixed(1)} req/s, ${bad} errors`);
     });
   await tc(VS, VSn, 'The other organisation while this one holds 5,000 ideas',
-    'Unaffected — each tenant is a separate schema with its own indexes', async () => {
+    'Unaffected - each tenant is a separate schema with its own indexes', async () => {
       const [r, took] = await timed(() => api('GET', '/api/ideas/dashboard', { token: BADMIN }));
       return ok(r.status === 200 && took < 1500, `Org B dashboard ${r.status} in ${ms(took)}`);
     });
   await tc(VS, VSn, 'Process memory after the load run',
-    'Resident memory stays bounded — no dataset is held in the application', async () => {
+    'Resident memory stays bounded - no dataset is held in the application', async () => {
       const rss = Math.round(process.memoryUsage().rss / 1024 / 1024);
       const heap = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
       return ok(rss < 1024, `RSS ${rss} MB, heap ${heap} MB after ${LOAD_IDEAS.toLocaleString()} ideas`);
@@ -1672,7 +1607,7 @@ async function main() {
       return ok(r.status === 200 && n <= 200, `${n} notifications returned`);
     });
 
-  // ══════════════════════════════ DATA INTEGRITY & RECOVERY ═══════════════
+  // DATA INTEGRITY & RECOVERY
   const DT = 'DATA', DTn = 'Data Integrity & Recovery';
 
   const mysql = (await import('mysql2/promise')).default;
@@ -1685,30 +1620,15 @@ async function main() {
 
   await tc(DT, DTn, 'Paginated queries do not bind LIMIT or OFFSET',
     'No prepared statement takes a row limit as a parameter - MySQL 8 rejects it', async () => {
-      /*
-       * This is a portability trap that a passing test suite cannot catch on
-       * its own, which is why it is checked in the source rather than by
-       * running a query.
-       *
-       * MariaDB (what most people run locally) accepts LIMIT ? and OFFSET ? as
-       * bound parameters. MySQL 8 does not: the prepared-statement protocol
-       * refuses them with "Incorrect arguments to mysqld_stmt_execute". So a
-       * paginated list works perfectly in development and returns 500 in
-       * production against a managed MySQL - which is exactly what happened to
-       * the admin console's user list. An organisation with four employees
-       * showed an empty table, and the only visible symptom was the absence of
-       * data.
-       *
-       * The fix everywhere is to build the row count into the statement text
-       * after clamping it to an integer, as activityService already did.
-       */
+      // This is a portability trap that a passing test suite cannot catch on its own, which is
+      // why it is checked in the source rather than by running a query.
       const files = fs.readdirSync(path.join(REPO_DIR, 'backend', 'src', 'services'))
         .filter((f) => f.endsWith('.js'));
       const offenders = [];
       for (const f of files) {
         const src = readRepo(`backend/src/services/${f}`);
-        // Look inside execute()/query() calls only, so a LIMIT ? appearing in a
-        // comment or a string of prose does not trip it.
+        // Look inside execute()/query() calls only, so a LIMIT ? appearing in a comment or a
+        // string of prose does not trip it.
         for (const m of src.matchAll(/(?:execute|query)\(\s*(`[^`]*`|'[^']*'|"[^"]*")/g)) {
           if (/\b(?:LIMIT|OFFSET)\s+\?/i.test(m[1])) offenders.push(f);
         }
@@ -1725,7 +1645,7 @@ async function main() {
       return ok(rows[0].c > 0, `${ran} application(s) this pass, ${rows[0].c} ledger row(s) total`);
     });
   await tc(DT, DTn, 'Migration runner executed a second time',
-    'Applies nothing — migrations are idempotent and ledgered', async () => {
+    'Applies nothing - migrations are idempotent and ledgered', async () => {
       const ran = await runMigrations(migConn, quiet, 'ifqm_test_master');
       return ok(ran === 0, `${ran} application(s) on the repeat run`);
     });
@@ -1744,12 +1664,12 @@ async function main() {
       }
     });
   await tc(DT, DTn, 'Ledger records which schema received which migration',
-    'One row per (database, migration) — reproducible on a new environment', async () => {
+    'One row per (database, migration) - reproducible on a new environment', async () => {
       const [rows] = await migConn.query('SELECT db_name, COUNT(*) AS c FROM ifqm_test_master.schema_migrations GROUP BY db_name');
       return ok(rows.length >= 2, rows.map((r) => `${r.db_name}:${r.c}`).join(', '));
     });
   await tc(DT, DTn, 'A tenant provisioned by the product versus the reference schema',
-    'Same table set — a new organisation is not a second-class database', async () => {
+    'Same table set - a new organisation is not a second-class database', async () => {
       const tables = async (db) => (await migConn.query(
         'SELECT TABLE_NAME AS t FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME', [db]))[0].map((r) => r.t);
       const ref = await tables('ifqm_test_a');
@@ -1758,7 +1678,7 @@ async function main() {
       return ok(fresh.length > 0 && missing.length === 0, `reference ${ref.length} tables, provisioned ${fresh.length}, missing: ${missing.join(', ') || 'none'}`);
     });
   await tc(DT, DTn, 'Duplicate idea code inserted directly',
-    'Rejected by the UNIQUE constraint — codes cannot collide', async () => {
+    'Rejected by the UNIQUE constraint - codes cannot collide', async () => {
       const code = (await sql('ifqm_test_a', 'SELECT idea_code FROM __DB__.ideas LIMIT 1'))[0].idea_code;
       let failed = false; let msg = '';
       try {
@@ -1776,10 +1696,10 @@ async function main() {
       const c = (await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_comments WHERE idea_id = ?', [id]))[0].c;
       const v = (await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_community_votes WHERE idea_id = ?', [id]))[0].c;
       const w = (await sql('ifqm_test_a', 'SELECT COUNT(*) AS c FROM __DB__.idea_workflow WHERE idea_id = ?', [id]))[0].c;
-      return ok(Number(c) + Number(v) + Number(w) === 0, `orphans left — comments:${c}, votes:${v}, workflow:${w}`);
+      return ok(Number(c) + Number(v) + Number(w) === 0, `orphans left - comments:${c}, votes:${v}, workflow:${w}`);
     });
   await tc(DT, DTn, 'Idea code sequence after a deletion',
-    'Next code continues past the highest issued — no reuse, no collision', async () => {
+    'Next code continues past the highest issued - no reuse, no collision', async () => {
       const before = (await sql('ifqm_test_a', "SELECT MAX(CAST(SUBSTRING_INDEX(idea_code,'-',-1) AS UNSIGNED)) AS n FROM __DB__.ideas WHERE idea_code LIKE 'IDA-%'"))[0].n;
       const id = await mkIdea(AUSER, 'Sequence probe after deletion');
       const row = (await sql('ifqm_test_a', 'SELECT idea_code FROM __DB__.ideas WHERE id = ?', [id]))[0];
@@ -1787,7 +1707,7 @@ async function main() {
       return ok(n > Number(before), `previous max ${before} → issued ${row.idea_code}`);
     });
   await tc(DT, DTn, 'Approval writes the status and the audit entry together',
-    'Both present — a decision is never half-recorded', async () => {
+    'Both present - a decision is never half-recorded', async () => {
       const id = await mkIdea(AUSER, 'Atomicity probe idea');
       await api('POST', '/api/ideas/review-action', { token: AREVIEWER, body: { idea_id: id, decision: 'Approved', comment: 'Atomicity probe' } });
       const idea = (await sql('ifqm_test_a', 'SELECT status FROM __DB__.ideas WHERE id = ?', [id]))[0];
@@ -1803,19 +1723,19 @@ async function main() {
       return ok(delta === config.points.submit, `+${delta} points (POINTS_SUBMIT=${config.points.submit})`);
     });
   await tc(DT, DTn, 'Stored timestamps versus the database clock',
-    'Written in the database\'s own time — no timezone drift', async () => {
+    'Written in the database\'s own time - no timezone drift', async () => {
       const id = await mkIdea(AUSER, 'Timestamp integrity probe');
       const row = (await sql('ifqm_test_a', 'SELECT ABS(TIMESTAMPDIFF(SECOND, created_at, NOW())) AS d FROM __DB__.ideas WHERE id = ?', [id]))[0];
       return ok(Number(row.d) <= 120, `created_at is ${row.d} s from NOW()`);
     });
   await tc(DT, DTn, 'Character set of the tenant tables',
-    'utf8mb4 throughout — every language and emoji storable', async () => {
+    'utf8mb4 throughout - every language and emoji storable', async () => {
       const [rows] = await migConn.query(
         "SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA='ifqm_test_a' AND TABLE_COLLATION NOT LIKE 'utf8mb4%'");
       return ok(Number(rows[0].c) === 0, `${rows[0].c} table(s) not on utf8mb4`);
     });
   await tc(DT, DTn, 'Storage engine of the tenant tables',
-    'InnoDB throughout — transactional and crash-recoverable', async () => {
+    'InnoDB throughout - transactional and crash-recoverable', async () => {
       const [rows] = await migConn.query(
         "SELECT COUNT(*) AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA='ifqm_test_a' AND ENGINE <> 'InnoDB'");
       return ok(Number(rows[0].c) === 0, `${rows[0].c} table(s) not InnoDB`);
@@ -1854,7 +1774,7 @@ async function main() {
       return ok(Number(before) === Number(after), `ideas before=${before}, after=${after}`);
     });
 
-  // ══════════════════════════════ EXTENSIBILITY & FUTURE SCOPE ════════════
+  // EXTENSIBILITY & FUTURE SCOPE
   const FU = 'FUT', FUn = 'Extensibility & Future Scope';
 
   const localeKeys = (code) => {
@@ -1878,10 +1798,10 @@ async function main() {
       return ok(complete, `en:${en.size} · ${report.join(' · ')}`);
     });
   await tc(FU, FUn, 'Adding an eighth language',
-    'Purely additive — one dictionary file plus one registry line', async () => {
+    'Purely additive - one dictionary file plus one registry line', async () => {
       const reg = readRepo('frontend/src/i18n/translations.js');
       const importsAll = LOCALES.every((c) => new RegExp(`['"\`./]*${c}(\\.js)?['"]`).test(reg));
-      return ok(importsAll, importsAll ? 'All seven locales registered in one map — an eighth is one import + one entry' : 'Locale registry is not a simple map');
+      return ok(importsAll, importsAll ? 'All seven locales registered in one map - an eighth is one import + one entry' : 'Locale registry is not a simple map');
     });
   await tc(FU, FUn, 'Adding a new API area',
     'Feature modules are mounted in one aggregator, no core surgery', async () => {
@@ -1896,13 +1816,13 @@ async function main() {
       return ok(declared, declared ? 'Reviewer and implementer role sets are single declarations' : 'Role sets are not centralised');
     });
   await tc(FU, FUn, 'Onboarding a new organisation at runtime',
-    'Usable the moment it is created — no deploy, no restart', async () => {
+    'Usable the moment it is created - no deploy, no restart', async () => {
       const l = await login('admin@growth.test', 'GrowthAdminPass123', 'growth');
       const r = await api('GET', '/api/ideas/dashboard', { token: l.token });
       return ok(!!l.token && r.status === 200, `login=${l.token ? 'ok' : l.error}, dashboard=${r.status}`);
     });
   await tc(FU, FUn, 'Two organisations holding different integration endpoints',
-    'Per-tenant configuration — customers can point at their own systems', async () => {
+    'Per-tenant configuration - customers can point at their own systems', async () => {
       await api('PUT', '/api/integrations/qcms', { token: AADMIN, body: { base_url: 'https://qcms-a.example/v1' } });
       await api('PUT', '/api/integrations/qcms', { token: BADMIN, body: { base_url: 'https://qcms-b.example/v2' } });
       const a = await api('GET', '/api/integrations/qcms', { token: AADMIN });
@@ -1930,9 +1850,9 @@ async function main() {
       return ok(perTenantHost && rows.length >= 2, rows.map((r) => `${r.slug}@${r.db_host}/${r.db_name}`).join(' · '));
     });
   await tc(FU, FUn, 'AI scoring with no provider key configured',
-    'Falls back to the built-in heuristic — the feature never hard-fails', async () => {
+    'Falls back to the built-in heuristic - the feature never hard-fails', async () => {
       const r = await api('GET', `/api/score?id=${IDEA1}`, { token: AADMIN });
-      return ok(r.status === 200, `Status ${r.status}, provider="${config.ai.provider || 'none — heuristic'}"`);
+      return ok(r.status === 200, `Status ${r.status}, provider="${config.ai.provider || 'none - heuristic'}"`);
     });
   await tc(FU, FUn, 'Swapping the AI provider',
     'Provider and keys are configuration, not embedded calls', async () => {
@@ -1940,7 +1860,7 @@ async function main() {
       return ok(surface, `config.ai exposes: ${Object.keys(config.ai).join(', ')}`);
     });
   await tc(FU, FUn, 'Targeting a second downstream system',
-    'The QCMS field mapping is a pure function — a new target is a new mapper', async () => {
+    'The QCMS field mapping is a pure function - a new target is a new mapper', async () => {
       const payload = mapIdeaToQcms({
         idea_code: 'IDA-2026-999', title: 'Mapper purity probe', impact_areas: 'Cost', impact_level: 'High',
         present_situation: 'a', proposed_solution: 'b', department: 'Quality', submitter_name: 'Probe User',
@@ -1997,11 +1917,11 @@ async function main() {
       return ok(!!pkg.scripts?.build, `build script: ${pkg.scripts?.build || 'none'}`);
     });
 
-  // ══════════════════════════════ OBSERVABILITY & OPERATIONS ══════════════
+  // OBSERVABILITY & OPERATIONS
   const OB = 'OPS', OBn = 'Observability & Operations';
 
   await tc(OB, OBn, 'Liveness probe cost',
-    'Answers in single-digit milliseconds — safe to poll often', async () => {
+    'Answers in single-digit milliseconds - safe to poll often', async () => {
       const [r, took] = await timed(() => api('GET', '/api/health', {}));
       return ok(r.status === 200 && took < 250, `Status ${r.status} in ${ms(took)}`);
     });

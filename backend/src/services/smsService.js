@@ -1,36 +1,4 @@
-/**
- * SMS delivery — MOM 29 Jul 2026 §4.1.
- *
- * A thin provider interface, because the meeting asked for a *mock* OTP test
- * with SMS-tag integration and no provider has been contracted yet. Writing
- * this against one vendor's SDK would have meant rewriting it when that choice
- * is actually made; writing it against an interface means the choice is a
- * setting.
- *
- * Providers:
- *   log       writes the message to the server log instead of sending it. This
- *             is what makes the mock test possible today. REFUSED in production
- *             — a provider that prints login codes into a live log file is a
- *             credential leak, not a fallback, so it fails closed there.
- *   jio_dlt   an Indian DLT gateway, configured from the platform console.
- *             This is the one intended for real use.
- *   msg91     an Indian transactional SMS gateway. Kept because it was already
- *             here and costs nothing to keep; configured from env.
- *   twilio    international. Also env-configured.
- *
- * "SMS tag" in the minutes is the DLT sender ID / template registration Indian
- * operators require: an unregistered template is silently dropped by the
- * carrier, which looks exactly like a bug in this application.
- *
- * ── Why jio_dlt reads the database and the others read env ─────────────────
- *
- * env was the right home while no provider had been chosen — it kept an
- * unconfigured feature from needing a schema. It is the wrong home now. The
- * person holding the DLT registration is on the IFQM platform team, and a
- * template ID that can only be corrected by editing a deployment is a template
- * ID that stays wrong. The two older providers are left as they were rather
- * than migrated speculatively; whichever is actually contracted can move.
- */
+/** SMS delivery - MOM 29 Jul 2026 §4.1. */
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { masterDb } from '../database/master.js';
@@ -38,21 +6,7 @@ import { DLT_TEMPLATES, SENDER_ID_RE, senderHeader, resolveTemplate } from '../c
 
 const providerFromEnv = () => (process.env.SMS_PROVIDER || '').trim().toLowerCase();
 
-/**
- * Which provider would actually carry a message right now.
- *
- * The environment wins over the stored setting, because that is the rule the
- * rest of this deployment already follows: the gateway account belongs to IFQM
- * and is set once per deployment, and `config.sms` is where a real send reads
- * it from. The console's stored `otp_provider` is only consulted when the
- * environment says nothing.
- *
- * Without this the console answered a different question from the one the
- * sender answers — it reported on, tested, and gated the feature against the
- * stored provider (which defaults to `log`) while every real code went out over
- * the env-configured gateway. A status panel disagreeing with the code path it
- * describes is worse than no status panel.
- */
+/** Which provider would actually carry a message right now. */
 export function effectiveProvider(stored = '') {
   return (config.sms.provider || providerFromEnv() || stored || 'log').toLowerCase();
 }
@@ -83,13 +37,7 @@ export async function dltConfig() {
   }
 }
 
-/**
- * What is missing before this connector could send anything.
- *
- * Returned as a list rather than a boolean so the console can name the empty
- * field instead of showing "not configured" and leaving somebody to guess
- * which of five values it meant.
- */
+/** What is missing before this connector could send anything. */
 export function dltMissing(cfg) {
   const need = [
     ['entity_id', 'Principal Entity ID'],
@@ -99,50 +47,29 @@ export function dltMissing(cfg) {
     ['api_key', 'Gateway API key'],
   ];
   const missing = need.filter(([k]) => !String(cfg[k] || '').trim()).map(([, label]) => label);
-  /*
-   * Six characters, optionally with a DLT category suffix: -T transactional,
-   * -S service, -P promotional.
-   *
-   * This demanded exactly six and nothing else, which rejects IFQMID-T — the
-   * header this platform is actually registered under. A correctly configured
-   * gateway was reported as misconfigured, and the console told an operator to
-   * go and fix a value that was right.
-   */
+  // Six characters, optionally with a DLT category suffix: -T transactional, -S service, -P
+  // promotional.
   if (cfg.sender_id && !SENDER_ID_RE.test(cfg.sender_id)) {
     missing.push('Header / Sender ID must be 6 characters, optionally followed by -T, -S or -P');
   }
   return missing;
 }
 
-/**
- * Send one text message.
- * @returns {Promise<{ sent: boolean, provider: string, detail?: string, ref?: string, status?: number }>}
- */
+/** Send one text message. */
 export async function sendSms(phone, message, { provider, purpose = 'login', tenantSlug = null } = {}) {
   const chosen = (provider || config.sms.provider || providerFromEnv() || 'log').toLowerCase();
   const to = String(phone || '').trim();
   if (!to) return { sent: false, provider: chosen, detail: 'no recipient' };
 
-  /*
-   * A purpose whose DLT template is not registered yet does not go out.
-   *
-   * Sending anyway would mean the gateway accepting it, the carrier dropping
-   * it, and this function returning sent:true — so the log, the delivery table
-   * and the caller would all record a message that no handset ever received.
-   * For a security alert, that is the worst of the three possible outcomes:
-   * silence that looks like success.
-   *
-   * The log provider is exempt because it is the local mock; it never reaches a
-   * carrier and is how this path gets exercised in development at all.
-   */
+  // A purpose whose DLT template is not registered yet does not go out.
   const spec = DLT_TEMPLATES[purpose];
-  // sendable, not registered: a purpose waiting on its own id can still be
-  // delivered under a fallback registration, and that fallback carries its own
-  // wording so the pair still matches.
+  // sendable, not registered: a purpose waiting on its own id can still be delivered under a
+  // fallback registration, and that fallback carries its own wording so the pair still
+  // matches.
   if (spec && !resolveTemplate(purpose).sendable && chosen !== 'log') {
     const why = spec.pendingReason || 'awaiting DLT approval';
     logger.warn(
-      `sms: not sending "${spec.label}" — its DLT template is not registered (${why}). `
+      `sms: not sending "${spec.label}" - its DLT template is not registered (${why}). `
       + 'Add the id to src/config/smsTemplates.js and set registered:true to enable it.'
     );
     const result = { sent: false, provider: chosen, detail: `template not registered: ${why}` };
@@ -151,19 +78,13 @@ export async function sendSms(phone, message, { provider, purpose = 'login', ten
   }
 
   const result = await deliver(chosen, to, message, purpose);
-  // Logged for every provider including the mock, so the console's activity
-  // panel is not empty during a UAT run on the log provider.
+  // Logged for every provider including the mock, so the console's activity panel is not
+  // empty during a UAT run on the log provider.
   await recordDelivery({ provider: result.provider, purpose, to, tenantSlug, result });
   return result;
 }
 
-/**
- * The message to send for a purpose, built from the registered wording.
- *
- * Returns the template id alongside it because the two travel together: the
- * carrier checks the text against the id, and a message whose wording has
- * drifted from its registration is dropped without a delivery report.
- */
+/** The message to send for a purpose, built from the registered wording. */
 export function messageFor(purpose, code, minutes) {
   const key = config.sms.templates[purpose] !== undefined ? purpose : 'login';
   const spec = DLT_TEMPLATES[key];
@@ -173,14 +94,7 @@ export function messageFor(purpose, code, minutes) {
     text: fillTemplate(config.sms.text[key], [code, minutes]),
     // Which registration is actually carrying this, when it is not its own.
     usingFallback: resolved.usingFallback,
-    /*
-     * Whether the carrier will actually carry it.
-     *
-     * A template awaiting DLT approval has no id, and a message sent without
-     * one — or with somebody else's — is accepted by the gateway and dropped by
-     * the carrier. Reported here so the caller can decline to send rather than
-     * report a success that did not happen.
-     */
+    // Whether the carrier will actually carry it.
     registered: spec ? resolved.sendable && !!config.sms.templates[key] : true,
     label: spec ? spec.label : key,
     pendingReason: spec ? spec.pendingReason || null : null,
@@ -191,14 +105,14 @@ export function messageFor(purpose, code, minutes) {
 export function kaleyraMissing(cfg = config.sms, purpose = 'login') {
   const missing = [];
   if (!cfg.apiKey) missing.push('SMS_API_KEY');
-  // Kaleyra puts the account SID in the path, not in a header: without it every
-  // request answers 401 "Incorrect SID or API key", which reads as a bad key.
-  if (!cfg.sid) missing.push('SMS_SID (the HX… account id from the Kaleyra console)');
+  // Kaleyra puts the account SID in the path, not in a header: without it every request
+  // answers 401 "Incorrect SID or API key", which reads as a bad key.
+  if (!cfg.sid) missing.push('SMS_SID (the HX... account id from the Kaleyra console)');
   if (!cfg.senderId) missing.push('SMS_SENDER_ID');
   if (!cfg.peId) missing.push('SMS_PE_ID');
   if (!cfg.templates[purpose]) missing.push(`template id for "${purpose}"`);
-  // See the note in dltMissing(): IFQMID-T is a six-character header with the
-  // transactional category suffix, and is valid.
+  // See the note in dltMissing(): IFQMID-T is a six-character header with the transactional
+  // category suffix, and is valid.
   if (cfg.senderId && !SENDER_ID_RE.test(cfg.senderId)) {
     missing.push('SMS_SENDER_ID must be 6 characters, optionally followed by -T, -S or -P');
   }
@@ -208,10 +122,10 @@ export function kaleyraMissing(cfg = config.sms, purpose = 'login') {
 async function deliver(chosen, to, message, purpose = 'login') {
   if (chosen === 'log') {
     if (config.env === 'production') {
-      // Fail closed. Returning "sent" here would mean users never receive a
-      // code while the server cheerfully reports success, and the code itself
-      // would be sitting in the log for anyone with log access.
-      logger.error('SMS provider is "log" in production — refusing to pretend a code was sent.');
+      // Fail closed. Returning "sent" here would mean users never receive a code while the
+      // server cheerfully reports success, and the code itself would be sitting in the log for
+      // anyone with log access.
+      logger.error('SMS provider is "log" in production - refusing to pretend a code was sent.');
       return { sent: false, provider: 'log', detail: 'log provider disabled in production' };
     }
     logger.info(`[SMS:mock] to ${maskPhone(to)} :: ${message}`);
@@ -223,27 +137,11 @@ async function deliver(chosen, to, message, purpose = 'login') {
   if (chosen === 'msg91') return sendViaMsg91(to, message);
   if (chosen === 'twilio') return sendViaTwilio(to, message);
 
-  logger.warn(`Unknown SMS provider "${chosen}" — message not sent.`);
+  logger.warn(`Unknown SMS provider "${chosen}" - message not sent.`);
   return { sent: false, provider: chosen, detail: 'unknown provider' };
 }
 
-/**
- * Kaleyra — the contracted gateway, configured from the environment.
- *
- * ── The shape of the request ───────────────────────────────────────────────
- *
- *   POST {endpoint}/v1/{SID}/messages
- *   api-key: <key>
- *   to=+91…&sender=IFQMSK&body=…&type=OTP&template_id=…&pe_id=…
- *
- * The SID is a path segment. Sending the key with no SID, or with the wrong
- * one, returns 401 "Incorrect SID or API key" — which reads as a bad key and
- * sends people to regenerate a key that was fine all along, so it is called out
- * by name in kaleyraMissing() above.
- *
- * `type=OTP` matters: Kaleyra routes OTP traffic separately, and a one-time
- * code sent down the transactional route can be delayed past its own expiry.
- */
+/** Kaleyra - the contracted gateway, configured from the environment. */
 async function sendViaKaleyra(to, message, purpose) {
   const cfg = config.sms;
   const missing = kaleyraMissing(cfg, purpose);
@@ -255,8 +153,8 @@ async function sendViaKaleyra(to, message, purpose) {
   const url = `${cfg.endpoint}/v1/${encodeURIComponent(cfg.sid)}/messages`;
   const body = new URLSearchParams({
     to: toE164(to),
-    // Six characters. A configured "IFQMID-T" is the header plus its category
-    // annotation, and the gateway refuses the annotated form outright.
+    // Six characters. A configured "IFQMID-T" is the header plus its category annotation, and
+    // the gateway refuses the annotated form outright.
     sender: senderHeader(cfg.senderId),
     body: message,
     type: 'OTP',
@@ -281,9 +179,7 @@ async function sendViaKaleyra(to, message, purpose) {
     }
     return {
       sent: true, provider: 'kaleyra', status: res.status, ref: gatewayRef(text),
-      // Accepted by the gateway is not delivered to the handset. A template
-      // whose wording has drifted from its registration is accepted here and
-      // dropped by the carrier afterwards.
+      // Accepted by the gateway is not delivered to the handset.
       detail: 'accepted by gateway',
     };
   } catch (e) {
@@ -300,15 +196,7 @@ function toE164(v, defaultCc = '91') {
   return `+${d}`;
 }
 
-/**
- * An Indian DLT gateway, configured from the console rather than from env.
- *
- * Per-deployment env variables were fine while no provider had been chosen.
- * They are wrong now: the operator who holds the DLT registration is a member
- * of the IFQM platform team, not somebody with shell access to the host, and
- * asking them to raise a deployment to correct a template ID guarantees the
- * template ID stays wrong.
- */
+/** An Indian DLT gateway, configured from the console rather than from env. */
 async function sendViaJioDlt(to, message) {
   const cfg = await dltConfig();
   const missing = dltMissing(cfg);
@@ -323,13 +211,13 @@ async function sendViaJioDlt(to, message) {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${cfg.api_key}`,
-        // Gateways differ on which header they read the key from. Sending both
-        // is harmless and saves a support round trip on first setup.
+        // Gateways differ on which header they read the key from. Sending both is harmless and
+        // saves a support round trip on first setup.
         'X-API-Key': cfg.api_key,
       },
       body: JSON.stringify({
-        // The three DLT identifiers. A message missing any of them is dropped
-        // by the carrier without a delivery report.
+        // The three DLT identifiers. A message missing any of them is dropped by the carrier
+        // without a delivery report.
         entityId: cfg.entity_id,
         senderId: cfg.sender_id,
         templateId: cfg.template_id,
@@ -350,8 +238,8 @@ async function sendViaJioDlt(to, message) {
     return {
       sent: true, provider: 'jio_dlt', status: res.status,
       ref: gatewayRef(body),
-      // Accepted by the gateway is not the same as delivered to the handset,
-      // and saying so here stops the console overclaiming.
+      // Accepted by the gateway is not the same as delivered to the handset, and saying so here
+      // stops the console overclaiming.
       detail: 'accepted by gateway',
     };
   } catch (e) {
@@ -360,15 +248,7 @@ async function sendViaJioDlt(to, message) {
   }
 }
 
-/**
- * Turn a fetch failure into something an operator can act on.
- *
- * Node reports almost every network problem as the bare string "fetch failed",
- * with the real cause one level down in `cause`. Passing that through means the
- * console shows "fetch failed" for a hostname that does not exist, a refused
- * connection and an expired certificate alike — three different problems with
- * three different fixes.
- */
+/** Turn a fetch failure into something an operator can act on. */
 export function networkReason(e, endpoint = '') {
   if (e.name === 'TimeoutError' || e.name === 'AbortError') {
     return 'The gateway did not respond within 15 seconds.';
@@ -376,7 +256,7 @@ export function networkReason(e, endpoint = '') {
   const code = e.cause?.code || e.code || '';
   const host = (() => { try { return new URL(endpoint).host; } catch { return 'the endpoint'; } })();
   const map = {
-    ENOTFOUND: `${host} does not resolve. Check the endpoint URL with your gateway provider — `
+    ENOTFOUND: `${host} does not resolve. Check the endpoint URL with your gateway provider - `
       + 'the default in this field is a placeholder and must be replaced with the real one.',
     EAI_AGAIN: `Could not look up ${host}. This is usually a temporary DNS problem.`,
     ECONNREFUSED: `${host} refused the connection.`,
@@ -407,23 +287,10 @@ function gatewayMessage(body) {
   }
 }
 
-/**
- * Append one row to the delivery log.
- *
- * Never the message body — it carries the code. The recipient is masked before
- * it is written, so the table cannot become a phone directory either.
- */
+/** Append one row to the delivery log. */
 async function recordDelivery({ provider, purpose, to, tenantSlug, result }) {
   try {
-    /*
-     * Which registration the message actually went out under.
-     *
-     * Only the DLT connector filled this in, so every Kaleyra row logged a NULL
-     * template — and a NULL here is the one column that could tell a dropped
-     * message from a delivered one. "Accepted by the gateway, never reached the
-     * handset" is always a template question, and answering it meant guessing
-     * which id was in force at the time rather than reading it back.
-     */
+    // Which registration the message actually went out under.
     let templateId = null;
     let sender = null;
     if (provider === 'jio_dlt') {
@@ -432,21 +299,7 @@ async function recordDelivery({ provider, purpose, to, tenantSlug, result }) {
       sender = senderHeader(cfg.sender_id) || null;
     } else if (provider === 'kaleyra') {
       templateId = config.sms.templates[purpose] || config.sms.templates.login || null;
-      /*
-       * The other half of the pair.
-       *
-       * template_id alone could not answer the question it was added for.
-       * Codes stopped arriving with the gateway returning 202 and every row
-       * logged ok=1: the ids were registered against IFQMID while the
-       * deployment transmitted IFQMSK, a valid sender on the same account but
-       * the wrong one for those templates. Kaleyra accepts it and the carrier
-       * discards it, silently.
-       *
-       * "Accepted but never arrived" is always about the id and the header
-       * AGREEING, so both belong on the row. As sent, not as configured — the
-       * category annotation is stripped before transmission and the log should
-       * show what actually went out.
-       */
+      // The other half of the pair.
       sender = senderHeader(config.sms.senderId) || null;
     }
     await masterDb().execute(
@@ -491,8 +344,8 @@ async function sendViaMsg91(to, message) {
       body: JSON.stringify({
         template_id: template,
         sender,
-        // The gateway expects the code as a template variable, not as free
-        // text: an unregistered body is dropped by the carrier.
+        // The gateway expects the code as a template variable, not as free text: an unregistered
+        // body is dropped by the carrier.
         recipients: [{ mobiles: normaliseIndian(to), OTP: extractCode(message) }],
       }),
     });
@@ -543,27 +396,13 @@ function normaliseIndian(v) {
 
 const extractCode = (message) => (String(message).match(/\b(\d{4,8})\b/) || [])[1] || '';
 
-/**
- * Fill a DLT template's {#var#} placeholders, left to right.
- *
- * The wording must come from the registered template rather than from a string
- * literal in this file. If the two ever drift — someone edits the sentence here
- * to read better — every message starts being dropped by the carrier with no
- * error anywhere, and the cause is invisible from inside the application.
- */
+/** Fill a DLT template's {#var#} placeholders, left to right. */
 export function fillTemplate(template, vars = []) {
   let i = 0;
   return String(template || '').replace(/\{#var#\}/g, () => String(vars[i++] ?? ''));
 }
 
-/**
- * Does this message still match the registered template?
- *
- * Compares the two with every placeholder's substitution allowed to be
- * anything. A mismatch is the single most common cause of "the gateway says
- * accepted and nothing arrives", so it is worth catching before the send
- * rather than after a support call.
- */
+/** Does this message still match the registered template? */
 export function matchesTemplate(template, message) {
   const t = String(template || '').trim();
   if (!t) return true;
@@ -572,19 +411,12 @@ export function matchesTemplate(template, message) {
   return new RegExp(`^${pattern}$`, 's').test(String(message || '').trim());
 }
 
-/**
- * Send a real message to one number, for the console's Test Connection button.
- *
- * Deliberately a real send. A test that only checks the credentials parse would
- * pass on a template ID that the carrier has never approved, which is exactly
- * the failure this button exists to catch — so it goes all the way to the
- * gateway and reports what came back.
- */
+/** Send a real message to one number, for the console's Test Connection button. */
 export async function sendTestSms(phone, { provider } = {}) {
-  // Defaulting to jio_dlt meant this button tested a connector the deployment
-  // was not using: on a Kaleyra deployment it reported the DLT connector's
-  // configuration state, so "Test Connection" could fail while sign-in codes
-  // were going out fine, or pass while they were not.
+  // Defaulting to jio_dlt meant this button tested a connector the deployment was not using:
+  // on a Kaleyra deployment it reported the DLT connector's configuration state, so "Test
+  // Connection" could fail while sign-in codes were going out fine, or pass while they were
+  // not.
   const chosen = (provider || effectiveProvider()).toLowerCase();
   const cfg = await dltConfig();
 
@@ -601,13 +433,9 @@ export async function sendTestSms(phone, { provider } = {}) {
     }
   }
 
-  /*
-   * Built from the registered wording so the test exercises the same path a
-   * real code takes, including the substitution — and, more importantly, so it
-   * carries the same text the carrier will check against the template id. A
-   * test that sent a literal would be accepted by the gateway and dropped by
-   * the carrier, reporting a pass for a configuration that cannot deliver.
-   */
+  // Built from the registered wording so the test exercises the same path a real code takes,
+  // including the substitution - and, more importantly, so it carries the same text the
+  // carrier will check against the template id.
   let message;
   if (chosen === 'jio_dlt' && cfg.template_text) {
     message = fillTemplate(cfg.template_text, ['000000', '5']);
@@ -620,13 +448,13 @@ export async function sendTestSms(phone, { provider } = {}) {
   const result = await deliver(chosen, String(phone || '').trim(), message);
   await recordDelivery({ provider: result.provider, purpose: 'test', to: phone, tenantSlug: null, result });
 
-  // Remember the outcome, so the console can show when the gateway was last
-  // proven to work rather than only that somebody filled the fields in.
+  // Remember the outcome, so the console can show when the gateway was last proven to work
+  // rather than only that somebody filled the fields in.
   try {
     const stamp = [
-      // Local time, to match the NOW() used by every other timestamp in
-      // these tables. toISOString() is UTC, which showed the last test as
-      // five and a half hours before the log row it wrote.
+      // Local time, to match the NOW() used by every other timestamp in these tables.
+      // toISOString() is UTC, which showed the last test as five and a half hours before the log
+      // row it wrote.
       ['sms_dlt_last_test_at', localStamp()],
       ['sms_dlt_last_test_ok', result.sent ? '1' : '0'],
       ['sms_dlt_last_test_note', (result.detail || '').slice(0, 255)],
@@ -663,13 +491,7 @@ export default {
   messageFor, kaleyraMissing, smsReady,
 };
 
-/**
- * Can a code actually be sent by SMS right now?
- *
- * Asked before offering the option, and before telling somebody a code is on
- * its way. Reported as a reason rather than a boolean so a failure names the
- * setting that is missing instead of "SMS is unavailable".
- */
+/** Can a code actually be sent by SMS right now? */
 export function smsReady(purpose = 'login') {
   const chosen = (config.sms.provider || providerFromEnv() || '').toLowerCase();
   if (!chosen) return { ready: false, reason: 'SMS_PROVIDER is not set.' };

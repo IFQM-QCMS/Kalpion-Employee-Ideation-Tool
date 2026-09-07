@@ -50,47 +50,21 @@ function PrivateRoute({ children }) {
       <div className="spinner" style={{ width:36,height:36,borderWidth:3 }}></div>
     </div>
   );
-  // "/" is the public marketing page now, so an expired session belongs on the
-  // sign-in screen rather than back at the pitch.
+  // "/" is the public marketing page now, so an expired session belongs on the sign-in
+  // screen rather than back at the pitch.
   if (!user) return <Navigate to="/login" replace />;
 
-  // A bulk-imported employee signs in with a temporary password derived from
-  // their name and birth year — guessable by any colleague. Until they replace
-  // it, this is the only screen they get. The server enforces the same rule
-  // (every other endpoint 403s), so this is for their benefit, not for security.
-  // Support is the one exception, on both sides of the wire: the person whose
-  // password doesn't work is the person who most needs to raise a ticket.
+  // A bulk-imported employee signs in with a temporary password derived from their name and
+  // birth year - guessable by any colleague.
   if (user.must_change_password && location.pathname !== '/support') {
     return <ForcePasswordChangePage />;
   }
 
-  /*
-   * Screens that document the software rather than anybody's data.
-   *
-   * The user guide is the same for every role in the sense that matters here:
-   * it opens no tenant database and reads nobody's ideas. It was caught by the
-   * platform-admin redirect below and bounced straight back to /platform, so
-   * the item sat in the sidebar and did nothing when clicked — which is what
-   * "the user guide is not opening" was.
-   *
-   * The server already treats it this way: /api/export/user-guide is on the
-   * short list of routes that require authentication but no tenant.
-   */
+  // Screens that document the software rather than anybody's data.
   const ROLE_NEUTRAL = ['/user-guide'];
   const roleNeutral = ROLE_NEUTRAL.some((p) => location.pathname.startsWith(p));
 
-  /*
-   * A platform admin who has not proved both channels sees one screen.
-   *
-   * The server already refuses everything else — the gate is in the auth
-   * middleware, because a gate in React is bypassed by anybody who calls the
-   * API with the token they were just handed. This is only so they land
-   * somewhere that explains itself instead of collecting 403s.
-   *
-   * Rendered directly rather than redirected: there is nothing to navigate
-   * between, and a redirect would put a URL in history that goes nowhere once
-   * verification is done.
-   */
+  // A platform admin who has not proved both channels sees one screen.
   if (user.role === 'platform_admin' && user.must_verify) {
     return <PlatformVerifyPage />;
   }
@@ -144,8 +118,7 @@ function AppRoutes() {
       <Route path="/challenges"      element={<PrivateRoute><AppShell><ChallengesPage /></AppShell></PrivateRoute>} />
       <Route path="/audit"           element={<PrivateRoute><AppShell><AuditPage /></AppShell></PrivateRoute>} />
       <Route path="/leaderboard"     element={<PrivateRoute><AppShell><LeaderboardPage /></AppShell></PrivateRoute>} />
-      {/* Rewards & Recognition — the leaderboard as a document HR can act on.
-          The server restricts it; the sidebar only hides the link. */}
+      {/* Rewards & Recognition - the leaderboard as a document HR can act on. */}
       <Route path="/rewards"         element={<PrivateRoute><AppShell><RewardsPage /></AppShell></PrivateRoute>} />
       <Route path="/analytics"       element={<PrivateRoute><AppShell><AnalyticsPage /></AppShell></PrivateRoute>} />
       <Route path="/admin"           element={<PrivateRoute><AppShell><AdminPage /></AppShell></PrivateRoute>} />
@@ -153,8 +126,7 @@ function AppRoutes() {
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
       <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
-      {/* One route for all three manuals — the page picks by role, so nobody
-          has to work out which of them is theirs. */}
+      {/* One route for all three manuals - the page picks by role, so nobody has to work out which of them is theirs. */}
       <Route path="/user-guide"      element={<PrivateRoute><AppShell><UserGuidePage /></AppShell></PrivateRoute>} />
       <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
       <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
@@ -165,9 +137,7 @@ function AppRoutes() {
       <Route path="/platform/plans"    element={<PrivateRoute><AppShell><PlatformPlansPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/billing"  element={<PrivateRoute><AppShell><PlatformBillingPage /></AppShell></PrivateRoute>} />
       <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
-      {/* A page, not a silent redirect. Bouncing somebody to the landing page
-          hides whether they mistyped, followed a stale link, or are simply not
-          signed in — and gives them nothing to do about any of it. */}
+      {/* A page, not a silent redirect. */}
       <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </>
@@ -182,15 +152,7 @@ export default function App() {
           <LangProvider>
             <ToastProvider>
               <NotifProvider>
-                {/*
-                  Inside the providers, not outside them.
-                  A crash in a screen should still be rendered with the app's
-                  theme, its toast host and its language in place — a fallback
-                  that loses all of that looks like a different site and reads
-                  as "you have been logged out of something broken". Placed
-                  here it also means a fault in one screen cannot take the
-                  session or the branding down with it.
-                */}
+                {/* Inside the providers, not outside them. */}
                 <ErrorBoundary>
                   <AppRoutes />
                 </ErrorBoundary>

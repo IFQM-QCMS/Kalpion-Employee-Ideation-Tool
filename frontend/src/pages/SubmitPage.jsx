@@ -11,25 +11,22 @@ import { loadOrgSettings, numSetting } from '../utils/orgSettings';
 const IMPACT_LEVELS = ['Low','Medium','High','Critical'];
 const FEASIBILITY_LEVELS = ['Low','Medium','High'];
 
-/* MOM §14.5 — feasibility is colour-coded, because "Low" in plain text next to
-   nine other plain-text fields is not something a reviewer scanning a list
-   notices. Red/amber/green is the vocabulary the shop floor already uses. */
+// MOM §14.5 - feasibility is colour-coded, because "Low" in plain text next to nine other
+// plain-text fields is not something a reviewer scanning a list notices.
 const FEASIBILITY_TONE = {
   Low:    { bg:'var(--danger-light)',  fg:'var(--danger)'  },
   Medium: { bg:'var(--warning-light)', fg:'var(--warning)' },
   High:   { bg:'var(--success-light)', fg:'var(--success)' },
 };
 
-/* MOM §14.5 — Time Required, three fixed bands. Keys match the backend enum. */
+// MOM §14.5 - Time Required, three fixed bands. Keys match the backend enum.
 const TIME_REQUIRED = [
   ['lt_3m', 'form.time_lt3'],
   ['3_6m',  'form.time_3_6'],
   ['6_12m', 'form.time_6_12'],
 ];
 
-/* MOM §14.6 — solution category tags. QCD is Quality, Cost, Delivery, kept as
-   three separate tags rather than one lump so an idea can be tagged for exactly
-   the dimension it improves. */
+// MOM §14.6 - solution category tags.
 const SOLUTION_TAGS = [
   ['process_improvement', 'form.tag_process'],
   ['quality',            'form.tag_quality'],
@@ -37,23 +34,14 @@ const SOLUTION_TAGS = [
   ['delivery',           'form.tag_delivery'],
 ];
 
-/*
- * Categories are per-organisation rows now, not a constant compiled into this
- * bundle. This list is only the last resort: if the request fails the employee
- * still gets a usable form instead of a step with nothing on it. It mirrors the
- * seed in migration 003.
- */
+// Categories are per-organisation rows now, not a constant compiled into this bundle.
 const FALLBACK_CATEGORIES = ['Safety','Quality','Productivity','Delivery','Sustenance'];
 
-/**
- * Required-field marker. The asterisk used to be a plain character in the label
- * text, the same weight and colour as the label itself, so it read as
- * punctuation rather than an instruction — people reached the validation error
- * before they noticed which fields were mandatory.
- *
- * aria-hidden because it carries no meaning for a screen reader: the `required`
- * attribute on the input already announces the field as mandatory, and reading
- * out "star" on top of that is noise.
+/*
+ * Required-field marker. The asterisk used to be a plain character in the label text, the
+ * same weight and colour as the label itself, so it read as punctuation rather than an
+ * instruction - people reached the validation error before they noticed which fields were
+ * mandatory.
  */
 const Req = () => (
   <span aria-hidden="true" style={{ color:'var(--danger)',fontWeight:800,marginLeft:2 }}>*</span>
@@ -99,22 +87,16 @@ export default function SubmitPage() {
   // Attached under the Benefits Expected field on the business-case step.
   const [fileBen, setFileBen] = useState(null);
 
-  // Step 5 co-suggesters — a dynamic list; add as many colleagues as needed.
+  // Step 5 co-suggesters - a dynamic list; add as many colleagues as needed.
   const [coSuggesters, setCoSuggesters] = useState([]); // [{ id, label }]
   const [coQuery, setCoQuery] = useState('');
   const [coResults, setCoResults] = useState([]);
 
-  // Step 6 options
-  // Anyone may mark their own idea as worth a patent check. A reviewer can do the
-  // same from the idea itself; this is the submitter's side of it.
+  // Step 6 options Anyone may mark their own idea as worth a patent check.
   const [patentable, setPatentable] = useState(false);
 
-  /*
-   * The attachment ceiling belongs to the organisation, so the note under the
-   * file box has to come from their settings rather than from a fixed string.
-   * It said "Max 10 MB" to an organisation that had set 5, and the first they
-   * learned otherwise was a rejected upload.
-   */
+  // The attachment ceiling belongs to the organisation, so the note under the file box has
+  // to come from their settings rather than from a fixed string.
   const [maxFileMb, setMaxFileMb] = useState(10);
   useEffect(() => {
     let cancelled = false;
@@ -124,9 +106,8 @@ export default function SubmitPage() {
     return () => { cancelled = true; };
   }, []);
 
-  /* Refuse an oversized file here, where the person can still pick another one,
-     rather than letting them finish the form and fail on upload. The server
-     enforces the same limit regardless — this is courtesy, not the control. */
+  // Refuse an oversized file here, where the person can still pick another one, rather than
+  // letting them finish the form and fail on upload.
   function pickFile(setter) {
     return (e) => {
       const f = e.target.files?.[0] || null;
@@ -158,9 +139,9 @@ export default function SubmitPage() {
     } catch {}
   }
 
-  // An organisation that has deleted every category cannot happen (the API
-  // refuses the last delete), but an empty response still falls back rather
-  // than rendering a step with no choices on it.
+  // An organisation that has deleted every category cannot happen (the API refuses the last
+  // delete), but an empty response still falls back rather than rendering a step with no
+  // choices on it.
   async function loadCategories() {
     try {
       const res = await categoriesApi.list();
@@ -233,7 +214,7 @@ export default function SubmitPage() {
       impact_level:       impactLevel,
       tangible_benefit:   tangible,
       intangible_benefit: intangible,
-      // Business case — all optional; blanks are stored as NULL server-side.
+      // Business case - all optional; blanks are stored as NULL server-side.
       investment_required:          investment,
       feasibility:                  feasibility,
       implementation_duration:      implDuration,
@@ -242,8 +223,8 @@ export default function SubmitPage() {
       expected_implementation_date: implDate,
       benefits_expected:            benefits,
       support_required:             support,
-      // Full co-suggester list (backend also mirrors the first two into the
-      // legacy columns for older read paths).
+      // Full co-suggester list (backend also mirrors the first two into the legacy columns for
+      // older read paths).
       co_suggester_ids:   coSuggesters.map(c => c.id),
       // §14.8: always identified. Existing anonymous ideas are untouched.
       is_anonymous:       0,
@@ -276,16 +257,7 @@ export default function SubmitPage() {
         const msg = t('msg.idea_ok', { code: res.data.idea_code });
         const pts = res.data.points_added > 0 ? ' · ' + t('msg.pts_earned', { n: res.data.points_added }) : '';
         showToast(msg + pts, 'success');
-        /*
-         * Cleanup and navigation sit OUTSIDE the try.
-         *
-         * They ran inside it, so any fault in our own tidying-up was caught by
-         * the handler below and shown to the author as a server error — which
-         * is how a ReferenceError in resetForm spent months being reported as
-         * "the server is down" on submissions that had in fact succeeded. The
-         * try is for the request; once the server has said yes, nothing after
-         * it should be able to claim the server said no.
-         */
+        // Cleanup and navigation sit OUTSIDE the try.
         submitted = true;
       } else {
         setError(res.data.error || t('msg.submit_failed'));
@@ -320,31 +292,17 @@ export default function SubmitPage() {
     setInvestment(''); setFeasibility(''); setImplDuration(''); setImplDate('');
     setBenefits(''); setSupport('');
     setCoSuggesters([]); setCoQuery(''); setCoResults([]);
-    /*
-     * `setAnonymous(false)` used to be here, and the setter no longer exists —
-     * anonymity was removed from this form under MOM §14.8 and the state went
-     * with it, but this line did not.
-     *
-     * It threw a ReferenceError on EVERY successful submission. The throw
-     * happened inside handleSubmit's try, so the catch reported it to the
-     * author as "server error" — after a success toast, and without the
-     * navigation to My Ideas. The idea was saved, which is exactly why this
-     * looked like an intermittent server fault rather than a bug on the happy
-     * path.
-     */
+    // `setAnonymous(false)` used to be here, and the setter no longer exists - anonymity was
+    // removed from this form under MOM §14.8 and the state went with it, but this line did
+    // not.
     setPatentable(false); setChallengeId('');
     setDraftId(null); setStep(1); setError(''); setDupWarning([]);
   }
 
-  /*
-   * The business case is a step of its own, third, straight after the solution
-   * — the questions it asks (what will this cost, how long, what support) only
-   * make sense once the solution has been described, and they belong before the
-   * optional attachment/co-suggester steps rather than buried under them.
-   *
-   * The existing wizard.stepN keys keep their original meanings; the new step
-   * has its own key rather than shifting every label by one.
-   */
+  // The business case is a step of its own, third, straight after the solution - the
+  // questions it asks (what will this cost, how long, what support) only make sense once the
+  // solution has been described, and they belong before the optional attachment/co-suggester
+  // steps rather than buried under them.
   const stepLabels = [
     t('wizard.step1'), t('wizard.step2'), t('wizard.business'),
     t('wizard.step3'), t('wizard.step4'), t('wizard.step5'),
@@ -362,8 +320,7 @@ export default function SubmitPage() {
         ))}
       </div>
 
-      {/* Full-width: the wizard fills the content area rather than a narrow
-          720px column, so long text and the two-column rows have room. */}
+      {/* Full-width: the wizard fills the content area rather than a narrow 720px column, so long text and the two-column rows have room. */}
       <div className="card" style={{ marginTop:20 }}>
         {error && <div className="alert alert-danger" style={{ marginBottom:16 }}>{error}</div>}
 
@@ -445,8 +402,7 @@ export default function SubmitPage() {
             <div className="form-row">
               <div className="form-group">
                 <label>{t('form.investment')} <span style={{ fontWeight:400,fontSize:11,color:'var(--subtle)' }}>(₹ INR)</span></label>
-                {/* Amounts are in INR by default — a fixed ₹ adornment sits in
-                    front of the field so the currency is never ambiguous. */}
+                {/* Amounts are in INR by default - a fixed ₹ adornment sits in front of the field so the currency is never ambiguous. */}
                 <div style={{ display:'flex',alignItems:'stretch' }}>
                   <span style={{ display:'inline-flex',alignItems:'center',padding:'0 12px',background:'var(--panel-bg)',border:'1px solid var(--border)',borderRight:'none',borderRadius:'6px 0 0 6px',fontWeight:600,color:'var(--heading)' }}>₹</span>
                   <input className="form-control" style={{ borderRadius:'0 6px 6px 0' }} value={investment} maxLength={255} inputMode="decimal"
@@ -457,9 +413,7 @@ export default function SubmitPage() {
               </div>
               <div className="form-group">
                 <label>{t('form.feasibility')}<InfoDot term="feasibility" /></label>
-                {/* §14.5 — colour-coded. Buttons rather than a <select> so the
-                    red/amber/green reads at a glance instead of hiding inside a
-                    closed dropdown. */}
+                {/* §14.5 - colour-coded. Buttons rather than a <select> so the red/amber/green reads at a glance instead of hiding inside a closed dropdown. */}
                 <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
                   {FEASIBILITY_LEVELS.map(l => {
                     const on = feasibility === l;
@@ -481,8 +435,7 @@ export default function SubmitPage() {
               </div>
             </div>
 
-            {/* §14.5 — Time Required. Three fixed bands, not free text: the
-                point of the item is that these are comparable across ideas. */}
+            {/* §14.5 - Time Required. Three fixed bands, not free text: the point of the item is that these are comparable across ideas. */}
             <div className="form-group">
               <label>{t('form.time_required')}<InfoDot term="time_required" /></label>
               <select className="form-control" value={timeRequired}
@@ -492,7 +445,7 @@ export default function SubmitPage() {
               </select>
             </div>
 
-            {/* §14.6 — solution category tags. */}
+            {/* §14.6 - solution category tags. */}
             <div className="form-group">
               <label>{t('form.solution_tags')}<InfoDot term="solution_tags" /></label>
               <div style={{ display:'flex',gap:8,flexWrap:'wrap',marginTop:4 }}>
@@ -515,8 +468,7 @@ export default function SubmitPage() {
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:6 }}>{t('form.solution_tags_hint')}</div>
             </div>
 
-            {/* "date or duration" — either answer is valid, so both are offered
-                and neither is required. */}
+            {/* "date or duration" - either answer is valid, so both are offered and neither is required. */}
             <div className="form-group">
               <label>{t('form.impl_time')}</label>
               <div className="form-row" style={{ marginTop:4 }}>
@@ -540,8 +492,7 @@ export default function SubmitPage() {
               <textarea className="form-control" rows="3" value={benefits}
                 onChange={e => setBenefits(e.target.value)}
                 placeholder={t('form.benefits_ph')} />
-              {/* Supporting document for the expected benefits (a costing sheet,
-                  projection, before/after data) attaches under this field. */}
+              {/* Supporting document for the expected benefits (a costing sheet, projection, before/after data) attaches under this field. */}
               <label style={{ marginTop:10,display:'block' }}>{t('form.attach_benefits')}</label>
               <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
                 onChange={e => setFileBen(e.target.files[0]||null)} />
@@ -552,9 +503,7 @@ export default function SubmitPage() {
               <textarea className="form-control" rows="3" value={support}
                 onChange={e => setSupport(e.target.value)}
                 placeholder={t('form.support_ph')} />
-              {/* Documents backing up the requested support (a quote, spec,
-                  approval note) attach right here, under the field they relate
-                  to. Uploaded after the idea is created — see uploadFiles(). */}
+              {/* Documents backing up the requested support (a quote, spec, approval note) attach right here, under the field they relate to. */}
               <label style={{ marginTop:10,display:'block' }}>{t('form.attach_support')}</label>
               <input type="file" className="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
                 onChange={pickFile(setFileSup)} />
@@ -583,7 +532,7 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 5: Co-Suggesters — add as many colleagues as you like */}
+        {/* Step 5: Co-Suggesters - add as many colleagues as you like */}
         {step === 5 && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
@@ -596,7 +545,7 @@ export default function SubmitPage() {
                   <div className="user-search-results" style={{ display:'block' }}>
                     {coResults.map(u => (
                       <div key={u.id} className="uitem" onClick={() => addCoSuggester(u)}>
-                        {u.name} · {u.employee_id} · {u.department||'–'}
+                        {u.name} · {u.employee_id} · {u.department||'-'}
                       </div>
                     ))}
                   </div>
@@ -649,8 +598,7 @@ export default function SubmitPage() {
                 <div className="form-control" style={{ background:'var(--panel-bg)' }}>{translateImpact(impactLevel, t)}</div>
               </div>
             </div>
-            {/* Business case — only the answers that were actually given, so a
-                lightly-filled form does not review as a wall of blanks. */}
+            {/* Business case - only the answers that were actually given, so a lightly-filled form does not review as a wall of blanks. */}
             {[[t('form.investment'), investment ? `₹ ${investment}` : ''],
               [t('form.feasibility'), feasibility ? translateImpact(feasibility, t) : ''],
               [t('form.time_required'), timeRequired ? t(TIME_REQUIRED.find(([v]) => v === timeRequired)?.[1] || '') : ''],
@@ -699,10 +647,7 @@ export default function SubmitPage() {
               </label>
             </div>
 
-            {/* MOM §14.8 — "Submit Idea Anonymously" is gone. The column and the
-                masking logic remain in the backend on purpose: ideas already
-                filed anonymously must keep that promise, and stripping the
-                feature retroactively would expose their authors. */}
+            {/* MOM §14.8 - "Submit Idea Anonymously" is gone. */}
 
             <div id="wizard-submit-row" style={{ display:'flex',gap:10,marginTop:24 }}>
               <button className="btn btn-success" disabled={submitting} onClick={handleSubmit}>

@@ -1,11 +1,10 @@
-/**
- * Report service — Node port of the `analytics` and `audit` actions in PHP
- * api/users.php (the JSON data feeding the in-app analytics dashboard and the
- * audit log). The printable HTML analytics report lives in exportService.
+/*
+ * Report service - Node port of the `analytics` and `audit` actions in PHP api/users.php
+ * (the JSON data feeding the in-app analytics dashboard and the audit log).
  */
 import logger from '../utils/logger.js';
 
-// ── analytics (JSON) ────────────────────────────────────────────────
+// analytics (JSON)
 export async function analytics(db) {
   const [trend] = await db.query(
     `SELECT DATE_FORMAT(submitted_at,'%Y-%m') AS month,
@@ -24,7 +23,7 @@ export async function analytics(db) {
       if (a) counts[a] = (counts[a] || 0) + 1;
     }
   }
-  // arsort — order by count descending.
+  // arsort - order by count descending.
   const impactDistribution = Object.fromEntries(
     Object.entries(counts).sort((a, b) => b[1] - a[1])
   );
@@ -40,19 +39,8 @@ export async function analytics(db) {
      FROM ideas WHERE status != 'Draft'`
   );
 
-  /*
-   * MOM §22 defines Implementation Rate and Implementation Velocity in terms of
-   * ideas FORWARDED TO QC, not ideas whose status happens to read Implemented.
-   *
-   * Those are different populations. An idea reaches the QC tool when it is
-   * pushed there and QCMS accepts it ('imported') or already has it
-   * ('duplicate'); its status may sit at Approved for weeks afterwards while
-   * the work is scheduled. Reporting the status column and calling it
-   * "forwarded to QC" would have been a label over the wrong number.
-   *
-   * Counted here rather than derived in the browser, because the browser only
-   * receives the status split — it has no way to know what reached QCMS.
-   */
+  // MOM §22 defines Implementation Rate and Implementation Velocity in terms of ideas
+  // FORWARDED TO QC, not ideas whose status happens to read Implemented.
   let qcms = { pushed: 0, pushed_30d: 0 };
   try {
     const [[row]] = await db.query(
@@ -64,8 +52,8 @@ export async function analytics(db) {
     );
     qcms = { pushed: Number(row.pushed) || 0, pushed_30d: Number(row.pushed_30d) || 0 };
   } catch (e) {
-    // The columns predate migration 007 on an un-migrated tenant. A missing
-    // figure reads as zero rather than blanking the whole dashboard.
+    // The columns predate migration 007 on an un-migrated tenant. A missing figure reads as
+    // zero rather than blanking the whole dashboard.
     logger.warn('analytics: QCMS counters unavailable', e.message);
   }
 
@@ -79,7 +67,7 @@ export async function analytics(db) {
   };
 }
 
-// ── audit (JSON) ────────────────────────────────────────────────────
+// audit (JSON)
 export async function audit(db) {
   const [rows] = await db.query(
     `SELECT w.*, u.name AS actor_name, u.role AS actor_role,

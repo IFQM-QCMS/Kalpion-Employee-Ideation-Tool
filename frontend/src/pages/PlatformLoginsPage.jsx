@@ -5,34 +5,12 @@ import { fmtDateTime } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 
-/*
- * Sign-in activity for the IFQM platform console.
- *
- * Staff accounts only. It used to list every employee sign-in across every
- * customer organisation, which buried the thing the page exists to answer —
- * who has been in this console — and put customers' internal staff movements
- * on a screen that has no business showing them.
- *
- * The record is append-only and separate from the lockout counter, which is
- * wiped on every successful sign-in and so could never answer "who signed in,
- * and when". Kept for 180 days, then trimmed.
- *
- * Failures matter as much as successes: a run of them against one account, or
- * from one address, is the first sign of somebody guessing passwords.
- */
+// Sign-in activity for the IFQM platform console.
 
-/*
- * Turn a user-agent string into something a person can read.
- *
- * Deliberately shallow. Every browser lies in its user-agent for historical
- * reasons — Chrome claims to be Safari, Edge claims to be Chrome — so this
- * checks in the order that gets the common cases right and gives up gracefully
- * rather than pretending to be a full parser. The raw string stays in the
- * tooltip for anyone who needs the truth.
- */
+// Turn a user-agent string into something a person can read.
 function describeDevice(ua) {
   const s = String(ua || '');
-  if (!s) return '—';
+  if (!s) return '-';
   const browser =
       /Edg\//.test(s)                        ? 'Edge'
     : /OPR\/|Opera/.test(s)                  ? 'Opera'
@@ -52,18 +30,10 @@ function describeDevice(ua) {
   return `${browser}${version ? ' ' + version : ''}${os ? ' on ' + os : ''}`;
 }
 
-/* An address on a private range is almost always the hosting provider's own
-   proxy rather than anything about the person, so the row says so instead of
-   leaving an operator to wonder why every sign-in is from 10.x. */
-/*
- * What an address actually tells you.
- *
- * Behind a hosting provider every sign-in arrives from the provider's own
- * internal range, so the column shows 10.x.x.x for everybody. That is not the
- * visitor's address and must not be allowed to read as one — an operator
- * scanning this table for "who signed in from where" would otherwise treat
- * infrastructure plumbing as evidence.
- */
+// An address on a private range is almost always the hosting provider's own proxy rather
+// than anything about the person, so the row says so instead of leaving an operator to
+// wonder why every sign-in is from 10.x.
+// What an address actually tells you.
 const NETWORK_NOTE = {
   private: 'hosting provider’s address, not the visitor’s',
   local: 'this machine',
@@ -91,16 +61,7 @@ export default function PlatformLoginsPage() {
   const { t } = useLang();
 
   const [rows,    setRows]    = useState([]);
-  /*
-   * Platform console sign-ins only.
-   *
-   * This defaulted to 'all', so the page listed every employee sign-in across
-   * every customer. That buries the question it exists to answer - who has been
-   * in the IFQM console - and a customer's staff movements are their business,
-   * not something to browse from here. The backend already defaulted to staff;
-   * the screen was overriding it. The filter that offered tenant users is gone
-   * with it, so the choice cannot be made again by accident.
-   */
+  // Platform console sign-ins only.
   const [actorType] = useState('platform_admin');
   const [last24,  setLast24]  = useState({ successes: 0, failures: 0, lockouts: 0 });
   const [loading, setLoading] = useState(true);
@@ -111,18 +72,7 @@ export default function PlatformLoginsPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [actorType, outcome, limit]);
 
-  /*
-   * Refresh when the tab is brought back to the front — not on a timer.
-   *
-   * This polled every fifteen seconds, which made the page visibly reload
-   * itself while somebody was reading it: rows jumped, the spinner flashed,
-   * and a table being scanned moved under the cursor. "Real time" on a page
-   * that lists sign-ins does not mean redrawing it four times a minute; it
-   * means what you are looking at is current when you look at it.
-   *
-   * So: fetch on open, fetch again when the tab regains focus, and otherwise
-   * only when Refresh is pressed.
-   */
+  // Refresh when the tab is brought back to the front - not on a timer.
   useEffect(() => {
     const onFocus = () => { if (!document.hidden) load(); };
     document.addEventListener('visibilitychange', onFocus);
@@ -155,8 +105,8 @@ export default function PlatformLoginsPage() {
       .some((v) => String(v || '').toLowerCase().includes(q));
   });
 
-  // Twenty to a page. The export below still writes every filtered row, so
-  // paging changes what is drawn and never what is taken away.
+  // Twenty to a page. The export below still writes every filtered row, so paging changes
+  // what is drawn and never what is taken away.
   const pager = usePager(filtered);
   useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [search, outcome, limit]);
 
@@ -247,16 +197,16 @@ export default function PlatformLoginsPage() {
                 <td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(r.created_at)}</td>
                 <td>
                   <div style={{ fontWeight: 600, color: 'var(--heading)' }}>
-                    {r.actor_name || (r.actor_email ? r.actor_email.split('@')[0] : '—')}
+                    {r.actor_name || (r.actor_email ? r.actor_email.split('@')[0] : '-')}
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>{r.actor_email || '—'}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--subtle)' }}>{r.actor_email || '-'}</div>
                 </td>
                 <td><OutcomeBadge outcome={r.outcome} t={t} /></td>
                 <td style={{ fontSize: 12.5 }}>
-                  {r.location || <span style={{ color: 'var(--subtle)' }}>—</span>}
+                  {r.location || <span style={{ color: 'var(--subtle)' }}>-</span>}
                 </td>
                 <td style={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
-                  {r.ip || '—'}
+                  {r.ip || '-'}
                   {NETWORK_NOTE[r.network] && (
                     <div style={{ fontSize: 11, color: 'var(--subtle)' }}>{NETWORK_NOTE[r.network]}</div>
                   )}

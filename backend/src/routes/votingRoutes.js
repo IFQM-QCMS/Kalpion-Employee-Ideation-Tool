@@ -1,7 +1,6 @@
-/**
- * Voting routes — /api/votes/*
- * Ported from PHP api/votes.php + board/community_vote from api/ideas.php.
- * All actions require authentication (no role restrictions), matching PHP.
+/*
+ * Voting routes - /api/votes/* Ported from PHP api/votes.php + board/community_vote from
+ * api/ideas.php.
  */
 import { Router } from 'express';
 import * as voting from '../controllers/votingController.js';

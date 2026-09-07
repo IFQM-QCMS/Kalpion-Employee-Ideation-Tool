@@ -1,8 +1,4 @@
-/**
- * Auth controller — thin HTTP layer over authService.
- * Maps to the PHP api/auth.php actions (me, login, logout, forgot_password,
- * reset_password, check_reset_token).
- */
+/** Auth controller - thin HTTP layer over authService. */
 import * as authService from '../services/authService.js';
 import * as otpService from '../services/otpService.js';
 import { maintenanceStatus } from '../services/maintenanceService.js';
@@ -12,13 +8,13 @@ import asyncHandler from '../utils/asyncHandler.js';
 
 const hostOf = (req) => req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
 
-/** GET /api/auth/me — mirrors action=me. Uses optionalAuth upstream. */
+/** GET /api/auth/me - mirrors action=me. Uses optionalAuth upstream. */
 export const me = asyncHandler(async (req, res) => {
   if (!req.user) {
     return respond(res, { success: false, authenticated: false });
   }
-  // CSRF token intentionally omitted — JWT-in-header removes the need (see
-  // authService docblock). Response is otherwise identical to PHP.
+  // CSRF token intentionally omitted - JWT-in-header removes the need (see authService
+  // docblock). Response is otherwise identical to PHP.
   return respond(res, { success: true, authenticated: true, user: req.user });
 });
 
@@ -30,25 +26,21 @@ export const login = asyncHandler(async (req, res) => {
     password,
     orgSlug: org_slug,
     host: hostOf(req),
-    // MOM §12.12 — where the sign-in came from, for the activity feed. Read
-    // here rather than in the service so the service stays free of req.
+    // MOM §12.12 - where the sign-in came from, for the activity feed. Read here rather than
+    // in the service so the service stays free of req.
     meta: {
       ip: req.ip,
       userAgent: req.get('user-agent'),
-      // The browser's own time zone, which it sends with the sign-in. Used to
-      // describe roughly where a platform-admin sign-in came from without
-      // handing anybody's address to a geolocation service.
+      // The browser's own time zone, which it sends with the sign-in.
       timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
     },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
 });
 
-/*
- * One-time-code sign-in (MOM §4.1, §4.2). `verify` returns the same
- * { user, token } shape as a password login, so nothing downstream has to know
- * which route the session came from.
- */
+// One-time-code sign-in (MOM §4.1, §4.2). `verify` returns the same { user, token } shape
+// as a password login, so nothing downstream has to know which route the session came
+// from.
 export const otpStatus = asyncHandler(async (_req, res) =>
   respond(res, await otpService.otpStatus())
 );
@@ -60,9 +52,7 @@ export const otpRequest = asyncHandler(async (req, res) =>
     meta: {
       ip: req.ip,
       userAgent: req.get('user-agent'),
-      // The browser's own time zone, which it sends with the sign-in. Used to
-      // describe roughly where a platform-admin sign-in came from without
-      // handing anybody's address to a geolocation service.
+      // The browser's own time zone, which it sends with the sign-in.
       timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
     },
   }))
@@ -75,16 +65,14 @@ export const otpVerify = asyncHandler(async (req, res) => {
     meta: {
       ip: req.ip,
       userAgent: req.get('user-agent'),
-      // The browser's own time zone, which it sends with the sign-in. Used to
-      // describe roughly where a platform-admin sign-in came from without
-      // handing anybody's address to a geolocation service.
+      // The browser's own time zone, which it sends with the sign-in.
       timeZone: req.get('x-client-timezone') || req.body?.client_timezone || null,
     },
   });
   return respond(res, { success: true, user: result.user, token: result.token });
 });
 
-/** POST /api/auth/logout — stateless; client discards the token. */
+/** POST /api/auth/logout - stateless; client discards the token. */
 export const logout = asyncHandler(async (_req, res) => {
   return respond(res, { success: true });
 });
@@ -96,11 +84,9 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
-/**
- * POST /api/auth/password-reset/request-code
- *
- * The other way to start a reset: a code to the registered address or mobile,
- * for somebody who cannot reach the mailbox the link would go to.
+/*
+ * The other way to start a reset: a code to the registered address or mobile, for somebody
+ * who cannot reach the mailbox the link would go to.
  */
 export const requestResetCode = asyncHandler(async (req, res) =>
   respond(res, await authService.requestPasswordResetCode({
@@ -108,7 +94,7 @@ export const requestResetCode = asyncHandler(async (req, res) =>
   }))
 );
 
-/** POST /api/auth/password-reset/verify-code — exchange a code for a reset token. */
+/** POST /api/auth/password-reset/verify-code - exchange a code for a reset token. */
 export const verifyResetCode = asyncHandler(async (req, res) =>
   respond(res, await authService.verifyPasswordResetCode({
     identifier: req.body?.identifier, code: req.body?.code,
@@ -127,14 +113,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
-/**
- * GET /api/auth/maintenance — public.
- *
- * Answers with { enabled, message } so the sign-in screen can show the notice
- * before anybody authenticates. `since` and `default_message` are dropped here:
- * they exist for the console, and how long IFQM has been mid-update is not a
- * tenant's business.
- */
+/** GET /api/auth/maintenance - public. */
 export const maintenance = asyncHandler(async (_req, res) => {
   const s = await maintenanceStatus();
   return respond(res, { success: true, enabled: s.enabled, message: s.message });
@@ -150,23 +129,8 @@ export const checkResetToken = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
-/**
- * POST /api/auth/change-password — signed-in password change.
- *
- * Also the exit route from the forced change a bulk-imported employee faces on
- * first login. Returns a new token: stamping password_changed_at revokes every
- * token issued before it, including the caller's.
- */
-/*
- * ── Platform admin account verification ────────────────────────────────────
- *
- * Behind requireAuth, so the caller has already proved the password. That is
- * what stops these being an oracle: without it, anybody could ask for a code to
- * be sent to an account they merely know the address of, and could probe which
- * addresses exist by watching which requests succeed.
- *
- * The destination is never taken from the request — see platformVerifyService.
- */
+/** POST /api/auth/change-password - signed-in password change. */
+// Behind requireAuth, so the caller has already proved the password.
 export const platformVerifyStatus = asyncHandler(async (req, res) =>
   respond(res, await platformVerify.status(req.user)));
 

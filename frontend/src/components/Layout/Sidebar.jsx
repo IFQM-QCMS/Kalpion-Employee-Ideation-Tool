@@ -40,8 +40,8 @@ export default function Sidebar({ collapsed, onToggle }) {
   const isSA   = isSuperAdmin(role);
   const isAdm  = isAdmin(role);
   const isPriv = isPrivileged(role);
-  // Narrower than isPriv — see canViewReports. A menu item that leads to a
-  // 403 is worse than no menu item.
+  // Narrower than isPriv - see canViewReports. A menu item that leads to a 403 is worse than
+  // no menu item.
   const canReport = canViewReports(role);
 
   const active = (path) => location.pathname === path;
@@ -62,13 +62,7 @@ export default function Sidebar({ collapsed, onToggle }) {
 
   return (
     <div id="sidebar" className={collapsed ? 'collapsed' : ''}>
-      {/*
-        * The organisation's own logo and name, not IFQM's — a TVS employee sees
-        * TVS here, an L&T employee sees L&T. Both fall back to the IFQM mark and
-        * the app name until that tenant's admin has set their branding, and for
-        * platform admins, who sit outside any tenant. The login page keeps the
-        * IFQM logo deliberately: there is no tenant resolved before sign-in.
-        */}
+      {/* The organisation's own logo and name, not IFQM's - a TVS employee sees TVS here, an L&T employee sees L&T. */}
       <div className="sidebar-logo" onClick={onToggle} style={{ cursor:'pointer' }} title={orgName}>
         <img
           src={logo}
@@ -81,10 +75,7 @@ export default function Sidebar({ collapsed, onToggle }) {
         </span>
       </div>
 
-      {/* The menu scrolls on its own so the account block below stays put.
-          Everything used to scroll together, and the footer - which is almost
-          transparent - rode up over the last menu item, so the name read on top
-          of "My Profile" and neither could be made out. */}
+      {/* The menu scrolls on its own so the account block below stays put. */}
       <div className="sidebar-nav">
 
       {!isPA && (
@@ -98,17 +89,14 @@ export default function Sidebar({ collapsed, onToggle }) {
           <div className="nav-section">{t('section.workflow')}</div>
           <NavItem path="/review"     icon={NAV_ICONS.review}     label={t('nav.review')}    hidden={!isPriv} />
           <NavItem path="/all-ideas"  icon={NAV_ICONS.allIdeas}   label={t('nav.all_ideas')} />
-          {/* §13.5 / §14.1 — rejections as a readable set, not a filter
-              nobody thinks to apply. */}
+          {/* §13.5 / §14.1 - rejections as a readable set, not a filter nobody thinks to apply. */}
           <NavItem path="/rejected"   icon={NAV_ICONS.allIdeas}   label={t('nav.rejected')} />
           <NavItem path="/board"      icon={NAV_ICONS.board}      label={t('nav.board')}     />
           <NavItem path="/audit"      icon={NAV_ICONS.audit}      label={t('nav.audit')}     hidden={!canReport} />
 
           <div className="nav-section">{t('section.insights')}</div>
           <NavItem path="/leaderboard" icon={NAV_ICONS.leaderboard} label={t('nav.leaderboard')} />
-          {/* Rewards & Recognition sits beside the leaderboard because it IS the
-              leaderboard — the version you hand to HR. Shown to the people who
-              run a reward cycle; the server enforces the same list. */}
+          {/* Rewards & Recognition sits beside the leaderboard because it IS the leaderboard - the version you hand to HR. */}
           <NavItem path="/rewards" icon={NAV_ICONS.leaderboard} label={t('nav.rewards')}
             hidden={!canReport} />
           <NavItem path="/analytics"   icon={NAV_ICONS.analytics}   label={t('nav.analytics')}   hidden={!canReport} />
@@ -117,8 +105,7 @@ export default function Sidebar({ collapsed, onToggle }) {
             <>
               <div className="nav-section">{t('section.admin')}</div>
               <NavItem path="/admin" icon={NAV_ICONS.admin} label={t('nav.admin')} />
-              {/* What this organisation pays, when it is next due, and — when
-                  IFQM has a gateway configured — how to pay it. */}
+              {/* What this organisation pays, when it is next due, and - when IFQM has a gateway configured - how to pay it. */}
               <NavItem path="/billing" icon={NAV_ICONS.billing} label={t('nav.my_billing')} />
             </>
           )}
@@ -141,16 +128,14 @@ export default function Sidebar({ collapsed, onToggle }) {
           <NavItem path="/platform/billing" icon={NAV_ICONS.billing} label={t('nav.billing')} />
           <NavItem path="/platform/logins" icon={NAV_ICONS.audit} label={t('nav.login_activity')} />
           <NavItem path="/platform/settings" icon={NAV_ICONS.admin} label={t('nav.platform_settings')} />
-          {/* The console has no Help section to hang this off, and one item does
-              not justify a section header of its own. */}
+          {/* The console has no Help section to hang this off, and one item does not justify a section header of its own. */}
           <NavItem path="/user-guide" icon={NAV_ICONS.guide} label={t('nav.user_guide')} />
         </>
       )}
 
       {!isPA && (
         <>
-          {/* Support is for everyone in the tenant, not just admins — the person
-              who hits a bug is the person who should be able to report it. */}
+          {/* Support is for everyone in the tenant, not just admins - the person who hits a bug is the person who should be able to report it. */}
           <div className="nav-section">{t('section.help')}</div>
           <NavItem path="/user-guide" icon={NAV_ICONS.guide} label={t('nav.user_guide')} />
           <NavItem path="/help" icon={NAV_ICONS.help} label={t('nav.help')} />

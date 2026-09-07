@@ -5,7 +5,7 @@ import { usersApi } from '../services/api';
 import { canViewReports, translateStatus, translateArea } from '../utils/helpers';
 import { Donut, Legend, AreaChart, Gauge, STATUS_COLORS, colorAt } from '../components/Charts';
 
-// Distinct accent per KPI card — colourful but each hue is validated.
+// Distinct accent per KPI card - colourful but each hue is validated.
 const KPI_ACCENTS = ['#2a78d6', '#1baf7a', '#4a3aa7', '#eda100'];
 
 export default function AnalyticsPage() {
@@ -65,10 +65,9 @@ export default function AnalyticsPage() {
   (data.status_summary||[]).forEach(s => { counts[s.status] = s.cnt; });
   const total   = Object.values(counts).reduce((a,b)=>a+b,0);
   const approved = (counts['Approved']||0) + (counts['Implemented']||0);
-  // counts['Implemented'] is deliberately NOT read here any more: MOM 22
-  // defines both implementation metrics against ideas forwarded to QC, and
-  // leaving the old variable in place is how the wrong number finds its way
-  // back into a label.
+  // counts['Implemented'] is deliberately NOT read here any more: MOM 22 defines both
+  // implementation metrics against ideas forwarded to QC, and leaving the old variable in
+  // place is how the wrong number finds its way back into a label.
   const ss       = data.score_stats || {};
   const hq = parseInt(ss.high_quality||0);
   const mq = parseInt(ss.medium_quality||0);
@@ -84,38 +83,17 @@ export default function AnalyticsPage() {
     .map(s => ({ label: translateStatus(s.status, t), value: Number(s.cnt), color: STATUS_COLORS[s.status] || '#94a3b8' }))
     .filter(d => d.value > 0);
 
-  /*
-   * MOM §22 defines both of these against ideas FORWARDED TO QC, not against
-   * the status column.
-   *
-   * They are different populations and the difference is not cosmetic. An idea
-   * reaches the QC tool when it is pushed and QCMS accepts it; its status may
-   * sit at Approved for weeks afterwards while the work is scheduled. This used
-   * to report `counts['Implemented']` under the label "Ideas forwarded to QC",
-   * which was a label over the wrong number — the figure moved when somebody
-   * marked an idea implemented, not when it actually went across.
-   *
-   *   Implementation Rate      what share of all ideas reached QC
-   *   Implementation Velocity  how many reached it in the last 30 days
-   *
-   * Velocity is a COUNT, not a percentage: "18 ideas pushed this month" is a
-   * pace, which is what velocity means, and a percentage of a moving total is
-   * not.
-   */
+  // MOM §22 defines both of these against ideas FORWARDED TO QC, not against the status
+  // column.
   const qcms = data.qcms || {};
   const pushed = Number(qcms.pushed) || 0;
   const pushed30 = Number(qcms.pushed_30d) || 0;
 
   const kpis = [
     [t('dash.total'), total, '', paletteIcon('bulb'), 'Total Ideas Submitted'],
-    /*
-     * The caption said "Approved & Implemented Rate" while the card beside it
-     * reports implementation separately — two cards claiming the same ground,
-     * and a reader could not tell whether implemented ideas were counted once
-     * or twice. The figure DOES include implemented ideas, because an idea that
-     * was implemented was necessarily approved first; the caption now says that
-     * rather than naming the other card's metric.
-     */
+    // The caption said "Approved & Implemented Rate" while the card beside it reports
+    // implementation separately - two cards claiming the same ground, and a reader could not
+    // tell whether implemented ideas were counted once or twice.
     [t('analytics.approval_rate'), total ? Math.round(approved/total*100) : 0, '%', paletteIcon('check'), t('analytics.approval_rate_sub')],
     [t('analytics.impl_rate'), total ? Math.round(pushed/total*100) : 0, '%', paletteIcon('rocket'), t('analytics.impl_rate_sub')],
     [t('analytics.impl_velocity'), pushed30, '', paletteIcon('rocket'), t('analytics.impl_velocity_sub')],
@@ -158,7 +136,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="analytics-bars" style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:20 }}>
-        {/* Status Distribution — donut */}
+        {/* Status Distribution - donut */}
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.status_dist')}</div>
@@ -175,7 +153,7 @@ export default function AnalyticsPage() {
           }
         </div>
 
-        {/* Impact Distribution — colourful bars */}
+        {/* Impact Distribution - colourful bars */}
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.impact_dist')}</div>
@@ -197,7 +175,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {/* Monthly Trend — smooth gradient area chart */}
+        {/* Monthly Trend - smooth gradient area chart */}
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.monthly_trend')}</div>
@@ -209,7 +187,7 @@ export default function AnalyticsPage() {
           }
         </div>
 
-        {/* Score Distribution — gauge + quality split */}
+        {/* Score Distribution - gauge + quality split */}
         <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
             <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('analytics.score_dist')}</div>
@@ -248,7 +226,7 @@ function tint(hex) {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},0.14)`;
 }
-// A subtle same-hue gradient for a bar fill (lighter → base).
+// A subtle same-hue gradient for a bar fill (lighter base).
 function grad(hex) { return `linear-gradient(90deg,${hex}cc,${hex})`; }
 // Gauge colour by quality-score band (green / amber / red; grey when unscored).
 function scoreColor(v) { const n = Number(v) || 0; return n <= 0 ? '#94a3b8' : n >= 75 ? '#1baf7a' : n >= 50 ? '#eda100' : '#e34948'; }

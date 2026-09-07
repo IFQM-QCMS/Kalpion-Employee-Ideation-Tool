@@ -5,20 +5,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/api';
 
-/*
-  Minimal "particles" auth page (adapted from appvibed01/minimal-auth).
-
-  Kept: the animated particle field + soft radial glows behind a slim, centred
-  card with a brand mark, heading and sub-line.
-
-  Adapted for IFQM, and why:
-   • The source is OAuth-only ("Continue with Google / GitHub"). IFQM has no
-     social login — so those buttons are replaced by the real email/phone +
-     password form. Nothing here is a dead button.
-   • The particle field is a small self-contained <canvas> (no new dependency,
-     no shadcn/Tailwind), and all styles are scoped under `.ifqm-particles`.
-   • Theme-aware: it reads the app's CSS variables, so it follows light/dark.
-*/
+// Minimal "particles" auth page (adapted from appvibed01/minimal-auth).
 
 const WrenchIcon = () => (
   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -59,8 +46,8 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-/* Lightweight particle field — drifting dots that link when close and gently
-   part around the cursor. Pure canvas; cleans up its rAF + listeners. */
+// Lightweight particle field - drifting dots that link when close and gently part around
+// the cursor.
 function useParticles(canvasRef) {
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -162,37 +149,16 @@ export default function LoginPage() {
   const canvasRef = useRef(null);
   useParticles(canvasRef);
 
-  /*
-   * Forgot-password, as a dialog rather than window.prompt().
-   *
-   * The native prompt could not be styled, could not show a validation message
-   * next to the field, and on several browsers is suppressed outright — which
-   * is what "it does not work at all" turned out to mean: no dialog appeared,
-   * so no request was ever sent.
-   *
-   * `forgotDone` deliberately keeps the panel open on success. The reply is
-   * intentionally the same whether or not the address is registered (the
-   * backend answers generically so this page cannot be used to discover who
-   * holds an account), so the user needs to read that sentence rather than
-   * have it flash past in a toast.
-   */
-  /*
-   * Maintenance mode.
-   *
-   * The notice is shown, but the form is deliberately LEFT ENABLED. This screen
-   * cannot know whether the person typing is a tenant user or an IFQM platform
-   * admin until credentials are submitted, and staff must be able to sign in
-   * precisely while this is on — they are the ones turning it off. So the
-   * banner sets the expectation and the server makes the decision.
-   */
+  // Forgot-password, as a dialog rather than window.prompt().
+  // Maintenance mode.
   const [maint, setMaint] = useState(null);
 
   useEffect(() => {
     let alive = true;
     authApi.maintenance()
       .then((r) => { if (alive && r.data?.enabled) setMaint(r.data.message || ''); })
-      // A failure here must never block sign-in: not knowing whether the
-      // platform is on hold is not a reason to refuse a login attempt.
+      // A failure here must never block sign-in: not knowing whether the platform is on hold is
+      // not a reason to refuse a login attempt.
       .catch(() => {});
     return () => { alive = false; };
   }, []);
@@ -202,22 +168,16 @@ export default function LoginPage() {
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotErr, setForgotErr] = useState('');
   const [forgotDone, setForgotDone] = useState(false);
-  // Which of the two routes the request took, and — for the code route — the
-  // masked destination the server reported.
+  // Which of the two routes the request took, and - for the code route - the masked
+  // destination the server reported.
   const [forgotVia, setForgotVia] = useState('link');
   const [forgotSentTo, setForgotSentTo] = useState('');
-  // The code step. Only reached on the SMS route; the emailed link finishes in
-  // the mailbox instead.
+  // The code step. Only reached on the SMS route; the emailed link finishes in the mailbox
+  // instead.
   const [forgotCode, setForgotCode] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
 
-  /*
-   * MOM §4.1 / §4.2 — sign in with a one-time code.
-   *
-   * The option is only shown when the platform has it switched on AND a
-   * provider is configured. Offering it otherwise would send people down a
-   * route where no code ever arrives, which is worse than not offering it.
-   */
+  // MOM §4.1 / §4.2 - sign in with a one-time code.
   const [otpAvailable, setOtpAvailable] = useState(false);
   const [mode, setMode]         = useState('password');   // 'password' | 'otp'
   const [otpStage, setOtpStage] = useState('request');     // 'request' | 'verify'
@@ -245,8 +205,8 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await authApi.otpRequest(otpPhone.trim());
-      // Deliberately generic — the server will not say whether the number is
-      // registered, and neither should this screen.
+      // Deliberately generic - the server will not say whether the number is registered, and
+      // neither should this screen.
       setOtpNote(res.data?.message || t('login.otp_sent'));
       setOtpStage('verify');
       setResendIn(res.data?.resend_in ?? 60);
@@ -276,16 +236,7 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
-    /*
-     * The reset email links to /reset-password?token=…&org=… (authService),
-     * while older links used ?reset_token= and landed here instead.
-     *
-     * A token arriving on THIS page used to be collected through three
-     * window.prompt() calls — new password, confirm it, hope they matched —
-     * with no strength hint, no reveal toggle and no way back from a typo.
-     * /reset-password is a real form that does all of that, so an old link is
-     * handed to it rather than served a worse copy of it.
-     */
+    // The reset email links to /reset-password?token=...&org=...
     const rt = params.get('token') || params.get('reset_token');
     if (!rt) return;
     const org = params.get('org') || params.get('org_slug') || orgSlug || '';
@@ -319,23 +270,13 @@ export default function LoginPage() {
     e?.preventDefault();
     setForgotErr('');
     setForgotDone(false);
-    // Seed it with whatever was already typed above, whatever kind of
-    // identifier that is. The common case is somebody who typed who they are,
-    // then found they could not remember the password — and since sign-in
-    // accepts a username or a number, so must this.
+    // Seed it with whatever was already typed above, whatever kind of identifier that is.
     setForgotEmail(email.trim());
     setForgotOpen(true);
   }
 
-  /*
-   * Exchange the code for a reset token, then finish on /reset-password — the
-   * same page the emailed link lands on.
-   *
-   * Deliberately NOT a second password form built into this dialog. Both routes
-   * end in the same place for the same reason the server does it that way: one
-   * way to actually set a password, two ways to earn the right to. A second
-   * form would be a second set of strength rules to keep in step.
-   */
+  // Exchange the code for a reset token, then finish on /reset-password - the same page the
+  // emailed link lands on.
   async function submitForgotCode(e) {
     e?.preventDefault();
     const code = forgotCode.trim();
@@ -359,21 +300,7 @@ export default function LoginPage() {
 
   async function submitForgot(e) {
     e?.preventDefault();
-    /*
-     * Two ways to earn a reset, chosen by what was typed.
-     *
-     * An address gets the emailed link, unchanged — it lands in a mailbox,
-     * survives being opened on another device, and is the better experience at
-     * a desk.
-     *
-     * A mobile number or a username gets a CODE. That route has existed on the
-     * server since it was written and nothing ever called it: this dialog
-     * validated an email regex and refused everything else, so the very people
-     * it was built for — somebody locked out of the mailbox a link would go to,
-     * somebody with no work address at all — had no way to reset a password.
-     * Once accounts stopped requiring an email that was not an inconvenience
-     * but a dead end.
-     */
+    // Two ways to earn a reset, chosen by what was typed.
     const id = forgotEmail.trim();
     if (!id) { setForgotErr(t('login.forgot_invalid')); return; }
     const isEmailAddr = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
@@ -388,9 +315,7 @@ export default function LoginPage() {
       } else {
         const res = await authApi.resetCodeRequest(id);
         if (res.data?.success) {
-          // The server masks where it went. Somebody who typed a username has
-          // no other way of knowing, and "a code has been sent" with no hint of
-          // where is how a person sits waiting on the wrong device.
+          // The server masks where it went.
           setForgotSentTo(res.data.sent_to || '');
           setForgotVia('code');
           setForgotDone(true);
@@ -473,7 +398,7 @@ export default function LoginPage() {
 
         /* ── Maintenance notice ─────────────────────────────────────────
            Warning colours rather than danger: the platform is not broken and
-           the reader has done nothing wrong — it is deliberately closed. */
+           the reader has done nothing wrong - it is deliberately closed. */
         .ifqm-particles .maint{
           display:flex;gap:11px;align-items:flex-start;margin-bottom:16px;
           background:var(--warning-light,var(--info-light));
@@ -552,16 +477,7 @@ export default function LoginPage() {
         {mode === 'otp' ? (
           otpStage === 'request' ? (
             <form onSubmit={sendCode}>
-              {/*
-                * Email address OR mobile number.
-                *
-                * This asked for a number only — type="tel", "Registered phone
-                * number" — while the server has always accepted either and, with
-                * no SMS gateway contracted, could only ever deliver by email. So
-                * the one channel that worked was the one the screen never
-                * invited anybody to use, and code sign-in looked completely
-                * broken. type="text" because a tel keypad cannot type an "@".
-                */}
+              {/* Email address OR mobile number. */}
               <div className="fld">
                 <span className="ic"><PhoneIcon /></span>
                 <input type="text" value={otpPhone} onChange={e => setOtpPhone(e.target.value)}
@@ -575,8 +491,7 @@ export default function LoginPage() {
             <form onSubmit={verifyCode}>
               <div className="fld">
                 <span className="ic"><LockIcon /></span>
-                {/* inputMode numeric so a phone shows the number pad; one-time-code
-                    lets both iOS and Android offer the SMS straight from the keyboard */}
+                {/* inputMode numeric so a phone shows the number pad; one-time-code. */}
                 <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={8}
                   value={otpCode} onChange={e => setOtpCode(e.target.value.replace(/\D/g, ''))}
                   placeholder={t('login.otp_code_ph')} autoComplete="one-time-code" required autoFocus
@@ -624,8 +539,7 @@ export default function LoginPage() {
         </form>
         )}
 
-        {/* Only offered when the platform actually has a working SMS provider —
-            a route where no code ever arrives is worse than no route. */}
+        {/* Only offered when the platform actually has a working SMS provider - a route where no code ever arrives is worse than no route. */}
         {otpAvailable && (
           <div className="switcher">
             <span />
@@ -647,9 +561,7 @@ export default function LoginPage() {
       </div>
 
       {forgotOpen && (
-        // Clicking the backdrop closes; clicking the panel must not, hence the
-        // stopPropagation. Escape closes too, for a keyboard user who opened it
-        // by accident.
+        // Clicking the backdrop closes; clicking the panel must not, hence the stopPropagation.
         <div className="modal-veil" onClick={() => !forgotBusy && setForgotOpen(false)}
           onKeyDown={(ev) => { if (ev.key === 'Escape' && !forgotBusy) setForgotOpen(false); }}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="forgot-title"
@@ -666,9 +578,7 @@ export default function LoginPage() {
                     : t('login.reset_sent')}
                 </div>
 
-                {/* The emailed link is finished in the mailbox. A code is
-                    finished here, or the message would be telling somebody to
-                    type it into a box that does not exist. */}
+                {/* The emailed link is finished in the mailbox. */}
                 {forgotVia === 'code' ? (
                   <form onSubmit={submitForgotCode}>
                     <div className="fld" style={{ marginTop: 14 }}>
@@ -706,9 +616,7 @@ export default function LoginPage() {
                 <form onSubmit={submitForgot}>
                   <div className="fld">
                     <span className="ic"><MailIcon /></span>
-                    {/* type="text", not "email". A browser refuses to submit a
-                        phone number or a username from an email field, which is
-                        what shut the code route out of this dialog. */}
+                    {/* type="text", not "email". */}
                     <input
                       type="text" value={forgotEmail} autoFocus autoComplete="username"
                       placeholder={t('login.identifier_ph')} disabled={forgotBusy}

@@ -1,54 +1,18 @@
-/**
- * Pay-as-you-go metering — an organisation is billed for the people who
- * actually signed in during the month.
- *
- * ── What counts as an active user ───────────────────────────────────────────
- *
- * Somebody who signed in successfully at least once in the calendar month. Not
- * somebody with an account: an organisation that provisions four hundred
- * employees and has thirty using the tool is billed for thirty, or the plan is
- * a seat licence wearing a different name.
- *
- * Counted from platform_login_activity, which is the only place that records a
- * sign-in per person per tenant. DISTINCT actor_id, so a person who signs in
- * every morning is one active user, not twenty-two.
- *
- * ── Why a month is counted once and then kept ──────────────────────────────
- *
- * The log this is derived from is purged after the retention window (migration
- * 029). Recomputing an old month would silently return a smaller number once
- * its sign-in rows had gone — and an invoice that quietly shrinks when it is
- * re-opened is worse than one that is simply wrong, because nobody can tell
- * afterwards which figure was actually charged.
- *
- * So closeMonth() writes the count and the unit price into tenant_active_users
- * and never revises them. That table outlives the log behind it, which is what
- * a billing record has to do.
- *
- * ── Why the unit price is stored with the count ────────────────────────────
- *
- * Raising the price of a PAYG plan must not rewrite what March was charged.
- * The rate in force at the moment the month closed is captured beside the
- * number of people it applied to, so an old invoice can still be explained
- * from its own row rather than from whatever the plan says today.
+/*
+ * Pay-as-you-go metering - an organisation is billed for the people who actually signed in
+ * during the month.
  */
 import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
-/** 'YYYY-MM' for a date, in the DATABASE's calendar — see closeMonth. */
+/** 'YYYY-MM' for a date, in the DATABASE's calendar - see closeMonth. */
 export const periodOf = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 export const isPayg = (cycle) => cycle === 'payg';
 
-/**
- * How many distinct people signed in for this organisation in this month.
- *
- * Reads the live log, so it is only meaningful for months still inside the
- * retention window. Closed months should be read from tenant_active_users
- * instead — that is the whole reason the snapshot exists.
- */
+/** How many distinct people signed in for this organisation in this month. */
 export async function activeUsersIn(tenantId, period) {
   if (!/^\d{4}-\d{2}$/.test(String(period || ''))) {
     throw badRequest('Period must be in YYYY-MM form.');
@@ -66,14 +30,7 @@ export async function activeUsersIn(tenantId, period) {
   return Number(row.n) || 0;
 }
 
-/**
- * Close a month for one organisation: count it, price it, and keep both.
- *
- * Idempotent by design. Re-running for a month already closed returns the
- * STORED figures rather than recounting — that is the guarantee the whole file
- * exists for, and a "just refresh it" that recomputed would quietly undo it.
- * Pass `recount: true` to deliberately revise a month that was closed in error.
- */
+/** Close a month for one organisation: count it, price it, and keep both. */
 export async function closeMonth(tenantId, period, { recount = false } = {}) {
   const id = Number(tenantId) || 0;
   const master = masterDb();
@@ -119,7 +76,7 @@ export async function closeMonth(tenantId, period, { recount = false } = {}) {
   );
 
   logger.info(
-    `payg: ${tenant.name} ${period} — ${activeUsers} active user(s) at ${unitPaise} paise each`
+    `payg: ${tenant.name} ${period} - ${activeUsers} active user(s) at ${unitPaise} paise each`
   );
   return {
     success: true, tenant_id: id, period,
@@ -130,13 +87,7 @@ export async function closeMonth(tenantId, period, { recount = false } = {}) {
   };
 }
 
-/**
- * What an organisation has been metered, month by month, newest first.
- *
- * The current month is included from the LIVE log and marked `open`, because
- * somebody asking "what am I running up this month?" wants today's number, not
- * silence until the month ends.
- */
+/** What an organisation has been metered, month by month, newest first. */
 export async function usageHistory(tenantId, { months = 12 } = {}) {
   const id = Number(tenantId) || 0;
   const master = masterDb();

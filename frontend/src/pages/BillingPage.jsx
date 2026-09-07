@@ -5,26 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { settingsApi } from '../services/api';
 import { fmtDate, fmtDateTime } from '../utils/helpers';
 
-/*
- * The organisation's own billing page.
- *
- * ── Who sees what ──────────────────────────────────────────────────────────
- *
- * Anybody signed in can read it. "This company is two days from being cut off"
- * is not confidential from the people it will cut off, and the person who
- * notices is often not the person who pays.
- *
- * Only an administrator can pay. An employee should not be able to spend the
- * company's money, so the button simply is not rendered for them — and the
- * server refuses it regardless, because a hidden button is not a permission.
- *
- * ── Loading Razorpay ───────────────────────────────────────────────────────
- *
- * The checkout script is fetched from Razorpay's own domain, on demand, only
- * when somebody actually presses Pay. Loading it on every page view would put a
- * third-party script into every screen of the product for a button most people
- * will never press.
- */
+// The organisation's own billing page.
 
 const money = (paise) => `₹${(Number(paise || 0) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 const RZP_SRC = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -79,11 +60,11 @@ export default function BillingPage() {
         description: `${order.plan?.name || ''} × ${order.periods}`,
         order_id: order.order_id,
         prefill: { name: user?.name, email: user?.email },
-        // Razorpay renders its own window and cannot read our CSS
-        // variables, so the brand colour has to be handed over literally.
+        // Razorpay renders its own window and cannot read our CSS variables, so the brand colour
+        // has to be handed over literally.
         theme: { color: '#1a5299' },
-        // Verified server-side against the signature. Nothing is extended on
-        // the strength of the browser saying it went through.
+        // Verified server-side against the signature. Nothing is extended on the strength of the
+        // browser saying it went through.
         handler: async (resp) => {
           try {
             const v = await settingsApi.payVerify(resp);
@@ -152,11 +133,7 @@ export default function BillingPage() {
           <div style={{ fontSize: 13, color: 'var(--subtle)', lineHeight: 1.6 }}>{t('bill.no_plan')}</div>
         ) : (
           <>
-            {/* A table, not four figures floating in a row.
-                As free-standing numbers nothing lined up: the price sat beside a
-                day count beside a date, all at the same weight, so there was no
-                telling which was the amount due and which was a countdown. Rows
-                with named labels answer that by construction. */}
+            {/* A table, not four figures floating in a row. */}
             <table className="table" style={{ marginBottom: 18 }}>
               <tbody>
                 <tr>
@@ -171,11 +148,7 @@ export default function BillingPage() {
                 <tr>
                   <td style={{ color: 'var(--subtle)' }}>{t('bill.amount_lbl')}</td>
                   <td>
-                    {/* The figure shown is the one the Pay button charges. It
-                        used to be the stored price captioned "including X% GST",
-                        which is only true for a GST-inclusive plan — on an
-                        exclusive one the page understated the bill and checkout
-                        opened on a larger number than the customer had read. */}
+                    {/* The figure shown is the one the Pay button charges. */}
                     <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                       {money(plan.total_rupees * 100)}
                     </span>
@@ -188,11 +161,11 @@ export default function BillingPage() {
                 </tr>
                 <tr>
                   <td style={{ color: 'var(--subtle)' }}>{t('bill.days_left')}</td>
-                  <td style={{ fontWeight: 700 }}>{sub.days_left ?? '—'}</td>
+                  <td style={{ fontWeight: 700 }}>{sub.days_left ?? '-'}</td>
                 </tr>
                 <tr>
                   <td style={{ color: 'var(--subtle)' }}>{t('bill.due')}</td>
-                  <td style={{ fontWeight: 600 }}>{sub.ends_at ? fmtDate(sub.ends_at) : '—'}</td>
+                  <td style={{ fontWeight: 600 }}>{sub.ends_at ? fmtDate(sub.ends_at) : '-'}</td>
                 </tr>
               </tbody>
             </table>
@@ -257,7 +230,7 @@ export default function BillingPage() {
                         {p.status}
                       </span>
                     </td>
-                    <td style={{ fontSize: 11 }}><code>{p.payment_ref || p.order_ref || '—'}</code></td>
+                    <td style={{ fontSize: 11 }}><code>{p.payment_ref || p.order_ref || '-'}</code></td>
                   </tr>
                 ))}
               </tbody>

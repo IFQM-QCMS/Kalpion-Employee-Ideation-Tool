@@ -4,21 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { rewardsApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
 
-/*
- * Rewards & Recognition.
- *
- * The org admin picks a period, sees the WHOLE leaderboard for it, and hands
- * HR a document. That last part is the point of the screen — nobody rewards
- * anybody from a browser tab, they forward a file.
- *
- * ── Why the whole list, always ─────────────────────────────────────────────
- *
- * The ordinary leaderboard stops at twenty. A reward list that silently
- * truncates is worse than none: the twenty-first person is not told they were
- * cut, and the person reading it cannot tell the cut happened. Everybody who
- * took part in the period appears here, in order, and the count is stated so
- * the reader can see nothing is missing.
- */
+// Rewards & Recognition.
 
 const PERIODS = [
   ['weekly', 'rr.p_weekly'],
@@ -34,13 +20,7 @@ export default function RewardsPage() {
   const { showToast } = useToast();
 
   const [period, setPeriod] = useState('monthly');
-  /*
-   * Defaults to the LAST complete period, not the one in progress.
-   *
-   * Rewarding happens just after a period ends — you decide March's award in
-   * April. Opening on a half-finished month would show a list that is going to
-   * change, which is the one thing a reward shortlist must not do.
-   */
+  // Defaults to the LAST complete period, not the one in progress.
   const [offset, setOffset] = useState(1);
   const [includeAll, setIncludeAll] = useState(false);
   const [from, setFrom] = useState('');
@@ -99,7 +79,7 @@ export default function RewardsPage() {
         </div>
       </div>
 
-      {/* ── Period ── */}
+      {/* Period */}
       <div className="card" style={{ padding: '16px 18px' }}>
         <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div className="form-group" style={{ margin: 0, minWidth: 180 }}>
@@ -151,14 +131,13 @@ export default function RewardsPage() {
 
         {data?.range && (
           <div style={{ marginTop: 12, fontSize: 12.5, color: 'var(--text-muted)' }}>
-            {/* The window in dates, not just its name. A reader a month later
-                cannot check "monthly"; they can check "1 Mar to 31 Mar". */}
+            {/* The window in dates, not just its name. */}
             {t('rr.covering', { range: data.range.display })}
           </div>
         )}
       </div>
 
-      {/* ── Download ── */}
+      {/* Download */}
       <div className="card" style={{ marginTop: 14, padding: '14px 18px' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--heading)' }}>
@@ -220,7 +199,7 @@ export default function RewardsPage() {
                           <div style={{ fontWeight: 600 }}>{p.name}</div>
                           <div style={{ fontSize: 11, color: 'var(--subtle)' }}>{p.employee_id}</div>
                         </td>
-                        <td style={{ fontSize: 12.5 }}>{p.department || '—'}</td>
+                        <td style={{ fontSize: 12.5 }}>{p.department || '-'}</td>
                         <td style={{ fontSize: 12.5 }}>{formatRole(p.role, t)}</td>
                         <td className="text-center">{p.ideas_submitted}</td>
                         <td className="text-center">{p.ideas_approved}</td>
@@ -228,8 +207,7 @@ export default function RewardsPage() {
                         <td className="text-center">{p.ideas_pending}</td>
                         <td style={{ textAlign: 'right' }}>
                           <strong>{p.points_period}</strong>
-                          {/* The working, beside the total: a score somebody is
-                              rewarded against should be checkable on sight. */}
+                          {/* The working, beside the total: a score somebody is rewarded against should be checkable on sight. */}
                           <div style={{ fontSize: 10.5, color: 'var(--subtle)' }}>
                             {p.points_submission} + {p.points_from_ideas}
                           </div>

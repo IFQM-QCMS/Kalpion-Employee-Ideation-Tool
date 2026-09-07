@@ -4,32 +4,7 @@ import { registrationsApi } from '../services/api';
 import InfoDot from '../components/InfoDot';
 import { isValidGstin, panFromGstin } from '../utils/gstin';
 
-/*
-  MSME self-registration.
-
-  Three steps rather than one long form, because the fields come from three
-  different places in the applicant's head: who they are, what the business is
-  on paper (the Udyam certificate), and where it operates. Splitting it also
-  means the corporate-email rule is enforced on step 1, before anyone has spent
-  five minutes typing GST numbers they would have to retype after a rejection.
-
-  Nothing here provisions anything. The application lands in a queue and a
-  platform admin approves it — the form says so plainly rather than implying an
-  instant account, because an unmet expectation at signup is a support ticket.
-
-  The statutory identifiers — Udyam number, GSTIN, PAN, CIN — and the website are
-  no longer asked for. They were required, on a step of their own, and they are
-  the fields an applicant is least likely to have to hand at the moment they
-  decide to try the product: the certificates are in somebody else's drawer, so
-  the form was abandoned there. The COLUMNS are kept and the server still
-  validates and stores anything it is sent, so every application already
-  submitted keeps its numbers and the platform screens go on showing them.
-
-  What that costs is worth stating plainly: those numbers were how a reviewer
-  checked an applicant against the public registers before a workspace was
-  created. Approval now rests on the company name, the work email domain and
-  the contact details, so the check moves from the form to the reviewer.
-*/
+// MSME self-registration.
 
 const ENTITY_TYPES = [
   ['proprietorship', 'Sole proprietorship'],
@@ -45,10 +20,10 @@ const ENTITY_TYPES = [
 
 const TURNOVER_BANDS = [
   ['under_50l', 'Under ₹50 lakh'],
-  ['50l_2cr', '₹50 lakh – ₹2 crore'],
-  ['2cr_10cr', '₹2 – 10 crore'],
-  ['10cr_50cr', '₹10 – 50 crore'],
-  ['50cr_250cr', '₹50 – 250 crore'],
+  ['50l_2cr', '₹50 lakh - ₹2 crore'],
+  ['2cr_10cr', '₹2 - 10 crore'],
+  ['10cr_50cr', '₹10 - 50 crore'],
+  ['50cr_250cr', '₹50 - 250 crore'],
   ['above_250cr', 'Above ₹250 crore'],
 ];
 
@@ -73,13 +48,7 @@ const STATES = [
 const BLANK = {
   company_name: '', proposed_slug: '',
   contact_name: '', contact_designation: '', contact_email: '', contact_phone: '',
-  /*
-   * Not on the form, and kept here deliberately. The columns behind them still
-   * exist and the server still validates and stores whatever it is sent, so
-   * these travel as empty strings rather than being absent — which keeps the
-   * request shape stable and means restoring the fields later is a change to
-   * the markup alone.
-   */
+  // Not on the form, and kept here deliberately.
   website: '', udyam_number: '', gstin: '', pan: '', cin: '',
   entity_type: '', sector: '', nic_code: '',
   employee_count: '', annual_turnover_band: '', year_established: '',
@@ -104,17 +73,7 @@ export default function SignupPage() {
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [otpMsg, setOtpMsg] = useState('');
 
-  /*
-   * The mobile leg of the same exercise.
-   *
-   * Kept as its own state rather than folded into the email one because both
-   * run at once and either can be mid-flight: a shared "verifying" flag would
-   * grey out the wrong button.
-   *
-   * `smsAvailable` is null until the server has answered. Null is not false —
-   * drawing "SMS unavailable" for the half-second before the answer arrives
-   * would tell every applicant the feature is broken.
-   */
+  // The mobile leg of the same exercise.
   const [phoneOtpSent, setPhoneOtpSent] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneOtpCode, setPhoneOtpCode] = useState('');
@@ -226,9 +185,8 @@ export default function SignupPage() {
     setVerifyingPhoneOtp(false);
   }
 
-  /* Check the work-email rule against the server as soon as the field loses
-     focus, so "we don't accept gmail" arrives before step 2 rather than after
-     the whole form is filled in. The server re-checks on submit regardless. */
+  // Check the work-email rule against the server as soon as the field loses focus, so "we
+  // don't accept gmail" arrives before step 2 rather than after the whole form is filled in.
   async function validateEmail() {
     const email = form.contact_email.trim();
     setEmailNote('');
@@ -237,20 +195,13 @@ export default function SignupPage() {
       const res = await registrationsApi.checkEmail(email);
       if (!res.data.acceptable) setEmailNote(res.data.reason || 'Use your work email address.');
       else if (!form.proposed_slug && res.data.domain) {
-        // Pre-fill the org code from the domain — one less thing to invent.
+        // Pre-fill the org code from the domain - one less thing to invent.
         setForm((f) => ({ ...f, proposed_slug: res.data.domain.split('.')[0].replace(/[^a-z0-9_-]/g, '') }));
       }
     } catch { /* advisory only; submit is the authority */ }
   }
 
-  /*
-   * Every field on a step has to be filled before the next one opens.
-   *
-   * The reason is not tidiness. A half-filled application sits in the queue
-   * while somebody emails back and forth for what is missing, which used to be
-   * most of them. Asking once, while the applicant is still here, is faster for
-   * everybody.
-   */
+  // Every field on a step has to be filled before the next one opens.
   const FIELD_RULES = {
     company_name:  { label: 'registered company name', min: 3 },
     proposed_slug: { label: 'preferred organization code', re: /^[a-z0-9][a-z0-9_-]{1,29}$/,
@@ -260,19 +211,13 @@ export default function SignupPage() {
       label: 'GSTIN',
       re: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/i,
       hint: 'Fifteen characters, as printed on your GST certificate.',
-      /*
-       * MOM 24/08 §2. The check digit is verified here so a mistyped number is
-       * caught at the field rather than three steps later — and the PAN inside
-       * the GSTIN is compared with the PAN field, because the GSTIN contains it
-       * and a form where they disagree has one of them wrong.
-       *
-       * The expected check character is deliberately not shown: quoting it back
-       * would turn this message into a recipe for fabricating a number that
-       * passes.
-       */
+      // MOM 24/08 §2. The check digit is verified here so a mistyped number is caught at the
+      // field rather than three steps later - and the PAN inside the GSTIN is compared with the
+      // PAN field, because the GSTIN contains it and a form where they disagree has one of them
+      // wrong.
       fn: (v, f) => {
         if (!isValidGstin(v)) {
-          return 'That GSTIN fails its own check digit — please copy it exactly as printed '
+          return 'That GSTIN fails its own check digit - please copy it exactly as printed '
             + 'on your GST certificate.';
         }
         const inside = panFromGstin(v);
@@ -306,20 +251,7 @@ export default function SignupPage() {
     country:      { optional: true, label: 'country', min: 2 },
   };
 
-  /*
-   * Udyam, GSTIN, PAN, CIN and the website are no longer asked for. The COLUMNS
-   * behind them are kept and the server still validates and stores anything it
-   * is sent, so applications already submitted keep their numbers and the
-   * platform screens go on showing them — they are simply not demanded of an
-   * applicant who wants to start.
-   *
-   * MSME category (micro / small / medium) went the same way for a different
-   * reason. MOM 24/08: the platform does not differentiate between
-   * organisations by size, so asking every applicant to file themselves into a
-   * size band collected an answer nothing acts on — and implied a tiering that
-   * does not exist. Employee count is still asked, which is the part that
-   * actually informs a rollout.
-   */
+  // Udyam, GSTIN, PAN, CIN and the website are no longer asked for.
   const STEP_FIELDS = [
     ['company_name', 'proposed_slug',
      'contact_name', 'contact_designation', 'contact_email', 'contact_phone'],
@@ -328,14 +260,7 @@ export default function SignupPage() {
     ['address_line', 'city', 'state', 'pincode', 'country'],
   ];
 
-  /**
-   * The first problem on a step, or '' when the step is complete.
-   *
-   * A rule marked `optional` is checked for FORM but not for presence: a PIN
-   * code that is there must look like a PIN code, and one that is absent is
-   * simply absent. MOM §13 keeps only the business identity mandatory, so most
-   * of this form is now the second case.
-   */
+  /** The first problem on a step, or '' when the step is complete. */
   function checkStep(n) {
     for (const key of STEP_FIELDS[n]) {
       const rule = FIELD_RULES[key];
@@ -351,15 +276,7 @@ export default function SignupPage() {
       if (rule.re && !rule.re.test(value)) {
         return `That ${rule.label} does not look right. ${rule.hint || ''}`.trim();
       }
-      /*
-       * A check the shape cannot express.
-       *
-       * GSTIN is the case this exists for: it is the right length and the right
-       * pattern and still not a real number, because the last character is a
-       * checksum over the other fourteen. The regex has nothing to say about
-       * that. `fn` returns its own message, since "does not look right" is
-       * unhelpful when the thing being reported is arithmetic.
-       */
+      // A check the shape cannot express.
       if (rule.fn) {
         const problem = rule.fn(value, form);
         if (problem) return problem;
@@ -509,7 +426,7 @@ export default function SignupPage() {
             <h1>Register your organisation</h1>
             <p className="lede">
               Tell us about your business and we will set up your workspace. Approval
-              is manual — usually the same working day — and your team can be invited
+              is manual - usually the same working day - and your team can be invited
               as soon as it is live. Every field is required: we verify the details
               against the public registers before creating a workspace.
             </p>
@@ -539,7 +456,7 @@ export default function SignupPage() {
                         <label htmlFor="proposed_slug">Preferred organization code <span className="opt">optional</span><InfoDot term="org_code" /></label>
                         <input id="proposed_slug" value={form.proposed_slug} onChange={set('proposed_slug')}
                           placeholder="xyz" />
-                        <p className="hint">Short identifier for your workspace — your people will see it when they sign in. We suggest one from your email address.</p>
+                        <p className="hint">Short identifier for your workspace - your people will see it when they sign in. We suggest one from your email address.</p>
                       </div>
                     </div>
                   </fieldset>
@@ -674,10 +591,8 @@ export default function SignupPage() {
                             type="tel"
                             value={form.contact_phone}
                             onChange={(e) => {
-                              // Changing the number invalidates the proof for the
-                              // old one — the server will refuse the application
-                              // otherwise, and finding that out at submit is worse
-                              // than finding it out here.
+                              // Changing the number invalidates the proof for the old one - the server will refuse the
+                              // application otherwise, and finding that out at submit is worse than finding it out here.
                               set('contact_phone')(e);
                               setPhoneVerified(false);
                               setPhoneOtpSent(false);
@@ -758,9 +673,7 @@ export default function SignupPage() {
                             {phoneOtpMsg}
                           </p>
                         )}
-                        {/* Said plainly rather than leaving a button that cannot
-                            work: the applicant cannot fix a gateway, and needs to
-                            know the hold-up is not at their end. */}
+                        {/* Said plainly rather than leaving a button that cannot work: the applicant cannot fix a gateway, and needs to know the hold-up is not at their end. */}
                         {smsAvailable === false && !phoneVerified && (
                           <p className="warn">
                             Codes by SMS are unavailable at the moment. Please contact IFQM to complete your registration.
@@ -781,11 +694,7 @@ export default function SignupPage() {
                 <>
                   <fieldset>
                     <legend>Business profile</legend>
-                    {/* MOM 13: the two statutory numbers a reviewer checks against
-                        the public registers. They came off the form when the whole
-                        statutory step went; 13 puts these two back and leaves Udyam
-                        and CIN out — a proprietorship never has a CIN, and an MSME
-                        below the threshold has no Udyam registration to give. */}
+                    {/* MOM 13: the two statutory numbers a reviewer checks against the public registers. */}
                     <div className="grid">
                       <div>
                         <label htmlFor="gstin">GSTIN <span className="req">*</span><InfoDot term="gstin" /></label>
@@ -800,14 +709,14 @@ export default function SignupPage() {
                       <div>
                         <label htmlFor="entity_type">Entity type <span className="req">*</span></label>
                         <select id="entity_type" value={form.entity_type} onChange={set('entity_type')}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {ENTITY_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
                       <div>
                         <label htmlFor="sector">Sector <span className="req">*</span></label>
                         <select id="sector" value={form.sector} onChange={set('sector')}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {SECTORS.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
@@ -825,7 +734,7 @@ export default function SignupPage() {
                       <div>
                         <label htmlFor="annual_turnover_band">Annual turnover <span className="opt">optional</span></label>
                         <select id="annual_turnover_band" value={form.annual_turnover_band} onChange={set('annual_turnover_band')}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {TURNOVER_BANDS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                         </select>
                       </div>
@@ -856,7 +765,7 @@ export default function SignupPage() {
                       <div>
                         <label htmlFor="state">State <span className="opt">optional</span></label>
                         <select id="state" value={form.state} onChange={set('state')}>
-                          <option value="">Select…</option>
+                          <option value="">Select...</option>
                           {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
                         </select>
                       </div>
@@ -874,8 +783,8 @@ export default function SignupPage() {
                   <fieldset>
                     <legend>Review</legend>
                     <div className="review">
-                      <div><b>{form.company_name || '—'}</b>{form.sector ? ` · ${form.sector}` : ''}</div>
-                      <div>{form.contact_name || '—'}{form.contact_designation ? `, ${form.contact_designation}` : ''} · {form.contact_email || '—'}</div>
+                      <div><b>{form.company_name || '-'}</b>{form.sector ? ` · ${form.sector}` : ''}</div>
+                      <div>{form.contact_name || '-'}{form.contact_designation ? `, ${form.contact_designation}` : ''} · {form.contact_email || '-'}</div>
                       <div>
                         Organization code: <b>{form.proposed_slug || 'derived from your email'}</b>
                         {form.employee_count ? ` · ${form.employee_count} employees` : ''}
@@ -895,15 +804,10 @@ export default function SignupPage() {
                 </>
               )}
 
-              {/*
-                Which fields are required, said once, where the eye already is
-                when somebody is about to press Continue. Every required field
-                is starred individually as well — this exists so the meaning of
-                the star does not have to be guessed at.
-              */}
+              {/* Which fields are required, said once, where the eye already is when somebody is about to press Continue. */}
               <p className="reqnote">
                 <span className="req">*</span> Required. Fields marked <span className="opt">optional</span> can
-                be left blank and added later — a reviewer would rather see an application with
+                be left blank and added later - a reviewer would rather see an application with
                 gaps than not see it at all. Your email address and mobile number are both
                 confirmed by a code before the application can be sent.
               </p>
@@ -915,7 +819,7 @@ export default function SignupPage() {
                 {step < STEPS.length - 1
                   ? <button type="button" className="btn primary" onClick={next}>Continue</button>
                   : <button type="submit" className="btn primary" disabled={busy}>
-                      {busy ? 'Submitting…' : 'Submit application'}
+                      {busy ? 'Submitting...' : 'Submit application'}
                     </button>}
               </div>
             </form>

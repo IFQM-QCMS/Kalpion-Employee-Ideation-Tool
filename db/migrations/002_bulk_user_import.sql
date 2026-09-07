@@ -1,32 +1,4 @@
--- ─────────────────────────────────────────────────────────────────────────────
---  Migration 002 — Bulk employee import (per-TENANT database)
---
---    mysql -u root -p ifqm_<slug> < db/migrations/002_bulk_user_import.sql
---
---  Idempotent: safe to re-run.
---
---  1. users.must_change_password
---     Imported employees get a derived temporary password (first 4 letters of
---     their name + year of birth). That is, by construction, guessable by any
---     colleague who knows their birthday — so it is a bootstrap credential, not
---     a password. This flag forces it to be replaced on first login, and the
---     rule is enforced server-side in the auth middleware (a UI-only redirect
---     would be bypassed by anyone calling the API directly).
---
---  2. users.date_of_birth
---     Input for the temporary-password rule, and normal HR data. PII: include it
---     in whatever retention policy covers the users table.
---
---  3. users.activated_at
---     When the employee actually replaced the temporary password. Lets an admin
---     see who has never signed in — those accounts still have a guessable
---     password and are the ones worth chasing.
---
---  4. user_import_jobs / user_import_errors
---     A 10,000-row import cannot run inside an HTTP request, so it runs as a
---     background job and the UI polls it. The job row doubles as the audit
---     record of a privileged action (who mass-created accounts, when, how many).
--- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 002 - Bulk employee import (per-TENANT database)
 
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -55,12 +27,11 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Existing accounts were created before this flag existed and already have a
--- password their owner chose; do not force them to change it.
+-- Existing accounts were created before this flag existed and already have a password
+-- their owner chose; do not force them to change it.
 UPDATE users SET must_change_password = 0 WHERE must_change_password IS NULL;
 
--- The admin console lists/searches users by name, employee id and email. Once a
--- tenant has thousands of employees those queries need to be indexed.
+-- The admin console lists/searches users by name, employee id and email.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'
@@ -79,7 +50,7 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- ── Import job tracking ─────────────────────────────────────────────────────
+-- Import job tracking
 CREATE TABLE IF NOT EXISTS user_import_jobs (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   actor_id        INT NULL,                    -- who ran it (audit)
@@ -101,9 +72,8 @@ CREATE TABLE IF NOT EXISTS user_import_jobs (
   INDEX idx_import_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Per-row rejections, so the admin can be told exactly which line was wrong and
--- why, and download the list as a CSV. Columns are wide because they store the
--- RAW (possibly invalid, possibly over-long) values from the sheet.
+-- Per-row rejections, so the admin can be told exactly which line was wrong and why, and
+-- download the list as a CSV.
 CREATE TABLE IF NOT EXISTS user_import_errors (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   job_id       INT NOT NULL,

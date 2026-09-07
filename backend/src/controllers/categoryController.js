@@ -1,6 +1,4 @@
-/**
- * Idea-category controller — HTTP layer over categoryService.
- */
+/** Idea-category controller - HTTP layer over categoryService. */
 import * as categoryService from '../services/categoryService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

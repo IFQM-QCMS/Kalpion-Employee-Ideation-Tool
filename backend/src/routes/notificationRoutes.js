@@ -1,6 +1,6 @@
-/**
- * Notification routes — /api/notifications/*
- * Ported from the `notifications` / `mark_read` actions of PHP api/users.php.
+/*
+ * Notification routes - /api/notifications/* Ported from the `notifications` / `mark_read`
+ * actions of PHP api/users.php.
  */
 import { Router } from 'express';
 import * as notifications from '../controllers/notificationController.js';

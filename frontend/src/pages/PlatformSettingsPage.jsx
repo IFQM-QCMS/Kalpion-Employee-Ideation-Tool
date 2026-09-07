@@ -9,28 +9,11 @@ import MessagingConnector from '../components/MessagingConnector';
 import { GatewayPanel } from './PlatformBillingPage';
 import OrgPicker from '../components/OrgPicker';
 
-// Mirrors DEFAULT_STAGES in backend/src/services/approvalStages.js — shown so a
-// platform admin can see what a new organisation starts with, not edit it here.
+// Mirrors DEFAULT_STAGES in backend/src/services/approvalStages.js - shown so a platform
+// admin can see what a new organisation starts with, not edit it here.
 const DEFAULT_CHAIN_STAGES = ['originator', 'immediate_manager', 'department_manager', 'plant_head'];
 
-/*
- * Platform → Settings. Five tabs:
- *
- *   Defaults      what a newly provisioned organisation starts with
- *   Organisation  read/write one existing tenant's own org_settings
- *   Messaging     the SMS/DLT gateway, one-time-code policy, email queue health
- *   Admins        IFQM staff accounts (there was no UI for these at all — the
- *                 only platform admin was the one seeded by master.sql)
- *   Health        read-only: DB reachability, row counts, upload footprint
- *
- * Messaging is separate from Defaults rather than folded into it. Defaults are
- * copied into every new organisation; delivery credentials belong to IFQM and
- * are copied to nobody, and one of them is a live secret.
- *
- * The SMTP password field is intentionally always empty. The server never sends
- * it back, so there is nothing to prefill; leaving it blank means "keep the
- * stored one". See platformSettingsService for why this is not a mask.
- */
+// Platform Settings. Five tabs.
 const TABS = ['ps.tab_defaults', 'ps.tab_org', 'ps.tab_messaging',
   'ps.tab_maintenance', 'ps.tab_payments', 'ps.tab_admins'];
 const FLAGS = ['anonymous_allowed', 'public_board_enabled', 'challenges_enabled'];
@@ -65,16 +48,14 @@ export default function PlatformSettingsPage() {
       {tab === 1 && <OrgSettingsTab />}
       {tab === 2 && <MessagingConnector />}
       {tab === 3 && <MaintenanceTab />}
-      {/* The payment gateway is configuration, not a billing action, so it
-          belongs with the other settings rather than on the screen used to
-          chase money. */}
+      {/* The payment gateway is configuration, not a billing action, so it belongs with the other settings rather than on the screen used to chase money. */}
       {tab === 4 && <GatewayPanel />}
       {tab === 5 && <AdminsTab />}
     </>
   );
 }
 
-// ── Defaults for new tenants ───────────────────────────────────────
+// Defaults for new tenants
 function DefaultsTab() {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -128,10 +109,7 @@ function DefaultsTab() {
         ))}
       </div>
 
-      {/* Every new organisation starts on the same chain and edits it in its own
-          Organisation Settings. This used to be a mode selector and a committee
-          percentage — two settings that described the approval chain differently
-          from the chain itself, set here by someone who does not run it. */}
+      {/* Every new organisation starts on the same chain and edits it in its own Organisation Settings. */}
       <div className="form-group">
         <label>{t('ps.default_chain')}</label>
         <div style={{ fontSize:13,color:'var(--text)',background:'var(--bg)',
@@ -141,10 +119,7 @@ function DefaultsTab() {
         <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('ps.default_chain_hint')}</div>
       </div>
 
-      {/* The attachment ceiling every organisation is bounded by. An org admin
-          can go lower for their own people; nobody can go above this. It used
-          to be an environment variable, so raising it for one customer meant a
-          redeploy. */}
+      {/* The attachment ceiling every organisation is bounded by. */}
       <div className="form-group" style={{ maxWidth: 280 }}>
         <label>{t('ps.max_file_mb')}</label>
         <input className="form-control" type="number" min="1" max="200"
@@ -158,7 +133,7 @@ function DefaultsTab() {
   );
 }
 
-// ── One tenant's own settings ──────────────────────────────────────
+// One tenant's own settings
 function OrgSettingsTab() {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -179,8 +154,8 @@ function OrgSettingsTab() {
   async function save() {
     setBusy(true);
     try {
-      // smtp_pass goes only when typed — an empty field must never overwrite the
-      // tenant's stored password.
+      // smtp_pass goes only when typed - an empty field must never overwrite the tenant's stored
+      // password.
       const payload = { ...s };
       delete payload.smtp_pass_set;
       if (smtpPass.trim()) payload.smtp_pass = smtpPass;
@@ -204,10 +179,7 @@ function OrgSettingsTab() {
 
       <div className="form-group">
         <label>{t('pt.to_org')}</label>
-        {/* A typeahead, not a native <select>. The list is every organisation
-            on the platform, and an option list cannot be searched — at a
-            thousand customers, finding one means knowing where its name falls
-            alphabetically. Same control as the New Ticket picker. */}
+        {/* A typeahead, not a native <select>. */}
         <OrgPicker orgs={tenants} value={id} onChange={setId}
           placeholder={t('pt.to_org_ph')} />
       </div>
@@ -270,19 +242,8 @@ function OrgSettingsTab() {
   );
 }
 
-// ── Platform admin accounts ────────────────────────────────────────
-/*
- * Maintenance mode — the whole platform on hold.
- *
- * Turning it ON locks every organisation out: nobody can sign in, and sessions
- * already open stop working on their next request. IFQM staff are unaffected,
- * which is what makes it safe to switch on from here — this screen keeps
- * working, so the switch can always be reached to turn it back off.
- *
- * Switching ON asks for confirmation and switching OFF does not. The two are
- * not symmetrical: one interrupts every customer at once, the other restores
- * service, and only the first is worth a speed bump.
- */
+// Platform admin accounts
+// Maintenance mode - the whole platform on hold.
 function MaintenanceTab() {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -300,9 +261,7 @@ function MaintenanceTab() {
       setEnabled(!!r.data.enabled);
       setSince(r.data.since || null);
       setPlaceholder(r.data.default_message || '');
-      // Only prefill when the operator actually wrote something. Echoing the
-      // default back into the box would turn it into text they now own and
-      // have to maintain.
+      // Only prefill when the operator actually wrote something.
       setMessage(r.data.message && r.data.message !== r.data.default_message ? r.data.message : '');
     } catch { showToast(t('msg.fail_load'), 'danger'); }
     setLoaded(true);
@@ -369,8 +328,7 @@ function MaintenanceTab() {
         <div style={{ fontSize:11,color:'var(--subtle)',marginTop:3 }}>{t('ps.maint_message_hint')}</div>
       </div>
 
-      {/* Saving the wording without changing the switch, so the notice can be
-          corrected mid-window without a stop/start. */}
+      {/* Saving the wording without changing the switch, so the notice can be corrected mid-window without a stop/start. */}
       <button className="btn btn-outline" disabled={busy} onClick={() => save(enabled)}>
         {t('ps.maint_save_message')}
       </button>
@@ -385,13 +343,7 @@ function AdminsTab() {
   const [admins, setAdmins] = useState([]);
   const [form, setForm] = useState({ name:'', email:'', phone:'', password:'' });
   const [pw, setPw] = useState({ current_password:'', new_password:'' });
-  /*
-   * Moving your own number, in two steps.
-   *
-   * `stage` is 'enter' until a code has gone out and 'verify' after, because
-   * the number and the code are asked for at different moments — showing both
-   * boxes at once invites somebody to type a code they have not been sent yet.
-   */
+  // Moving your own number, in two steps.
   const [ph, setPh] = useState({ phone:'', current_password:'', code:'', stage:'enter' });
   const [busy, setBusy] = useState(false);
 
@@ -407,14 +359,7 @@ function AdminsTab() {
       const res = await platformApi.createAdmin(form);
       if (res.data.success) {
         setForm({ name:'', email:'', phone:'', password:'' });
-        /*
-         * The server's own sentence, not a generic "added".
-         *
-         * What happens next is unusual enough to be worth saying: the account
-         * exists but does nothing until the person it belongs to proves the
-         * address and the number. An operator who is not told that reads the
-         * new admin's "I am locked out" as a bug.
-         */
+        // The server's own sentence, not a generic "added".
         showToast(res.data.message || t('ps.admin_added'), 'success');
         await load();
       }
@@ -460,12 +405,7 @@ function AdminsTab() {
     setBusy(false);
   }
 
-  /*
-   * Correcting somebody else's. For the account created with a mistyped number,
-   * which can never receive a code and cannot fix it for itself — the
-   * verification gate allows an unverified session nothing but the verify
-   * endpoints.
-   */
+  // Correcting somebody else's.
   async function fixAdminPhone(a) {
     const next = window.prompt(t('ps.ph_fix_prompt', { name: a.name }), a.phone || '');
     if (next == null || !next.trim()) return;
@@ -505,15 +445,7 @@ function AdminsTab() {
                   {a.email}
                   {a.phone && <div style={{ fontSize:11,color:'var(--subtle)' }}>{a.phone}</div>}
                 </td>
-                {/*
-                  Whether this account has proved it is reachable.
-
-                  An account with an unverified address is one nobody can send a
-                  reset to, and one grandfathered past migration 039 has no
-                  number on file at all. Neither shows in a name and an email,
-                  so without this the console lists accounts that cannot be
-                  contacted as though they were fine.
-                */}
+                {/* Whether this account has proved it is reachable. */}
                 <td style={{ fontSize:12 }}>
                   {a.verified
                     ? (a.predates_verification
@@ -526,9 +458,7 @@ function AdminsTab() {
                 </td>
                 <td style={{ fontSize:12,color:'var(--subtext)' }}>{fmtDate(a.created_at)}</td>
                 <td style={{ textAlign:'right' }}>
-                  {/* Only for somebody else, and only when their number is
-                      unproven — a verified admin moves their own number
-                      themselves, with a code, which is the stronger path. */}
+                  {/* Only for somebody else, and only when their number is unproven - a verified admin moves their own number themselves, with a code, which is the stronger path. */}
                   {a.id !== meId && !a.phone_verified && (
                     <button className="btn btn-outline btn-sm" style={{ marginRight:6 }}
                       disabled={busy} onClick={() => fixAdminPhone(a)}>
@@ -573,10 +503,7 @@ function AdminsTab() {
 
       <div className="card" style={{ marginTop:16,maxWidth:620 }}>
         <div className="card-title">{t('ps.change_own_pw')}</div>
-        {/* Whose password this is. The panel sits directly beneath the table of
-            every platform admin, so "Change my password" read as though it might
-            act on whichever row was last looked at. It only ever changes the
-            signed-in account, and now says so with the name and address on it. */}
+        {/* Whose password this is. The panel sits directly beneath the table of every platform admin, so "Change my password" read as though it might act on whichever row was last looked at. */}
         <div style={{
           display:'flex',alignItems:'center',gap:10,margin:'2px 0 14px',
           padding:'10px 13px',borderRadius:10,
@@ -605,14 +532,7 @@ function AdminsTab() {
         </button>
       </div>
 
-      {/*
-        Moving your own number.
-
-        Beside the password card because it is the same kind of act: the number
-        is where a sign-in code and a password reset go, so it is a credential,
-        not a contact detail. Hence the current password to start, a code to the
-        new handset before anything is written, and a notice to the old one after.
-      */}
+      {/* Moving your own number. */}
       <div className="card" style={{ marginTop:16,maxWidth:620 }}>
         <div className="card-title">{t('ps.ph_title')}</div>
         <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12,lineHeight:1.6 }}>
@@ -660,4 +580,4 @@ function AdminsTab() {
   );
 }
 
-// ── Health ─────────────────────────────────────────────────────────
+// Health

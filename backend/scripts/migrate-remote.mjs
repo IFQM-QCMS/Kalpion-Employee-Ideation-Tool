@@ -1,24 +1,4 @@
-/**
- * Run pending migrations against a remote (managed) MySQL.
- *
- *   node scripts/migrate-remote.mjs ../.env.render ../ca.pem
- *   node scripts/migrate-remote.mjs ../.env.render ../ca.pem --dry
- *
- * ── Why this exists next to migrate.js ─────────────────────────────────────
- *
- * `npm run migrate` reads backend/.env, which on any developer's machine points
- * at their local MySQL. Running it against production therefore meant either
- * editing .env and remembering to put it back, or pasting a database password
- * onto a command line — where it lands in shell history and in the process list
- * of every other user on the box.
- *
- * This reads the credentials out of a file instead, and prints a plan before it
- * writes anything. The migration ledger in ifqm_master.schema_migrations is
- * what decides the plan, so re-running is safe: only unrecorded (db, file)
- * pairs are applied.
- *
- * --dry connects, shows exactly what would run, and exits without applying.
- */
+/** Run pending migrations against a remote (managed) MySQL. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,7 +38,7 @@ if (!host) {
 
 console.log(`[migrate] target   ${env.MASTER_DB_USER}@${host}:${env.DB_PORT || 3306}/${master}`);
 console.log(`[migrate] tls      ${String(env.DB_SSL).toLowerCase() === 'true' ? (ca ? 'verified against ' + caPath : 'ON, certificate NOT verified') : 'off'}`);
-if (dry) console.log('[migrate] DRY RUN — nothing will be written');
+if (dry) console.log('[migrate] DRY RUN - nothing will be written');
 
 let conn;
 try {
@@ -75,10 +55,8 @@ try {
   });
 
   if (dry) {
-    /*
-     * The same question the runner asks, asked read-only: for every tenant in
-     * the registry, which migration files have no ledger row yet.
-     */
+    // The same question the runner asks, asked read-only: for every tenant in the registry,
+    // which migration files have no ledger row yet.
     const dir = path.join(__dirname, '..', '..', 'db', 'migrations');
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
     const [[{ n }]] = await conn.query(

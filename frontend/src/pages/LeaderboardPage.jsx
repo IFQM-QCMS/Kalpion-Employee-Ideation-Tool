@@ -28,15 +28,12 @@ function EngBadge({ aiScore, avgRating, voteCount, t }) {
   );
 }
 
-/* Rank numerals for the top three. Emoji medals were removed from every
-   dashboard: they render differently on each platform, carry no meaning to a
-   screen reader, and read as decoration on a screen about people's work. */
+// Rank numerals for the top three.
 const MEDAL = ['1st', '2nd', '3rd'];
 
-/**
- * Podium for the top three, ordered 2 – 1 – 3 so the winner stands centre and
- * tallest, the way a real podium reads. Below ~640px it collapses to a single
- * column in rank order, since three narrow columns turn the names into ellipses.
+/*
+ * Podium for the top three, ordered 2 - 1 - 3 so the winner stands centre and tallest, the
+ * way a real podium reads.
  */
 function Podium({ rows, meId, t }) {
   if (!rows.length) return null;
@@ -97,7 +94,7 @@ function Podium({ rows, meId, t }) {
             </div>
             <div className="pod-body">
               <div className="pod-name" title={u.name}>{u.name}</div>
-              <div className="pod-dept">{u.department || '–'}</div>
+              <div className="pod-dept">{u.department || '-'}</div>
               {String(u.id) === String(meId) && <div className="you">{t('lb.you')}</div>}
             </div>
             <div className="pod-pts">{u.points}<small>{t('unit.pts')}</small></div>
@@ -146,25 +143,10 @@ export default function LeaderboardPage() {
     }, 200);
   }, [data]);
 
-  /*
-   * Sharing produces a picture, not a line of text. Nobody posts a paste of
-   * "1. Priya - 240 pts"; people do post a card with their name and rank on it.
-   *
-   * The card is drawn on a canvas in the browser: no library, no upload, and
-   * nothing about any idea on it - names, points and idea counts only. On a
-   * phone it goes straight into the native share sheet; on a desktop, where
-   * browsers cannot share files, it downloads so it can be attached anywhere.
-   */
+  // Sharing produces a picture, not a line of text.
   const shareRef = useRef(null);
 
-  /*
-   * Forwarding to HR is a dialog rather than a one-click button.
-   *
-   * It sends real mail to an address somebody types, so there has to be a step
-   * where they can read what they typed before it goes. A single button that
-   * fires on click has no such step, and the mistake it invites — a wrong
-   * address — cannot be taken back.
-   */
+  // Forwarding to HR is a dialog rather than a one-click button.
   const [hrOpen, setHrOpen] = useState(false);
   const [hrTo, setHrTo] = useState('');
   const [hrNote, setHrNote] = useState('');
@@ -205,19 +187,9 @@ export default function LeaderboardPage() {
   const periodLabel = () =>
     t(PERIODS.find((p) => p.val === period)?.label || 'lb.all');
 
-  /**
-   * Hand the standings to whatever mail client the machine uses — Outlook on
-   * every desktop this is deployed to.
-   *
-   * A mailto: cannot carry an attachment, so this sends the standings as text
-   * rather than the share card. That is the honest trade: the picture is
-   * already available through the two buttons beside this one, and a recipient
-   * reading it in a mail client wants names and numbers they can reply to, not
-   * an image they have to open.
-   *
-   * Body length is capped. Mail clients and the browsers that hand off to them
-   * silently truncate very long mailto URLs, and a half-sent leaderboard looks
-   * like a bug rather than a limit — so it sends the top ten and says so.
+  /*
+   * Hand the standings to whatever mail client the machine uses - Outlook on every desktop
+   * this is deployed to.
    */
   function emailLeaderboard() {
     const rows = data?.individuals || [];
@@ -226,11 +198,11 @@ export default function LeaderboardPage() {
     const orgName = user?.org_name || 'IFQM';
     const top = rows.slice(0, 10);
     const lines = top.map((r, i) =>
-      `${String(i + 1).padStart(2, ' ')}. ${r.name} — ${r.points} ${t('unit.pts')}`
+      `${String(i + 1).padStart(2, ' ')}. ${r.name} - ${r.points} ${t('unit.pts')}`
       + ` (${r.ideas_count ?? r.idea_count ?? 0} ${t('lb.ideas_word')})`);
 
     const body = [
-      `${t('lb.share_title')} — ${orgName}`,
+      `${t('lb.share_title')} - ${orgName}`,
       periodLabel(),
       '',
       ...lines,
@@ -239,7 +211,7 @@ export default function LeaderboardPage() {
       t('lb.email_footer'),
     ].filter(Boolean).join('\n');
 
-    const subject = `${t('lb.share_title')} — ${orgName} (${periodLabel()})`;
+    const subject = `${t('lb.share_title')} - ${orgName} (${periodLabel()})`;
     window.location.href =
       `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }
@@ -264,11 +236,11 @@ export default function LeaderboardPage() {
         periodLabel: periodLabel(),
       });
       filename = 'my-idea-score.png';
-      text = `${me.name} — #${idx + 1} on the ${orgName} idea leaderboard, ${me.points} ${t('unit.pts')}.`;
+      text = `${me.name} - #${idx + 1} on the ${orgName} idea leaderboard, ${me.points} ${t('unit.pts')}.`;
     } else {
       drawPodiumCard(canvas, { orgName, rows, periodLabel: periodLabel() });
       filename = 'idea-leaderboard.png';
-      text = `${t('lb.share_title')} — ${orgName}`;
+      text = `${t('lb.share_title')} - ${orgName}`;
     }
 
     try {
@@ -277,19 +249,19 @@ export default function LeaderboardPage() {
       const how = await shareImage(blob, filename, text);
       showToast(how === 'shared' ? t('lb.share_ok') : t('lb.share_saved'), 'success');
     } catch (e) {
-      // AbortError is the user closing the share sheet — not a failure.
+      // AbortError is the user closing the share sheet - not a failure.
       if (e?.name !== 'AbortError') showToast(t('msg.error'), 'danger');
     }
   }
 
-  /* Text remains available for anyone who wants to paste it into a chat. */
+  // Text remains available for anyone who wants to paste it into a chat.
   async function shareLeaderboardText() {
     const rows = (data?.individuals || []).slice(0, 5);
     if (!rows.length) return;
     const medals = ['1.', '2.', '3.', '4.', '5.'];
     const text = [
-      `${t('lb.share_title')} — ${user?.org_name || 'IFQM'}`,
-      ...rows.map((u, i) => `${medals[i]} ${u.name} — ${u.points} ${t('unit.pts')}`),
+      `${t('lb.share_title')} - ${user?.org_name || 'IFQM'}`,
+      ...rows.map((u, i) => `${medals[i]} ${u.name} - ${u.points} ${t('unit.pts')}`),
     ].join('\n');
 
     try {
@@ -368,25 +340,19 @@ export default function LeaderboardPage() {
             onClick={shareLeaderboardText} disabled={!indivs.length}>
             {t('lb.share_text')}
           </button>
-          {/* Opens the desktop mail client — Outlook, wherever this is
-              deployed. Text rather than the card, because mailto: carries no
-              attachment; see emailLeaderboard(). */}
+          {/* Opens the desktop mail client - Outlook, wherever this is deployed. */}
           <button className="btn btn-outline btn-sm"
             onClick={emailLeaderboard} disabled={!indivs.length}>
             {t('lb.share_email')}
           </button>
 
-          {/* MOM 24/08 §8 — a document, not a spreadsheet and not a picture.
-              It carries the organisation, the period and the date, which is
-              what makes it filable months after the fact. */}
+          {/* MOM 24/08 §8 - a document, not a spreadsheet and not a picture. */}
           <button className="btn btn-outline btn-sm"
             onClick={downloadPdf} disabled={!indivs.length || pdfBusy}>
             {pdfBusy ? t('btn.saving') : t('lb.download_pdf')}
           </button>
 
-          {/* MOM 24/08 §1 — forward to HR for Rewards & Recognition. Sent by
-              the server with the PDF attached, because a mailto: cannot carry
-              an attachment and what HR needs is the document. */}
+          {/* MOM 24/08 §1 - forward to HR for Rewards & Recognition. */}
           {canForward && (
             <button className="btn btn-primary btn-sm"
               onClick={() => setHrOpen(true)} disabled={!indivs.length}>
@@ -427,7 +393,7 @@ export default function LeaderboardPage() {
                             {u.name}
                             {u.id == user?.id && <span style={{ fontSize:11,color:'#f59e0b',marginLeft:4 }}>{t('lb.you')}</span>}
                           </div>
-                          <div className="lb-dept">{u.department||'–'}</div>
+                          <div className="lb-dept">{u.department||'-'}</div>
                           <div className="progress-bar" style={{ marginTop:8 }}>
                             <div className="progress-fill" style={{ width:'0%' }} data-w={Math.round(u.points/maxPts*100)}></div>
                           </div>
@@ -464,8 +430,8 @@ export default function LeaderboardPage() {
             <div id="lb-departments">
               <div className="bar-chart">
                 {depts.map(dep => (
-                  <div className="bar-row" key={dep.department||'–'}>
-                    <span className="bar-label">{(dep.department||'–').substring(0,12)}</span>
+                  <div className="bar-row" key={dep.department||'-'}>
+                    <span className="bar-label">{(dep.department||'-').substring(0,12)}</span>
                     <div className="bar-track">
                       <div className="bar-fill" style={{ width:'0%',background:'linear-gradient(90deg,#374151,#6b7280)' }}
                         data-w={Math.round((dep.dept_points||0)/maxDpt*100)}></div>
@@ -488,7 +454,7 @@ export default function LeaderboardPage() {
                     <div className="top-idea-rank">#{idx+1}</div>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)' }}>{idea.title}</div>
-                      <div style={{ fontSize:11,color:'var(--subtle)' }}>{idea.idea_code} · {idea.submitter_name} · {idea.department||'–'}</div>
+                      <div style={{ fontSize:11,color:'var(--subtle)' }}>{idea.idea_code} · {idea.submitter_name} · {idea.department||'-'}</div>
                     </div>
                     <div style={{ textAlign:'right' }}>
                       <span className={scoreBadgeClass(idea.ai_score)}>{idea.ai_score}/100</span>

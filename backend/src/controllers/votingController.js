@@ -1,7 +1,4 @@
-/**
- * Voting controller — HTTP layer over votingService.
- * Maps to PHP api/votes.php + the board/community_vote actions of ideas.php.
- */
+/** Voting controller - HTTP layer over votingService. */
 import * as voting from '../services/votingService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

@@ -7,14 +7,7 @@ import { platformApi, saveBlob } from '../services/api';
 import { Donut, Legend, colorAt, STATUS_COLORS } from '../components/Charts';
 import InfoDot from '../components/InfoDot';
 
-/*
- * Platform → Organizations (tenant management).
- *
- * Everything here is the outer shell of a tenant: counts, status, and the org's
- * own admin as a support contact. No employee, idea or file from inside a tenant
- * reaches this screen — the API will not serve them. See the privacy contract in
- * backend/src/services/platformService.js.
- */
+// Platform Organizations (tenant management).
 const STATUS_STYLE = {
   active:    { background:'var(--success-light)', color:'var(--success)' },
   suspended: { background:'var(--danger-light)',  color:'var(--danger)' },
@@ -29,11 +22,10 @@ const KPI_ICONS = {
   ideas:     <path d="M9 21h6M12 3a6 6 0 016 6c0 2.2-1.1 3.8-2.5 5L15 16H9l-.5-2C7 12.8 6 11.2 6 9a6 6 0 016-6z"/>,
 };
 
-/**
- * How an organisation is behaving, as distinct from what an operator did to it.
- * `inactive` here means "no sign-in for N days" and carries no consequence —
- * the badge exists so a quiet account is noticed before renewal, not so the
- * platform can act on it.
+/*
+ * How an organisation is behaving, as distinct from what an operator did to it. `inactive`
+ * here means "no sign-in for N days" and carries no consequence - the badge exists so a
+ * quiet account is noticed before renewal, not so the platform can act on it.
  */
 function ActivityBadge({ ten, t }) {
   const TONE = {
@@ -134,16 +126,14 @@ export default function PlatformDashPage() {
     active:    tenants.filter((x) => x.status === 'active').length,
     suspended: tenants.filter((x) => x.status === 'suspended').length,
     pending:   tenants.filter((x) => x.status === 'pending').length,
-    // Gone quiet: signed in at some point, but not in the last few days. Kept
-    // apart from orgs that have never signed in at all, which is a different
-    // problem (a handover that never happened).
+    // Gone quiet: signed in at some point, but not in the last few days.
     inactive:  tenants.filter((x) => x.activity_state === 'inactive').length,
     never:     tenants.filter((x) => x.activity_state === 'never_logged_in').length,
     users:     tenants.reduce((s, x) => s + (x.user_count || 0), 0),
     ideas:     tenants.reduce((s, x) => s + (x.idea_count || 0), 0),
   };
 
-  // Chart data — a status donut and the busiest organisations by idea volume.
+  // Chart data - a status donut and the busiest organisations by idea volume.
   const statusDonut = [
     { label: t('pa.status_active'),    value: counts.active,    color: STATUS_COLORS.active },
     { label: t('pa.status_suspended'), value: counts.suspended, color: STATUS_COLORS.suspended },
@@ -155,9 +145,7 @@ export default function PlatformDashPage() {
     .filter((o) => (o.idea_count || 0) > 0);
   const maxIdeas = Math.max(...topByIdeas.map((o) => o.idea_count || 0), 1);
 
-  /* Client-side CSV: this data is already in the browser, so exporting it needs
-   * no endpoint. Values are quoted and internal quotes doubled — an org named
-   * O"Brien, Inc. would otherwise split into extra columns. */
+  // Client-side CSV: this data is already in the browser, so exporting it needs no endpoint.
   function exportCsv() {
     const cols = ['name', 'slug', 'status', 'activity_state', 'days_since_login', 'admin_name', 'admin_email', 'user_count', 'idea_count', 'implemented_count', 'last_activity'];
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -171,12 +159,12 @@ export default function PlatformDashPage() {
     ['suspended', t('pa.kpi_suspended'),  counts.suspended, 'var(--danger)',  'var(--danger-light)'],
     ['users',     t('pa.total_users'),    counts.users,     'var(--info)',    'var(--info-light)'],
     ['ideas',     t('pa.ideas_submitted'), counts.ideas,    'var(--warning)', 'var(--warning-light)'],
-    // §12.8 — the drill-down the MOM named: Organisations → Ideas → Implemented,
-    // then §12.5's QCMS figure as the business-value endpoint of that path.
+    // §12.8 - the drill-down the MOM named: Organisations Ideas Implemented, then §12.5's QCMS
+    // figure as the business-value endpoint of that path.
     ['ideas',     t('pa.kpi_implemented'), totals.implemented, 'var(--primary)', 'var(--primary-light)'],
     ['ideas',     t('pa.qcms_pushed'),     totals.qcms_pushed, 'var(--info)',    'var(--info-light)'],
-    // Inactivity is reported, never acted upon. Nothing is suspended because of
-    // it; it is here so the platform team can pick up the phone.
+    // Inactivity is reported, never acted upon. Nothing is suspended because of it; it is here
+    // so the platform team can pick up the phone.
     ['orgs',      t('pa.kpi_inactive'),    counts.inactive,    'var(--warning)', 'var(--warning-light)'],
     ['orgs',      t('pa.kpi_never_login'), counts.never,       'var(--danger)',  'var(--danger-light)'],
   ];
@@ -190,8 +178,7 @@ export default function PlatformDashPage() {
           </h1>
           <div style={{ fontSize:13,color:'var(--subtle)',marginTop:4 }}>{t('pa.tenant_mgmt_sub')}</div>
         </div>
-        {/* The platform-admin manual — the vendor console, which nobody inside
-            a customer organisation should ever be handed. */}
+        {/* The platform-admin manual - the vendor console, which nobody inside a customer organisation should ever be handed. */}
       </div>
 
       {/* KPI strip */}
@@ -222,11 +209,7 @@ export default function PlatformDashPage() {
               <span style={{ fontSize:11,color:'var(--subtle)',fontWeight:600 }}>{counts.total} Tenants</span>
             </div>
             <div style={{ display:'flex',alignItems:'center',gap:18,flexWrap:'wrap',padding:'10px 0' }}>
-              {/* No centre label. "Total Organizations" is far wider than the
-                  hole it sat in, so it ran out across the ring and off both
-                  sides of it. The number needs no caption here: the card is
-                  headed Organisation Status and the count beside it already
-                  says what is being counted. */}
+              {/* No centre label. "Total Organizations" is far wider than the hole it sat in, so it ran out across the ring and off both sides of it. */}
               <Donut size={150} thickness={24} data={statusDonut} centerValue={counts.total} />
               <div style={{ flex:1,minWidth:120 }}><Legend items={statusDonut} /></div>
             </div>
@@ -324,14 +307,13 @@ export default function PlatformDashPage() {
                             <div style={{ fontSize:13 }}>{ten.admin_name}</div>
                             <div style={{ fontSize:11,color:'var(--subtle)' }}>{ten.admin_email}</div>
                           </>
-                        : <span style={{ color:'var(--subtle)' }}>—</span>}
+                        : <span style={{ color:'var(--subtle)' }}>-</span>}
                     </td>
                     <td style={{ fontWeight:700 }}>{ten.user_count ?? 0}</td>
                     <td style={{ fontWeight:700 }}>{ten.idea_count ?? 0}</td>
                     <td style={{ fontWeight:700,color:'var(--info)' }}>{ten.qcms_pushed_count ?? 0}</td>
                     <td>
-                      {/* Operator-set state. "suspended" in the database reads as
-                          "On Hold" everywhere a human sees it. */}
+                      {/* Operator-set state. "suspended" in the database reads as "On Hold" everywhere a human sees it. */}
                       <span style={{ ...(STATUS_STYLE[ten.status] || {}),fontSize:10,padding:'3px 10px',borderRadius:20,fontWeight:700,textTransform:'uppercase' }}>
                         {t(`pa.status_${ten.status}`) || ten.status}
                       </span>
@@ -339,9 +321,7 @@ export default function PlatformDashPage() {
                         <div style={{ fontSize:10,color:'var(--danger)',marginTop:3 }}>{t('platform.db_error')}</div>
                       )}
                     </td>
-                    {/* Derived from sign-ins, separate from the status above.
-                        Purely informational: nothing is switched off when an
-                        organisation goes quiet. */}
+                    {/* Derived from sign-ins, separate from the status above. */}
                     <td><ActivityBadge ten={ten} t={t} /></td>
                     <td style={{ fontSize:12,color:'var(--subtext)' }}>
                       {ten.last_activity ? new Date(ten.last_activity).toLocaleDateString() : t('pa.no_activity')}
@@ -356,18 +336,14 @@ export default function PlatformDashPage() {
                       {menuFor === ten.id && (
                         <div style={{
                           position:'absolute',right:0,zIndex:20,minWidth:190,textAlign:'left',
-                          // The list card scrolls horizontally, and a box with
-                          // overflow-x:auto cannot keep overflow-y:visible — the
-                          // browser promotes it to auto, so a menu hanging below
-                          // the last row was clipped away entirely. Flip it above
-                          // the button for rows near the bottom.
+                          // The list card scrolls horizontally, and a box with overflow-x:auto cannot keep
+                          // overflow-y:visible - the browser promotes it to auto, so a menu hanging below the last
+                          // row was clipped away entirely.
                           ...(rowIdx >= filtered.length - 2 && filtered.length > 2
                             ? { bottom:'100%', marginBottom:4 }
                             : { top:'100%', marginTop:4 }),
-                          // Was var(--card), which this design system does not
-                          // define — the menu rendered with a transparent
-                          // background over the table, so it looked like the
-                          // button did nothing at all.
+                          // Was var(--card), which this design system does not define - the menu rendered with a
+                          // transparent background over the table, so it looked like the button did nothing at all.
                           background:'var(--surface)',border:'1px solid var(--border)',borderRadius:'var(--r)',
                           boxShadow:'var(--shadow-lg)',padding:6,
                         }}>
@@ -377,8 +353,7 @@ export default function PlatformDashPage() {
                           <MenuItem onClick={() => toggleStatus(ten)} disabled={ten.is_default && ten.status === 'active'}>
                             {ten.status === 'active' ? t('pa.suspend') : t('pa.activate')}
                           </MenuItem>
-                          {/* Reset and delete both need confirmation, so they live
-                              on the detail page rather than one click deep here. */}
+                          {/* Reset and delete both need confirmation, so they live on the detail page rather than one click deep here. */}
                           <MenuItem onClick={() => navigate(`/platform/tenants/${ten.id}?name=${encodeURIComponent(ten.name)}`)}>
                             {t('pa.action_manage')}
                           </MenuItem>
@@ -443,15 +418,8 @@ function CreateOrgModal({ onClose, onCreated, t }) {
         onCreated();
       } else { setError(res.data.error || t('pa.create_failed')); }
     } catch (err) {
-      /*
-       * axios throws on every non-2xx, so this branch — not the one above — is
-       * what runs for a rejected create. It used to discard `err` entirely and
-       * show "Server error. Please try again." for all of them, which hid the
-       * only messages that tell the admin what to fix: "Admin password must be
-       * at least 12 characters.", "Organization code already in use.",
-       * "Invalid admin email address.". A 12-character password rule is
-       * impossible to satisfy when the error says "server error".
-       */
+      // axios throws on every non-2xx, so this branch - not the one above - is what runs for a
+      // rejected create.
       setError(err?.response?.data?.error || t('msg.server_error'));
     }
     setSaving(false);

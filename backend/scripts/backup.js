@@ -1,25 +1,6 @@
-/**
- * Database backup with rotation:  npm run backup   (from backend/)
- *
- * Dumps every ifqm_% schema (registry + all tenants) to timestamped .sql files
- * under BACKUP_DIR, then prunes old runs beyond BACKUP_KEEP. The customer data
- * in these schemas has no other copy anywhere — until this runs somewhere on a
- * schedule, a single disk failure is unrecoverable loss.
- *
- * Env (backend/.env):
- *   BACKUP_DIR   where to write (default backend/backups — MOVE THIS OFF-BOX
- *                or sync the directory elsewhere; a backup on the same disk as
- *                the database only protects against mistakes, not failures)
- *   BACKUP_KEEP  how many timestamped runs to retain (default 14)
- *   MYSQLDUMP    path to the mysqldump binary if it is not on PATH
- *                (XAMPP: C:\xampp\mysql\bin\mysqldump.exe)
- *
- * Restore (documented in docs/DEPLOYMENT.md):
- *   mysql -u root -p < backups/<stamp>/ifqm_master.sql
- *   mysql -u root -p < backups/<stamp>/ifqm_<slug>.sql   (repeat per tenant)
- *
- * Each dump includes CREATE DATABASE + USE, so restore is one import per file.
- * Scheduling: Windows Task Scheduler or cron, nightly — see DEPLOYMENT.md.
+/*
+ * Dumps every ifqm_% schema (registry + all tenants) to timestamped.sql files under
+ * BACKUP_DIR, then prunes old runs beyond BACKUP_KEEP.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -43,7 +24,7 @@ const BACKUP_DIR = process.env.BACKUP_DIR || path.join(BACKEND, 'backups');
 const log = (m) => console.log(`[backup] ${m}`);
 const die = (m) => { console.error(`[backup] FATAL: ${m}`); process.exit(1); };
 
-/** Find mysqldump: env override → PATH → the XAMPP default location. */
+/** Find mysqldump: env override PATH the XAMPP default location. */
 function mysqldumpBin() {
   if (process.env.MYSQLDUMP) return process.env.MYSQLDUMP;
   const xampp = 'C:\\xampp\\mysql\\bin\\mysqldump.exe';
@@ -63,7 +44,7 @@ try {
 const [rows] = await conn.query("SHOW DATABASES LIKE 'ifqm%'");
 await conn.end();
 const schemas = rows.map((r) => Object.values(r)[0]).filter((n) => /^ifqm[a-z0-9_]*$/.test(n));
-if (!schemas.length) die("no ifqm_% schemas found — nothing to back up.");
+if (!schemas.length) die("no ifqm_% schemas found - nothing to back up.");
 
 const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19); // 2026-07-18-03-15-00
 const runDir = path.join(BACKUP_DIR, stamp);
@@ -76,8 +57,8 @@ for (const schema of schemas) {
   const outFile = path.join(runDir, `${schema}.sql`);
   const args = [
     `--host=${HOST}`, `--user=${USER}`,
-    // Password via env, not argv — argv is visible to every local process list.
-    '--databases', schema,       // emits CREATE DATABASE + USE → one-file restore
+    // Password via env, not argv - argv is visible to every local process list.
+    '--databases', schema,       // emits CREATE DATABASE + USE one-file restore
     '--single-transaction',      // consistent InnoDB snapshot, no table locks
     '--routines', '--triggers',
     `--result-file=${outFile}`,
@@ -91,25 +72,23 @@ for (const schema of schemas) {
     die(`mysqldump failed for ${schema}: ${e.stderr || e.message}`);
   }
   const size = fs.statSync(outFile).size;
-  if (size < 500) die(`${schema}.sql is suspiciously small (${size} bytes) — refusing to count this as a backup.`);
+  if (size < 500) die(`${schema}.sql is suspiciously small (${size} bytes) - refusing to count this as a backup.`);
   log(`  ${schema}.sql  (${(size / 1024).toFixed(1)} KB)`);
 }
 
-// ── Uploads ─────────────────────────────────────────────────────────────────
-// Attachments and tenant logos live on disk, not in MySQL — a database-only
-// backup silently loses every attached document. Copied unless BACKUP_UPLOADS=0
-// (set that only if something else already snapshots the uploads directory).
+// Uploads Attachments and tenant logos live on disk, not in MySQL - a database-only backup
+// silently loses every attached document.
 if (process.env.BACKUP_UPLOADS !== '0') {
   const uploadsSrc = path.join(BACKEND, 'uploads');
   if (fs.existsSync(uploadsSrc)) {
     fs.cpSync(uploadsSrc, path.join(runDir, 'uploads'), { recursive: true });
     log('  uploads/ copied');
   } else {
-    log('  uploads/ not found — skipped');
+    log('  uploads/ not found - skipped');
   }
 }
 
-// ── Rotation ────────────────────────────────────────────────────────────────
+// Rotation
 const runs = fs.readdirSync(BACKUP_DIR, { withFileTypes: true })
   .filter((d) => d.isDirectory() && /^\d{4}-\d{2}-\d{2}-/.test(d.name))
   .map((d) => d.name)

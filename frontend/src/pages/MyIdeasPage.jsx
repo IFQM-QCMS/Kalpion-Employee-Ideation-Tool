@@ -85,13 +85,7 @@ export default function MyIdeasPage() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/*
-        One row per idea.
-        As cards, an author scanning for "which of mine is still sitting in
-        review" had to read every card in full, because status lived in a
-        different spot depending on how long the title was. In a column the
-        answer is found without reading anything.
-      */}
+      {/* One row per idea. As cards, an author scanning for "which of mine is still sitting in review" had to read every card in full, because status lived in a different spot depending on how long the title was. */}
       <div className="card" style={{ overflowX:'auto' }}>
         <table className="table">
           <thead>
@@ -118,23 +112,22 @@ export default function MyIdeasPage() {
                 <td><strong>{i.idea_code}</strong></td>
                 <td title={i.title}><div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div></td>
                 <td style={{ color:'var(--text-muted)',fontSize:12.5 }}>
-                  <div className="cell-clamp" style={{ maxWidth:200 }}>{translateAreas(i.impact_areas, t) || '—'}</div>
+                  <div className="cell-clamp" style={{ maxWidth:200 }}>{translateAreas(i.impact_areas, t) || '-'}</div>
                 </td>
-                <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'–'}</span></td>
+                <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'-'}</span></td>
                 <td>
                   {i.ai_score > 0
                     ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
-                    : <span className="score-none score-badge">—</span>}
+                    : <span className="score-none score-badge">-</span>}
                 </td>
-                {/* A draft has been seen by nobody, so it has no engagement to
-                    report - an empty cell here means "not yet", not "zero". */}
+                {/* A draft has been seen by nobody, so it has no engagement to report - an empty cell here means "not yet", not "zero". */}
                 <td style={{ whiteSpace:'nowrap' }}>
                   {i.status !== 'Draft'
                     ? <div style={{ display:'flex',alignItems:'center',gap:6,flexWrap:'wrap' }}>
                         <EngBadge aiScore={i.ai_score} avgRating={i.avg_rating} voteCount={i.vote_count} t={t} />
                         <EngMiniStats avgRating={i.avg_rating} voteCount={i.vote_count} />
                       </div>
-                    : <span style={{ color:'var(--subtle)' }}>—</span>}
+                    : <span style={{ color:'var(--subtle)' }}>-</span>}
                 </td>
                 <td>
                   <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span>
@@ -143,7 +136,7 @@ export default function MyIdeasPage() {
                 <td>
                   {i.points_awarded > 0
                     ? <span className="points-badge">+{i.points_awarded} {t('unit.pts')}</span>
-                    : <span style={{ color:'var(--subtle)' }}>—</span>}
+                    : <span style={{ color:'var(--subtle)' }}>-</span>}
                 </td>
                 <td style={{ whiteSpace:'nowrap' }}>
                   {i.submitted_at ? fmtDateTime(i.submitted_at) : translateStatus('Draft', t)}

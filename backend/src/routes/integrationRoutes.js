@@ -1,9 +1,6 @@
-/**
- * Integration routes — /api/integrations/*  (org-admin only)
- *
- * The QCMS API key and the push action are administrative and secret-bearing, so
- * every route here is limited to the organisation's admins. The key never leaves
- * the server: the push is made from the backend, not the browser.
+/*
+ * The QCMS API key and the push action are administrative and secret-bearing, so every
+ * route here is limited to the organisation's admins.
  */
 import { Router } from 'express';
 import * as integration from '../controllers/integrationController.js';

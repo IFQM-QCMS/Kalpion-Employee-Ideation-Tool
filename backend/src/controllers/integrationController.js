@@ -1,7 +1,4 @@
-/**
- * Integration controller — org-admin "Approved Ideas" + "API & Integration".
- * All routes are org-admin guarded (see integrationRoutes).
- */
+/** Integration controller - org-admin "Approved Ideas" + "API & Integration". */
 import * as integration from '../services/integrationService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

@@ -1,49 +1,17 @@
-/**
- * Email service — Node/nodemailer equivalent of PHP api/mailer.php.
- *
- * Preserves the same behaviour:
- *   getOrgSettings(db)                          → all org_settings as a map
- *   queueEmail(db, to, name, subject, body)     → insert into email_queue
- *   processEmailQueue(db)                        → send up to 5 pending emails
- *   sendSmtpEmail(settings, to, name, subj, html)→ deliver one HTML email
- *
- * PHP hand-rolled a raw SMTP conversation supporting STARTTLS (port 587) and
- * implicit TLS (port 465) with AUTH LOGIN. nodemailer performs the identical
- * negotiation from the same org_settings values.
- */
+/** Email service - Node/nodemailer equivalent of PHP api/mailer.php. */
 import nodemailer from 'nodemailer';
 import config from '../config/index.js';
 import logger from '../utils/logger.js';
 import { mailConfig, sendZeptoMail } from './zeptoMailService.js';
 
-/**
- * Is the platform's own sender configured?
- *
- * All four are required. A host with no credentials, or credentials with no
- * From address, cannot deliver anything — and a half-configured sender that
- * reports itself ready is how sign-in codes end up silently going nowhere.
- */
+/** Is the platform's own sender configured? */
 export function platformMailReady(cfg = config.platformMail) {
-  /*
-   * "Can this deployment send mail at all?"
-   *
-   * On PLATFORM_MAIL_TRANSPORT=api there may be no SMTP account configured at
-   * all, and requiring one would report a perfectly working deployment as
-   * unable to send - which hides the code option on the sign-in screen and
-   * refuses registration codes. What is needed there is a token and a sender.
-   */
+  // "Can this deployment send mail at all?".
   if (cfg.transport === 'api') return !!(cfg.apiKey && cfg.from);
   return !!(cfg.host && cfg.user && cfg.pass && cfg.from);
 }
 
-/**
- * The platform transport, built once.
- *
- * Memoised because this is on the path of every code and every reset link;
- * building a transport per message re-does the TLS handshake setup for no
- * reason. Not pooled — a pool holds sockets open, and this process should be
- * able to exit when told to.
- */
+/** The platform transport, built once. */
 let platformTransport = null;
 function getPlatformTransport() {
   if (platformTransport) return platformTransport;
@@ -53,113 +21,44 @@ function getPlatformTransport() {
     host,
     port,
     secure: port === 465,          // implicit TLS
-    // On 587 STARTTLS is only offered, not required — without this nodemailer
-    // will happily continue in the clear if the server declines the upgrade,
-    // putting the SMTP password and the sign-in code on the wire.
+    // On 587 STARTTLS is only offered, not required - without this nodemailer will happily
+    // continue in the clear if the server declines the upgrade, putting the SMTP password and
+    // the sign-in code on the wire.
     requireTLS: port !== 465,
-    // Verified, deliberately. This was `rejectUnauthorized: false`, which
-    // accepts any certificate at all: it turns TLS into encryption without
-    // authentication, so anything able to answer for the host can read the
-    // credentials and every code that goes through it.
+    // Verified, deliberately. This was `rejectUnauthorized: false`, which accepts any
+    // certificate at all: it turns TLS into encryption without authentication, so anything
+    // able to answer for the host can read the credentials and every code that goes through
+    // it.
     tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
     auth: { user, pass },
     connectionTimeout: 15000,
     greetingTimeout: 15000,
-    /*
-     * Cap the DNS lookup. This is the difference between mail working and not.
-     *
-     * nodemailer resolves A and then AAAA before every cold connection, and it
-     * resolves AAAA unconditionally — succeeding on IPv4 does not skip it. It
-     * only skips the family when the host has no interface of that family at
-     * all, and a Wi-Fi link-local fe80:: address counts as one.
-     *
-     * On a network whose resolver never answers AAAA, that lookup runs to
-     * nodemailer's own DNS_TIMEOUT (30s) and retries past a minute, so the 15s
-     * connectionTimeout above fires and every send fails with "Connection
-     * timeout" — while the host resolves over IPv4 in 8ms and the connection
-     * itself takes ~110ms. Measured here: 66s and failing, against 1.4s and a
-     * "250 Message received" with this set.
-     *
-     * 2s is far above a working resolver's latency and far below the budget,
-     * so it costs a healthy network nothing and rescues a broken one. It has
-     * to be the DNS timeout rather than a larger connectionTimeout: waiting a
-     * minute for a sign-in code is its own failure.
-     */
+    // Cap the DNS lookup. This is the difference between mail working and not.
     dnsTimeout: 2000,
   });
   return platformTransport;
 }
 
-/**
- * Send one message as the platform, rather than as a customer.
- *
- * Used for everything with no tenant SMTP behind it — sign-in codes, password
- * resets, registration mail, billing notices.
- *
- * Two routes, in this order:
- *   1. the SMTP account in the environment (see config.platformMail);
- *   2. the ZeptoMail HTTP API, if a platform admin configured one in the
- *      console. Kept as a fallback so an existing deployment that set it up
- *      that way keeps working; nothing new needs it.
- *
- * Throws rather than returning false on failure, because that is the contract
- * sendSmtpEmail already has with the queue processor: a thrown error marks the
- * row failed and leaves it visible, whereas a quiet false would mark it sent.
- */
-/*
- * ── Why SMTP gets skipped after it fails ───────────────────────────────────
- *
- * Some hosts block outbound SMTP outright — Render's free instances do. There
- * the connection does not refuse, it HANGS, so every send sat for the full
- * connectionTimeout before falling through to the HTTPS route. A person
- * registering an account clicked Submit and waited sixteen seconds for a form
- * to respond, on every attempt.
- *
- * So a connection-level failure is remembered, and for the next few minutes
- * sends go straight to the API. Only the first attempt in each window pays the
- * timeout. Deliberately NOT permanent: a blocked port and a brief network fault
- * look identical from here, and the second heals.
- *
- * Authentication failures are excluded — a wrong password is not a reason to
- * stop trying the transport, and it would come back the moment it is corrected.
- */
+/** Send one message as the platform, rather than as a customer. */
+// Some hosts block outbound SMTP outright - Render's free instances do.
 const SMTP_COOLDOWN_MS = 5 * 60 * 1000;
 let smtpDeadUntil = 0;
 
 const isConnectionFailure = (err) => {
   const code = String(err?.code || '').trim();
-  // ECONNECTION and EDNS are nodemailer's own wrappings; the rest come from the
-  // socket. A blocked port shows up as ETIMEDOUT — the case this exists for.
+  // ECONNECTION and EDNS are nodemailer's own wrappings; the rest come from the socket. A
+  // blocked port shows up as ETIMEDOUT - the case this exists for.
   return [
     'ETIMEDOUT', 'ECONNREFUSED', 'ECONNRESET', 'ESOCKET', 'ECONNECTION',
     'EDNS', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH',
   ].includes(code) || /timeout|timed out/i.test(err?.message || '');
 };
 
-/**
- * Send over ZeptoMail's REST API, on 443.
- *
- * Extracted so both routes into it share one implementation: the catch below
- * when SMTP has just failed, and the skip above it once SMTP is known to be
- * unreachable. Returns false rather than throwing — every caller has its own
- * idea of what to do next.
- */
-/**
- * @param {Array} attachments  [{ filename, content: Buffer, contentType }]
- *   ZeptoMail wants base64 in `content`, the MIME type in `mime_type` and the
- *   display name in `name`. Different spelling from nodemailer's, which is why
- *   the callers pass one shape and each transport translates it.
- */
+/** Send over ZeptoMail's REST API, on 443. */
+
 async function sendViaZeptoApi({ to, toName, subject, bodyHtml, attachments = [] }) {
   const { user, pass, from, fromName, apiKey: configured } = config.platformMail;
-  /*
-   * The API token, NOT the SMTP password. This used to be `pass || user`, which
-   * sends the SMTP password as a `Zoho-enczapikey` and earns a 401 every time —
-   * so on a host that blocks outbound SMTP the fallback could never have
-   * worked, and the failure reported itself as a mail problem rather than a
-   * wrong-credential one. ZeptoMail issues the two separately: emailappsmtp…
-   * for SMTP, emailapikey for this.
-   */
+  // The API token, NOT the SMTP password.
   const apiKey = configured || pass || user;
   if (!apiKey) return false;
   const safeTo = headerSafe(to);
@@ -191,12 +90,12 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml, attachments = []
       logger.info(`email: delivered to ${maskEmail(to)} via ZeptoMail HTTPS API`);
       return true;
     }
-    // 401 here almost always means PLATFORM_MAIL_API_KEY is unset and the SMTP
-    // password was used instead, so say that rather than only the status.
+    // 401 here almost always means PLATFORM_MAIL_API_KEY is unset and the SMTP password was
+    // used instead, so say that rather than only the status.
     logger.error(
       `ZeptoMail HTTPS API responded ${res.status}: ${text.slice(0, 150)}`
       + (res.status === 401 && !configured
-        ? ' — no PLATFORM_MAIL_API_KEY is set, so the SMTP password was sent as the API token.'
+        ? ' - no PLATFORM_MAIL_API_KEY is set, so the SMTP password was sent as the API token.'
         : '')
     );
     return false;
@@ -207,28 +106,14 @@ async function sendViaZeptoApi({ to, toName, subject, bodyHtml, attachments = []
 }
 
 export async function sendViaPlatform(toEmail, toName, subject, bodyHtml, attachments = []) {
-  /*
-   * No address is a normal state, not an error. Since migration 025 an account
-   * may exist with a username and a mobile number and nothing else, and every
-   * notification path in the product reaches this function eventually. Refusing
-   * here — once — is what keeps "this employee has no mailbox" from surfacing
-   * as a failed idea submission somewhere far away.
-   */
+  // No address is a normal state, not an error.
   if (!String(toEmail || '').trim()) {
     return { success: false, skipped: true, error: 'No email address on file for this recipient.' };
   }
 
   const { host, port, from, fromName, transport } = config.platformMail;
 
-  /*
-   * HTTPS only, because this host is known to block SMTP.
-   *
-   * Distinct from the cooldown below, which DISCOVERS the block by waiting out
-   * a connection timeout and then remembering. Discovery costs sixteen seconds
-   * of somebody watching a registration form, once per cooldown window and
-   * again after every idle period — on a host where the answer is already
-   * known. Being told is better than being made to find out on a timer.
-   */
+  // HTTPS only, because this host is known to block SMTP.
   if (transport === 'api') {
     if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
     throw new Error(
@@ -238,8 +123,8 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml, attach
     );
   }
 
-  // SMTP is known unreachable — go straight over HTTPS rather than making the
-  // caller wait out the connection timeout again.
+  // SMTP is known unreachable - go straight over HTTPS rather than making the caller wait
+  // out the connection timeout again.
   if (platformMailReady() && Date.now() < smtpDeadUntil) {
     if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
     throw new Error(
@@ -260,24 +145,24 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml, attach
         ...(attachments.length ? { attachments } : {}),
       });
       logger.info(`email: delivered to ${maskEmail(toEmail)} via platform SMTP (${host}:${port})`);
-      smtpDeadUntil = 0; // it works after all — stop skipping it
+      smtpDeadUntil = 0; // it works after all - stop skipping it
       return true;
     } catch (err) {
       if (isConnectionFailure(err)) {
         smtpDeadUntil = Date.now() + SMTP_COOLDOWN_MS;
         logger.warn(
-          `platform SMTP could not be reached (${err.message}) — skipping it for `
+          `platform SMTP could not be reached (${err.message}) - skipping it for `
           + `${SMTP_COOLDOWN_MS / 60000} minutes so sends stop waiting on a blocked port. `
           + 'If this host blocks outbound SMTP, set PLATFORM_MAIL_API_KEY and mail will go over HTTPS instead.'
         );
       }
-      logger.warn(`platform SMTP failed (${err.message}) — attempting ZeptoMail HTTP REST API fallback on port 443...`);
+      logger.warn(`platform SMTP failed (${err.message}) - attempting ZeptoMail HTTP REST API fallback on port 443...`);
       if (await sendViaZeptoApi({ to: toEmail, toName, subject, bodyHtml, attachments })) return true;
       throw err;
     }
   }
 
-  // No SMTP account in the environment — fall back to a console-configured API.
+  // No SMTP account in the environment - fall back to a console-configured API.
   const cfg = await mailConfig();
   if (cfg.zepto_enabled && cfg.token && cfg.endpoint) {
     const r = await sendZeptoMail({ to: toEmail, toName, subject, html: bodyHtml, cfg });
@@ -291,21 +176,12 @@ export async function sendViaPlatform(toEmail, toName, subject, bodyHtml, attach
   );
 }
 
-/**
- * Prove the account works, without needing a recipient.
- *
- * `verify()` opens the connection and authenticates, which is what actually
- * goes wrong on first setup — a wrong password and an unverified sender domain
- * both look identical from the outside until something is sent.
- */
+/** Prove the account works, without needing a recipient. */
 export async function verifyPlatformMail() {
   if (!platformMailReady()) return { ok: false, detail: 'not configured' };
-  /*
-   * On the API transport there is nothing to verify by opening a socket, and
-   * probing SMTP would report "NOT working" at every boot for a deployment
-   * that sends perfectly well over 443. A send is not attempted here either -
-   * a health check that emails somebody is not a health check.
-   */
+  // On the API transport there is nothing to verify by opening a socket, and probing SMTP
+  // would report "NOT working" at every boot for a deployment that sends perfectly well over
+  // 443.
   if (config.platformMail.transport === 'api') {
     return { ok: true, detail: 'HTTPS API (SMTP not attempted)' };
   }
@@ -313,7 +189,8 @@ export async function verifyPlatformMail() {
     await getPlatformTransport().verify();
     return { ok: true, detail: `${config.platformMail.host}:${config.platformMail.port}` };
   } catch (e) {
-    // If SMTP times out (e.g. Render/Cloud host firewall blocking port 587), check HTTPS REST API on port 443!
+    // If SMTP times out (e.g. Render/Cloud host firewall blocking port 587), check HTTPS REST
+    // API on port 443!
     try {
       const apiKey = config.platformMail.apiKey || config.platformMail.pass || config.platformMail.user;
       const httpRes = await fetch('https://api.zeptomail.in/v1.1/email', {
@@ -334,20 +211,13 @@ export async function verifyPlatformMail() {
   }
 }
 
-/**
- * Enough of an address to correlate a log line, not enough to harvest one.
- *
- * Exported because the platform-admin verification screen shows the address a
- * code is going to, and that screen is reachable with only a password — so it
- * has to be enough for the right person to recognise their own mailbox and not
- * enough for anybody else to learn one.
- */
+/** Enough of an address to correlate a log line, not enough to harvest one. */
 export function maskEmail(v) {
   const [name = '', domain = ''] = String(v).split('@');
   return `${name.slice(0, 2)}***@${domain}`;
 }
 
-/** Fetch all org_settings as a key→value map (PHP getOrgSettings). */
+/** Fetch all org_settings as a keyvalue map (PHP getOrgSettings). */
 export async function getOrgSettings(db) {
   try {
     const [rows] = await db.query('SELECT key_name, value FROM org_settings');
@@ -373,54 +243,37 @@ function buildTransport(settings) {
     host,
     port,
     secure: port === 465, // implicit TLS
-    // On 587, STARTTLS is normally opportunistic — if the server doesn't offer
-    // it, nodemailer would happily send the SMTP password in the clear. Require
-    // the upgrade instead, and refuse to talk to a server with a bad cert.
+    // On 587, STARTTLS is normally opportunistic - if the server doesn't offer it, nodemailer
+    // would happily send the SMTP password in the clear.
     requireTLS: port !== 465,
     tls: { rejectUnauthorized: true, minVersion: 'TLSv1.2' },
     auth: user ? { user, pass } : undefined,
     connectionTimeout: 15000,
     greetingTimeout: 15000,
-    // Same AAAA-lookup stall as the platform transport above, and worse here:
-    // this one is built per send rather than memoised, so it never gets the
-    // benefit of nodemailer's DNS cache and pays the wait every time.
+    // Same AAAA-lookup stall as the platform transport above, and worse here: this one is
+    // built per send rather than memoised, so it never gets the benefit of nodemailer's DNS
+    // cache and pays the wait every time.
     dnsTimeout: 2000,
   });
 }
 
-/**
- * Strip CR/LF (and quotes) from anything interpolated into an address header.
- * The display names come from org settings, i.e. they are admin-controlled
- * input; a newline in one is the classic route to injecting extra SMTP headers
- * (Bcc:, Reply-To:) into the outgoing message.
- */
+/** Strip CR/LF (and quotes) from anything interpolated into an address header. */
 function headerSafe(s) {
   return String(s ?? '').replace(/[\r\n"<>]/g, ' ').trim();
 }
 
-/**
- * Send one HTML email. Returns true on success; throws on SMTP error
- * (matching the PHP contract used by the queue processor).
+/*
+ * Send one HTML email. Returns true on success; throws on SMTP error (matching the PHP
+ * contract used by the queue processor).
  */
 export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml) {
-  /*
-   * No address is a normal state, not an error. Since migration 025 an account
-   * may exist with a username and a mobile number and nothing else, and every
-   * notification path in the product reaches this function eventually. Refusing
-   * here — once — is what keeps "this employee has no mailbox" from surfacing
-   * as a failed idea submission somewhere far away.
-   */
+  // No address is a normal state, not an error.
   if (!String(toEmail || '').trim()) {
     return { success: false, skipped: true, error: 'No email address on file for this recipient.' };
   }
 
-  /*
-   * A tenant with its own SMTP host keeps using it — mail appearing to come
-   * from the customer's own domain is a feature. Everything else falls through
-   * to the platform provider, which is the only route available for mail with
-   * no tenant behind it and the only one that works where the host blocks
-   * outbound SMTP ports.
-   */
+  // A tenant with its own SMTP host keeps using it - mail appearing to come from the
+  // customer's own domain is a feature.
   if (!String(settings?.smtp_host || '').trim()) {
     return sendViaPlatform(toEmail, toName, subject, bodyHtml);
   }
@@ -439,29 +292,7 @@ export async function sendSmtpEmail(settings, toEmail, toName, subject, bodyHtml
 }
 
 /** Insert an email into the queue (PHP queueEmail). */
-/**
- * Send somebody the temporary password their account was created with.
- *
- * ── Why this exists ────────────────────────────────────────────────────────
- *
- * Both places that mint a temporary password — approving a registration, and
- * resetting an org admin's password from the console — returned it to the
- * screen with "share it with the applicant". That meant the credential to a
- * brand-new workspace travelled by whatever channel the operator reached for:
- * a phone call, a WhatsApp message, an email typed by hand. It also meant the
- * first thing a new customer experienced was waiting for somebody to get round
- * to it.
- *
- * ── What it does NOT change ────────────────────────────────────────────────
- *
- * The password is still returned to the caller and still shown once in the
- * console. Mail fails — that is the entire reason this codebase has an SMTP
- * cooldown and an API fallback — and an operator holding the only copy of a
- * credential is the difference between "resend it" and "provision it again".
- * The screen says which of the two happened.
- *
- * @returns {Promise<boolean>} whether it was actually delivered
- */
+/** Send somebody the temporary password their account was created with. */
 export async function sendTemporaryPassword({ email, name, orgName, slug, password, reason }) {
   if (!String(email || '').trim() || !password) return false;
 
@@ -484,7 +315,7 @@ export async function sendTemporaryPassword({ email, name, orgName, slug, passwo
   </table>
   <p>You will be asked to choose your own password the first time you sign in.
   Until you do, this one is the only thing standing in front of your organisation's
-  account — so please sign in soon, and do not forward this message.</p>
+  account - so please sign in soon, and do not forward this message.</p>
   <p style="color:#667089;margin-top:18px">If you were not expecting this, tell us straight away.</p>
 </div>`;
 
@@ -494,8 +325,8 @@ export async function sendTemporaryPassword({ email, name, orgName, slug, passwo
 
   try {
     const res = await sendViaPlatform(email, name, subject, html);
-    // sendViaPlatform reports a missing address as {skipped:true} rather than
-    // throwing, so a falsy success has to be read as "not delivered".
+    // sendViaPlatform reports a missing address as {skipped:true} rather than throwing, so a
+    // falsy success has to be read as "not delivered".
     return !(res && res.success === false);
   } catch (e) {
     logger.warn(`temporary password email to ${email} failed: ${e.message}`);
@@ -516,38 +347,14 @@ export async function queueEmail(db, toEmail, toName, subject, body) {
   }
 }
 
-/**
- * How long a queued notification is still worth delivering.
- *
- * These are notices about something that happened, and their value decays.
- * Worse, their CONTENT decays: "Action Required: idea awaiting your approval"
- * sent a fortnight late is not merely stale, it is wrong — the idea has almost
- * certainly moved on, and the recipient goes looking for something that is not
- * in their queue.
- *
- * This exists because the gate below had left 47 real messages sitting unsent
- * across two organisations, some of them three weeks old. Turning delivery on
- * without this would have posted all of them at once.
- */
+/** How long a queued notification is still worth delivering. */
 const MAX_QUEUE_AGE_DAYS = 3;
 
 /** Process up to 5 pending emails (PHP processEmailQueue). */
 export async function processEmailQueue(db) {
   const settings = await getOrgSettings(db);
 
-  /*
-   * Retire anything too old to be true any more — first, before any gate.
-   *
-   * Expiring a notice has nothing to do with whether a provider exists. It is
-   * the deployments WITHOUT one where this matters most: those are exactly the
-   * ones whose queue grows without bound, and this whole bug is what that looks
-   * like after three weeks. Doing it below the checks would mean the queue only
-   * gets tidied on the systems that never needed tidying.
-   *
-   * Marked 'failed' rather than deleted: the row is the evidence that the
-   * notification was generated and never reached anybody, which is worth
-   * keeping when somebody asks why they were not told.
-   */
+  // Retire anything too old to be true any more - first, before any gate.
   try {
     await db.execute(
       `UPDATE email_queue SET status = 'failed'
@@ -555,56 +362,26 @@ export async function processEmailQueue(db) {
       [MAX_QUEUE_AGE_DAYS]
     );
 
-    /*
-     * Reclaim rows left mid-flight.
-     *
-     * A row is marked 'processing' before the send and only leaves that state
-     * when the send returns. A process that is restarted in between — a deploy,
-     * a crash, a host recycling — strands it: it is not 'pending', so no later
-     * pass will ever pick it up again, and it is not 'sent', so nobody got it.
-     * `attempts` was already incremented, so putting it back cannot loop; five
-     * failures still retire it.
-     *
-     * Fifteen minutes is comfortably longer than any send can legitimately
-     * take, so nothing is reclaimed out from under a send that is still going.
-     */
+    // Reclaim rows left mid-flight.
     await db.execute(
       `UPDATE email_queue SET status = 'pending'
         WHERE status = 'processing' AND created_at < NOW() - INTERVAL 15 MINUTE`
     );
   } catch (e) {
-    // A tenant whose migration has not run has no 'processing' in its enum.
-    // Tidying is not the job; delivering is. Say so once and carry on.
-    logger.warn(`processEmailQueue: queue housekeeping skipped — ${e.message}`);
+    // A tenant whose migration has not run has no 'processing' in its enum. Tidying is not the
+    // job; delivering is. Say so once and carry on.
+    logger.warn(`processEmailQueue: queue housekeeping skipped - ${e.message}`);
   }
 
-  /*
-   * ── The switch that silently swallowed every notification ────────────────
-   *
-   * This used to read `(settings.email_enabled ?? '0') !== '1'`, and every
-   * tenant is seeded with email_enabled = '0'. So a brand-new organisation had
-   * mail off, nobody knew the setting existed, and the queue filled up forever
-   * while every other part of the product behaved as though mail worked. The
-   * rows were not failed or retried — `attempts` stayed at 0 — because nothing
-   * ever reached the SELECT below. It looked fine from every direction except
-   * the recipient's, which is exactly what this file's own header warns about.
-   *
-   * The setting now means what its name says: an organisation that has opted
-   * OUT. Off requires somebody to have chosen it, and the default is to deliver
-   * the mail the product has already promised to send. Migration 037 turns the
-   * seeded '0' into '1' for existing tenants, because none of them chose it.
-   */
+  // This used to read `(settings.email_enabled ??
   if (String(settings.email_enabled ?? '1') === '0') return;
 
   // No tenant SMTP is no longer a dead end: the platform provider can carry it.
-  // Only give up when neither route exists, and say which is missing — this
-  // used to log "smtp_host is not configured" once a minute forever with no
-  // hint that a platform-wide provider would solve it.
   if (!String(settings.smtp_host || '').trim() && !platformMailReady()) {
     const cfg = await mailConfig();
     if (!cfg.zepto_enabled) {
       logger.warn('processEmailQueue: no SMTP host for this organisation and no platform '
-        + 'mail sender — queued mail cannot be delivered.');
+        + 'mail sender - queued mail cannot be delivered.');
       return;
     }
   }
@@ -619,29 +396,7 @@ export async function processEmailQueue(db) {
   for (const email of emails) {
     const id = Number(email.id);
 
-    /*
-     * Claim the row before sending.
-     *
-     * ── The second reason no mail was going out ─────────────────────────────
-     *
-     * `status` is an ENUM('pending','sent','failed') and this wrote
-     * 'processing', which is not one of them. Under a permissive sql_mode
-     * (MariaDB 10.4, which is what XAMPP ships and what development runs on)
-     * the server truncates it to '' with a warning and carries on, so this was
-     * invisible for as long as nobody looked. Under STRICT_ALL_TABLES — which
-     * is Aiven's default, and therefore production — it is error 1265, the
-     * whole pass throws, the per-tenant catch in the scheduler logs a line, and
-     * not one message is ever sent.
-     *
-     * So even with the email_enabled gate fixed, production would still have
-     * delivered nothing. Both faults produced the identical symptom: rows
-     * pending forever at attempts = 0.
-     *
-     * Migration 038 adds 'processing' to the enum. The fallback below keeps
-     * this working on a tenant whose migration has not run yet: losing the
-     * claim marker costs an at-most-once guarantee that a single-instance
-     * scheduler already provides, and is far better than sending nothing.
-     */
+    // Claim the row before sending.
     try {
       await db.execute(
         "UPDATE email_queue SET status = 'processing', attempts = attempts + 1 WHERE id = ?",
@@ -649,7 +404,7 @@ export async function processEmailQueue(db) {
       );
     } catch (e) {
       logger.warn(`processEmailQueue: could not mark ${id} as processing (${e.code}) `
-        + '— run migration 038; continuing without the claim marker');
+        + '- run migration 038; continuing without the claim marker');
       await db.execute(
         'UPDATE email_queue SET attempts = attempts + 1 WHERE id = ?', [id]
       );

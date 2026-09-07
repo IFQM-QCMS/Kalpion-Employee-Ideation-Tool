@@ -1,14 +1,9 @@
-/**
- * Support controller — thin HTTP layer over supportService.
- *
- * The tenant handlers take req.tenant / req.user from the caller's own token, so
- * the org a ticket is read or written against is never a client-supplied value.
- */
+/** Support controller - thin HTTP layer over supportService. */
 import * as support from '../services/supportService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
-// ── Tenant side (requireAuth) ──────────────────────────────────────
+// Tenant side (requireAuth)
 export const listMine = asyncHandler(async (req, res) =>
   respond(res, await support.listTenantTickets(req.tenant, req.user, req.query))
 );
@@ -29,7 +24,7 @@ export const update = asyncHandler(async (req, res) =>
   respond(res, await support.updateTenantTicket(req.tenant, req.user, req.params.id, req.body || {}))
 );
 
-// ── Platform side (requirePlatformAuth) ────────────────────────────
+// Platform side (requirePlatformAuth)
 export const platformList = asyncHandler(async (req, res) =>
   respond(res, await support.listPlatformTickets(req.query))
 );

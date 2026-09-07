@@ -1,29 +1,4 @@
-/**
- * One-time-code login — MOM 29 Jul 2026 §4.1, §4.2.
- *
- * A user asks for a code on their registered phone, then exchanges the code for
- * the same JWT a password login returns. Nothing downstream can tell which
- * route was used, which is the point: no endpoint has to learn about OTP.
- *
- * ── The rules this file exists to enforce ──────────────────────────────────
- *
- * Codes are stored HASHED. A plaintext six-digit column would let anyone with
- * read access to the registry sign in as any user with a code outstanding — the
- * same mistake as storing passwords in clear, and a six-digit secret is far
- * easier to use than a bcrypt hash.
- *
- * Requesting a code says NOTHING about whether the number is registered. The
- * response is identical either way. Otherwise this endpoint becomes a free
- * membership oracle: type numbers, learn who works there.
- *
- * Wrong guesses are counted PER CODE. Six digits is a million possibilities,
- * which sounds like a lot until you notice an attacker has the whole validity
- * window and can guess as fast as the network allows. Five wrong answers burns
- * the code.
- *
- * Issuing a new code invalidates the previous one. Otherwise every resend adds
- * another live code and the guessing space shrinks with each click.
- */
+/** One-time-code login - MOM 29 Jul 2026 §4.1, §4.2. */
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import config from '../config/index.js';
@@ -52,16 +27,7 @@ const DEFAULTS = {
   otp_provider: 'log',
 };
 
-/**
- * Platform-wide OTP policy, with sane fallbacks if the rows are missing.
- *
- * OTP_ENABLED in the environment overrides the stored row when it is set. The
- * delivery account for email codes is configured in the environment too and has
- * no screen anywhere; leaving the on/off switch stranded in the console would
- * mean a deployment could be fully configured to send codes and still refuse to
- * offer them, with the fix hidden behind a settings page nobody was told to
- * open. An unset OTP_ENABLED changes nothing.
- */
+/** Platform-wide OTP policy, with sane fallbacks if the rows are missing. */
 export async function policy() {
   const override = config.otpEnabled === undefined ? {} : { otp_enabled: config.otpEnabled ? '1' : '0' };
   try {
@@ -75,25 +41,13 @@ export async function policy() {
   }
 }
 
-/**
- * Parse a policy number.
- *
- * NOT `parseInt(v) || fallback`: zero is falsy, so a deliberately configured 0
- * — "no resend throttle", which is exactly what a UAT run wants — silently
- * became the default instead. Anything unparseable still falls back.
- */
+/** Parse a policy number. */
 function num(v, fallback) {
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : fallback;
 }
 
-/**
- * A numeric code of the requested length, drawn from a CSPRNG.
- *
- * Math.random() is not acceptable here even though the code is short-lived:
- * its output is predictable from previous values, so an attacker who has seen
- * one code could compute the next.
- */
+/** A numeric code of the requested length, drawn from a CSPRNG. */
 function generateCode(length) {
   const n = Math.max(4, Math.min(8, num(length, 6)));
   const max = 10 ** n;
@@ -110,13 +64,7 @@ const GENERIC = {
   message: 'If that number belongs to an account, a code has been sent to it.',
 };
 
-/**
- * The code, in an email.
- *
- * Plain and short on purpose. A code email that looks like marketing gets
- * filtered as marketing, and the one thing the reader needs is six digits they
- * can read at a glance.
- */
+/** The code, in an email. */
 function otpEmailHtml(name, code, minutes) {
   const safe = String(name || '').replace(/[<>&]/g, '');
   return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;color:#111;line-height:1.6">
@@ -124,23 +72,18 @@ function otpEmailHtml(name, code, minutes) {
   <p>Use this code to sign in to Kalpion:</p>
   <p style="font-size:30px;font-weight:700;letter-spacing:7px;margin:22px 0">${code}</p>
   <p>It expires in ${minutes} minute(s) and can be used once.</p>
-  <p style="color:#666;font-size:13px">If you did not ask to sign in, you can ignore this message —
+  <p style="color:#666;font-size:13px">If you did not ask to sign in, you can ignore this message -
   nobody can use this code without your email account. Do not forward it to anyone.</p>
 </div>`;
 }
 
-/**
- * POST /api/auth/otp/request
- *
- * @param {{ identifier: string, purpose?: string, meta?: object }} args
- */
+
 export async function requestOtp({ identifier, purpose = 'login', meta = {} } = {}) {
   const raw = String(identifier || '').trim();
   if (!raw) throw badRequest('Enter your registered phone number.');
 
-  // The login screen offers a code as an alternative to a password, so the two
-  // are the same door and both have to be shut. Only tenant users ever reach
-  // this service — a platform admin has no organisation to sign in to.
+  // The login screen offers a code as an alternative to a password, so the two are the same
+  // door and both have to be shut.
   await assertNotInMaintenance();
 
   const p = await policy();
@@ -151,13 +94,7 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   const phone = normalizePhone(raw);
   const email = isEmail(raw) ? raw.toLowerCase() : '';
-  /*
-   * A username identifies the account but is not somewhere a code can be sent.
-   * It resolves to the person, and the code then goes to their registered
-   * number or address like any other — otherwise signing in by username would
-   * work with a password and quietly fail with a one-time code, which is the
-   * kind of half-feature that is worse than not having it.
-   */
+  // A username identifies the account but is not somewhere a code can be sent.
   const username = (!phone && !email) ? normalizeUsername(raw) : '';
   const key = phone || email || username;
   const idType = phone ? 'phone' : (email ? 'email' : 'username');
@@ -165,8 +102,8 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   const master = masterDb();
 
-  // Resend throttle. Checked before the directory lookup so a caller cannot use
-  // response timing to tell a known number from an unknown one.
+  // Resend throttle. Checked before the directory lookup so a caller cannot use response
+  // timing to tell a known number from an unknown one.
   const [[recent] = []] = await master.execute(
     `SELECT TIMESTAMPDIFF(SECOND, created_at, NOW()) AS age
        FROM login_otps WHERE identifier = ? ORDER BY id DESC LIMIT 1`,
@@ -178,8 +115,8 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
       { retry_after: wait - Number(recent.age) });
   }
 
-  // Who does this belong to? An unknown identifier gets the generic reply and
-  // nothing is written — there is nobody to send a code to.
+  // Who does this belong to? An unknown identifier gets the generic reply and nothing is
+  // written - there is nobody to send a code to.
   let tenant = null;
   let user = null;
   try {
@@ -204,7 +141,7 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     logger.warn('otp: identifier lookup failed', e.message);
   }
   if (!tenant || !user) {
-    logger.info(`otp: request for unknown identifier ${maskPhone(key)} — generic reply`);
+    logger.info(`otp: request for unknown identifier ${maskPhone(key)} - generic reply`);
     return GENERIC;
   }
 
@@ -216,10 +153,9 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     'UPDATE login_otps SET expires_at = NOW() WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()',
     [key]
   );
-  // `channel` records how the code actually travelled, which is not the same
-  // question as what the identifier looks like — somebody who typed a number can
-  // still be sent an email when the gateway is down. So it is stamped after the
-  // send, from the row id this INSERT returns; until then it would be a guess.
+  // `channel` records how the code actually travelled, which is not the same question as
+  // what the identifier looks like - somebody who typed a number can still be sent an email
+  // when the gateway is down.
   const [inserted] = await master.execute(
     `INSERT INTO login_otps
        (identifier, id_type, code_hash, tenant_id, tenant_slug, user_id, purpose, expires_at, requested_ip)
@@ -230,66 +166,27 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   const minutes = Math.max(1, Math.round(ttl / 60));
 
-  /*
-   * On a DLT gateway the wording is not ours to choose — it has to be the
-   * template the carrier approved against the id sent alongside it, or the
-   * message is accepted by the gateway and then dropped by the carrier, with no
-   * error and no delivery report at either end.
-   *
-   * So the text comes from the registered wording, the same way the
-   * registration and reset journeys already get it: messageFor() reads the
-   * configured SMS_TEXT_* for this purpose and fills its {#var#} placeholders
-   * left to right — the code, then the minutes — and hands back the template id
-   * that wording was approved under.
-   *
-   * This used to be a literal written here, which meant signing in — the one
-   * journey anybody actually uses — was the only journey sending wording the
-   * carrier had never seen, while carrying a template id claiming otherwise.
-   */
+  // On a DLT gateway the wording is not ours to choose - it has to be the template the
+  // carrier approved against the id sent alongside it, or the message is accepted by the
+  // gateway and then dropped by the carrier, with no error and no delivery report at either
+  // end.
   let body = messageFor(purpose, code, minutes).text;
-  // A deployment configured through the platform console rather than the
-  // environment keeps its approved wording there instead.
+  // A deployment configured through the platform console rather than the environment keeps
+  // its approved wording there instead.
   if (p.otp_provider === 'jio_dlt') {
     const cfg = await dltConfig();
     if (cfg.template_text) body = fillTemplate(cfg.template_text, [code, minutes]);
   }
 
-  /*
-   * Somebody who typed an email address gets the code by email.
-   *
-   * This branch was missing: an email identifier resolved correctly, a code was
-   * issued and stored, and then it was handed to the SMS gateway addressed to
-   * `user.phone` — so a person signing in by email either got a text they were
-   * not expecting, or, with no number on file, nothing at all while the screen
-   * said a code had been sent.
-   */
-  /*
-   * The code goes where the person asked for it.
-   *
-   * This used to read `if (idType === 'email' || user.email)`, so anybody with
-   * an address on file got an EMAIL even when they had carefully typed their
-   * mobile number — and were then told a code had been sent to that number.
-   * With most seeded accounts carrying a fictional address, the message went
-   * nowhere and the whole feature looked dead.
-   *
-   * Typed an address, get an email; typed a number, get a text. The other
-   * channel is only used when the first cannot deliver at all — a code that
-   * arrives by the wrong route still lets somebody in, whereas silence does
-   * not — and the fallback is logged, because "it sent, just not where you
-   * expected" is the kind of thing that has to be findable afterwards.
-   */
+  // Somebody who typed an email address gets the code by email.
+  // The code goes where the person asked for it.
   const emailAddr = idType === 'email' ? key : (user.email || '');
   const phoneNum = idType === 'phone' ? key : (user.phone || '');
-  // Typed a username: neither channel was named, so the account's own number is
-  // preferred — it is the one field every account is required to have.
+  // Typed a username: neither channel was named, so the account's own number is preferred -
+  // it is the one field every account is required to have.
   const preferSms = idType === 'phone' || (idType === 'username' && !!phoneNum);
-  /*
-   * Each route reports the channel it *is*, rather than leaving it to be
-   * inferred from the provider name afterwards. The inference was a hard-coded
-   * list of three SMS providers, so a code sent over msg91 or twilio was
-   * recorded as having gone out by email — and the delivery log is the only
-   * place anybody can look to answer "where did that code actually go".
-   */
+  // Each route reports the channel it *is*, rather than leaving it to be inferred from the
+  // provider name afterwards.
   const trySms = async () => ({
     ...(await sendSms(phoneNum, body, { purpose, tenantSlug: tenant.slug })),
     channel: 'sms',
@@ -313,17 +210,16 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   if (!sent.sent) {
     if (preferred === 'sms' && emailAddr) {
-      logger.warn(`otp: SMS unavailable (${sent.detail || 'no route'}) — falling back to email`);
+      logger.warn(`otp: SMS unavailable (${sent.detail || 'no route'}) - falling back to email`);
       sent = await tryEmail();
     } else if (preferred === 'email' && phoneNum) {
-      logger.warn(`otp: email failed (${sent.detail || 'no route'}) — falling back to SMS`);
+      logger.warn(`otp: email failed (${sent.detail || 'no route'}) - falling back to SMS`);
       sent = await trySms();
     }
   }
 
-  // Now it is known rather than assumed — including the case where the code
-  // went out by the channel the person did NOT ask for. Left NULL when no route
-  // could be tried at all, which is honest: nothing carried it anywhere.
+  // Now it is known rather than assumed - including the case where the code went out by the
+  // channel the person did NOT ask for.
   if (inserted?.insertId && sent.channel) {
     master.execute('UPDATE login_otps SET channel = ? WHERE id = ?',
       [sent.channel, inserted.insertId]).catch(() => {});
@@ -334,24 +230,21 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
 
   return {
     ...GENERIC,
-    // Never the code itself. This only tells the UI how long to run its timer
-    // and whether to show "resend" yet.
+    // Never the code itself. This only tells the UI how long to run its timer and whether to
+    // show "resend" yet.
     expires_in: ttl,
     resend_in: wait,
   };
 }
 
-/**
- * POST /api/auth/otp/verify — exchanges a correct code for a session.
- * Returns the identical { user, token } shape as a password login.
- */
+/** POST /api/auth/otp/verify - exchanges a correct code for a session. */
 export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   const raw = String(identifier || '').trim();
   const supplied = String(code || '').trim();
   if (!raw || !supplied) throw badRequest('Enter the code that was sent to you.');
 
-  // Also on redemption, not only on request: a code issued a minute before the
-  // switch was thrown must not still buy a session after it.
+  // Also on redemption, not only on request: a code issued a minute before the switch was
+  // thrown must not still buy a session after it.
   await assertNotInMaintenance();
 
   const p = await policy();
@@ -370,8 +263,8 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
     [key]
   );
 
-  // Always burn a compare, even with no row, so a wrong number and a wrong code
-  // take the same time to answer.
+  // Always burn a compare, even with no row, so a wrong number and a wrong code take the
+  // same time to answer.
   const maxAttempts = num(p.otp_max_attempts, 5);
   const ok = row
     ? await bcrypt.compare(supplied, row.code_hash)
@@ -382,8 +275,8 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   if (!ok) {
     const attempts = Number(row.attempts) + 1;
     await master.execute(
-      // Burn the code outright once the limit is reached, rather than leaving it
-      // alive for the rest of its window with the counter pinned.
+      // Burn the code outright once the limit is reached, rather than leaving it alive for the
+      // rest of its window with the counter pinned.
       'UPDATE login_otps SET attempts = ?, expires_at = IF(? >= ?, NOW(), expires_at) WHERE id = ?',
       [attempts, attempts, maxAttempts, row.id]
     );
@@ -398,8 +291,8 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
       : 'Too many incorrect attempts. Request a new code.');
   }
 
-  // Single use. Marked consumed before the session is minted, so the same code
-  // cannot be redeemed twice by two requests arriving together.
+  // Single use. Marked consumed before the session is minted, so the same code cannot be
+  // redeemed twice by two requests arriving together.
   const [res] = await master.execute(
     'UPDATE login_otps SET consumed_at = NOW() WHERE id = ? AND consumed_at IS NULL',
     [row.id]
@@ -456,28 +349,13 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   return { user: session, token };
 }
 
-/**
- * Whether the sign-in screen should offer the OTP option at all.
- *
- * `enabled` means "switched on AND able to deliver", not merely switched on.
- * Offering the option while the gateway is misconfigured is worse than not
- * offering it: the user abandons a password that works for a code that never
- * arrives, and the screen has no way to tell them why.
- */
+/** Whether the sign-in screen should offer the OTP option at all. */
 export async function otpStatus() {
   const p = await policy();
 
-  /*
-   * Codes go out by email, so "able to deliver" means the platform sender is
-   * configured — the SMTP account in the environment, or, for a deployment that
-   * was set up that way, the ZeptoMail API in the console.
-   *
-   * The console's own `otp_email_enabled` switch is only consulted on the API
-   * route. It defaults to off, so honouring it on the environment route would
-   * mean a correctly configured deployment still hid the option until somebody
-   * opened a settings page — and the whole point of configuring delivery in the
-   * environment is that nobody has to.
-   */
+  // Codes go out by email, so "able to deliver" means the platform sender is configured -
+  // the SMTP account in the environment, or, for a deployment that was set up that way, the
+  // ZeptoMail API in the console.
   let emailReady = platformMailReady();
   let route = 'platform_smtp';
   if (!emailReady) {
@@ -486,16 +364,7 @@ export async function otpStatus() {
     route = 'zeptomail_api';
   }
 
-  /*
-   * SMS counts as "able to deliver" too.
-   *
-   * This asked about email and nothing else, from when email was the only route
-   * a code could take. It is not any more — a deployment whose codes go out over
-   * the DLT gateway is fully configured to send them, and this would still have
-   * reported the feature as unavailable and hidden the option on the sign-in
-   * screen, because no SMTP account happened to be set. The whole point of the
-   * gateway is that no SMTP account has to be.
-   */
+  // SMS counts as "able to deliver" too.
   const sms = smsReady('login');
   const deliverable = emailReady || sms.ready;
 
@@ -504,17 +373,12 @@ export async function otpStatus() {
     enabled: p.otp_enabled !== '0' && deliverable,
     length: num(p.otp_length, 6),
     resend_in: num(p.otp_resend_seconds, 60),
-    // Named for what would actually carry a code. Somebody who types a number
-    // gets SMS and somebody who types an address gets email, so when both are
-    // up neither name alone is true.
+    // Named for what would actually carry a code.
     provider: emailReady && sms.ready ? 'both' : (emailReady ? route : (sms.ready ? config.sms.provider : 'none')),
   };
 }
 
-/**
- * Can the chosen provider actually put a message on a handset right now?
- * Returns the reason when it cannot, for the platform console to display.
- */
+/** Can the chosen provider actually put a message on a handset right now? */
 export async function providerReadiness(provider) {
   const chosen = String(provider || 'log').toLowerCase();
   if (chosen === 'log') {
@@ -522,12 +386,7 @@ export async function providerReadiness(provider) {
       ? { deliverable: false, reason: 'The mock provider is refused in production.' }
       : { deliverable: true, reason: 'Codes are written to the server log, not sent.' };
   }
-  /*
-   * Kaleyra — the contracted gateway, and the one this deployment actually
-   * runs on. It was missing from this list entirely, so the platform console
-   * described the live provider as `Unknown provider "kaleyra"` and showed the
-   * feature as undeliverable while it was working perfectly well.
-   */
+  // Kaleyra - the contracted gateway, and the one this deployment actually runs on.
   if (chosen === 'kaleyra') {
     const missing = kaleyraMissing(config.sms, 'login');
     return missing.length

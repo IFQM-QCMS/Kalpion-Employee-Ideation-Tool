@@ -54,7 +54,7 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
     <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth:480 }}>
         <div className="modal-header">
-          <span>{t('review.route_committee')} — #{ideaCode}</span>
+          <span>{t('review.route_committee')} - #{ideaCode}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
@@ -67,7 +67,7 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
                 <div className="user-search-results" style={{ display:'block' }}>
                   {results.map(u => (
                     <div key={u.id} className="uitem" onClick={() => addReviewer(u)}>
-                      {u.name} · {u.employee_id} · {u.department||'–'}
+                      {u.name} · {u.employee_id} · {u.department||'-'}
                     </div>
                   ))}
                 </div>
@@ -89,9 +89,7 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
             </div>
           )}
 
-          {/* The rule, stated rather than configured. It replaces a percentage
-              box that every organisation left at 100 and that could silently
-              overrule the named approval chain. */}
+          {/* The rule, stated rather than configured. */}
           <div style={{ fontSize:12,color:'var(--text-muted)',background:'var(--bg)',
             border:'1px solid var(--border)',borderRadius:'var(--r)',padding:'8px 12px' }}>
             {t('ar.unanimous_note')}

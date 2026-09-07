@@ -1,17 +1,4 @@
-/**
- * Authentication service — Node equivalent of PHP api/auth.php.
- *
- * Reproduces, identically:
- *   • brute-force lockout (5 fails → 15-min lock, per email|org identifier)
- *   • platform-admin-first login (ifqm_master.platform_admins), then tenant user
- *   • bcrypt password verification (PHP $2y$ hashes verify unchanged)
- *   • forgot / reset / check-reset-token password flows (bcrypt-hashed tokens)
- *
- * Differences (mandated by the session→JWT migration, documented):
- *   • The PHP session is replaced by a signed JWT returned as `token`.
- *   • CSRF tokens (a session artifact) are dropped — JWT travels in the
- *     Authorization header, so there is no ambient credential to forge.
- */
+/** Authentication service - Node equivalent of PHP api/auth.php. */
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import config from '../config/index.js';
@@ -29,17 +16,12 @@ import * as verification from './verificationService.js';
 import { assertNotInMaintenance } from './maintenanceService.js';
 import logger from '../utils/logger.js';
 
-// ── Brute-force lockout ──────────────────────────────────────────────────────
-// Persisted in ifqm_master.login_attempts. This used to be a process-local Map,
-// which meant the lockout reset on every restart or deploy (wait for a bounce
-// and keep guessing), did not exist across a second worker, and grew without
-// bound. Keyed per <email>|<org> so one account locks — not everyone sharing an
-// office IP.
+// Brute-force lockout Persisted in ifqm_master.login_attempts.
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 900; // 15 min
 
-// If the master DB is unreachable we still must not let guessing run free, so
-// fall back to an in-process counter for the life of the process.
+// If the master DB is unreachable we still must not let guessing run free, so fall back to
+// an in-process counter for the life of the process.
 const memoryAttempts = new Map();
 
 async function getFailedAttempts(id) {
@@ -62,11 +44,8 @@ async function getFailedAttempts(id) {
 
 async function recordFailedAttempt(id) {
   try {
-    // NOTE: inside ON DUPLICATE KEY UPDATE, MySQL evaluates the assignments in
-    // order, so `attempts` in the second expression is the value ALREADY
-    // incremented by the first. Comparing `attempts + 1` here would therefore
-    // count one too many and lock the account on the 4th failure while the user
-    // was still being told "1 attempt remaining".
+    // NOTE: inside ON DUPLICATE KEY UPDATE, MySQL evaluates the assignments in order, so
+    // `attempts` in the second expression is the value ALREADY incremented by the first.
     await masterDb().execute(
       `INSERT INTO login_attempts (login_id, attempts, locked_until)
             VALUES (?, 1, NULL)
@@ -101,15 +80,10 @@ function initialsFrom(name) {
   );
 }
 
-/**
- * Authenticate a user (platform admin or tenant user).
- * @returns {Promise<{ user: object, token: string }>}
- */
+/** Authenticate a user (platform admin or tenant user). */
 export async function login({ email, password, orgSlug, host, meta = {} }) {
   email = String(email || '').trim();
-  // Deliberately NOT trimmed: the password must be compared exactly as the user
-  // set it. Trimming here while storing it untrimmed would silently lock out
-  // anyone whose password begins or ends with a space.
+  // Deliberately NOT trimmed: the password must be compared exactly as the user set it.
   password = String(password ?? '');
   const cleanSlug = sanitizeSlug(orgSlug);
 
@@ -120,8 +94,8 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
   // Lockout check
   const attempts = await getFailedAttempts(loginId);
   if (attempts.locked_for > 0) {
-    // A locked account being hammered is precisely what an operator wants to
-    // see in the activity feed, so it is recorded rather than only thrown.
+    // A locked account being hammered is precisely what an operator wants to see in the
+    // activity feed, so it is recorded rather than only thrown.
     recordLogin({
       actorType: 'tenant_user', actorEmail: email, tenantSlug: cleanSlug || null,
       outcome: 'lockout', ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
@@ -132,7 +106,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     );
   }
 
-  // ── Try platform admin first (ifqm_master.platform_admins) ──
+  // Try platform admin first (ifqm_master.platform_admins)
   try {
     const master = masterDb();
     const [rows] = await master.execute(
@@ -143,22 +117,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     if (pa) {
       const passwordOk = await bcrypt.compare(password, pa.password_hash);
       if (passwordOk) {
-        /*
-         * ── An account that has not proved itself gets in, and no further ──
-         *
-         * A platform admin reaches every tenant on the platform. Until both the
-         * address and the number are proven, the session is issued but the
-         * middleware refuses everything except the two verify endpoints — the
-         * same shape as must_change_password, and for the same reason: a gate
-         * that lives in the UI is bypassed by anybody who calls the API with
-         * the token they were just handed.
-         *
-         * Signing in is allowed rather than refused because the codes have to
-         * go somewhere, and "somewhere" is decided by this row. Refusing the
-         * login outright would leave the new admin with a password that works
-         * on nothing and no way to ask for a code — and would leak, to anybody
-         * guessing addresses, which accounts exist but are not yet set up.
-         */
+        // A platform admin reaches every tenant on the platform.
         const pending = [];
         if (!pa.email_verified_at) pending.push('email');
         if (!pa.phone_verified_at) pending.push('phone');
@@ -173,9 +132,8 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
           ...(pending.length ? {
             must_verify: true,
             pending_verification: pending,
-            // Shown on the verification screen so somebody can tell at a glance
-            // that a code is going to an address they can actually open. Masked,
-            // because the screen is reachable with only a password.
+            // Shown on the verification screen so somebody can tell at a glance that a code is going
+            // to an address they can actually open.
             verify_email: maskEmail(pa.email),
             verify_phone: maskPhone(pa.phone),
           } : {}),
@@ -212,31 +170,16 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     logger.warn('platform_admins lookup skipped', e.message);
   }
 
-  /*
-   * ── Maintenance mode ──────────────────────────────────────────────────────
-   *
-   * Everything above this line is the platform-admin path, and it RETURNS on a
-   * successful login. So placing the gate here — rather than checking a role —
-   * exempts IFQM staff by the shape of the function: the only way to reach this
-   * line is to not be a platform admin.
-   *
-   * That matters more than it looks. A role check could be got wrong later, and
-   * getting it wrong means nobody can sign in to turn maintenance back off.
-   */
+  // Everything above this line is the platform-admin path, and it RETURNS on a successful
+  // login.
   await assertNotInMaintenance();
 
-  // ── Tenant user auth ──
-  // The organisation code is optional now. With one, we open exactly that
-  // organisation's database (an explicit assertion — see resolveTenant). Without
-  // one, we identify the organisation from the login itself: the email, or the
-  // registered phone number, resolved through the global login directory.
+  // Tenant user auth The organisation code is optional now.
   const tenant = cleanSlug
     ? await resolveTenant({ slug: cleanSlug, host })
     : await resolveTenantByLogin(email);
 
-  // The identifier matched no organisation. Answer exactly like a wrong password
-  // — a dummy compare for constant time, a counted failure, one generic message
-  // — so login never reveals which emails or numbers are registered.
+  // The identifier matched no organisation.
   if (!tenant) {
     await bcrypt.compare(password, DUMMY_HASH);
     await recordFailedAttempt(loginId);
@@ -255,20 +198,18 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
 
   const db = getTenantPool(tenant);
 
-  // Match on email OR phone, whichever the person typed. Phones are stored in
-  // assorted formats, so compare on digits only (last-10 suffix).
+  // Match on email OR phone, whichever the person typed. Phones are stored in assorted
+  // formats, so compare on digits only (last-10 suffix).
   const base =
     `SELECT u.*, UNIX_TIMESTAMP(u.password_changed_at) AS password_changed_ts,
             m.name AS manager_name
        FROM users u
        LEFT JOIN users m ON m.id = u.manager_id
       WHERE `;
-  /*
-   * Three kinds of identifier, resolved in the order that makes each of them
-   * unambiguous: an address has an '@', a number reduces to digits, and a
-   * username is what is left — letters with no '@', which by construction can
-   * be neither of the other two (see directoryService.isUsername).
-   */
+  // Three kinds of identifier, resolved in the order that makes each of them unambiguous: an
+  // address has an '@', a number reduces to digits, and a username is what is left - letters
+  // with no '@', which by construction can be neither of the other two (see
+  // directoryService.isUsername).
   const phoneKey = normalizePhone(email);
   const usernameKey = normalizeUsername(email);
   let where; let params;
@@ -288,10 +229,8 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
   const [rows] = await db.execute(`${base}${where} AND u.status = 'active' LIMIT 1`, params);
   const user = rows[0];
 
-  // Always run the compare, even when the email matched nothing — against a
-  // burned dummy hash. Short-circuiting on !user answered "no such account" in
-  // ~5ms and "wrong password" in ~250ms, so response time alone enumerated
-  // which emails exist in an organisation.
+  // Always run the compare, even when the email matched nothing - against a burned dummy
+  // hash.
   const passwordOk = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
   if (!user || !passwordOk) {
     await recordFailedAttempt(loginId);
@@ -325,23 +264,19 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     manager_name: user.manager_name,
     points: user.points,
     avatar_initials: user.avatar_initials || (user.name || '').charAt(0).toUpperCase(),
-    // Bulk-imported employees sign in with a derived temporary password and can
-    // do nothing else until they replace it (enforced server-side in the auth
-    // middleware). The flag rides along so the UI can show the change screen
-    // immediately rather than bouncing off a 403.
+    // Bulk-imported employees sign in with a derived temporary password and can do nothing
+    // else until they replace it (enforced server-side in the auth middleware).
     must_change_password: !!user.must_change_password,
     org_name: tenant.name,
     org_slug: tenant.slug,
   };
 
   await clearFailedAttempts(loginId);
-  // Keep the login directory current (and self-heal it for a pre-existing user
-  // who was resolved by the tenant scan rather than a directory row).
+  // Keep the login directory current (and self-heal it for a pre-existing user who was
+  // resolved by the tenant scan rather than a directory row).
   indexUser(tenant, user).catch(() => {});
-  // Stamp the organisation's last sign-in so the platform console can report
-  // which orgs have gone quiet. Best-effort and fire-and-forget: an activity
-  // metric must never be able to fail a login. Tenant id 0 is the built-in
-  // fallback tenant, which has no registry row to update.
+  // Stamp the organisation's last sign-in so the platform console can report which orgs have
+  // gone quiet.
   if (tenant.id) {
     masterDb()
       .execute('UPDATE tenants SET last_login_at = NOW() WHERE id = ?', [tenant.id])
@@ -361,10 +296,7 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
   return { user: session, token };
 }
 
-/**
- * Forgot-password: always returns a generic success (anti-enumeration).
- * Emails a reset link only when SMTP is enabled/configured.
- */
+/** Forgot-password: always returns a generic success (anti-enumeration). */
 export async function forgotPassword({ email, orgSlug, host }) {
   email = String(email || '').trim().toLowerCase();
   const cleanSlug = sanitizeSlug(orgSlug);
@@ -379,7 +311,7 @@ export async function forgotPassword({ email, orgSlug, host }) {
   const tenant = cleanSlug
     ? await resolveTenant({ slug: cleanSlug, host })
     : await resolveTenantByLogin(email);
-  if (!tenant) return generic; // unknown email → same generic answer (no enumeration)
+  if (!tenant) return generic; // unknown email same generic answer (no enumeration)
   const db = getTenantPool(tenant);
 
   const [rows] = await db.execute(
@@ -392,26 +324,10 @@ export async function forgotPassword({ email, orgSlug, host }) {
   // Invalidate existing tokens, then issue a new one (1h TTL).
   await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
 
-  // Split token: <selector>.<verifier>. The selector is an indexed lookup so we
-  // run exactly ONE bcrypt compare. Previously verification bcrypt-compared the
-  // candidate against every unexpired row in the table, which let anyone burn
-  // arbitrary CPU by posting junk tokens.
+  // Split token: <selector>.<verifier>.
   const { token, selector, verifierHash } = await makeResetToken();
 
-  /*
-   * The database computes the expiry, and that is not a style preference.
-   *
-   * This used to write `new Date(Date.now() + 3600e3).toISOString()` — a UTC
-   * string — into a column that findResetToken() then compares with
-   * `expires_at > NOW()`, where NOW() is MySQL's LOCAL time. On any server
-   * running ahead of UTC the token was already in the past the moment it was
-   * written: a deployment in India (UTC+5:30) issued reset links that were
-   * five and a half hours expired on arrival, and every one of them answered
-   * "Invalid or expired reset link. Please request a new one."
-   *
-   * login_otps has always done it this way, which is exactly why one-time
-   * codes worked while reset links did not.
-   */
+  // The database computes the expiry, and that is not a style preference.
   await db.execute(
     `INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at)
           VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
@@ -425,7 +341,7 @@ export async function forgotPassword({ email, orgSlug, host }) {
     const htmlBody =
       '<!DOCTYPE html><html><head><meta charset="UTF-8"></head>' +
       '<body style="font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#1e293b;line-height:1.6">' +
-      '<h2 style="color:#4f46e5;margin-top:0">IFQM – Password Reset Request</h2>' +
+      '<h2 style="color:#4f46e5;margin-top:0">IFQM - Password Reset Request</h2>' +
       `<p>Hi ${escapeHtml(user.name)},</p>` +
       '<p>We received a request to reset your Kalpion account password. Click the button below to set a new password. This link expires in 1 hour.</p>' +
       `<p style="margin:24px 0"><a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#4f46e5;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px">Reset Password</a></p>` +
@@ -443,26 +359,8 @@ export async function forgotPassword({ email, orgSlug, host }) {
 }
 
 /** Reset password given a valid, unexpired token. */
-/*
- * ── Resetting a password with a code instead of a link ─────────────────────
- *
- * The emailed link still works and is unchanged. This exists because a link is
- * useless to the people most likely to need it: somebody whose work address is
- * the account they cannot get into, somebody on a phone with no access to that
- * mailbox, somebody at a plant with a shared terminal. A code sent to their own
- * mobile reaches them where they are.
- *
- * It deliberately ends in the SAME place the emailed link does — a row in
- * password_reset_tokens, redeemed by the existing /auth/reset-password. One way
- * to actually set a password, two ways to earn the right to.
- */
-/**
- * Enough of an address or number to recognise, not enough to learn.
- *
- * Only ever returned to somebody who has just proved they know a valid
- * identifier for the account, and only far enough for them to know which of
- * their own devices to look at.
- */
+// The emailed link still works and is unchanged.
+/** Enough of an address or number to recognise, not enough to learn. */
 function maskDestination(value) {
   const v = String(value || '').trim();
   if (!v) return '';
@@ -483,8 +381,8 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
   const { key, idType } = verification.classify(identifier);
   if (!key) throw badRequest('Enter your username, registered email address or mobile number.');
 
-  // Same anti-enumeration rule as forgotPassword: an unknown identifier gets
-  // the identical answer, so this cannot be used to test who has an account.
+  // Same anti-enumeration rule as forgotPassword: an unknown identifier gets the identical
+  // answer, so this cannot be used to test who has an account.
   const tenant = await resolveTenantByLogin(key);
   if (!tenant) return generic;
 
@@ -507,28 +405,15 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
   }
   if (!user) return generic;
 
-  /*
-   * Where the code actually goes.
-   *
-   * An address or a number IS a destination, so it is used as typed. A username
-   * is not — it names the account and nothing more — so the code goes to the
-   * mobile number on the account, falling back to the address. The number is
-   * preferred because it is the field every account is required to have, and
-   * because somebody resetting a password is frequently locked out of the very
-   * mailbox an email would go to.
-   *
-   * The verification row is keyed on THAT destination rather than on what was
-   * typed, because verifyCode() looks the code up by identifier — key it on the
-   * username and the code that arrives by SMS could never be redeemed.
-   */
+  // Where the code actually goes.
   let destination = key;
   if (idType === 'username') {
     const phone = String(user.phone || '').trim();
     const email = String(user.email || '').trim().toLowerCase();
     destination = phone || email;
     if (!destination) {
-      // No address and no number: nothing can be sent. Answered generically so
-      // this cannot be used to discover which accounts are unreachable.
+      // No address and no number: nothing can be sent. Answered generically so this cannot be
+      // used to discover which accounts are unreachable.
       logger.warn(`auth: reset by username "${key}" has no email or phone on the account`);
       return generic;
     }
@@ -542,21 +427,12 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
     userId: user.id,
     ip: meta.ip,
   });
-  /*
-   * The destination is echoed back — masked — because the caller typed a
-   * username and has no way of knowing where the code went. "We sent a code"
-   * with no hint of where is how somebody sits waiting on the wrong device.
-   */
+  // The destination is echoed back - masked - because the caller typed a username and has no
+  // way of knowing where the code went.
   return { ...generic, sent_to: maskDestination(destination) };
 }
 
-/**
- * Exchange a correct code for a reset token.
- *
- * The token is short-lived and single-use exactly like the emailed one, and
- * every other outstanding token for the account is burned first — so a reset
- * begun by somebody who should not have started one cannot be finished later.
- */
+/** Exchange a correct code for a reset token. */
 export async function verifyPasswordResetCode({ identifier, code } = {}) {
   const { row } = await verification.verifyCode({ identifier, code, purpose: 'password_reset' });
   if (!row?.tenant_slug || !row?.user_id) {
@@ -572,8 +448,8 @@ export async function verifyPasswordResetCode({ identifier, code } = {}) {
 
   await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
   const { token, selector, verifierHash } = await makeResetToken();
-  // Same clock as the row it is compared against — see the note in
-  // forgotPassword. Fifteen minutes, not the hour a link gets.
+  // Same clock as the row it is compared against - see the note in forgotPassword. Fifteen
+  // minutes, not the hour a link gets.
   await db.execute(
     `INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at)
           VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE))`,
@@ -584,8 +460,8 @@ export async function verifyPasswordResetCode({ identifier, code } = {}) {
   return {
     success: true,
     verified: true,
-    // Fifteen minutes, not the hour an emailed link gets: the person is holding
-    // the code and finishing now, so there is no reason to leave it lying open.
+    // Fifteen minutes, not the hour an emailed link gets: the person is holding the code and
+    // finishing now, so there is no reason to leave it lying open.
     token,
     org_slug: tenant.slug,
     expires_in: 900,
@@ -609,10 +485,8 @@ export async function resetPassword({ token, password, orgSlug, host }) {
 
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-  // Stamping password_changed_at is what actually kills the old sessions: the
-  // auth middleware rejects any JWT issued before this moment. Without it, a
-  // stolen token stayed usable for the rest of its 8-hour life even after the
-  // victim reset their password.
+  // Stamping password_changed_at is what actually kills the old sessions: the auth
+  // middleware rejects any JWT issued before this moment.
   await db.execute(
     'UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE id = ?',
     [hash, matched.user_id]
@@ -637,17 +511,7 @@ export async function checkResetToken({ token, orgSlug, host }) {
   return { success: true, valid: !!matched };
 }
 
-/**
- * Change the password of the signed-in user.
- *
- * Used both for a normal voluntary change and for the forced change that a
- * bulk-imported employee must complete on first login.
- *
- * Returns a FRESH token. Stamping password_changed_at is what revokes tokens
- * issued before the change — including the one the caller is holding right now —
- * so without reissuing here the user would be logged out by the very act of
- * securing their account.
- */
+/** Change the password of the signed-in user. */
 export async function changePassword(db, user, { currentPassword, newPassword, orgSlug }) {
   currentPassword = String(currentPassword ?? '');
   newPassword = String(newPassword ?? '');
@@ -663,14 +527,14 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
   const row = rows[0];
   if (!row) throw unauthorized('Your account is no longer active.');
 
-  // Verify the current password even during a forced change: possession of a
-  // token alone must not be enough to overwrite the credential.
+  // Verify the current password even during a forced change: possession of a token alone
+  // must not be enough to overwrite the credential.
   if (!(await bcrypt.compare(currentPassword, row.password_hash))) {
     throw badRequest('Your current password is incorrect.');
   }
 
-  // The new password gets the full policy — the temporary one was exempt
-  // precisely because it was temporary.
+  // The new password gets the full policy - the temporary one was exempt precisely because
+  // it was temporary.
   assertPasswordStrength(newPassword, { label: 'New password' });
 
   if (await bcrypt.compare(newPassword, row.password_hash)) {
@@ -686,9 +550,8 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
     [hash, user.id]
   );
 
-  // Read the stamp back rather than assuming what NOW() produced — this value
-  // must match the row exactly or the fresh token below would be rejected by
-  // the middleware as stale.
+  // Read the stamp back rather than assuming what NOW() produced - this value must match the
+  // row exactly or the fresh token below would be rejected by the middleware as stale.
   const [after] = await db.execute(
     'SELECT UNIX_TIMESTAMP(password_changed_at) AS pwd_ts FROM users WHERE id = ?',
     [user.id]
@@ -697,20 +560,20 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
 
   logger.info(`auth: password changed for user ${user.id}`);
 
-  // Reissue. The stamp above invalidated every token issued earlier — including
-  // the one the caller used to make this request — so without a fresh token the
-  // user would be logged out by the very act of securing their account.
+  // Reissue. The stamp above invalidated every token issued earlier - including the one the
+  // caller used to make this request - so without a fresh token the user would be logged out
+  // by the very act of securing their account.
   const session = { ...user, must_change_password: false };
   const token = signToken({ user: session, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
 
   return { success: true, message: 'Password updated.', token, user: session };
 }
 
-// ── Reset-token helpers ─────────────────────────────────────────────────────
+// Reset-token helpers
 const BCRYPT_ROUNDS = 12; // ~250ms; was 10
 
-// A real hash of nothing anyone knows, used to keep the compare running when
-// the email matched no account (see login). Module-load cost, paid once.
+// A real hash of nothing anyone knows, used to keep the compare running when the email
+// matched no account (see login). Module-load cost, paid once.
 const DUMMY_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), BCRYPT_ROUNDS);
 
 /** Mint a `<selector>.<verifier>` reset token. Only the verifier is hashed. */
@@ -724,7 +587,7 @@ async function makeResetToken() {
   };
 }
 
-/** Look a token up by selector (one indexed row → one bcrypt compare). */
+/** Look a token up by selector (one indexed row one bcrypt compare). */
 async function findResetToken(db, token) {
   const dot = token.indexOf('.');
   if (dot < 1) return null;
@@ -741,11 +604,9 @@ async function findResetToken(db, token) {
   return (await bcrypt.compare(verifier, row.token_hash)) ? row : null;
 }
 
-/**
+/*
  * One password policy for every path that sets a password (self-service reset,
- * admin-created accounts, new tenant admins). Length is the control that
- * actually matters (NIST SP 800-63B); we additionally reject the handful of
- * passwords that show up first in every credential-stuffing list.
+ * admin-created accounts, new tenant admins).
  */
 const WORST_PASSWORDS = new Set([
   'password', 'password1', 'password123', '12345678', '123456789', '1234567890',

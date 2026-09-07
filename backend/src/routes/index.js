@@ -1,7 +1,4 @@
-/**
- * API route aggregator. Mounts each feature module under /api/*.
- * Modules are added here as the migration proceeds (users, ideas, votes, ...).
- */
+/** API route aggregator. Mounts each feature module under /api/*. */
 import { Router } from 'express';
 import authRoutes from './authRoutes.js';
 import userRoutes from './userRoutes.js';
@@ -31,10 +28,7 @@ const router = Router();
 // Liveness: "the process is up". Cheap enough for a load balancer to hit often.
 router.get('/health', (_req, res) => res.json({ success: true, status: 'ok' }));
 
-// Readiness: "this instance can actually serve traffic". A process that is
-// running but cannot reach its database is worse than one that is down — it
-// answers every request with a 500. Point the load balancer / orchestrator at
-// this one so a DB-less instance is pulled out of rotation instead.
+// Readiness: "this instance can actually serve traffic".
 router.get('/ready', async (_req, res) => {
   try {
     await masterDb().query('SELECT 1');
@@ -46,15 +40,15 @@ router.get('/ready', async (_req, res) => {
 });
 
 router.use('/auth', authRoutes);
-// Public: an MSME applying for its own workspace. Everything it creates is a
-// queued application — provisioning only happens on platform-admin approval.
+// Public: an MSME applying for its own workspace. Everything it creates is a queued
+// application - provisioning only happens on platform-admin approval.
 router.use('/registrations', registrationRoutes);
 router.use('/users', userRoutes);
 router.use('/ideas', ideaRoutes);
 router.use('/votes', votingRoutes);
 router.use('/comments', commentRoutes);
 router.use('/leaderboard', leaderboardRoutes);
-// Rewards & Recognition — the leaderboard as a document HR can act on.
+// Rewards & Recognition - the leaderboard as a document HR can act on.
 router.use('/rewards', rewardsRoutes);
 router.use('/score', scoreRoutes);
 router.use('/notifications', notificationRoutes);

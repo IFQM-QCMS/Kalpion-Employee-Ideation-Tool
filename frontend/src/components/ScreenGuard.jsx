@@ -2,36 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { loadOrgSettings } from '../utils/orgSettings';
 
-/*
-  Screen guard — wraps every screen that puts idea text on display: All Ideas,
-  the Review Queue, Rejected Ideas and the Idea Board.
-
-  ── What it actually does ──────────────────────────────────────────────────
-    • Blanks the idea content the moment the window loses focus or the tab is
-      hidden. That is the part that bites: Snipping Tool, Win+Shift+S, macOS
-      Cmd+Shift+4 and most capture utilities take focus away from the browser
-      first, so what they capture is the covered screen, not the ideas.
-    • Lays the reader's own name, employee number and the current time over the
-      content, tiled, so anything that does get captured is attributable.
-    • Suppresses right-click, text selection, copy, cut and drag inside the
-      guarded area, and intercepts Ctrl/Cmd+C, +X, +S, +P and +U.
-    • Blanks the content for printing and print-to-PDF.
-    • Clears the clipboard after PrintScreen.
-
-  ── What it cannot do ──────────────────────────────────────────────────────
-  No web page can truly prevent a screenshot. A phone camera pointed at the
-  monitor, a capture card, a screen recorder started before the page loaded, or
-  a second machine mirroring the display are all outside anything a browser can
-  reach. Treat this as a strong deterrent that makes casual capture awkward and
-  any leak traceable — not as a guarantee.
-
-  The real protection is that the server never sends idea text to people who are
-  not entitled to read it. See redactSolution() in ideaService: that is
-  enforcement. This is discouragement layered on top.
-
-  On by default. An organisation can switch it off with the
-  `idea_screen_protection` setting in the admin panel.
-*/
+// Screen guard - wraps every screen that puts idea text on display: All Ideas, the Review
+// Queue, Rejected Ideas and the Idea Board.
 
 export default function ScreenGuard({ children }) {
   const { user } = useAuth();
@@ -54,10 +26,9 @@ export default function ScreenGuard({ children }) {
     const reveal  = () => setHidden(false);
     const onVisibility = () => setHidden(document.visibilityState !== 'visible');
 
-    // Form fields are exempt. Blocking selection everywhere inside the guard
-    // also blocked selecting text in the search box and the date pickers, which
-    // made the filters unusable — and nobody leaks an idea by selecting their
-    // own search term.
+    // Form fields are exempt. Blocking selection everywhere inside the guard also blocked
+    // selecting text in the search box and the date pickers, which made the filters unusable -
+    // and nobody leaks an idea by selecting their own search term.
     const isFormField = (el) => !!el?.closest?.('input, textarea, select, [contenteditable="true"]');
     const inGuarded = (e) => e.target?.closest?.('[data-guard]') && !isFormField(e.target);
     const block = (e) => { if (inGuarded(e)) { e.preventDefault(); return false; } return true; };
@@ -65,9 +36,8 @@ export default function ScreenGuard({ children }) {
     const onKey = (e) => {
       const k = (e.key || '').toLowerCase();
       if (k === 'printscreen') {
-        // The image is already taken by the time this fires — the operating
-        // system does not ask the page. Blanking the screen and wiping the
-        // clipboard is the whole of what is left to do.
+        // The image is already taken by the time this fires - the operating system does not ask
+        // the page.
         setHidden(true);
         navigator.clipboard?.writeText(' ').catch(() => {});
         setTimeout(() => setHidden(false), 1400);

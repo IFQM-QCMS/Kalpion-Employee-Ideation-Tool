@@ -5,14 +5,7 @@ import { platformApi, saveBlob } from '../services/api';
 import { fmtDate } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 
-/*
- * The plan catalogue — what IFQM sells.
- *
- * Prices are typed and shown in rupees; the server keeps them in paise. That is
- * not pedantry: ₹2,500.10 has no exact form as a decimal number, and the error
- * compounds the moment 18% tax is applied to it. The conversion happens once,
- * at the boundary, so nothing in between can drift.
- */
+// The plan catalogue - what IFQM sells.
 
 const CYCLES = [
   ['monthly', 'Monthly'],
@@ -20,9 +13,7 @@ const CYCLES = [
   ['half_yearly', 'Half-yearly'],
   ['yearly', 'Yearly (1 year)'],
   ['one_time', 'One-time'],
-  // No end date at all, unlike one_time which is a long fixed term. Assigning a
-  // lifetime plan marks the organisation exempt with no period end, so the
-  // nightly lapse sweep never looks at it.
+  // No end date at all, unlike one_time which is a long fixed term.
   ['lifetime', 'Lifetime (never expires)'],
 ];
 const TIERS = [
@@ -48,37 +39,18 @@ const BLANK = {
   api_quota_monthly: '', support_level: 'standard', status: 'active',
 };
 
-/*
- * A sensible monthly request allowance for a plan with this many users.
- * Mirrors suggestQuota() in the backend's planService — the same arithmetic,
- * shown next to the field so an operator can see whether the number they typed
- * is in the right order of magnitude.
- *
- * A signed-in person costs roughly 500 requests on a working day, so about
- * 11,000 a month; 15,000 leaves room for a heavy user, an import and exports.
- */
+// A sensible monthly request allowance for a plan with this many users.
 function suggestQuota(maxUsers) {
   const n = parseInt(maxUsers, 10);
   if (!Number.isFinite(n) || n <= 0) return null;
   return Math.max(100000, n * 15000);
 }
 
-/* A four-step configurator, because a plan has four unrelated kinds of decision
-   in it and one long form makes people miss the ones that matter. */
+// A four-step configurator, because a plan has four unrelated kinds of decision in it and
+// one long form makes people miss the ones that matter.
 const STEPS = ['Info', 'Pricing', 'Limits', 'Review'];
 
-/*
- * Defined at module scope, NOT inside PlanConfigurator.
- *
- * It used to live inside the component, which meant every keystroke produced a
- * brand-new function identity for `Field`. React compares element types by
- * identity, so a new type is a different component: it unmounted the old
- * subtree and mounted a fresh one, and the <input> inside lost focus on every
- * character. The form could only be filled one letter at a time, clicking back
- * into the box between each.
- *
- * Anything that renders inputs has to keep a stable identity across renders.
- */
+// Defined at module scope, NOT inside PlanConfigurator.
 const Field = ({ label, children, hint, required }) => (
   <div className="form-group">
     <label>{label}{required && <span style={{ color: 'var(--danger)', marginLeft: 3 }}>*</span>}</label>
@@ -120,29 +92,20 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
     setError('');
   };
 
-  /*
-   * Numeric fields accept digits only, filtered as they are typed.
-   *
-   * inputMode="numeric" is a hint to a phone's keyboard and nothing more: on a
-   * desktop it does not stop a single letter. The amount field accepted text,
-   * which was then stripped to 0 on save - so a plan could be created for free
-   * because somebody typed the price with the currency name in it and nothing
-   * said otherwise. Filtering on the way in means what is on screen is always
-   * what will be stored.
-   */
+  // Numeric fields accept digits only, filtered as they are typed.
   const setNum = (k, { decimal = false } = {}) => (e) => {
     const raw = String(e.target.value);
     const cleaned = decimal
-      // One decimal point at most; later ones are dropped rather than rejected,
-      // so a stray keypress does not wipe what was already typed.
+      // One decimal point at most; later ones are dropped rather than rejected, so a stray
+      // keypress does not wipe what was already typed.
       ? raw.replace(/[^0-9.]/g, '').replace(/(\.[0-9]*)\./g, '$1')
       : raw.replace(/[^0-9]/g, '');
     setForm((f) => ({ ...f, [k]: cleaned }));
     setError('');
   };
 
-  /* Shown live on the pricing step, because "GST included or excluded" is an
-     18% difference and nobody should have to work it out in their head. */
+  // Shown live on the pricing step, because "GST included or excluded" is an 18% difference
+  // and nobody should have to work it out in their head.
   const preview = (() => {
     const amount = Number(String(form.amount_rupees).replace(/[^0-9.]/g, '')) || 0;
     const rate = Number(form.gst_percent) || 0;
@@ -293,8 +256,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 </label>
               </div>
 
-              {/* An 18% mistake is easy to make and hard to spot, so the split is
-                  shown live rather than left to be worked out. */}
+              {/* An 18% mistake is easy to make and hard to spot, so the split is shown live rather than left to be worked out. */}
               <div style={{
                 background: 'var(--panel-bg)', border: '1px solid var(--border)',
                 borderRadius: 10, padding: '10px 14px', fontSize: 13, marginTop: 4,
@@ -317,7 +279,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
 
               <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, cursor: 'pointer' }}>
                 <input type="checkbox" checked={form.is_custom} onChange={set('is_custom')} />
-                <span>Custom plan — quoted privately, hidden from any public price list</span>
+                <span>Custom plan - quoted privately, hidden from any public price list</span>
               </label>
             </>
           )}
@@ -338,10 +300,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                     placeholder={t('pl.unlimited')} inputMode="numeric" />
                 </Field>
               </div>
-              {/* Sized from the user cap rather than guessed. A cap that is
-                  too small does not degrade the product — it stops it, which is
-                  exactly what happened when a flat 2,000-a-month figure was
-                  applied to page loads. */}
+              {/* Sized from the user cap rather than guessed. */}
               <div className="form-group">
                 <label>{t('pl.monthly_allowance')}<InfoDot term="request_allowance" /></label>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -359,7 +318,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--subtle)', marginTop: 4 }}>
                   {suggestQuota(form.max_users)
-                    ? `About 15,000 requests per permitted user per month — roughly thirty times what `
+                    ? `About 15,000 requests per permitted user per month - roughly thirty times what `
                       + `ordinary use costs, so a busy month never reaches it.`
                     : ''}
                 </div>
@@ -424,7 +383,7 @@ function PlanConfigurator({ plan, onClose, onSaved }) {
           {step < STEPS.length - 1
             ? <button className="btn btn-primary" onClick={next}>Next →</button>
             : <button className="btn btn-primary" disabled={busy || !confirm} onClick={save}>
-                {busy ? 'Saving…' : 'Save plan configuration'}
+                {busy ? 'Saving...' : 'Save plan configuration'}
               </button>}
         </div>
       </div>
@@ -586,7 +545,7 @@ export default function PlatformPlansPage() {
                 <td>
                   <div style={{ fontWeight: 700, color: 'var(--heading)' }}>{p.name}</div>
                   <div className="cell-clamp" style={{ maxWidth: 240, fontSize: 11.5, color: 'var(--subtle)' }}
-                    title={p.description || ''}>{p.description || '—'}</div>
+                    title={p.description || ''}>{p.description || '-'}</div>
                   {p.is_lifetime && (
                     <span className="chip chip-success" style={{ fontSize: 10, marginTop: 4 }}>
                       Never expires
@@ -624,10 +583,7 @@ export default function PlatformPlansPage() {
                 </td>
                 <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button className="btn btn-outline btn-sm" onClick={() => setEditing(p)}>Edit</button>
-                  {/* Trial and Lifetime are permanent: the platform depends on
-                      one existing and IFQM's founding members depend on the
-                      other. The server refuses either way; not drawing the
-                      button is the difference between a rule and a bug. */}
+                  {/* Trial and Lifetime are permanent: the platform depends on one existing and IFQM's founding members depend on the other. */}
                   {p.status === 'active' && !p.is_permanent && (
                     <button className="btn btn-outline btn-sm" style={{ marginLeft: 6 }}
                       onClick={() => retire(p)}>Delete</button>

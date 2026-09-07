@@ -1,25 +1,4 @@
-/**
- * Generate a dummy employee sheet for the bulk importer.
- *
- *   node scripts/generate-demo-employees.js [count] [outfile]
- *   node scripts/generate-demo-employees.js 500 ../docs/IFQM_Demo_Employees_500.xlsx
- *
- * Why this exists: demonstrating the tool, load-testing the user list, and
- * exercising the approval chain all need a realistic organisation, and typing
- * one by hand is not realistic. Every constraint the real importer enforces is
- * honoured here, so the output uploads cleanly rather than producing 500 error
- * rows that then have to be read.
- *
- * The important one is the reporting tree. `manager_employee_id` must name
- * somebody who either already exists in the tenant or appears in this same
- * sheet, so managers are generated before the people who report to them and
- * every row points strictly upward. A tree that referenced itself, or referenced
- * a row further down, would import as a pile of orphans and the escalation chain
- * would have nowhere to send anything.
- *
- * The column list is imported from the importer itself rather than restated, so
- * this file cannot drift out of step with the format it is producing.
- */
+/** Generate a dummy employee sheet for the bulk importer. */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
@@ -27,9 +6,9 @@ import { COLUMNS } from '../src/services/userImportService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// ── Deterministic randomness ────────────────────────────────────────────────
-// Seeded on purpose: regenerating the sheet gives the same people, so a demo
-// scripted around "Priya Nair in Quality" does not break on the next run.
+// Deterministic randomness Seeded on purpose: regenerating the sheet gives the same
+// people, so a demo scripted around "Priya Nair in Quality" does not break on the next
+// run.
 let seed = 20260807;
 const rnd = () => {
   seed = (seed * 1103515245 + 12345) & 0x7fffffff;
@@ -38,7 +17,7 @@ const rnd = () => {
 const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
 const int = (lo, hi) => lo + Math.floor(rnd() * (hi - lo + 1));
 
-// ── Name pools ──────────────────────────────────────────────────────────────
+// Name pools
 const MALE = [
   'Arjun', 'Rahul', 'Vikram', 'Suresh', 'Manoj', 'Anil', 'Ramesh', 'Karthik', 'Sandeep',
   'Prakash', 'Deepak', 'Naveen', 'Girish', 'Mahesh', 'Sunil', 'Rajesh', 'Ashok', 'Vinod',
@@ -66,11 +45,7 @@ const DEPARTMENTS = [
   'Design & Engineering', 'Purchase', 'Human Resources', 'Finance & Accounts',
   'Safety & EHS', 'Information Technology', 'Dispatch & Packing',
 ];
-/*
- * A site and the unit that occupies it are the same fact, so they are declared
- * together. Picking them independently produced people in "Plant 1, Coimbatore"
- * when Plant 1 is in Bengaluru.
- */
+// A site and the unit that occupies it are the same fact, so they are declared together.
 const SITES = [
   { business_unit: 'Plant 1', location: 'Bengaluru' },
   { business_unit: 'Plant 2', location: 'Mysuru' },
@@ -79,17 +54,13 @@ const SITES = [
 ];
 const DOMAIN = 'vertexprecision.co.in';
 
-/*
- * The pyramid. Ratios are picked to look like a real mid-size manufacturer:
- * one plant head, a thin layer of senior management, and most of the headcount
- * on the floor. An org chart with 40 managers and 60 workers would exercise the
- * approval chain in a way no real customer ever will.
- */
+// The pyramid. Ratios are picked to look like a real mid-size manufacturer: one plant
+// head, a thin layer of senior management, and most of the headcount on the floor.
 const LAYERS = [
   { role: 'plant_head',         share: 0.002, ageMin: 48, ageMax: 58 },
   { role: 'senior_manager',     share: 0.006, ageMin: 42, ageMax: 54 },
-  // One per department (see DEPARTMENTS above), so every department has an
-  // owner and none of them import with nobody in charge.
+  // One per department (see DEPARTMENTS above), so every department has an owner and none of
+  // them import with nobody in charge.
   { role: 'department_manager', share: 0.024, ageMin: 38, ageMax: 50 },
   { role: 'manager',            share: 0.044, ageMin: 34, ageMax: 48 },
   { role: 'project_lead',       share: 0.060, ageMin: 30, ageMax: 44 },
@@ -106,8 +77,8 @@ function build(count) {
   const byRole = Object.create(null);
   let n = 0;
 
-  // Work out how many of each layer, giving the remainder to 'employee' so the
-  // total lands exactly on `count` however the rounding falls.
+  // Work out how many of each layer, giving the remainder to 'employee' so the total lands
+  // exactly on `count` however the rounding falls.
   const sizes = {};
   let assigned = 0;
   for (const l of LAYERS) {
@@ -126,10 +97,7 @@ function build(count) {
     return addr;
   };
 
-  // Round-robin cursors, one per layer. Managers are handed out in turn rather
-  // than at random: random assignment reliably leaves some managers with no
-  // reports at all and others with twenty, which is not what an org chart looks
-  // like and makes the escalation chain lopsided when demoed.
+  // Round-robin cursors, one per layer.
   const cursor = Object.create(null);
 
   for (const [li, layer] of LAYERS.entries()) {
@@ -141,8 +109,8 @@ function build(count) {
       const salutation = female ? (rnd() < 0.35 ? 'Mrs' : 'Ms') : 'Mr';
       const employeeId = `EMP${String(++n).padStart(4, '0')}`;
 
-      // Everyone reports one layer up. Walk further up only if that layer is
-      // empty, which can only happen on a very small sheet.
+      // Everyone reports one layer up. Walk further up only if that layer is empty, which can
+      // only happen on a very small sheet.
       let manager = null;
       for (let up = li - 1; up >= 0 && !manager; up--) {
         const pool = byRole[LAYERS[up].role];
@@ -153,16 +121,8 @@ function build(count) {
         }
       }
 
-      /*
-       * Which department someone belongs to is decided at the level that owns a
-       * department, and inherited below it.
-       *
-       * Inheriting it all the way from the top was wrong and looked it: the
-       * plant head got one random department, 85% of the layer below copied it,
-       * and by the bottom of the tree 378 of 500 people worked in the Tool Room.
-       * A plant head runs every department, so there is nothing to inherit from
-       * them — the department manager is the first person who actually owns one.
-       */
+      // Which department someone belongs to is decided at the level that owns a department, and
+      // inherited below it.
       let department;
       let site;
       if (layer.role === 'plant_head') {
@@ -205,8 +165,8 @@ function build(count) {
 
 async function main() {
   const count = Math.max(1, parseInt(process.argv[2], 10) || 500);
-  // Defaults into docs/, where the sample sheets and the rest of the project
-  // documentation live. Pass a second argument to write somewhere else.
+  // Defaults into docs/, where the sample sheets and the rest of the project documentation
+  // live. Pass a second argument to write somewhere else.
   const out = path.resolve(__dirname, '..', process.argv[3] || `../docs/IFQM_Demo_Employees_${count}.xlsx`);
   const rows = build(count);
 
@@ -223,13 +183,13 @@ async function main() {
 
   rows.forEach((r) => ws.addRow(r));
 
-  // year_of_birth as text. Left as a number, Excel helpfully reformats 1994 into
-  // a date on some locales and the import then rejects the whole column.
+  // year_of_birth as text. Left as a number, Excel helpfully reformats 1994 into a date on
+  // some locales and the import then rejects the whole column.
   const yobCol = ws.getColumn(COLUMNS.findIndex((c) => c.key === 'year_of_birth') + 1).letter;
   for (let r = 2; r <= rows.length + 1; r++) ws.getCell(`${yobCol}${r}`).numFmt = '@';
   ws.autoFilter = { from: 'A1', to: { row: 1, column: COLUMNS.length } };
 
-  // ── A second sheet, so whoever opens this knows what they are looking at ──
+  // A second sheet, so whoever opens this knows what they are looking at
   const info = wb.addWorksheet('About this file');
   info.columns = [{ width: 26 }, { width: 92 }];
   const line = (a, b, bold = false) => {
@@ -237,7 +197,7 @@ async function main() {
     if (bold) row.font = { bold: true };
     row.alignment = { vertical: 'top', wrapText: true };
   };
-  line('IFQM — demo employee data', '', true);
+  line('IFQM - demo employee data', '', true);
   line('', '');
   line('What this is', `${rows.length} fictional employees for demonstrations and testing. Every name, email address and phone number is invented. No real person's data appears in this file.`);
   line('How to use it', 'Admin → User List → Bulk Import → upload the file. Review the preview, then confirm.');

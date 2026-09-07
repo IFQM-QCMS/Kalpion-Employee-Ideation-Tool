@@ -5,20 +5,7 @@ import { platformApi } from '../services/api';
 import { fmtDate, fmtDateTime } from '../utils/helpers';
 import InfoDot from './InfoDot';
 
-/*
- * Everything about one organisation, in one place.
- *
- * Two halves that were previously nowhere:
- *
- *   The company. Udyam number, GSTIN, PAN, CIN, entity type, sector, size,
- *   turnover, registered address, who applied — all collected once at
- *   registration and then never shown again. It sat in a table nobody looked
- *   at, which meant answering "is this a real company?" involved a database
- *   client.
- *
- *   The money. Which plan they are on, whether they are in a trial, how many
- *   days are left, and the controls to change any of it.
- */
+// Everything about one organisation, in one place.
 
 const ENTITY_LABEL = {
   proprietorship: 'Sole proprietorship', partnership: 'Partnership firm', llp: 'LLP',
@@ -27,13 +14,13 @@ const ENTITY_LABEL = {
 };
 const CATEGORY_LABEL = { micro: 'Micro', small: 'Small', medium: 'Medium' };
 const TURNOVER_LABEL = {
-  under_50l: 'Under ₹50 lakh', '50l_2cr': '₹50 lakh – ₹2 crore', '2cr_10cr': '₹2 – 10 crore',
-  '10cr_50cr': '₹10 – 50 crore', '50cr_250cr': '₹50 – 250 crore', above_250cr: 'Above ₹250 crore',
+  under_50l: 'Under ₹50 lakh', '50l_2cr': '₹50 lakh - ₹2 crore', '2cr_10cr': '₹2 - 10 crore',
+  '10cr_50cr': '₹10 - 50 crore', '50cr_250cr': '₹50 - 250 crore', above_250cr: 'Above ₹250 crore',
 };
 const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
-/* A label/value pair. Renders an em dash rather than nothing when a field was
-   never supplied, so a gap reads as "not given" and not as a broken screen. */
+// A label/value pair. Renders an em dash rather than nothing when a field was never
+// supplied, so a gap reads as "not given" and not as a broken screen.
 function Row({ label, value, mono }) {
   return (
     <div style={{ display: 'flex', gap: 12, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
@@ -42,7 +29,7 @@ function Row({ label, value, mono }) {
         flex: 1, fontSize: 13, color: 'var(--text)', fontWeight: 500,
         fontFamily: mono ? 'ui-monospace, monospace' : undefined,
         overflowWrap: 'anywhere',
-      }}>{value || <span style={{ color: 'var(--subtle)' }}>—</span>}</div>
+      }}>{value || <span style={{ color: 'var(--subtle)' }}>-</span>}</div>
     </div>
   );
 }
@@ -121,7 +108,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
 
   return (
     <>
-      {/* ── Subscription ────────────────────────────────────────────── */}
+      {/* Subscription */}
       <Card title="Subscription and billing" info="billing_status">
         {loading ? <div className="empty-state"><div className="spinner"></div></div> : (
           <>
@@ -157,8 +144,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
               </div>
             </div>
 
-            {/* Controls. Deliberately plain: this is a decision a person makes on
-                a phone call, not a workflow. */}
+            {/* Controls. Deliberately plain: this is a decision a person makes on a phone call, not a workflow. */}
             <div style={{
               marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)',
               display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end',
@@ -166,10 +152,10 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
               <div className="form-group" style={{ margin: 0, minWidth: 200 }}>
                 <label style={{ fontSize: 12 }}>Plan</label>
                 <select className="form-control" value={planId} onChange={(e) => setPlanId(e.target.value)}>
-                  <option value="">Choose a plan…</option>
+                  <option value="">Choose a plan...</option>
                   {plans.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — {money(p.total_rupees)} {p.cycle_label.toLowerCase()}
+                      {p.name} - {money(p.total_rupees)} {p.cycle_label.toLowerCase()}
                     </option>
                   ))}
                 </select>
@@ -206,15 +192,12 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
               </button>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--subtle)', marginTop: 8 }}>
-              Trial days are counted from today, not added to what is left — “30 days” means thirty
+              Trial days are counted from today, not added to what is left - “30 days” means thirty
               days from now. Recording a payment extends the period and reinstates an organisation
               that was held for non-payment.
             </div>
 
-            {/* Usage against the plan's allowance. Shown so the platform team
-                sees somebody approaching a limit before their staff do — the
-                failure mode last time was a customer finding out when their
-                screens stopped working. */}
+            {/* Usage against the plan's allowance. */}
             {sub?.quota?.monthly != null && (
               <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between',
@@ -254,8 +237,8 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
                   {sub.history.map((h) => (
                     <div key={h.id} style={{ fontSize: 12, padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                       <strong>{h.event.replace(/_/g, ' ')}</strong>
-                      {h.from_plan_name && h.to_plan_name && <> — {h.from_plan_name} → {h.to_plan_name}</>}
-                      {!h.from_plan_name && h.to_value && <> — {h.to_value}</>}
+                      {h.from_plan_name && h.to_plan_name && <> - {h.from_plan_name} → {h.to_plan_name}</>}
+                      {!h.from_plan_name && h.to_value && <> - {h.to_value}</>}
                       {h.note && <span style={{ color: 'var(--text-muted)' }}> · {h.note}</span>}
                       <div style={{ color: 'var(--subtle)', fontSize: 11 }}>
                         {fmtDateTime(h.created_at)}{h.actor_name ? ` · ${h.actor_name}` : ' · automatic'}
@@ -269,7 +252,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
         )}
       </Card>
 
-      {/* ── Usage ───────────────────────────────────────────────────── */}
+      {/* Usage */}
       <Card title="What they are actually using">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
           {[
@@ -307,7 +290,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
         </div>
       </Card>
 
-      {/* ── The company ─────────────────────────────────────────────── */}
+      {/* The company */}
       <Card title="Company details" info="registration_queue">
         {!r ? (
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>

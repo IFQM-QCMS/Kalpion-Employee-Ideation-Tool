@@ -1,17 +1,11 @@
-/**
- * Small, dependency-free chart primitives for the analytics dashboards.
- *
- * Colours follow the validated categorical palette (fixed order, never cycled
- * past 8 — fold the rest into "Other"): blue, orange, aqua, yellow, magenta,
- * green, violet, red. Status colours are kept separate and reserved.
- */
+/** Small, dependency-free chart primitives for the analytics dashboards. */
 
 // Categorical hues in fixed order (light-mode values; each clears CVD checks).
 export const CHART_COLORS = [
   '#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948',
 ];
 
-// Reserved status colours (semantic — never reused as "series N").
+// Reserved status colours (semantic - never reused as "series N").
 export const STATUS_COLORS = {
   Submitted: '#2a78d6', 'Under Review': '#eda100', Approved: '#1baf7a',
   Rejected: '#e34948', Implemented: '#4a3aa7', Draft: '#94a3b8',
@@ -20,19 +14,13 @@ export const STATUS_COLORS = {
 
 export const colorAt = (i) => CHART_COLORS[i % CHART_COLORS.length];
 
-/**
- * A donut/ring chart. `data` = [{ label, value, color }].
- * Renders a segmented ring with a small gap between slices and an optional
- * centred figure. Static (no animation) — reads clearly in print and screenshots.
- */
+/** A donut/ring chart. `data` = [{ label, value, color }]. */
 export function Donut({ data = [], size = 168, thickness = 26, centerValue, centerLabel }) {
   const clean = data.filter((d) => Number(d.value) > 0);
   const total = clean.reduce((s, d) => s + Number(d.value), 0);
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
-  // A small gap between slices. Only when there are ≥2 slices, and never bigger
-  // than a fraction of the smallest slice. Caps are BUTT — round caps on a thick
-  // ring extend ~thickness/2 past each arc and make neighbours overlap.
+  // A small gap between slices.
   const GAP = clean.length > 1 ? 2 : 0;
   let offset = 0;
 
@@ -86,7 +74,7 @@ export function Legend({ items = [], showValue = true }) {
   );
 }
 
-// Catmull-Rom → cubic-bezier smoothing for a flowing line.
+// Catmull-Rom cubic-bezier smoothing for a flowing line.
 function smoothPath(pts) {
   if (!pts.length) return '';
   if (pts.length < 2) return `M${pts[0].x},${pts[0].y}`;
@@ -102,10 +90,7 @@ function smoothPath(pts) {
 
 let _uid = 0;
 
-/**
- * A smooth gradient area/line chart. `data` = [{ label, value }].
- * Scales uniformly to its container width; dots carry a native hover tooltip.
- */
+/** A smooth gradient area/line chart. `data` = [{ label, value }]. */
 export function AreaChart({ data = [], color = '#2a78d6', height = 190 }) {
   const W = 580, H = height, padL = 10, padR = 10, padT = 18, padB = 26;
   const id = `ac${++_uid}`;
@@ -154,8 +139,7 @@ export function Gauge({ value = 0, max = 100, size = 132, thickness = 13, color 
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={thickness}
           strokeLinecap="round" strokeDasharray={`${frac * c} ${c}`} />
       </g>
-      {/* 0.26 of the gauge width made a two-digit score the loudest thing on the
-          analytics page — louder than the KPI figures it is a detail of. */}
+      {/* 0.26 of the gauge width made a two-digit score the loudest thing on the analytics page - louder than the KPI figures it is a detail of. */}
       <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.19} fontWeight="800" fill="var(--heading)">{value}</text>
       {label && <text x="50%" y="65%" textAnchor="middle" fontSize={size * 0.1} fill="var(--subtle)"
         style={{ textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</text>}

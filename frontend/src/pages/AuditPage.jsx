@@ -30,8 +30,8 @@ export default function AuditPage() {
     setLoading(false);
   }
 
-  // Twenty to a page: the list endpoints already bound what they return,
-  // but rendering every row was the browser's cost, not the server's.
+  // Twenty to a page: the list endpoints already bound what they return, but rendering every
+  // row was the browser's cost, not the server's.
   const pager = usePager(rows);
 
   return (
@@ -60,11 +60,7 @@ export default function AuditPage() {
           )}
           {pager.slice.map((w, i) => (
             <tr key={i}>
-              {/*
-                Date AND time. An audit trail that says only "23 Aug" cannot
-                order two decisions made on the same day, which is the question
-                it exists to answer — and on a busy idea that is most of them.
-              */}
+              {/* Date AND time. An audit trail that says only "23 Aug" cannot order two decisions made on the same day, which is the question it exists to answer - and on a busy idea that is most of them. */}
               <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(w.created_at)}</td>
               <td>
                 <strong>{w.idea_code}</strong>
@@ -72,7 +68,7 @@ export default function AuditPage() {
               </td>
               <td><span className={`badge ${statusBadge(w.action)}`}>{translateStatus(w.action, t)}</span></td>
               <td>{w.actor_name} <small>({formatRole(w.actor_role, t)})</small></td>
-              <td>{w.comment || '—'}</td>
+              <td>{w.comment || '-'}</td>
             </tr>
           ))}
         </tbody>

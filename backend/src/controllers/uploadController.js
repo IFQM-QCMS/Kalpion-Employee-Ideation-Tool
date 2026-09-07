@@ -1,7 +1,4 @@
-/**
- * Upload controller — HTTP layer over uploadService. Maps to api/upload.php.
- * The multipart file is provided by multer as req.file (memory storage).
- */
+/** Upload controller - HTTP layer over uploadService. */
 import { createReadStream } from 'node:fs';
 import * as uploadService from '../services/uploadService.js';
 import { respond } from '../utils/respond.js';
@@ -14,20 +11,19 @@ export const upload = asyncHandler(async (req, res) => {
     section: req.body?.section ?? 'situation',
     file: req.file,
   });
-  // No public URL is returned any more — attachments are fetched through the
-  // authenticated download route below, keyed by attachment id.
+  // No public URL is returned any more - attachments are fetched through the authenticated
+  // download route below, keyed by attachment id.
   return respond(res, { success: true, filename });
 });
 
-/** GET /api/upload/:id/download — authenticated, tenant-scoped file stream. */
+/** GET /api/upload/:id/download - authenticated, tenant-scoped file stream. */
 export const download = asyncHandler(async (req, res) => {
   const slug = req.tenant?.slug || 'ifqm';
   const { absPath, filename, contentType } =
     await uploadService.getDownloadable(req.db, slug, req.user, req.params.id);
 
-  // Always as an attachment, never inline: an uploaded file must not be able to
-  // execute in the app's own origin. nosniff stops the browser second-guessing
-  // the declared type. Private/no-store keeps it out of shared caches.
+  // Always as an attachment, never inline: an uploaded file must not be able to execute in
+  // the app's own origin. nosniff stops the browser second-guessing the declared type.
   res.setHeader('Content-Type', contentType);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");

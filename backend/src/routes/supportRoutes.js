@@ -1,11 +1,4 @@
-/**
- * Support routes — /api/support/*  (tenant side)
- *
- * Any signed-in tenant user may raise a ticket and follow their own. A tenant
- * admin additionally sees every ticket raised inside their own organisation.
- * The platform-side queue lives at /api/platform/tickets (platformRoutes.js) so
- * that everything behind requirePlatformAuth stays in one place.
- */
+/** Any signed-in tenant user may raise a ticket and follow their own. */
 import { Router } from 'express';
 import * as support from '../controllers/supportController.js';
 import { requireAuth } from '../middleware/auth.js';

@@ -4,22 +4,7 @@ import { usersApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
 import InfoDot from '../components/InfoDot';
 
-/*
- * Type a name, get that person's whole reporting line.
- *
- * The org chart already existed, but reading one person's line off a tree of a
- * few thousand people means scrolling and counting indents. The question an
- * administrator actually asks is "who does Priya's idea go to, and after that?"
- * — and that is a straight line, not a tree.
- *
- * The chain is worked out on the server (userService.reportingChain), walking
- * manager_id upward with a visited-set, because a chart that has accidentally
- * been made circular is a real thing and would otherwise spin forever here.
- *
- * Shown top-down: the most senior person first, the person you asked about
- * last, then their direct reports. That is the direction an idea travels, so
- * it reads the same way the escalation works.
- */
+// Type a name, get that person's whole reporting line.
 export default function ReportingLineLookup() {
   const { t } = useLang();
 
@@ -33,17 +18,17 @@ export default function ReportingLineLookup() {
   const timerRef = useRef(null);
   const boxRef   = useRef(null);
 
-  // Close the suggestion list on an outside click, or the list hangs over the
-  // rest of the page after the person has moved on.
+  // Close the suggestion list on an outside click, or the list hangs over the rest of the
+  // page after the person has moved on.
   useEffect(() => {
     const onDoc = (e) => { if (!boxRef.current?.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  /* Search on the server rather than filtering a list held in the browser: a
-     tenant can hold ten thousand employees and pulling them all down to answer
-     one lookup is the thing this screen was changed to stop doing. */
+  // Search on the server rather than filtering a list held in the browser: a tenant can hold
+  // ten thousand employees and pulling them all down to answer one lookup is the thing this
+  // screen was changed to stop doing.
   function onType(value) {
     setQuery(value);
     setError('');

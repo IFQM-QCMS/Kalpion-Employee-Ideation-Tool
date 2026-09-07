@@ -1,10 +1,4 @@
-/**
- * Billing endpoints — HTTP only.
- *
- * Every one of these is platform-staff territory except `mySubscription`, which
- * is how an organisation's own admin sees where their account stands and how
- * long is left.
- */
+/** Billing endpoints - HTTP only. */
 import asyncHandler from '../utils/asyncHandler.js';
 import { respond } from '../utils/respond.js';
 import * as planService from '../services/planService.js';
@@ -12,7 +6,7 @@ import * as subscriptionService from '../services/subscriptionService.js';
 import * as razorpayService from '../services/razorpayService.js';
 import * as usageBilling from '../services/usageBillingService.js';
 
-// ── Plan catalogue ──────────────────────────────────────────────────
+// Plan catalogue
 export const listPlans = asyncHandler(async (req, res) =>
   respond(res, await planService.listPlans({
     includeInactive: String(req.query.include_inactive ?? '1') === '1',
@@ -35,7 +29,7 @@ export const retirePlan = asyncHandler(async (req, res) =>
   respond(res, await planService.retirePlan(req.params.id))
 );
 
-// ── One organisation's subscription ─────────────────────────────────
+// One organisation's subscription
 export const subscription = asyncHandler(async (req, res) =>
   respond(res, await subscriptionService.subscriptionFor(req.params.id))
 );
@@ -62,21 +56,9 @@ export const markPaid = asyncHandler(async (req, res) =>
 );
 
 /** Find everyone whose time is up. `?dry_run=1` reports without changing. */
-/**
- * Every organisation's billing state, for the payments dashboard.
- *
- * One request rather than one per organisation: the screen shows a summary and
- * a table that have to agree with each other, and totals computed in a browser
- * from N separate responses drift the moment one of them fails.
- */
-/*
- * ── The organisation's own billing page ───────────────────────────────────
- *
- * Deliberately readable by any signed-in member of the organisation, and
- * payable only by its administrators. An employee seeing "your company is three
- * days from being cut off" is useful; an employee being able to spend the
- * company's money is not.
- */
+/** Every organisation's billing state, for the payments dashboard. */
+// Deliberately readable by any signed-in member of the organisation, and payable only by
+// its administrators.
 export const myBilling = asyncHandler(async (req, res) => {
   const tenantId = req.tenant?.id;
   if (!tenantId) return respond(res, { success: true, subscription: null, plan: null });
@@ -92,8 +74,8 @@ export const myBilling = asyncHandler(async (req, res) => {
     ...rest,
     events,
     payments: history,
-    // Only what a browser legitimately needs: whether to show the Pay button,
-    // and the PUBLIC key id. The secret is never in this response.
+    // Only what a browser legitimately needs: whether to show the Pay button, and the PUBLIC
+    // key id. The secret is never in this response.
     gateway: {
       enabled: gateway.enabled && !razorpayService.razorpayMissing(gateway).length,
       mode: razorpayService.razorpayMode(gateway.key_id),
@@ -124,7 +106,7 @@ export const payVerify = asyncHandler(async (req, res) =>
   }))
 );
 
-// ── Platform: the gateway's own configuration ──
+// Platform: the gateway's own configuration
 export const gatewayGet = asyncHandler(async (_req, res) => {
   const cfg = await razorpayService.razorpayConfig();
   return respond(res, {
@@ -132,7 +114,7 @@ export const gatewayGet = asyncHandler(async (_req, res) => {
     enabled: cfg.enabled,
     key_id: cfg.key_id,
     business_name: cfg.business_name,
-    // Never the secret — only whether one is on file.
+    // Never the secret - only whether one is on file.
     key_secret_set: !!cfg.key_secret,
     mode: razorpayService.razorpayMode(cfg.key_id),
     missing: razorpayService.razorpayMissing(cfg),
@@ -158,14 +140,8 @@ export const sweep = asyncHandler(async (req, res) =>
   }))
 );
 
-// ── The organisation's own view ─────────────────────────────────────
-/**
- * What the customer sees about their own account.
- *
- * Deliberately thinner than the platform view: the plan, where the dates stand
- * and how long is left. No billing history, no internal notes, and no figures
- * about other organisations.
- */
+// The organisation's own view
+/** What the customer sees about their own account. */
 export const mySubscription = asyncHandler(async (req, res) => {
   const tenantId = req.tenant?.id;
   if (!tenantId) return respond(res, { success: true, subscription: null, plan: null });
@@ -191,21 +167,14 @@ export default {
   myBilling, payStart, payVerify, gatewayGet, gatewayUpdate, gatewayTest, sendMonthlyInvoices,
 };
 
-/* ── Pay as you go ──────────────────────────────────────────────────────── */
+// Pay as you go
 
-/** GET /api/platform/tenants/:id/usage — metered months, newest first. */
+/** GET /api/platform/tenants/:id/usage - metered months, newest first. */
 export const usage = asyncHandler(async (req, res) =>
   respond(res, await usageBilling.usageHistory(req.params.id, { months: req.query.months }))
 );
 
-/**
- * POST /api/platform/tenants/:id/usage/close — fix a month's figures.
- *
- * Idempotent: closing an already-closed month returns what was stored rather
- * than recounting, because the sign-in log behind it is purged on a retention
- * window and a recount would quietly shrink an old invoice. `recount: true`
- * revises a month deliberately.
- */
+/** POST /api/platform/tenants/:id/usage/close - fix a month's figures. */
 export const closeUsageMonth = asyncHandler(async (req, res) =>
   respond(res, await usageBilling.closeMonth(
     req.params.id,

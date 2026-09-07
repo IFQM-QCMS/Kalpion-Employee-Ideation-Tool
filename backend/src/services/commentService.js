@@ -1,35 +1,15 @@
-/**
- * Comment service — Node port of PHP api/comments.php (threaded comments).
- *
- * Actions: list (nested top-level + replies with soft-delete placeholders),
- * add (with validation + parent check), delete (owner or admin/executive/
- * super_admin; soft-delete if the comment has replies, else hard-delete).
- *
- * The nesting + placeholder rules mirror the PHP exactly:
- *   • A soft-deleted comment is kept as a "[deleted]" placeholder ONLY if it
- *     still has replies; otherwise it is omitted from the tree.
- *   • Replies attach to their parent by shared object reference, so arbitrary
- *     depth nests correctly.
- */
+/** Comment service - Node port of PHP api/comments.php (threaded comments). */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
 import { getOrgSettings } from './mailerService.js';
 import { employeeSections } from './ideaSections.js';
 
 const ADMIN_ROLES = ['admin', 'executive', 'super_admin'];
-// The same set ideaService treats as entitled to read a full proposal. Somebody
-// in one of these roles is judging ideas, so the discussion is theirs to read.
+// The same set ideaService treats as entitled to read a full proposal. Somebody in one of
+// these roles is judging ideas, so the discussion is theirs to read.
 const PRIVILEGED = ['manager', 'department_manager', 'senior_manager', 'plant_head',
   'executive', 'admin', 'super_admin'];
 
-/**
- * Is this discussion open to this person?
- *
- * The author, their co-suggesters, the assigned reviewers and anyone senior
- * enough to be reviewing always see it. For everybody else it is one of the
- * sections the organisation controls, and the thread is where an idea gets
- * picked apart in detail - so an organisation that hides the proposal and
- * leaves the comments open has not hidden anything.
- */
+/** Is this discussion open to this person? */
 async function canReadThread(db, user, ideaId) {
   if (!user) return false;
   if (PRIVILEGED.includes(user.role)) return true;
@@ -56,13 +36,13 @@ async function canReadThread(db, user, ideaId) {
   return employeeSections(await getOrgSettings(db)).includes('comments');
 }
 
-// ── LIST ────────────────────────────────────────────────────────────
+// LIST
 export async function list(db, ideaId, user = null) {
   ideaId = Number(ideaId) || 0;
   if (!ideaId) throw badRequest('idea_id is required.');
 
-  // `user` is optional so existing callers keep working; when it is supplied
-  // the organisation's section rules are applied.
+  // `user` is optional so existing callers keep working; when it is supplied the
+  // organisation's section rules are applied.
   if (user && !(await canReadThread(db, user, ideaId))) {
     return { success: true, comments: [], comments_hidden: true };
   }
@@ -83,12 +63,12 @@ export async function list(db, ideaId, user = null) {
     if (r.parent_id) childParentIds.add(Number(r.parent_id));
   }
 
-  // Build the id→comment map, applying soft-delete placeholder rules.
+  // Build the idcomment map, applying soft-delete placeholder rules.
   const commentMap = new Map();
   for (const r of rows) {
     r.replies = [];
     if (Number(r.is_deleted) === 1) {
-      if (!childParentIds.has(Number(r.id))) continue; // no replies → omit
+      if (!childParentIds.has(Number(r.id))) continue; // no replies omit
       r.content = '[deleted]';
       r.user_name = null;
       r.avatar_initials = null;
@@ -97,8 +77,8 @@ export async function list(db, ideaId, user = null) {
     commentMap.set(Number(r.id), r);
   }
 
-  // Nest replies under parents (insertion order = created_at ASC, so parents
-  // are always present before their children).
+  // Nest replies under parents (insertion order = created_at ASC, so parents are always
+  // present before their children).
   const topLevel = [];
   for (const comment of commentMap.values()) {
     const pid = Number(comment.parent_id ?? 0);
@@ -112,7 +92,7 @@ export async function list(db, ideaId, user = null) {
   return { success: true, comments: topLevel };
 }
 
-// ── ADD ─────────────────────────────────────────────────────────────
+// ADD
 export async function add(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const content = String(b.content ?? '').trim();
@@ -141,7 +121,7 @@ export async function add(db, user, b) {
   return { success: true, comment_id: result.insertId };
 }
 
-// ── DELETE ──────────────────────────────────────────────────────────
+// DELETE
 export async function remove(db, user, id) {
   id = Number(id) || 0;
   if (!id) throw badRequest('Comment id is required.');

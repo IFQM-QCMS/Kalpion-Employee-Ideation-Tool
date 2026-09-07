@@ -1,29 +1,8 @@
-/*
- * GSTIN check digit, client side.
- *
- * ── This is a copy, and the server is the authority ────────────────────────
- *
- * backend/src/utils/gstin.js does the same arithmetic and is what actually
- * decides whether a registration is accepted. This exists so an applicant is
- * told at the field rather than after submitting a four-step form — a mistyped
- * GSTIN is worth catching where it was typed.
- *
- * Duplicating an algorithm is normally how two implementations drift apart. It
- * is safe here for one specific reason: this copy can only ever be more
- * permissive in effect, never less. The server re-runs the full check on every
- * submission, so if this one were wrong the worst outcome is a form that lets
- * something through and a server that then refuses it — the same experience as
- * having no client-side check at all. It cannot approve anything.
- *
- * The check character is over the first 14 positions: weights alternate 1, 2
- * from the left, and each product is folded back into base 36 as quotient plus
- * remainder before summing. The fold is what catches a transposition rather
- * than only a substitution.
- */
+// GSTIN check digit, client side.
 const CHARSET = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
-// The gaps are real — there is no 39–96. 97 is Other Territory, 99 is Centre
-// Jurisdiction; both are issued.
+// The gaps are real - there is no 39-96. 97 is Other Territory, 99 is Centre Jurisdiction;
+// both are issued.
 const STATE_CODES = new Set([
   '01', '02', '03', '04', '05', '06', '07', '08', '09', '10',
   '11', '12', '13', '14', '15', '16', '17', '18', '19', '20',

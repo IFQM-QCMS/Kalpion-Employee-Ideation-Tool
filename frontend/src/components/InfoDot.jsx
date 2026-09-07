@@ -1,43 +1,21 @@
 import { useState, useRef, useEffect, useId } from 'react';
 import { useLang } from '../context/LangContext';
 
-/**
- * The small "i" that explains a term.
- *
- * Most of this product's settings are named in the vocabulary of the people who
- * built it — SLA, escalation, threshold, engagement index, slug. An org admin at
- * a 40-person workshop is not obliged to know any of those, and a field whose
- * meaning has to be guessed gets set wrong or left alone. Neither is what the
- * number is for.
- *
- * Behaviour, and why:
- *   • opens on HOVER for a mouse user, so reading a form costs no clicks;
- *   • opens on CLICK/tap as well, because hover does not exist on a touch
- *     device — a hover-only tooltip is invisible to every phone user;
- *   • opens on FOCUS, so it is reachable by keyboard;
- *   • a `title` attribute would have done none of the above reliably, which is
- *     why this is a real element rather than a native tooltip.
- *
- * A click "pins" the bubble open until it is clicked again or focus leaves, so a
- * long explanation cannot vanish because the pointer drifted a few pixels.
- *
- * Usage:  <InfoDot term="sla_days" />          — text from the glossary
- *         <InfoDot text="Anything at all." />  — one-off text
- */
+/** The small "i" that explains a term. */
 export default function InfoDot({ term, text, label }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
-  // Flip the bubble to the right edge when the dot sits near the viewport edge,
-  // otherwise the explanation is clipped off screen exactly when it is needed.
+  // Flip the bubble to the right edge when the dot sits near the viewport edge, otherwise
+  // the explanation is clipped off screen exactly when it is needed.
   const [alignRight, setAlignRight] = useState(false);
   const wrapRef = useRef(null);
   const id = useId();
 
   const body = text || (term ? t(`info.${term}`) : '');
 
-  // A glossary key that has not been written yet must render nothing rather
-  // than an "i" that opens an empty box or, worse, prints the raw key.
+  // A glossary key that has not been written yet must render nothing rather than an "i" that
+  // opens an empty box or, worse, prints the raw key.
   const missing = !body || body === `info.${term}`;
 
   useEffect(() => {
@@ -87,7 +65,7 @@ export default function InfoDot({ term, text, label }) {
           background:var(--surface);border:1px solid var(--border);border-radius:10px;
           box-shadow:0 14px 34px -12px rgba(12,14,20,.42);padding:10px 12px;
           font-size:11.8px;line-height:1.55;color:var(--text);
-          /* A bubble inherits from whatever label it sits in — which is usually
+          /* A bubble inherits from whatever label it sits in - which is usually
              bold, uppercase and letter-spaced. Reset all of it. */
           font-weight:400;text-transform:none;letter-spacing:0;text-align:left;white-space:normal;
           animation:ifqm-info-in .13s ease-out;
@@ -105,8 +83,8 @@ export default function InfoDot({ term, text, label }) {
         aria-expanded={open}
         aria-describedby={open ? id : undefined}
         onClick={(e) => {
-          // Labels wrap their control: without this, clicking the "i" also
-          // focuses (and for a checkbox, toggles) the field being explained.
+          // Labels wrap their control: without this, clicking the "i" also focuses (and for a
+          // checkbox, toggles) the field being explained.
           e.preventDefault();
           e.stopPropagation();
           reposition();

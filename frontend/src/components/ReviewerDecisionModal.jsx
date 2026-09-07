@@ -29,7 +29,7 @@ export default function ReviewerDecisionModal({ ideaId, ideaCode, onClose }) {
     <div className="modal-overlay open" onClick={e => e.target===e.currentTarget && onClose()}>
       <div className="modal" style={{ maxWidth:440 }}>
         <div className="modal-header">
-          <span>{t('review.my_review')} — #{ideaCode}</span>
+          <span>{t('review.my_review')} - #{ideaCode}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">

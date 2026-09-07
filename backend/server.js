@@ -1,6 +1,4 @@
-/**
- * Server entrypoint. Boots the Express app and starts listening.
- */
+/** Server entrypoint. Boots the Express app and starts listening. */
 import { createApp } from './src/app.js';
 import config, { assertConfigOrExit } from './src/config/index.js';
 import { closeAllPools } from './src/database/tenant.js';
@@ -11,95 +9,68 @@ import { smsTemplateWarnings } from './src/config/index.js';
 import { effectiveProvider, kaleyraMissing } from './src/services/smsService.js';
 import { templateStatus } from './src/config/smsTemplates.js';
 
-// Never boot a production server with a forgeable token secret or a
-// passwordless database. Exits the process in production.
+// Never boot a production server with a forgeable token secret or a passwordless database.
+// Exits the process in production.
 assertConfigOrExit(logger);
 
 const app = createApp();
 
 const server = app.listen(config.port, () => {
   logger.info(`IFQM backend listening on port ${config.port} (${config.env})`);
-  // Started here rather than at import time, so a process that fails to bind
-  // its port does not spend fifteen seconds sending email on the way out.
+  // Started here rather than at import time, so a process that fails to bind its port does
+  // not spend fifteen seconds sending email on the way out.
   startScheduler();
 
-  /*
-   * Say at boot whether the platform can send mail.
-   *
-   * Sign-in codes and password resets both depend on it, and both fail in the
-   * same quiet way: the screen says a code has been sent and nothing arrives.
-   * A line in the log at startup is the cheapest place to notice that the
-   * sender was never configured — or that the password is wrong, which
-   * verify() finds without sending anything to anybody.
-   */
+  // Say at boot whether the platform can send mail.
   if (!platformMailReady()) {
-    logger.warn('platform mail: not configured — sign-in codes and password-reset '
+    logger.warn('platform mail: not configured - sign-in codes and password-reset '
       + 'links cannot be delivered. Set PLATFORM_SMTP_* in backend/.env.');
   } else {
     verifyPlatformMail().then((r) => {
-      if (r.ok) logger.info(`platform mail: ready — ${config.platformMail.from} via ${r.detail}`);
-      else logger.error(`platform mail: configured but NOT working — ${r.detail}`);
+      if (r.ok) logger.info(`platform mail: ready - ${config.platformMail.from} via ${r.detail}`);
+      else logger.error(`platform mail: configured but NOT working - ${r.detail}`);
     });
   }
 
-  /*
-   * And whether SMS can be delivered, for the same reason.
-   *
-   * A DLT misconfiguration is the quietest failure in this product: the gateway
-   * accepts the message, the carrier drops it for not matching its template
-   * registration, and every layer here reports success. Nothing surfaces until
-   * somebody says they never got their code.
-   *
-   * So the state is stated once, at boot, where it costs nothing to read:
-   * which gateway is selected, which templates can actually be sent, and which
-   * cannot and why.
-   */
+  // And whether SMS can be delivered, for the same reason.
   if (smsTemplateWarnings.length) {
     for (const w of smsTemplateWarnings) logger.error(`sms config: ${w}`);
   }
 
   const provider = effectiveProvider();
   if (provider === 'log') {
-    logger.warn('sms: provider is "log" — codes are written to this log, not sent. '
+    logger.warn('sms: provider is "log" - codes are written to this log, not sent. '
       + 'Set SMS_PROVIDER in backend/.env before anyone relies on a text message.');
   } else {
     const blocked = kaleyraMissing(config.sms, 'login');
     if (provider === 'kaleyra' && blocked.length) {
-      logger.error(`sms: gateway is not usable — missing ${blocked.join(', ')}`);
+      logger.error(`sms: gateway is not usable - missing ${blocked.join(', ')}`);
     } else {
-      /*
-       * Split on SENDABLE, not on registered.
-       *
-       * A purpose awaiting its own id can still be delivered under a fallback
-       * registration, and reporting it as "will NOT be sent" was simply untrue
-       * — it named a working journey as broken, which is how a boot diagnostic
-       * trains people to ignore it.
-       */
+      // Split on SENDABLE, not on registered.
       const all = templateStatus();
       const own = all.filter((t) => t.sendable && !t.using_fallback);
       const borrowed = all.filter((t) => t.sendable && t.using_fallback);
       const blocked = all.filter((t) => !t.sendable);
 
-      logger.info(`sms: ${provider} via ${config.sms.senderId} — `
+      logger.info(`sms: ${provider} via ${config.sms.senderId} - `
         + `${own.length} template(s) registered (${own.map((t) => t.purpose).join(', ')})`);
       for (const t of borrowed) {
         logger.info(`sms: "${t.label}" is sent under the ${t.using_fallback} registration `
-          + `until it has its own id — ${t.pending_reason || 'pending'}`);
+          + `until it has its own id - ${t.pending_reason || 'pending'}`);
       }
       for (const t of blocked) {
-        logger.warn(`sms: "${t.label}" will NOT be sent — ${t.pending_reason || 'no template id'}`);
+        logger.warn(`sms: "${t.label}" will NOT be sent - ${t.pending_reason || 'no template id'}`);
       }
     }
   }
 });
 
-// A port clash is the single most common way starting this goes wrong (a stray
-// instance from a previous run is still holding it). Say so plainly instead of
-// dumping a net.js stack trace that reads like the app is broken.
+// A port clash is the single most common way starting this goes wrong (a stray instance
+// from a previous run is still holding it).
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     logger.error(
-      `Port ${config.port} is already in use — another IFQM backend is probably still running.\n` +
+      `Port ${config.port} is already in use - another IFQM backend is probably still running.\n` +
       `  Find it:  Windows> netstat -ano | findstr :${config.port}    Linux/macOS> lsof -i :${config.port}\n` +
       `  Stop it:  Windows> taskkill /PID <pid> /F                   Linux/macOS> kill <pid>\n` +
       `  Or start this one on a different port:  PORT=4001 node server.js`
@@ -114,20 +85,19 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-// Graceful shutdown: stop accepting connections, let in-flight requests finish,
-// then close the DB pools. Without draining, a deploy can cut a request off
-// mid-transaction.
+// Graceful shutdown: stop accepting connections, let in-flight requests finish, then close
+// the DB pools.
 let shuttingDown = false;
 async function shutdown(sig) {
   if (shuttingDown) return;
   shuttingDown = true;
-  logger.info(`${sig} received — draining connections`);
-  // Before the pools close, so a job cannot start a query against a pool that
-  // is about to be torn down underneath it.
+  logger.info(`${sig} received - draining connections`);
+  // Before the pools close, so a job cannot start a query against a pool that is about to be
+  // torn down underneath it.
   stopScheduler();
 
   const force = setTimeout(() => {
-    logger.error('Shutdown timed out after 15s — forcing exit');
+    logger.error('Shutdown timed out after 15s - forcing exit');
     process.exit(1);
   }, 15000).unref();
 

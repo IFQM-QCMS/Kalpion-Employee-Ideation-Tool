@@ -1,39 +1,4 @@
-/*
- * A backtick inside a <style>{`...`}</style> block.
- *
- * ── The bug this exists for ────────────────────────────────────────────────
- *
- * LandingPage renders its CSS through <style>{`...`}</style>. A prose comment
- * inside that CSS referred to a class name as `.ifqm-lp` — in backticks, the
- * way you would write it in Markdown.
- *
- * Those two characters closed the template literal and opened another one, and
- * what was left still parsed as valid JavaScript:
- *
- *     "…css…".ifqm - lp`…more css…`
- *
- * a property access, a subtraction, and a tagged template. So the build passed
- * — nothing about it is syntactically wrong — and the page threw
- * "lp is not defined" at render, which React answers by unmounting the whole
- * tree. A blank page and a green build.
- *
- * That combination is the reason for this file. A bundler cannot flag it, a
- * type checker would not either, and the runtime error names an identifier that
- * appears nowhere in the source, so it tells you nothing about where to look.
- *
- * ── Why it only checks <style> blocks ─────────────────────────────────────
- *
- * The first version of this script tried to tokenise JavaScript so it could
- * check every template literal. It reported five failures, all false: an
- * apostrophe in ordinary JSX text ("doesn't") reads as an opening quote to
- * anything short of a real parser, and everything after it is misclassified.
- *
- * A check that cries wolf is worse than no check, because it gets ignored and
- * then removed. So this looks at one thing, the place where CSS and prose are
- * embedded in JavaScript and the accident is actually possible, and it decides
- * that one thing by a rule with no judgement in it: between <style>{` and `},
- * a backtick is always wrong. No parsing, no heuristics, nothing to tune.
- */
+// A backtick inside a <style>{`...`}</style> block.
 import fs from 'node:fs';
 import path from 'node:path';
 

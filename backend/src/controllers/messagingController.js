@@ -1,12 +1,4 @@
-/**
- * Messaging controller — HTTP layer over messagingService.
- *
- * Mounted under /api/platform, which carries a blanket platform-staff guard, so
- * nothing here re-checks the role. The one thing this layer does own is the
- * rate limit on the test send: it reaches an external gateway that charges per
- * message, and a button that can be held down is a way to spend somebody's
- * money.
- */
+/** Messaging controller - HTTP layer over messagingService. */
 import asyncHandler from '../utils/asyncHandler.js';
 import { respond } from '../utils/respond.js';
 import * as messaging from '../services/messagingService.js';

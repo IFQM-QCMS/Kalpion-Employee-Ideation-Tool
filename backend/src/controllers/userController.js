@@ -1,7 +1,4 @@
-/**
- * User controller — HTTP layer over userService. Maps to the user-management
- * actions of PHP api/users.php.
- */
+/** User controller - HTTP layer over userService. */
 import * as userService from '../services/userService.js';
 import * as hierarchyTemplate from '../services/hierarchyTemplateService.js';
 import { respond, badRequest } from '../utils/respond.js';
@@ -16,8 +13,8 @@ export const adminUsers = asyncHandler(async (req, res) =>
     q: req.query.q,
     page: req.query.page,
     limit: req.query.limit,
-    // MOM §13.9 — filtering happens in SQL, so the console never has to pull
-    // the whole user table to narrow it.
+    // MOM §13.9 - filtering happens in SQL, so the console never has to pull the whole user
+    // table to narrow it.
     role: req.query.role,
     department: req.query.department,
     status: req.query.status,
@@ -25,12 +22,7 @@ export const adminUsers = asyncHandler(async (req, res) =>
   }))
 );
 
-/*
- * MOM §13.14 — the reporting-structure template.
- *
- * Separate from the employee import on purpose: this can only rewire who
- * reports to whom, never create or remove people.
- */
+// MOM §13.14 - the reporting-structure template.
 export const hierarchyTemplate_download = asyncHandler(async (req, res) => {
   const wb = await hierarchyTemplate.buildTemplate(req.db, req.tenant?.name);
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -49,7 +41,7 @@ export const hierarchyTemplate_apply = asyncHandler(async (req, res) => {
   respond(res, await hierarchyTemplate.applyUpload(req.db, req.file.buffer));
 });
 
-/** GET /api/users/:id/chain — MOM §13.8, one person's full reporting line. */
+/** GET /api/users/:id/chain - MOM §13.8, one person's full reporting line. */
 export const reportingChain = asyncHandler(async (req, res) =>
   respond(res, await userService.reportingChain(req.db, req.params.id))
 );
@@ -78,11 +70,8 @@ export const hierarchy = asyncHandler(async (req, res) =>
   respond(res, await userService.hierarchy(req.db))
 );
 
-/*
- * Changing your own mobile number, in two steps: a code to the NEW number, then
- * the code back. The number on file is therefore always one somebody proved
- * they hold — which matters because sign-in codes and password resets go to it.
- */
+// Changing your own mobile number, in two steps: a code to the NEW number, then the code
+// back.
 export const requestPhoneChangeCode = asyncHandler(async (req, res) =>
   respond(res, await userService.requestPhoneChangeCode(req.db, req.user, req.body || {}, req.tenant))
 );

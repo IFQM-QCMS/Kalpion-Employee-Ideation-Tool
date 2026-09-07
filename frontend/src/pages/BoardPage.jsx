@@ -35,8 +35,8 @@ export default function BoardPage() {
   }
 
 
-  /* The one-page summary. Same endpoint as the full export - the server sends
-     whichever document this reader is entitled to. */
+  // The one-page summary. Same endpoint as the full export - the server sends whichever
+  // document this reader is entitled to.
   async function downloadGist(idea) {
     try {
       await exportApi.ideaPdf(idea.id, idea.idea_code);
@@ -112,14 +112,7 @@ export default function BoardPage() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      {/*
-        The board ranks ideas against each other — that is what the sort control
-        at the top is for. Cards made the ranking almost impossible to read: the
-        net score sat in a rail whose vertical position moved with the length of
-        every summary above it, so "is this one ahead of that one" meant
-        scrolling back and forth. As a column, the order the sort produced is
-        finally visible as an order.
-      */}
+      {/* The board ranks ideas against each other - that is what the sort control at the top is for. */}
       <div className="card" style={{ overflowX:'auto' }}>
         <table className="table">
           <thead>
@@ -152,10 +145,7 @@ export default function BoardPage() {
                     <div style={{ fontWeight:600,color:'var(--heading)' }}>
                       <div className="cell-clamp" style={{ maxWidth:300 }}>{i.title}</div>
                     </div>
-                    {/* Summaries, not the full text. The board is a browse view
-                        like All Ideas, so the same rule applies: the server
-                        sends a gist and nothing more. The clamp is presentation
-                        — it is not what keeps the rest of the proposal back. */}
+                    {/* Summaries, not the full text. */}
                     <div className="cell-clamp" style={{ maxWidth:300,fontSize:12.5,color:'var(--text-muted)',marginTop:2 }}
                          title={i.situation_summary || i.present_situation || ''}>
                       {i.situation_summary || i.present_situation}
@@ -169,20 +159,19 @@ export default function BoardPage() {
                     )}
                   </td>
                   <td>{i.submitter_name}</td>
-                  <td>{i.department||'–'}</td>
-                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'–'}</span></td>
+                  <td>{i.department||'-'}</td>
+                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'-'}</span></td>
                   <td>
                     {i.ai_score > 0
                       ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
-                      : <span className="score-none score-badge">—</span>}
+                      : <span className="score-none score-badge">-</span>}
                   </td>
                   <td>
                     <VoteWidget ideaId={i.id} isSelf={isSelf}
                       upvotes={upvotes} downvotes={downvotes}
                       userVote={i.user_vote} onVote={castVote} />
                   </td>
-                  {/* The number the sort is actually ordering by, given a column
-                      of its own so the ranking can be checked at a glance. */}
+                  {/* The number the sort is actually ordering by, given a column of its own so the ranking can be checked at a glance. */}
                   <td style={{ fontWeight:700,color:'var(--heading)' }}>{net}</td>
                   <td>
                     <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
@@ -190,8 +179,7 @@ export default function BoardPage() {
                   </td>
                   <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.created_at)}</td>
                   <td>
-                    {/* Somebody outside the idea is offered the summary, never
-                        a full view. */}
+                    {/* Somebody outside the idea is offered the summary, never a full view. */}
                     {i.viewer_inside === false ? (
                       <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
                         onClick={() => downloadGist(i)}>{t('btn.summary')}</button>

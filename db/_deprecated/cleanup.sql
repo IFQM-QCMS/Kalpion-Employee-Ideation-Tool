@@ -1,9 +1,4 @@
--- ============================================================
---  IFQM Cleanup Script
---  Wipes all sample data from ifqm_ideation.
---  Run this ONCE before deploying to production.
---  Keeps schema intact; deletes all rows.
--- ============================================================
+-- IFQM Cleanup Script Wipes all sample data from ifqm_ideation.
 
 USE ifqm_ideation;
 

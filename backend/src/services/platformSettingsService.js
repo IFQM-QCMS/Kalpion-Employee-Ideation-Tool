@@ -1,23 +1,4 @@
-/**
- * Platform settings — the IFQM side of configuration.
- *
- * Four things live here:
- *   1. defaults for newly provisioned tenants (ifqm_master.platform_settings)
- *   2. read/write of an existing tenant's own org_settings
- *   3. platform admin accounts (ifqm_master.platform_admins)
- *   4. a read-only health view
- *
- * ── How this sits with the privacy contract ────────────────────────────────
- * Settings are configuration, not people: SLA days and feature flags say nothing
- * about any employee, so editing them does not breach the boundary in
- * platformService.js. Two things still need care and are handled below:
- *
- *   • smtp_pass is a live credential belonging to the customer. It is never
- *     returned at all (see "Why there is no password mask here" below) — the
- *     vendor can point a tenant at a mail server without ever being shown
- *     their mail password.
- *   • the health view counts rows and bytes. It must never list what is in them.
- */
+/** Platform settings - the IFQM side of configuration. */
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -35,88 +16,43 @@ import logger from '../utils/logger.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOADS_BASE = path.join(__dirname, '..', '..', 'uploads');
 
-/**
- * ── Why there is no password mask here ──────────────────────────────────────
- *
- * The obvious design — return "••••••••" for a set password and skip writing
- * when that exact string comes back — is what the tenant's own settings service
- * does, and it is unsafe. The sentinel only works if the decoration survives a
- * round trip through the client, HTTP, and the driver byte-for-byte. It does
- * not: sent through this API the bullets came back as something that matched
- * neither the mask nor a glyph filter, and were written into the database AS the
- * customer's mail password. A working mail configuration was destroyed by a
- * request that meant "don't change my password".
- *
- * So the mask is gone. The rule is now unambiguous and has nothing to encode:
- *
- *   read   → smtp_pass is NEVER returned; the client gets smtp_pass_set: bool
- *   write  → empty/absent  = leave the stored password alone
- *            non-empty     = the operator typed a new one, save it
- *            smtp_pass_clear: true = deliberately remove it
- *
- * Because no mask is ever sent, no client can echo one back, and no encoding
- * can turn "keep it" into "overwrite it with garbage".
+/*
+ * The obvious design - return "••••••••" for a set password and skip writing when that
+ * exact string comes back - is what the tenant's own settings service does, and it is
+ * unsafe.
  */
 
-/**
- * Defaults a new tenant is born with. SMTP is deliberately absent: a mail server
- * is per-organisation, and a shared default would silently point every new
- * tenant's outbound mail at one account.
- */
+/** Defaults a new tenant is born with. */
 const DEFAULTS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'approval_stages',
-  // Billing. These are platform-wide policy, not per-organisation settings:
-  // how long a new organisation evaluates for, when it starts being warned,
-  // whether lapsing actually locks anybody out, and who to contact about it.
+  // Billing. These are platform-wide policy, not per-organisation settings: how long a new
+  // organisation evaluates for, when it starts being warned, whether lapsing actually locks
+  // anybody out, and who to contact about it.
   'default_trial_days', 'billing_warn_days', 'billing_enforce',
   'billing_contact_email', 'billing_contact_phone',
-  // Request allowances: whether the plan's limit is enforced, how far over is
-  // tolerated, and where the warning starts.
+  // Request allowances: whether the plan's limit is enforced, how far over is tolerated, and
+  // where the warning starts.
   'quota_enforce', 'quota_grace_percent', 'quota_warn_percent',
-  /*
-   * The attachment ceiling every organisation is bounded by.
-   *
-   * Deliberately named apart from the tenant's own `max_file_mb`: the two live
-   * in different tables and mean different things — this is the most any
-   * organisation may be allowed, that is what one organisation has chosen for
-   * itself — and one name for both would be read as one setting.
-   *
-   * It is NOT in NEW_TENANT_KEYS. A platform ceiling copied into a customer's
-   * own settings would become a number they could edit, which is the opposite
-   * of a ceiling.
-   */
+  // The attachment ceiling every organisation is bounded by.
   'platform_max_file_mb',
-  // How many months of ACCESS logs to keep. Approval history and billing
-  // records are never purged — see retentionService for why that distinction
-  // is the whole point.
+  // How many months of ACCESS logs to keep.
   'log_retention_months',
 ];
 
-/**
- * Which of those are actually SEEDED into a new organisation.
- *
- * The list above answers "what may a platform admin edit here". This answers a
- * different question — "what does a new organisation start with" — and
- * conflating them meant adding billing policy to the console silently copied
- * `billing_enforce`, `quota_grace_percent` and the rest into every new tenant's
- * org_settings, where they mean nothing and nobody can edit them.
- *
- * Billing and quota policy is platform-wide by definition. It belongs in the
- * registry, not in each customer's own settings table.
- */
+/** Which of those are actually SEEDED into a new organisation. */
 const NEW_TENANT_KEYS = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'approval_stages',
 ];
 
-/** Mirrors settingsService's whitelist — what IFQM may change on a live tenant. */
+/** Mirrors settingsService's whitelist - what IFQM may change on a live tenant. */
 const TENANT_SETTINGS_WHITELIST = [
   'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
   'challenges_enabled', 'email_enabled', 'smtp_host', 'smtp_port', 'smtp_user',
   'smtp_pass', 'smtp_from', 'smtp_from_name',
-  // One ordered chain, one key. The mode/role-list/threshold keys that used to
-  // sit here described the same chain three other ways and are gone.
+  // One ordered chain, one key. The mode/role-list/threshold keys that used to sit here
+  // described the same chain three other ways and are gone.
   'approval_stages',
 ];
 
@@ -124,30 +60,22 @@ const TENANT_SETTINGS_WHITELIST = [
 function normaliseSetting(key, rawValue) {
   let value = rawValue;
   if (key === 'approval_stages') {
-    // Same rule as settingsService: unknown stage keys are dropped, the
-    // originator is implicit and first, and a chain with no approver in it is
-    // refused rather than stored.
+    // Same rule as settingsService: unknown stage keys are dropped, the originator is implicit
+    // and first, and a chain with no approver in it is refused rather than stored.
     const stages = [...new Set(
       String(value).split(',').map((s) => s.trim()).filter((s) => STAGE_CATALOG[s] && s !== 'originator')
     )];
     if (!stages.length) return null;
     return ['originator', ...stages].join(',');
   }
-  /*
-   * Bounded by MAX_FILE_MB from the environment, which stays the hard limit.
-   * The console decides policy; the server decides what it will physically
-   * accept, and a console that could raise the figure past multer's own limit
-   * would be promising uploads that fail at the door.
-   */
+  // Bounded by MAX_FILE_MB from the environment, which stays the hard limit.
   if (key === 'platform_max_file_mb') {
     const n = parseInt(value, 10);
     return String(Math.max(1, Math.min(config.maxFileMb, Number.isFinite(n) ? n : config.maxFileMb)));
   }
-  /*
-   * Floored at six months. A window short enough to delete this quarter's
-   * sign-ins would take the lockout counters and the SMS delivery evidence with
-   * it, and somebody would only find that out while investigating an incident.
-   */
+  // Floored at six months. A window short enough to delete this quarter's sign-ins would
+  // take the lockout counters and the SMS delivery evidence with it, and somebody would only
+  // find that out while investigating an incident.
   if (key === 'log_retention_months') {
     const n = parseInt(value, 10);
     return String(Math.max(6, Math.min(120, Number.isFinite(n) ? n : 24)));
@@ -155,8 +83,8 @@ function normaliseSetting(key, rawValue) {
   if (key === 'review_sla_days' || key === 'escalation_days') {
     return String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));
   }
-  // Zero is a real answer here - "no trial, billing starts on day one" - so it
-  // is clamped rather than treated as unset.
+  // Zero is a real answer here - "no trial, billing starts on day one" - so it is clamped
+  // rather than treated as unset.
   if (key === 'default_trial_days') {
     const n = parseInt(value, 10);
     return String(Math.max(0, Math.min(365, Number.isFinite(n) ? n : 14)));
@@ -179,14 +107,7 @@ function normaliseSetting(key, rawValue) {
   return String(value);
 }
 
-/**
- * One platform setting by name.
- *
- * The billing services need a single value on a hot path (every sweep, every
- * approval), and pulling the whole settings table to read one row is wasteful.
- * Returns null when the key has never been written, so the caller can apply its
- * own default rather than being handed an empty string that looks deliberate.
- */
+/** One platform setting by name. */
 export async function getPlatformSetting(key) {
   try {
     const [[row]] = await masterDb().execute(
@@ -199,12 +120,7 @@ export async function getPlatformSetting(key) {
   }
 }
 
-/**
- * The largest attachment any organisation may permit, in MB.
- *
- * Falls back to the environment when unset or unreadable, and is clamped by it
- * in every case — see the note on the normaliser above.
- */
+/** The largest attachment any organisation may permit, in MB. */
 export async function platformFileCeilingMb() {
   const raw = await getPlatformSetting('platform_max_file_mb');
   const n = parseInt(raw, 10);
@@ -212,7 +128,7 @@ export async function platformFileCeilingMb() {
   return Math.max(1, Math.min(config.maxFileMb, wanted));
 }
 
-// ── 1. New-tenant defaults ─────────────────────────────────────────
+// 1. New-tenant defaults
 
 export async function getDefaults() {
   const [rows] = await masterDb().query('SELECT key_name, value FROM platform_settings');
@@ -240,11 +156,7 @@ export async function updateDefaults(body) {
   return { success: true, updated };
 }
 
-/**
- * The seed list createTenant() writes into a brand-new tenant's org_settings.
- * Falls back to the built-in values if the table is empty or unreachable, so
- * provisioning never breaks because a settings row is missing.
- */
+/** The seed list createTenant() writes into a brand-new tenant's org_settings. */
 export async function defaultsForNewTenant() {
   const BUILT_IN = [
     ['approval_stages', DEFAULT_STAGES.join(',')],
@@ -259,7 +171,7 @@ export async function defaultsForNewTenant() {
   }
 }
 
-// ── 2. Per-tenant settings override ────────────────────────────────
+// 2. Per-tenant settings override
 
 async function tenantRow(tenantId) {
   const [rows] = await masterDb().execute('SELECT * FROM tenants WHERE id = ? LIMIT 1', [Number(tenantId) || 0]);
@@ -274,8 +186,8 @@ export async function getTenantSettings(tenantId) {
     const [rows] = await db.query('SELECT key_name, value FROM org_settings');
     const settings = Object.fromEntries(rows.map((r) => [r.key_name, r.value]));
 
-    // The customer's mail password never leaves their database — not even
-    // disguised. The client is told only whether one is set.
+    // The customer's mail password never leaves their database - not even disguised. The
+    // client is told only whether one is set.
     settings.smtp_pass_set = !!settings.smtp_pass;
     delete settings.smtp_pass;
 
@@ -303,7 +215,7 @@ export async function updateTenantSettings(tenantId, body) {
     let updated = 0;
     for (const [key, raw] of Object.entries(body)) {
       if (!TENANT_SETTINGS_WHITELIST.includes(key)) continue;
-      // Handled below, explicitly — never through the generic path.
+      // Handled below, explicitly - never through the generic path.
       if (key === 'smtp_pass') continue;
       const value = normaliseSetting(key, raw);
       if (value === null) continue;
@@ -328,18 +240,10 @@ export async function updateTenantSettings(tenantId, body) {
   }
 }
 
-// ── 3. Platform admin accounts ─────────────────────────────────────
+// 3. Platform admin accounts
 
 export async function listAdmins() {
-  /*
-   * The verification state travels with the list.
-   *
-   * An account that has not proved its address is one nobody can send a reset
-   * to, and an account grandfathered past migration 039 has no number on file
-   * at all. Neither fact is visible from a name and an email, so the console
-   * would show a tidy list of accounts with no way to tell the difference
-   * between one that is reachable and one that is not.
-   */
+  // The verification state travels with the list.
   const [rows] = await masterDb().query(
     `SELECT id, name, email, phone, created_at, email_verified_at, phone_verified_at
        FROM platform_admins ORDER BY id`
@@ -351,8 +255,8 @@ export async function listAdmins() {
       email_verified: !!a.email_verified_at,
       phone_verified: !!a.phone_verified_at,
       verified: !!(a.email_verified_at && a.phone_verified_at),
-      // Grandfathered: trusted from before the rule existed, and never actually
-      // asked to prove anything. Worth naming rather than showing a green tick.
+      // Grandfathered: trusted from before the rule existed, and never actually asked to prove
+      // anything. Worth naming rather than showing a green tick.
       predates_verification: !!a.email_verified_at && !a.phone,
     })),
   };
@@ -366,33 +270,19 @@ export async function createAdmin(body) {
 
   if (!name || !email) throw badRequest('Name and email are required.');
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw badRequest('Invalid email address.');
-  /*
-   * A number is required, and it is not paperwork.
-   *
-   * This account is verified on two independent channels before it can do
-   * anything, and "two channels" means two — an account with only an address
-   * can be taken by whoever holds that mailbox, which for a credential that
-   * reaches every tenant on the platform is the whole risk in one sentence.
-   * It is also the only way back in when the address stops working.
-   */
+  // A number is required, and it is not paperwork.
   if (!phone) throw badRequest('A mobile number is required. The account is verified on both channels before it can be used.');
   if (!isValidPhone(phone)) {
     throw badRequest('Enter a valid mobile number, including the country or area code.');
   }
-  // A platform admin can reach every tenant in the product. Same policy as a
-  // tenant super user, at minimum.
+  // A platform admin can reach every tenant in the product. Same policy as a tenant super
+  // user, at minimum.
   assertPasswordStrength(password, { label: 'Password' });
 
   const [dup] = await masterDb().execute('SELECT id FROM platform_admins WHERE email = ? LIMIT 1', [email]);
   if (dup.length) throw new ApiError(409, 'A platform admin with that email already exists.');
 
-  /*
-   * MOM §12.11 — a soft cap of 5. Soft because the MOM said soft: it is a
-   * governance signal, not a licence check, so it is stored in platform_settings
-   * and an operator who genuinely needs a sixth can raise it rather than being
-   * blocked by a constant nobody can reach. Every one of these accounts can
-   * reach every tenant, so the number should stay small and deliberate.
-   */
+  // MOM §12.11 - a soft cap of 5.
   const [[cap] = []] = await masterDb().execute(
     "SELECT value FROM platform_settings WHERE key_name = 'max_platform_admins' LIMIT 1"
   );
@@ -404,19 +294,7 @@ export async function createAdmin(body) {
       + 'or raise the limit in Platform Settings, before adding another.');
   }
 
-  /*
-   * Created UNVERIFIED, and the codes are not sent from here.
-   *
-   * The person being given this account is not at the keyboard — somebody else
-   * is creating it for them. Sending both codes now would put them in a mailbox
-   * and a handset that nobody is watching, where they expire in five minutes,
-   * long before the new admin first signs in. The account would then look
-   * broken on the one screen it is allowed to reach.
-   *
-   * So the proofs are collected at first sign-in, when the right person is
-   * present and asking for them. Until both are recorded the session can do
-   * exactly one thing: verify itself. See enforcePlatformAdminVerification.
-   */
+  // Created UNVERIFIED, and the codes are not sent from here.
   const [res] = await masterDb().execute(
     'INSERT INTO platform_admins (name, email, phone, password_hash) VALUES (?, ?, ?, ?)',
     [name, email, phone, await bcrypt.hash(password, 12)]
@@ -434,14 +312,7 @@ export async function createAdmin(body) {
   };
 }
 
-/**
- * Remove a platform admin.
- *
- * Two locks: you cannot delete yourself (an operator removing their own account
- * mid-session is never what they meant), and you cannot delete the last one —
- * there is no UI to create a platform admin without already being one, so an
- * empty table means the console is unreachable until someone edits SQL.
- */
+/** Remove a platform admin. */
 export async function deleteAdmin(currentAdmin, id) {
   const targetId = Number(id) || 0;
   const currentId = Number(String(currentAdmin?.id || '').replace(/^pa_/, ''));
@@ -468,8 +339,8 @@ export async function changeOwnPassword(currentAdmin, body) {
   const row = rows[0];
   if (!row) throw notFound('Account no longer exists.');
 
-  // Proving possession of the current password is what stops a borrowed, still
-  // signed-in browser from being turned into a permanent takeover.
+  // Proving possession of the current password is what stops a borrowed, still signed-in
+  // browser from being turned into a permanent takeover.
   if (!(await bcrypt.compare(String(body?.current_password ?? ''), row.password_hash))) {
     throw badRequest('Current password is incorrect.');
   }
@@ -480,21 +351,7 @@ export async function changeOwnPassword(currentAdmin, body) {
   return { success: true };
 }
 
-/**
- * Step one of moving your own number: prove you hold the new handset.
- *
- * ── Why a code and not just a form field ───────────────────────────────────
- *
- * The number is where a sign-in code and a password reset go, so whoever
- * controls it controls the account — and this account reaches every tenant on
- * the platform. Writing it straight from a form would mean a borrowed, still
- * signed-in browser could redirect the recovery channel and keep the account
- * after the real owner changed their password.
- *
- * The current password is required for the same reason it is required to change
- * the password itself: it is what distinguishes the owner from somebody who
- * walked past an unlocked screen.
- */
+/** Step one of moving your own number: prove you hold the new handset. */
 export async function requestOwnPhoneChange(currentAdmin, body) {
   const id = Number(String(currentAdmin?.id || '').replace(/^pa_/, ''));
   if (!id) throw badRequest('Not a platform admin account.');
@@ -516,11 +373,7 @@ export async function requestOwnPhoneChange(currentAdmin, body) {
   const digits = (v) => String(v ?? '').replace(/\D/g, '');
   if (digits(phone) === digits(row.phone)) throw badRequest('That is already your number.');
 
-  /*
-   * One number per platform account. Two admins sharing one handset makes a
-   * code ambiguous — and a code that could belong to either of two accounts
-   * that each reach every tenant is not a second factor at all.
-   */
+  // One number per platform account.
   const [[clash] = []] = await masterDb().execute(
     "SELECT id FROM platform_admins WHERE id <> ? "
     + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ? LIMIT 1",
@@ -538,13 +391,7 @@ export async function requestOwnPhoneChange(currentAdmin, body) {
   return { success: true, ...sent };
 }
 
-/**
- * Step two: the code came back, so the handset is theirs. Save it.
- *
- * The OLD number and address are told afterwards. That notice is the whole
- * point of the exercise — it is what makes a quietly stolen account visible to
- * the person it was stolen from, on a channel the thief no longer controls.
- */
+/** Step two: the code came back, so the handset is theirs. */
 export async function confirmOwnPhoneChange(currentAdmin, body) {
   const id = Number(String(currentAdmin?.id || '').replace(/^pa_/, ''));
   if (!id) throw badRequest('Not a platform admin account.');
@@ -560,18 +407,15 @@ export async function confirmOwnPhoneChange(currentAdmin, body) {
   });
 
   const previous = String(row.phone || '').trim();
-  /*
-   * The new number is verified by the code that just came back, so the proof
-   * timestamp moves with it. Leaving the old timestamp in place would claim a
-   * number had been proved that nobody has ever sent anything to.
-   */
+  // The new number is verified by the code that just came back, so the proof timestamp moves
+  // with it.
   await masterDb().execute(
     'UPDATE platform_admins SET phone = ?, phone_verified_at = NOW() WHERE id = ?',
     [phone, id]
   );
 
   notifyPlatformAdminPhoneChanged(row, previous, phone).catch((e) =>
-    logger.warn(`platform: number-change notice failed for admin ${id} — ${e.message}`));
+    logger.warn(`platform: number-change notice failed for admin ${id} - ${e.message}`));
   logger.info(`platform: admin ${id} changed their mobile number`);
   return { success: true, phone, message: 'Your mobile number has been updated.' };
 }
@@ -597,39 +441,14 @@ async function notifyPlatformAdminPhoneChanged(admin, previous, next) {
     ).catch(() => {});
   }
 
-  /*
-   * To the OLD handset, under the alert's own registered template
-   * (1277178823569994190). Sent to the number being moved AWAY from, because
-   * that is the one the rightful owner still holds — telling the new number is
-   * telling whoever just took it.
-   */
+  // To the OLD handset, under the alert's own registered template (1277178823569994190).
   if (previous) {
     const { text } = messageFor('phone_changed', tail);
     await sendSms(previous, text, { purpose: 'phone_changed' }).catch(() => {});
   }
 }
 
-/**
- * Correct another administrator's number.
- *
- * ── The dead end this exists for ───────────────────────────────────────────
- *
- * A new account is created by somebody else typing the number in. Typed wrongly,
- * no code can ever arrive — and the verification gate allows an unverified
- * session to reach nothing except the verify endpoints, so the person it belongs
- * to cannot correct it themselves. Without this the only remedy is deleting the
- * account and making it again.
- *
- * Self-service change is deliberately NOT opened to unverified sessions instead.
- * That would let anybody holding the password of an unproven account point the
- * number at their own handset and verify it — turning a stolen password into a
- * complete account, which is exactly what the two-channel rule is for.
- *
- * This is safe where that is not, because the caller is an already-verified
- * platform admin, and every platform admin already holds every power the target
- * has. It escalates nothing. It is logged, and the target's proof is cleared so
- * the number still has to answer a code before it counts.
- */
+/** Correct another administrator's number. */
 export async function updateAdminPhone(currentAdmin, id, body) {
   const targetId = Number(id) || 0;
   const phone = String(body?.phone ?? '').trim();
@@ -651,12 +470,7 @@ export async function updateAdminPhone(currentAdmin, id, body) {
   );
   if (clash) throw new ApiError(409, 'That number is already on another platform admin account.');
 
-  /*
-   * Cleared, not carried over. The new number has been asserted by a third
-   * party and proved by nobody, so it must answer a code before the account
-   * works again — otherwise this route would be a way to hand somebody else's
-   * account a number of your choosing and leave it fully live.
-   */
+  // Cleared, not carried over.
   await masterDb().execute(
     'UPDATE platform_admins SET phone = ?, phone_verified_at = NULL WHERE id = ?',
     [phone, targetId]
@@ -678,7 +492,7 @@ export async function updateAdminPhone(currentAdmin, id, body) {
   };
 }
 
-// ── 4. Health ──────────────────────────────────────────────────────
+// 4. Health
 
 /** Total bytes under a directory. Counts size; never reads content. */
 async function dirSize(dir) {

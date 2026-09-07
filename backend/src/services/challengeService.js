@@ -1,16 +1,10 @@
-/**
- * Challenge service — Node port of PHP api/challenges.php (innovation challenges).
- *
- * Actions: list (with idea_count), get (challenge + linked non-draft ideas),
- * create, update (creator or admin/executive/super_admin), delete (orphans
- * linked ideas first). Validation, roles, SQL, and ordering mirror the PHP.
- */
+/** Challenge service - Node port of PHP api/challenges.php (innovation challenges). */
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 const UPDATE_ADMIN_ROLES = ['admin', 'executive', 'super_admin'];
 
-// ── LIST ────────────────────────────────────────────────────────────
+// LIST
 export async function list(db) {
   const [rows] = await db.query(
     `SELECT ch.*, u.name AS creator_name,
@@ -23,7 +17,7 @@ export async function list(db) {
   return { success: true, challenges: rows };
 }
 
-// ── GET (challenge + linked ideas) ─────────────────────────────────
+// GET (challenge + linked ideas)
 export async function get(db, id) {
   id = Number(id) || 0;
   if (!id) throw badRequest('id is required.');
@@ -53,7 +47,7 @@ export async function get(db, id) {
   return { success: true, challenge };
 }
 
-// ── CREATE ──────────────────────────────────────────────────────────
+// CREATE
 export async function create(db, user, b) {
   const title = String(b.title ?? '').trim();
   const description = String(b.description ?? '').trim();
@@ -72,7 +66,7 @@ export async function create(db, user, b) {
   return { success: true, id: result.insertId };
 }
 
-// ── UPDATE ──────────────────────────────────────────────────────────
+// UPDATE
 export async function update(db, user, id, b) {
   id = Number(id) || 0;
   if (!id) throw badRequest('id is required.');
@@ -103,7 +97,7 @@ export async function update(db, user, id, b) {
   return { success: true };
 }
 
-// ── DELETE (orphan linked ideas first) ─────────────────────────────
+// DELETE (orphan linked ideas first)
 export async function remove(db, id) {
   id = Number(id) || 0;
   if (!id) throw badRequest('id is required.');

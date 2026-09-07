@@ -1,10 +1,8 @@
-// English — the canonical key set. Every other locale is validated against this
-// file at startup in dev (see translations.js), so a key added here without a
-// counterpart elsewhere surfaces immediately instead of silently rendering English.
+// English - the canonical key set.
 export default {
   'app.name':'IdeaTool',
 
-  // ── Navigation ──
+  // Navigation
   'nav.dashboard':'Dashboard',
   'nav.my_ideas':'My Ideas',
   'nav.submit':'Submit Idea',
@@ -16,7 +14,7 @@ export default {
   'nav.leaderboard':'Leaderboard',
   'nav.rewards':'Rewards & Recognition',
   'rr.title':'Rewards & Recognition',
-  'rr.subtitle':'The full leaderboard for a period, with every idea behind it — ready to hand to HR.',
+  'rr.subtitle':'The full leaderboard for a period, with every idea behind it - ready to hand to HR.',
   'rr.period':'Period',
   'rr.which':'Which one',
   'rr.from':'From',
@@ -37,7 +35,7 @@ export default {
   'rr.share_title':'Share with HR',
   'rr.dl_excel':'Download Excel',
   'rr.dl_pdf':'Download PDF',
-  'rr.dl_hint':'Both files carry every idea in the period in full — the author, the whole approval chain with dates, and the attachments by name.',
+  'rr.dl_hint':'Both files carry every idea in the period in full - the author, the whole approval chain with dates, and the attachments by name.',
   'rr.downloaded':'Downloaded.',
   'rr.k_people':'People',
   'rr.k_ideas':'Ideas submitted',
@@ -45,7 +43,7 @@ export default {
   'rr.k_implemented':'Implemented',
   'rr.k_points':'Points awarded',
   'rr.none':'Nobody submitted an idea in this period.',
-  'rr.showing_all':'Showing all {n} — this is the complete list, not a top ten.',
+  'rr.showing_all':'Showing all {n} - this is the complete list, not a top ten.',
   'rr.col_rank':'Rank',
   'rr.col_name':'Name',
   'rr.col_dept':'Department',
@@ -67,7 +65,7 @@ export default {
   'section.super_admin':'IFQM Super Admin',
   'section.platform':'Platform',
 
-  // ── Login ──
+  // Login
   'login.app_title':'Kalpion',
   'login.tagline':'Turn great ideas into real improvements.',
   'login.id_short':'Username / Email / Phone',
@@ -81,7 +79,7 @@ export default {
   'login.rq_name':'Full name',
   'login.rq_org':'Organisation',
   'login.rq_submit':'Send request',
-  'login.access_note':'Accounts are created by your organisation admin — we’ve noted your request and support will follow up.',
+  'login.access_note':'Accounts are created by your organisation admin - we’ve noted your request and support will follow up.',
   'login.tab_email':'Email',
   'login.tab_phone':'Phone',
   'login.email_ph':'Enter your email address',
@@ -99,16 +97,16 @@ export default {
   'login.password':'Password',
   'login.password_ph':'Enter your password',
   'login.btn':'Sign In',
-  'login.signing_in':'Signing in…',
+  'login.signing_in':'Signing in...',
   'login.failed':'Login failed.',
   'login.forgot':'Forgot your password?',
   'login.forgot_body':'Enter your username, registered email address or mobile number. An email address gets a link to set a new password; a number or username gets a code by SMS. Either is valid for a short time only.',
   'login.forgot_send':'Send reset link',
-  'login.forgot_sending':'Sending…',
+  'login.forgot_sending':'Sending...',
   'login.forgot_invalid':'Enter your username, email address or mobile number.',
   'login.maint_title':'Platform under maintenance',
   'login.maint_body':'We are carrying out scheduled maintenance and the platform is temporarily unavailable. Your data is safe and no action is required from you. Please try again shortly, or contact your administrator if you need help.',
-  // MOM §4.1 / §4.2 — one-time code sign-in
+  // MOM §4.1 / §4.2 - one-time code sign-in
   'login.use_otp':'Sign in with a code instead',
   'login.use_password':'Sign in with a password instead',
   'login.otp_phone_ph':'Registered phone number',
@@ -136,7 +134,7 @@ export default {
   'login.pw_updated':'Password updated. Please sign in.',
   'login.reset_failed':'Reset failed. The link may have expired.',
 
-  // ── Topbar ──
+  // Topbar
   'topbar.dark':'Dark',
   'topbar.light':'Light',
   'topbar.toggle_dark':'Toggle dark mode',
@@ -145,7 +143,7 @@ export default {
   'topbar.mark_read':'Mark all read',
   'notif.header':'Notifications',
 
-  // ── Dashboard ──
+  // Dashboard
   'dash.total':'Total Ideas',
   'dash.approved':'Approved',
   'dash.implemented':'Implemented',
@@ -154,7 +152,7 @@ export default {
   'dash.status_dist':'Status Distribution',
   'dash.recent_activity':'Recent Activity',
 
-  // ── Status / impact / area / role enums (DB values) ──
+  // Status / impact / area / role enums (DB values)
   'status.submitted':'Submitted',
   'status.review':'Under Review',
   'status.approved':'Approved',
@@ -184,17 +182,17 @@ export default {
   'role.manager':'Manager',
   'role.senior_manager':'Senior Manager',
   'role.executive':'Plant Head',
-  // MOM §12.9 — spelled out rather than abbreviated. "Org Admin" next to
-  // "Super Admin" read as two grades of the same thing; they are different jobs.
+  // MOM §12.9 - spelled out rather than abbreviated. "Org Admin" next to "Super Admin" read
+  // as two grades of the same thing; they are different jobs.
   'role.admin':'Organisation Admin',
   'role.super_admin':'Super Admin',
   'role.department_manager':'Department Manager',
   'role.plant_head':'Plant Head',
   'role.platform_admin':'Platform Admin',
 
-  // ── Filters & tables ──
-  'filter.search_ideas':'Search ideas…',
-  'filter.search_users':'Search users…',
+  // Filters & tables
+  'filter.search_ideas':'Search ideas...',
+  'filter.search_users':'Search users...',
   'filter.all_statuses':'All Statuses',
   'filter.all_impact':'All Impact Levels',
   'table.code':'Code',
@@ -208,18 +206,15 @@ export default {
   'table.date':'Date',
   'table.solution_gist':'Solution (gist)',
 
-  // == GLOSSARY ==============================================================
-  // Every jargon term in the product, explained for the person who has to set
-  // it -- an org admin at a 40-person workshop, not the people who built this.
-  // Rules for anything added here: say what the setting DOES and what happens
-  // if it is wrong; give a concrete number or example; never define a term
-  // using another term from this same list.
+  // == GLOSSARY ============================================================== Every jargon
+  // term in the product, explained for the person who has to set it -- an org admin at a
+  // 40-person workshop, not the people who built this.
   'info.explain':'What does this mean?',
 
   // -- Review & SLA --
-  'info.sla_days':'SLA stands for service level agreement — the promise about how quickly something gets done. Here it is the number of days a reviewer has before the idea is marked overdue. It is a reminder, not an action: nothing is reassigned or rejected automatically, the idea just starts showing as late so somebody chases it. Seven days is typical.',
+  'info.sla_days':'SLA stands for service level agreement - the promise about how quickly something gets done. Here it is the number of days a reviewer has before the idea is marked overdue. It is a reminder, not an action: nothing is reassigned or rejected automatically, the idea just starts showing as late so somebody chases it. Seven days is typical.',
   'info.escalation_days':'How many days an idea can sit untouched before it moves up to the next person in the approval chain. Unlike the service level agreement (SLA) above, this one really does move the idea. Set it longer than the SLA, or ideas will jump to the next approver before the first one has run out of time.',
-  'info.review_sla':'SLA stands for service level agreement — a promise about how quickly a piece of work is done. Here it is simply the number of days a reviewer is expected to respond in.',
+  'info.review_sla':'SLA stands for service level agreement - a promise about how quickly a piece of work is done. Here it is simply the number of days a reviewer is expected to respond in.',
 
   // -- Approval workflow --
   'info.approval_stages':'The steps an idea passes through, in order, from the person who submitted it to whoever gives final sign-off. Add or remove steps to match how your organisation actually approves things. The last step is the one that closes the idea.',
@@ -229,7 +224,7 @@ export default {
 
   // -- Visibility & privacy --
   'info.solution_visibility':'Who can read the full text of an idea. Everyone always sees the title, category, score and status - this only controls the detailed write-up, so colleagues cannot copy an idea before it has been reviewed. The person who wrote it always sees their own.',
-  'info.prediction_visibility':'The app scores each idea automatically and writes a short reason for the score. This controls who can read that reason. Voting is unaffected — everyone can always vote. The concern is that a machine-written verdict shown to the whole company discourages people whose first attempt scored badly, so the default is managers only. Whoever wrote the idea always sees the assessment of their own.',
+  'info.prediction_visibility':'The app scores each idea automatically and writes a short reason for the score. This controls who can read that reason. Voting is unaffected - everyone can always vote. The concern is that a machine-written verdict shown to the whole company discourages people whose first attempt scored badly, so the default is managers only. Whoever wrote the idea always sees the assessment of their own.',
   'info.content_protection':'Turns off right-click, text selection and copy on the text of an idea, and lays the reader’s own name faintly across it. Be clear about what it does not do: it cannot stop a screenshot, a phone camera pointed at the screen, or anyone who opens the browser’s developer tools. It discourages casual copying and makes a leak traceable. What actually protects an idea is the setting above, because the text is never sent to people who should not have it.',
   'info.feature_flags':'On/off switches for optional parts of the app. Turning one off hides that feature from everyone in your organisation; existing data is kept, not deleted, so you can turn it back on.',
   'info.flag_anonymous':'Lets employees submit without their name attached. Ideas already submitted anonymously stay anonymous even if you switch this off.',
@@ -238,7 +233,7 @@ export default {
   'info.flag_email':'Whether the app sends email at all - review reminders, approval notices, password resets. The mail server details below have to be filled in first.',
 
   // -- Email --
-  'info.smtp':'SMTP stands for simple mail transfer protocol — the standard method for sending email. These are the details of the mail server the app sends through; your IT provider or email host supplies them. Without them the app still works, but nobody receives notifications and password reset emails never arrive.',
+  'info.smtp':'SMTP stands for simple mail transfer protocol - the standard method for sending email. These are the details of the mail server the app sends through; your IT provider or email host supplies them. Without them the app still works, but nobody receives notifications and password reset emails never arrive.',
   'info.smtp_host':'The address of your SMTP (simple mail transfer protocol) server, for example smtp.gmail.com or smtp.office365.com. Your email provider publishes this.',
   'info.smtp_port':'The numbered channel the mail server listens on. 587 is the usual answer and the one to try first.',
   'info.smtp_user':'The mailbox the app signs in as to send mail. Usually a full email address.',
@@ -246,17 +241,17 @@ export default {
   'info.smtp_from':'The address employees will see messages arriving from. It normally has to belong to the same domain as the mailbox above, or the mail gets rejected as spam.',
 
   // -- Scoring --
-  'info.ai_score':'AI stands for artificial intelligence. This is an automatic quality score out of 100, worked out from how complete and well-argued the submission is across six areas. It is a sorting aid so good ideas surface first — not a decision. A reviewer can approve a low-scoring idea or turn down a high-scoring one.',
+  'info.ai_score':'AI stands for artificial intelligence. This is an automatic quality score out of 100, worked out from how complete and well-argued the submission is across six areas. It is a sorting aid so good ideas surface first - not a decision. A reviewer can approve a low-scoring idea or turn down a high-scoring one.',
   'info.community_score':'The automatic score adjusted by how colleagues voted. Upvotes push it up, downvotes pull it down. It shows whether the people who do the work agree with the machine.',
   'info.engagement_index':'A single number combining an idea’s score, its star ratings and how many people voted. High means the idea is both well-formed and getting attention; low often just means nobody has looked at it yet.',
   'info.impact_level':'How big a difference this idea would make if implemented. Your own judgement - there is no formula. It helps reviewers sort what to look at first.',
   'info.feasibility':'How realistically this can be done with what the organisation has today. Green is straightforward, amber needs some effort or spend, red needs significant investment or a decision nobody has taken yet.',
   'info.time_required':'Roughly how long implementation would take once approved. A rough band is fine - it is there so reviewers can tell a quick win from a long project.',
-  'info.solution_tags':'What kind of improvement this is. QCD stands for quality, cost and delivery — the three things most improvement programmes measure. Pick every one that applies.',
+  'info.solution_tags':'What kind of improvement this is. QCD stands for quality, cost and delivery - the three things most improvement programmes measure. Pick every one that applies.',
   'info.tangible_benefit':'A benefit you can put a number on: money saved, hours saved, scrap reduced. E.g. "about \u20b950,000 a year in rework".',
   'info.intangible_benefit':'A real benefit you cannot easily put a number on: safer working, less frustration, a better audit result. These count too - say so plainly.',
-  'info.roi':'ROI stands for return on investment — what the organisation actually got back after the idea was carried out, recorded once it is done. This is the real figure, not the estimate made at submission.',
-  'info.patentability':'Whether this idea might be worth protecting as intellectual property — that is, registering a patent so the idea cannot simply be copied. Kept separate from approval on purpose: an idea can be approved and not patentable, or turned down on cost and still worth filing.',
+  'info.roi':'ROI stands for return on investment - what the organisation actually got back after the idea was carried out, recorded once it is done. This is the real figure, not the estimate made at submission.',
+  'info.patentability':'Whether this idea might be worth protecting as intellectual property - that is, registering a patent so the idea cannot simply be copied. Kept separate from approval on purpose: an idea can be approved and not patentable, or turned down on cost and still worth filing.',
   'info.duplicate_check':'As you type a title, the app looks for ideas that already exist. It is a heads-up, not a block - if yours is genuinely different, carry on.',
 
   // -- Idea states --
@@ -271,28 +266,27 @@ export default {
   'info.on_hold':'Something YOU did to this organisation: their access is paused. Nobody there can sign in until you take them off hold. Their data is untouched.',
   'info.activity_state':'Something the ORGANISATION did, or stopped doing. "Inactive" simply means nobody has signed in for 5 days or more. Information only - nothing is switched off, and they can still sign in normally.',
   'info.tenant':'One customer organisation. Each has its own separate database, so no organisation can see another\u2019s people, ideas or files.',
-  'info.api_quota':'API stands for application programming interface — the way another system talks to this one. This is a cap on how many such requests one organisation may make, so a single customer or a faulty integration cannot consume the whole platform. Raise it for an organisation that legitimately needs more.',
-  'info.qcms_pushed':'QCMS stands for Quality Control Management System — the separate tool where work is actually tracked. This counts the approved ideas handed over to it: the point where an idea stops being a suggestion and becomes tracked work.',
+  'info.api_quota':'API stands for application programming interface - the way another system talks to this one. This is a cap on how many such requests one organisation may make, so a single customer or a faulty integration cannot consume the whole platform. Raise it for an organisation that legitimately needs more.',
+  'info.qcms_pushed':'QCMS stands for Quality Control Management System - the separate tool where work is actually tracked. This counts the approved ideas handed over to it: the point where an idea stops being a suggestion and becomes tracked work.',
   'info.platform_admin_limit':'How many IFQM staff accounts may exist. Every one of them can reach every customer organisation, so the number should stay small and deliberate.',
   'info.registration_queue':'Businesses that have applied for a workspace. Approving one creates their database and their first admin account, so read the details before deciding.',
   'info.udyam':'The registration number an Indian MSME receives from the government Udyam portal. MSME stands for micro, small and medium enterprise. The number is how a business shows it qualifies as one.',
-  'info.gstin':'GSTIN stands for Goods and Services Tax Identification Number — the 15-character number every GST-registered business in India is issued. It is printed at the top of your GST registration certificate.',
-  'info.nic_code':'NIC stands for National Industrial Classification — the government’s code for what kind of business this is. It appears on your Udyam certificate, usually as two digits.',
+  'info.gstin':'GSTIN stands for Goods and Services Tax Identification Number - the 15-character number every GST-registered business in India is issued. It is printed at the top of your GST registration certificate.',
+  'info.nic_code':'NIC stands for National Industrial Classification - the government’s code for what kind of business this is. It appears on your Udyam certificate, usually as two digits.',
 
   // -- User management --
   'info.employee_id':'Your organisation’s own staff number. It must be unique, and it is what bulk import matches on when updating people who already exist.',
   'info.bulk_import':'Add many employees at once from a spreadsheet. Download the template, fill it in, upload it. Each person gets a temporary password they must change when they first sign in.',
   'info.must_change_password':'This person signed in with a temporary password and has not replaced it yet. They cannot use the rest of the app until they do.',
   'info.reporting_line':'This person\u2019s managers, all the way up. Ideas they submit travel along this line for approval.',
-  'info.qcms_api_key':'The key that lets this app hand approved ideas to your QCMS (Quality Control Management System) tool. API stands for application programming interface — the way two systems talk to each other without a person in between. Once saved the key is never shown again: not on screen, in exports, or in logs. To change it, paste a new one; leaving it blank keeps the current key.',
+  'info.qcms_api_key':'The key that lets this app hand approved ideas to your QCMS (Quality Control Management System) tool. API stands for application programming interface - the way two systems talk to each other without a person in between. Once saved the key is never shown again: not on screen, in exports, or in logs. To change it, paste a new one; leaving it blank keeps the current key.',
 
-  // ── MOM 29 Jul 2026 ──
-  // §14.5 Time Required
+  // MOM 29 Jul 2026 §14.5 Time Required
   'form.time_required':'Time required',
   'form.time_none':'Not estimated',
   'form.time_lt3':'Less than 3 months',
-  'form.time_3_6':'3 – 6 months',
-  'form.time_6_12':'6 – 12 months',
+  'form.time_3_6':'3 - 6 months',
+  'form.time_6_12':'6 - 12 months',
   // §14.6 solution category tags
   'form.solution_tags':'Solution category',
   'form.solution_tags_hint':'Pick every dimension this idea improves. QCD is Quality, Cost and Delivery.',
@@ -303,8 +297,8 @@ export default {
   // §13.13 review stage
   'idea.under_review_by':'Under review by {names}',
   'idea.review_unassigned':'Awaiting reviewer assignment',
-  'idea.review_closed':'Closed — {status}',
-  'idea.review_draft':'Draft — not yet submitted',
+  'idea.review_closed':'Closed - {status}',
+  'idea.review_draft':'Draft - not yet submitted',
   // §13.10 patentability
   'idea.patentability':'Patentability',
   'idea.pat_not_assessed':'Not assessed',
@@ -321,7 +315,7 @@ export default {
   'idea.archived_ok':'Idea archived.',
   'idea.restored_ok':'Idea restored.',
   'idea.show_archived':'Archived only',
-  'idea.confirm_archive':'Archive this idea? It stays in reports and keeps its points — it just leaves the working lists.',
+  'idea.confirm_archive':'Archive this idea? It stays in reports and keeps its points - it just leaves the working lists.',
   // §13.3 export
   'btn.export_csv':'Export CSV',
   'btn.export_pdf':'Export PDF',
@@ -340,7 +334,7 @@ export default {
   'dash.total_n':'Total: {n}',
   'dash.recent_tag':'Recent updates',
   // §12.13 info buttons
-  'pa.sla_info':'Working days a reviewer has before an idea is flagged as overdue. Nothing is reassigned automatically — the flag is a prompt, not an action.',
+  'pa.sla_info':'Working days a reviewer has before an idea is flagged as overdue. Nothing is reassigned automatically - the flag is a prompt, not an action.',
   'pa.escalation_info':'Working days before an unactioned idea moves up to the next approver in the chain.',
   // §12.4 / §12.9 nomenclature
   'pa.active_orgs':'Active Organizations',
@@ -372,7 +366,7 @@ export default {
   'admin.pv_seniors':'Managers and above (plus the author)',
   'admin.pv_everyone':'Everyone in the organisation',
   'admin.content_protection':'Discourage copying of idea text',
-  'admin.cp_hint':'Blocks right-click, selection and copy on idea text, and stamps the reader’s name faintly across it. It cannot stop a screenshot or a phone camera — nothing in a browser can. Its real value is that a leaked screenshot carries a name.',
+  'admin.cp_hint':'Blocks right-click, selection and copy on idea text, and stamps the reader’s name faintly across it. It cannot stop a screenshot or a phone camera - nothing in a browser can. Its real value is that a leaked screenshot carries a name.',
   // §13.9 user filters
   'admin.filter_role':'All roles',
   'admin.filter_dept':'All departments',
@@ -395,7 +389,7 @@ export default {
   'table.bu':'Business Unit',
   'table.email':'Email',
 
-  // ── Generic buttons / units ──
+  // Generic buttons / units
   'btn.back':'Back',
   'btn.next':'Next',
   'btn.review':'Review',
@@ -405,7 +399,7 @@ export default {
   'btn.remove':'Remove',
   'btn.view':'View',
   'btn.save':'Save',
-  'btn.saving':'Saving…',
+  'btn.saving':'Saving...',
   'btn.download':'Download',
   'btn.refresh':'Refresh',
   'btn.add_user':'+ Add User',
@@ -419,7 +413,7 @@ export default {
   'eng.med':'Med',
   'eng.low':'Low',
 
-  // ── Submit wizard ──
+  // Submit wizard
   'wizard.step1':'Situation',
   'wizard.step2':'Solution',
   'wizard.step3':'Attachments',
@@ -428,32 +422,32 @@ export default {
   'form.title':'Situation Title',
   'form.title_ph':'Brief title for your idea',
   'form.situation':'Current Situation Description',
-  'form.situation_ph':'Describe the current problem or inefficiency in detail…',
+  'form.situation_ph':'Describe the current problem or inefficiency in detail...',
   'form.min_chars':'(min. 20 chars)',
-  'form.dup_warning':'Similar ideas already exist — please review before submitting:',
+  'form.dup_warning':'Similar ideas already exist - please review before submitting:',
   'form.solution':'Proposed Solution',
-  'form.solution_ph':'Describe your proposed improvement in detail…',
+  'form.solution_ph':'Describe your proposed improvement in detail...',
   'form.tangible':'Tangible Benefit (Optional)',
   'form.tangible_ph':'e.g. Rs. 50,000 savings/year',
   'form.intangible':'Intangible Benefit (Optional)',
   'form.intangible_ph':'e.g. Improved worker confidence, better audit scores',
   'form.impact_areas':'Select Categories',
   'form.impact_level':'Overall Impact Level',
-  'form.attach_situation':'Supporting Document — Situation (Optional)',
-  'form.attach_solution':'Supporting Document — Solution (Optional)',
+  'form.attach_situation':'Supporting Document - Situation (Optional)',
+  'form.attach_solution':'Supporting Document - Solution (Optional)',
   'form.attach_note':'Supported: PDF, Word, Excel, images. Max {mb} MB each.',
   'form.co1':'Co-Suggester 1',
   'form.co2':'Co-Suggester 2',
-  'form.co_search_ph':'Search by name or employee ID…',
+  'form.co_search_ph':'Search by name or employee ID...',
   'form.review_heading':'Review your idea before submitting',
   'form.template':'Idea Template',
-  'form.no_template':'— No Template —',
+  'form.no_template':'- No Template -',
   'form.tpl_cost':'Cost Reduction',
   'form.tpl_quality':'Quality Improvement',
   'form.tpl_safety':'Safety Enhancement',
   'form.tpl_process':'Process Optimization',
   'form.challenge':'Link to Challenge',
-  'form.no_challenge':'— No Challenge —',
+  'form.no_challenge':'- No Challenge -',
   'form.anonymous':'Submit anonymously',
   'form.save_draft':'Save Draft',
   'form.submit_idea':'Submit New Idea',
@@ -465,7 +459,7 @@ export default {
   'preview.co_suggesters':'Co-Suggesters',
   'preview.none_selected':'None selected',
 
-  // ── Idea detail modal ──
+  // Idea detail modal
   'modal.details':'Details',
   'modal.overview':'Overview',
   'modal.impact':'Impact & benefits',
@@ -501,15 +495,15 @@ export default {
   'community.upvote':'Upvote',
   'community.downvote':'Downvote',
   'community.vote_hint':'Click ▲ or ▼ · Click again to remove your vote',
-  'community.rating_title':'Community rating (1–5 stars)',
+  'community.rating_title':'Community rating (1-5 stars)',
   'community.your_rating':'Your rating',
   'community.rating_ok':'Rating submitted',
 
-  // ── Review workflow ──
+  // Review workflow
   'review.decide':'Review / Decide',
   'review.decision_label':'Decision',
   'review.comment_label':'Comment / Feedback',
-  'review.comment_ph':'Optional comments for the submitter…',
+  'review.comment_ph':'Optional comments for the submitter...',
   'review.approve':'Approve',
   'review.reject':'Reject',
   'review.implement':'Mark as Implemented',
@@ -547,11 +541,11 @@ export default {
   'rd.intro':'You have been assigned as a reviewer for this idea. Submit your individual decision:',
   'rd.decision':'Your Decision',
   'rd.feedback':'Comments (optional)',
-  'rd.feedback_ph':'Provide your reasoning or feedback…',
+  'rd.feedback_ph':'Provide your reasoning or feedback...',
   'rd.confirm':'Submit your decision ({decision}) for idea #{code}?',
   'rd.recorded':'Your decision ({decision}) was recorded.',
 
-  // ── Admin panel ──
+  // Admin panel
   'admin.tab_overview':'Overview',
   'admin.tab_ideas':'Idea Management',
   'admin.tab_users':'User List',
@@ -585,20 +579,20 @@ export default {
   'admin.test_email':'Send Test Email',
   'admin.settings_saved':'Settings saved successfully.',
   'admin.settings_failed':'Failed to save settings.',
-  // ── Organization branding (per-tenant name + logo) ──
+  // Organization branding (per-tenant name + logo)
   'admin.branding_heading':'Organization Branding',
   'admin.branding_desc':'Your organization’s name and logo appear across the app for everyone in your organization. Only your organization sees them.',
   'admin.org_name':'Organization Name',
   'admin.org_name_ph':'e.g. TVS Motor Company',
   'admin.org_name_required':'Organization name cannot be empty.',
   'admin.save_org_name':'Save Name',
-  'admin.saving':'Saving…',
+  'admin.saving':'Saving...',
   'admin.branding_saved':'Organization name updated.',
   'admin.org_logo':'Organization Logo',
   'admin.logo_hint':'PNG only, up to 1MB. A wide, transparent logo works best.',
   'admin.logo_current':'Current logo',
-  'admin.logo_preview':'Preview — not saved yet',
-  'admin.logo_none':'No logo set — showing the default.',
+  'admin.logo_preview':'Preview - not saved yet',
+  'admin.logo_none':'No logo set - showing the default.',
   'admin.logo_upload':'Upload Logo',
   'admin.logo_remove':'Remove Logo',
   'admin.logo_saved':'Logo updated.',
@@ -606,10 +600,10 @@ export default {
   'admin.logo_not_png':'The logo must be a PNG image.',
   'admin.logo_too_big':'The logo must be 1MB or smaller.',
   'admin.logo_pick_first':'Choose a PNG file first.',
-  'admin.sending_test':'Sending test email…',
+  'admin.sending_test':'Sending test email...',
   'admin.test_sent':'Test email sent!',
   'admin.ai_scoring':'AI Scoring',
-  'admin.rescoring':'Rescoring…',
+  'admin.rescoring':'Rescoring...',
   'admin.edit_user':'Edit User',
   'admin.add_user_title':'Add User',
   'admin.uf_name':'Full Name',
@@ -619,8 +613,8 @@ export default {
   'admin.uf_role':'Role',
   'admin.uf_manager':'Manager',
   'admin.uf_role_taken':'already held by {name}',
-  'admin.uf_manager_hint':'Who this person reports to. Ideas go to the approver on this line — set it, or the idea is offered to every holder of the role instead.',
-  'admin.uf_none':'— None —',
+  'admin.uf_manager_hint':'Who this person reports to. Ideas go to the approver on this line - set it, or the idea is offered to every holder of the role instead.',
+  'admin.uf_none':'- None -',
   'admin.uf_dept':'Department',
   'admin.uf_bu':'Business Unit',
   'admin.uf_location':'Location',
@@ -631,7 +625,7 @@ export default {
   'admin.user_updated':'User updated.',
   'admin.user_save_failed':'Failed to save user.',
 
-  // ── Super admin ──
+  // Super admin
   'sa.tab_overview':'Overview',
   'sa.tab_hierarchy':'Hierarchy',
   'sa.tab_users':'Users',
@@ -648,7 +642,7 @@ export default {
   'sa.rescore_desc':'Triggers the AI to re-evaluate and re-score all submitted ideas in the organisation. Use after updating prompts or models.',
   'sa.no_users':'No users found.',
 
-  // ── Platform admin ──
+  // Platform admin
   'pa.active_tenants':'Active Tenants',
   'pa.total_users':'Total Users',
   'pa.ideas_submitted':'Ideas Submitted',
@@ -664,17 +658,17 @@ export default {
   'pa.admin_email':'Admin Email',
   'pa.admin_password':'Admin Password',
   'pa.create_btn':'Create Organisation',
-  'pa.creating':'Creating…',
+  'pa.creating':'Creating...',
   'pa.created':'Organisation created!',
   'pa.create_failed':'Failed to create organisation.',
   'pa.all_required':'All fields are required.',
   'pa.org_hierarchy':'Organization Hierarchy',
   'pa.overview':'Platform Overview',
-  'pa.private':'Aggregate metrics only — tenant content is private',
+  'pa.private':'Aggregate metrics only - tenant content is private',
   'pa.signed_in':'Signed in as',
-  'pa.all_tenants':'All Tenants — Aggregate Stats',
-  'pa.hierarchy_sub':'Organization structure — names, roles, departments only. No idea content.',
-  // ── Platform settings ──
+  'pa.all_tenants':'All Tenants - Aggregate Stats',
+  'pa.hierarchy_sub':'Organization structure - names, roles, departments only. No idea content.',
+  // Platform settings
   'nav.platform_settings':'Settings',
   'ps.title':'Platform Settings',
   'ps.sub':'Defaults for new organisations, per-organisation overrides, IFQM staff accounts, and system health.',
@@ -685,9 +679,9 @@ export default {
   'ps.tab_health':'Health',
   'ps.tab_maintenance':'Maintenance',
   'ps.maint_title':'Maintenance mode',
-  'ps.maint_hint':'Puts the whole platform on hold while you work on an update. Every organisation is locked out — nobody can sign in, and sessions already open stop working on their next request. IFQM platform admin accounts are unaffected, so you can keep working and switch this back off from this screen.',
-  'ps.maint_state_on':'Maintenance mode is ON — all tenants are locked out',
-  'ps.maint_state_off':'Maintenance mode is off — the platform is live',
+  'ps.maint_hint':'Puts the whole platform on hold while you work on an update. Every organisation is locked out - nobody can sign in, and sessions already open stop working on their next request. IFQM platform admin accounts are unaffected, so you can keep working and switch this back off from this screen.',
+  'ps.maint_state_on':'Maintenance mode is ON - all tenants are locked out',
+  'ps.maint_state_off':'Maintenance mode is off - the platform is live',
   'ps.maint_since':'On hold since {when}',
   'ps.maint_turn_on':'Turn on',
   'ps.maint_turn_off':'Turn off',
@@ -698,19 +692,19 @@ export default {
   'ps.maint_on_ok':'Maintenance mode is on. All tenants are locked out.',
   'ps.maint_off_ok':'Maintenance mode is off. The platform is live again.',
   'ps.defaults_title':'Defaults for New Organisations',
-  'ps.defaults_hint':'Applied when an organisation is created. Changing these never affects organisations that already exist — each one owns its settings from then on.',
+  'ps.defaults_hint':'Applied when an organisation is created. Changing these never affects organisations that already exist - each one owns its settings from then on.',
   'ps.defaults_saved':'Defaults saved.',
   'ps.org_title':'Organisation Settings',
-  'ps.org_hint':'Read and change one organisation’s own settings without signing in as them. These are configuration values only — no employee data is shown here.',
+  'ps.org_hint':'Read and change one organisation’s own settings without signing in as them. These are configuration values only - no employee data is shown here.',
   'ps.org_saved':'Organisation settings saved.',
-  'ps.smtp_pass_set':'A password is set — leave blank to keep it',
+  'ps.smtp_pass_set':'A password is set - leave blank to keep it',
   'ps.smtp_pass_unset':'No password set',
   'ps.smtp_pass_hint':'The stored password is never shown. Leave blank to keep it; type a new one to replace it.',
   'ps.admins_title':'Platform Admin Accounts',
   'ps.admins_hint':'IFQM staff who can reach this console. Every account here can see every organisation’s account shell and support tickets.',
   'ps.add_admin':'Add Platform Admin',
   'pv.title':'Verify your administrator account',
-  'pv.intro':'This account can reach every organisation on the platform, so it has to prove it is reachable on both channels before it will do anything. Verify your email address and your mobile number — you can do them in either order.',
+  'pv.intro':'This account can reach every organisation on the platform, so it has to prove it is reachable on both channels before it will do anything. Verify your email address and your mobile number - you can do them in either order.',
   'pv.email':'Email address',
   'pv.phone':'Mobile number',
   'pv.send':'Send code',
@@ -723,7 +717,7 @@ export default {
   'pv.sent_phone':'Code sent to your mobile number.',
   'pv.one_done':'Verified. One more to go.',
   'pv.all_done':'Both verified. Opening the console.',
-  'pv.note':'Codes expire after a few minutes. If nothing arrives, check the address and number on the account with whoever created it — a typo there is the usual cause.',
+  'pv.note':'Codes expire after a few minutes. If nothing arrives, check the address and number on the account with whoever created it - a typo there is the usual cause.',
   'ps.admin_verified':'Verified',
   'ps.admin_v_yes':'Email + phone',
   'ps.admin_v_legacy':'Predates verification',
@@ -756,7 +750,7 @@ export default {
   'ps.per_tenant':'Per-Organisation Footprint',
   'ps.db':'DB',
   'ps.uploads':'Uploads',
-  // ── Support tickets ──
+  // Support tickets
   'section.help':'HELP',
   'nav.support':'Support',
   'nav.registrations':'Registrations',
@@ -784,7 +778,7 @@ export default {
   'sup.closed_note':'This ticket is closed. Raise a new one if you still need help.',
   'sup.ifqm_support':'IFQM Support',
   'sup.from_ifqm':'From IFQM',
-  'sup.disclosure':'Your name, email and the text you write here are shared with the IFQM support team. Nothing else from your organisation — your ideas, files and colleagues — is ever visible to them.',
+  'sup.disclosure':'Your name, email and the text you write here are shared with the IFQM support team. Nothing else from your organisation - your ideas, files and colleagues - is ever visible to them.',
   'sup.status_open':'Open',
   'sup.status_in_progress':'In progress',
   'sup.status_waiting':'Waiting',
@@ -799,15 +793,15 @@ export default {
   'sup.cat_access':'Access / login',
   'sup.cat_feature':'Feature request',
   'sup.cat_other':'Other',
-  // ── Platform ticket queue ──
+  // Platform ticket queue
   'pt.title':'Support Tickets',
   'pt.sub':'Every request from every organisation.',
   'pt.new':'+ New Ticket',
-  'pt.new_hint':'Opens a ticket in the chosen organisation — use it for maintenance notices or to follow up an incident.',
+  'pt.new_hint':'Opens a ticket in the chosen organisation - use it for maintenance notices or to follow up an incident.',
   'pt.to_org':'Organisation',
-  'pt.to_org_ph':'Type a name or code…',
+  'pt.to_org_ph':'Type a name or code...',
   'pt.none':'No tickets match.',
-  'pt.search_ph':'Search code, subject, requester…',
+  'pt.search_ph':'Search code, subject, requester...',
   'pt.search':'Search',
   'pt.all_priorities':'All priorities',
   'pt.kpi_total':'Total',
@@ -819,15 +813,15 @@ export default {
   'pt.internal':'Internal',
   'pt.internal_note':'Internal note (not visible to the customer)',
   'pt.public_reply':'Reply to customer',
-  'pt.mark_internal':'Internal note — IFQM staff only, the customer never sees this',
+  'pt.mark_internal':'Internal note - IFQM staff only, the customer never sees this',
   'pt.save_note':'Save note',
-  // ── Organizations console (tenant management table) ──
+  // Organizations console (tenant management table)
   'pa.tenant_mgmt':'Tenant Management',
   'pa.tenant_mgmt_sub':'Monitor and manage all registered organisations and their status.',
   'pa.kpi_total_orgs':'Total Organizations',
   'pa.kpi_active':'Active',
   'pa.kpi_suspended':'On Hold',
-  'pa.search_ph':'Search name, organization code, or admin…',
+  'pa.search_ph':'Search name, organization code, or admin...',
   'pa.all_status':'All Status',
   'pa.status_active':'Active',
   'pa.status_suspended':'On Hold',
@@ -844,8 +838,8 @@ export default {
   'pa.default_org':'default',
   'pa.action_view':'View overview',
   'pa.action_manage':'Manage / delete',
-  // ── Organisation detail (aggregate only) + management ──
-  'pa.overview_sub':'Account overview — aggregate figures only.',
+  // Organisation detail (aggregate only) + management
+  'pa.overview_sub':'Account overview - aggregate figures only.',
   'pa.privacy_note':'IFQM sees only these totals. Employee names and details, idea content, and uploaded files stay inside the organisation and are never sent to the platform console.',
   'pa.kpi_users':'Users',
   'pa.kpi_ideas':'Ideas',
@@ -854,12 +848,12 @@ export default {
   'pa.role_spread':'Role Distribution',
   'pa.active_suffix':'active',
   'pa.admin_contacts':'Organisation Admin Contacts',
-  'pa.admin_contacts_sub':'The organisation’s own admin accounts — your support contacts. No other user is listed.',
+  'pa.admin_contacts_sub':'The organisation’s own admin accounts - your support contacts. No other user is listed.',
   'pa.no_admins':'This organisation has no admin account.',
   'pa.reset_admin_pw':'Reset Password',
   'pa.temp_pw_issued':'Temporary password issued.',
   'pa.temp_pw_for':'Temporary password for',
-  'pa.temp_pw_note':'Shown once — copy it now. The admin must change it at next sign-in, and their existing sessions have been ended.',
+  'pa.temp_pw_note':'Shown once - copy it now. The admin must change it at next sign-in, and their existing sessions have been ended.',
   'pa.manage_org':'Manage Organisation',
   'pa.slug_change_warn':'Changing this breaks existing ?org= links and signs users out.',
   'pa.saved':'Organisation updated.',
@@ -872,20 +866,19 @@ export default {
   'pa.suspended_ok':'Organisation put on hold.',
   'pa.activated_ok':'Organisation taken off hold.',
 
-  // ── Organisation activity (reported, never enforced) ──
-  // "On hold" is a decision an operator made; "inactive" is something the org
-  // did (or stopped doing). Two different questions, two different labels.
+  // Organisation activity (reported, never enforced) "On hold" is a decision an operator
+  // made; "inactive" is something the org did (or stopped doing).
   'pa.activity':'Activity',
   'pa.act_active':'Active',
   'pa.act_inactive':'Inactive',
   'pa.act_on_hold':'On Hold',
   'pa.act_pending':'Pending',
   'pa.act_never':'Never signed in',
-  'pa.act_inactive_hint':'No sign-in for {days} days. Shown for information only — nothing has been changed.',
+  'pa.act_inactive_hint':'No sign-in for {days} days. Shown for information only - nothing has been changed.',
   'pa.act_days_ago':'{days}d ago',
   'pa.act_today':'Today',
 
-  // ── MSME self-registration queue ──
+  // MSME self-registration queue
   'pa.reg_title':'Registration requests',
   'pa.reg_sub':'MSMEs that have applied for a workspace. Approving one provisions the organisation.',
   'pa.reg_none':'No applications waiting.',
@@ -896,13 +889,13 @@ export default {
   'pa.reg_rejected_ok':'Application rejected.',
   'pa.reg_reject_prompt':'Reason for rejection (optional, kept internal):',
   'pa.reg_slug_prompt':'Organisation code for this workspace:',
-  'pa.reg_temp_pw':'Temporary password for {email} — copy it now, it is shown once:',
+  'pa.reg_temp_pw':'Temporary password for {email} - copy it now, it is shown once:',
   'pa.reg_applied':'Applied',
   'pa.reg_contact':'Contact',
   'pa.reg_company':'Company',
   'pa.reg_details':'Details',
   'pa.reg_hide':'Hide details',
-  'pa.reg_search':'Search company, contact, GSTIN…',
+  'pa.reg_search':'Search company, contact, GSTIN...',
   'pa.reg_tab_pending':'Pending',
   'pa.reg_tab_approved':'Approved',
   'pa.reg_tab_rejected':'Rejected',
@@ -962,8 +955,8 @@ export default {
   'hier.confirm_reset':'Reset approval workflow to platform defaults?',
   'hier.saved':'Approval workflow saved.',
   'hier.org_structure':'Reporting Structure',
-  'hier.org_hint':'Reassign who each person reports to — submitted ideas escalate up this chain.',
-  'hier.search_ph':'Search by name, ID or department…',
+  'hier.org_hint':'Reassign who each person reports to - submitted ideas escalate up this chain.',
+  'hier.search_ph':'Search by name, ID or department...',
   'hier.n_matches':'{n} match(es)',
   'hier.n_below':'{n} below',
   'hier.collapse':'Collapse',
@@ -979,7 +972,7 @@ export default {
   'cat.deleted':'Category deleted.',
   'cat.used_in':'{n} idea(s)',
   'cat.unused':'Not used yet',
-  'cat.empty':'No categories yet — add the first one.',
+  'cat.empty':'No categories yet - add the first one.',
   'hier.stages_label':'Approval Chain',
   'hier.stages_hint':'An idea starts with the originator and moves up one stage at a time. The last stage gives the final decision. Add, remove or reorder the stages to match how your organisation actually works.',
   'hier.stage_add':'Add a stage',
@@ -997,7 +990,7 @@ export default {
   'stage.executive':'Executive',
   'wizard.business':'Business Case',
   'form.bc_heading':'Business Case',
-  'form.bc_hint':'All optional — fill in what you know. Reviewers can ask for the rest.',
+  'form.bc_hint':'All optional - fill in what you know. Reviewers can ask for the rest.',
   'form.investment':'Investment required',
   'form.investment_ph':'e.g. 2,00,000 for tooling + 3 man-days',
   'form.feasibility':'Feasibility',
@@ -1024,7 +1017,7 @@ export default {
   'platform.employees':'Employees',
   'platform.reports_to':'Reports to:',
 
-  // ── Analytics ──
+  // Analytics
   'analytics.approval_rate':'Approval Rate',
   'analytics.impl_rate':'Implementation Rate',
   'analytics.impl_rate_sub':'Ideas Sent to QC',
@@ -1035,12 +1028,12 @@ export default {
   'analytics.monthly_trend':'Monthly Submission Trend',
   'analytics.score_dist':'Quality Score Distribution',
   'analytics.high':'High (75+)',
-  'analytics.med':'Med (50–74)',
+  'analytics.med':'Med (50-74)',
   'analytics.low_score':'Low (<50)',
   'analytics.avg_note':'Overall average AI score:',
   'analytics.no_trend':'No trend data yet.',
 
-  // ── Leaderboard ──
+  // Leaderboard
   'lb.all':'All Time',
   'lb.monthly':'Monthly',
   'lb.quarterly':'Quarterly',
@@ -1051,7 +1044,7 @@ export default {
   'lb.avg_score':'Avg Score',
   'lb.you':'(You)',
 
-  // ── Challenges ──
+  // Challenges
   'challenges.new':'+ New Challenge',
   'challenges.none':'No active challenges at the moment.',
   'challenges.by':'By',
@@ -1070,7 +1063,7 @@ export default {
   'challenges.load_failed':'Failed to load challenges.',
   'challenges.col_title':'Challenge',
 
-  // ── Idea board ──
+  // Idea board
   'board.sort_votes':'Sort: Most Votes',
   'board.sort_newest':'Sort: Newest',
   'board.sort_score':'Sort: AI Score',
@@ -1080,7 +1073,7 @@ export default {
   'board.view_board':'Board',
   'board.view_table':'Table',
 
-  // ── Profile ──
+  // Profile
   'profile.edit':'Edit details',
   'profile.save':'Save',
   'profile.saved':'Profile updated.',
@@ -1096,8 +1089,8 @@ export default {
   'profile.bu':'Business Unit',
   'profile.loc':'Location',
 
-  // ── Messages ──
-  'msg.loading':'Loading…',
+  // Messages
+  'msg.loading':'Loading...',
   'msg.no_ideas':'No ideas found. Submit your first idea!',
   'msg.no_review':'No ideas pending review.',
   'msg.no_audit':'No audit records.',
@@ -1126,39 +1119,39 @@ export default {
   'msg.decision_ok':'Decision Submitted',
   'msg.rescore_ok':'Rescored {n} ideas successfully.',
 
-  // ── Bulk employee import / forced password change ──
+  // Bulk employee import / forced password change
   'imp.button':'Bulk Import',
   'imp.title':'Bulk Import Employees',
   'imp.step1':'1. Download the template',
   'imp.step1_desc':'The template already has the right columns, an example row, and a role dropdown limited to the roles you are allowed to assign. Fill in one row per employee.',
   'imp.download_template':'Download Excel template',
   'imp.step2':'2. Upload your filled sheet',
-  'imp.checking':'Checking the file…',
+  'imp.checking':'Checking the file...',
   'imp.step3':'3. Review before creating',
   'imp.will_create':'Will be created',
   'imp.will_skip':'Will be skipped',
   'imp.rows_read':'Rows read',
   'imp.temp_password':'First-time password',
-  'imp.password_notice':'Employees with an email address are sent a temporary password directly — you do not have to pass anything on to them. Employees without one get the first 4 letters of their name plus the last 4 digits of their phone number, shown in the table below, which you must give them yourself. Everyone must change it the first time they sign in, and cannot use anything else until they do. A password built from a name and a phone number can be worked out by a colleague, so ask those employees to sign in promptly.',
+  'imp.password_notice':'Employees with an email address are sent a temporary password directly - you do not have to pass anything on to them. Employees without one get the first 4 letters of their name plus the last 4 digits of their phone number, shown in the table below, which you must give them yourself. Everyone must change it the first time they sign in, and cannot use anything else until they do. A password built from a name and a phone number can be worked out by a colleague, so ask those employees to sign in promptly.',
   'imp.skipped_rows':'Rows that will be skipped',
-  'imp.skipped_note':'Existing employees are never modified by an import — those rows are simply skipped. Fix the rest and upload again; already-created employees will be skipped the second time.',
+  'imp.skipped_note':'Existing employees are never modified by an import - those rows are simply skipped. Fix the rest and upload again; already-created employees will be skipped the second time.',
   'imp.create_n':'Create {n} employees',
-  'imp.phase_hashing':'Securing passwords…',
-  'imp.phase_inserting':'Creating accounts…',
-  'imp.keep_open':'This runs on the server — you can close this window and the import will finish.',
+  'imp.phase_hashing':'Securing passwords...',
+  'imp.phase_inserting':'Creating accounts...',
+  'imp.keep_open':'This runs on the server - you can close this window and the import will finish.',
   'imp.done':'{n} employees created',
   'imp.done_toast':'{n} employee accounts created.',
   'imp.done_skipped':'{n} rows were skipped.',
   'imp.download_errors':'Download the skipped rows (CSV)',
   'imp.tell_employees':'Tell each employee without an email address their first-time password: the first 4 letters of their name followed by the last 4 digits of their phone number. Example: Yashas on 7975495881 → yash5881. Anything that is not a letter is skipped, so R. Kumar gives rkum. Employees who have an email address were sent theirs directly and need nothing from you. Everyone is asked to choose a new password as soon as they sign in.',
   'imp.failed':'Import failed',
-  'imp.failed_note':'No accounts were created. Nothing was half-imported — you can safely try again.',
+  'imp.failed_note':'No accounts were created. Nothing was half-imported - you can safely try again.',
   'imp.pending':'Not signed in yet',
   'imp.pending_hint':'This employee still has the temporary password from the import. It is guessable until they sign in and change it.',
-  'imp.showing':'Showing {from}–{to} of {total}',
+  'imp.showing':'Showing {from}-{to} of {total}',
   'imp.pw_emailed':'Emailed to them',
   'pw.title':'Choose a new password',
-  'pw.subtitle':'Your account was created for you — set your own password to continue.',
+  'pw.subtitle':'Your account was created for you - set your own password to continue.',
   'pw.why':'You signed in with a temporary password that was generated from your name and year of birth. Anyone could guess it, so you need to replace it before you can use the app.',
   'pw.current':'Temporary password',
   'pw.current_hint':'The one you just signed in with.',
@@ -1170,16 +1163,16 @@ export default {
   'pw.same_as_current':'Your new password must be different from the temporary one.',
   'pw.changed':'Password updated. Welcome!',
   'pw.need_help':'Need help?',
-  'sa.too_many_tree':'This organisation has {total} people — showing the first {shown}. The full org chart is too large to draw; use the Users tab to search for someone.',
+  'sa.too_many_tree':'This organisation has {total} people - showing the first {shown}. The full org chart is too large to draw; use the Users tab to search for someone.',
 
-  // ── Relative time ──
+  // Relative time
   'time.just_now':'Just now',
   'time.min_ago':'{n} min ago',
   'time.hr_ago':'{n}h ago',
   'time.day_ago':'{n}d ago',
 
-  // ── INR amount hint + support-required attachment label ──
-  'form.attach_support':'Supporting Document — Support Required (Optional)',
+  // INR amount hint + support-required attachment label
+  'form.attach_support':'Supporting Document - Support Required (Optional)',
   'form.amount_inr':'Amount in Indian Rupees (₹).',
 
   'detail.export_pdf':'Export PDF',
@@ -1193,11 +1186,11 @@ export default {
 
   'form.co_suggesters':'Co-suggesters',
   'form.co_hint':'Search and add colleagues who contributed. Add as many as you like.',
-  'form.attach_benefits':'Supporting Document — Benefits Expected (Optional)',
+  'form.attach_benefits':'Supporting Document - Benefits Expected (Optional)',
 
   'sa.monthly_activity':'Monthly Submission Activity',
 
-  // ── QCMS integration ──
+  // QCMS integration
   'admin.view':'View',
   'admin.col_code':'Idea Code',
   'admin.col_title':'Title',
@@ -1209,7 +1202,7 @@ export default {
   'admin.qcms_push_all':'Push all to QCMS',
   'admin.qcms_push':'Push',
   'admin.qcms_not_configured':'QCMS is not set up yet. Paste your API key and enable it in the API & Integration tab.',
-  'admin.qcms_push_result':'Pushed to QCMS — {i} imported, {d} duplicate, {f} failed.',
+  'admin.qcms_push_result':'Pushed to QCMS - {i} imported, {d} duplicate, {f} failed.',
   'admin.qcms_status_imported':'Imported',
   'admin.qcms_status_duplicate':'Duplicate',
   'admin.qcms_status_failed':'Failed',
@@ -1235,15 +1228,15 @@ export default {
   'pa.chart_ideas_by_org':'Ideas by Organisation',
 
 
-  // ── Patentable, timestamps, previews ─────────────────────────────────
+  // Patentable, timestamps, previews
   'table.patentable':'Patentable',
   'idea.patentable_short':'Patentable',
   'idea.patentable_hint':'Someone has marked this idea as possibly worth protecting as intellectual property.',
   'idea.situation_hidden_hint':'You are seeing the opening lines of the problem. The full write-up is shown to the people reviewing this idea and to whoever submitted it.',
   'form.patentable':'This idea may be worth patenting',
-  'form.patentable_hint':'Tick this if you think the idea is new enough to be protected. It flags the idea for a closer look — it does not affect approval either way.',
+  'form.patentable_hint':'Tick this if you think the idea is new enough to be protected. It flags the idea for a closer look - it does not affect approval either way.',
 
-  // ── Bulk archive ─────────────────────────────────────────────────────
+  // Bulk archive
   'bulk.open':'Archive in bulk',
   'bulk.title':'Archive in bulk',
   'bulk.help_ideas':'Filtering only changes what you are looking at. Archiving takes ideas out of everybody’s day-to-day lists. Nothing is deleted and points, history and savings are all kept.',
@@ -1261,7 +1254,7 @@ export default {
   'bulk.confirm_restore_n':'Restore {n} record(s) to the everyday lists?',
   'bulk.confirm_restore_before':'Restore everything older than {date}?',
 
-  // ── Platform: sign-in activity ───────────────────────────────────────
+  // Platform: sign-in activity
   'nav.login_activity':'Login Activity',
   'la.title':'Login Activity',
   'la.subtitle':'Every sign-in to this console by IFQM staff: who, when, from where, and whether it worked. Customer organisations’ own employee sign-ins are not listed here.',
@@ -1270,7 +1263,7 @@ export default {
   'la.lockout':'Locked out',
   'la.all_outcomes':'All outcomes',
   'la.last_n':'Last {n}',
-  'la.search_ph':'Search name, email, organization code or address…',
+  'la.search_ph':'Search name, email, organization code or address...',
   'la.col_when':'Date and time',
   'la.col_who':'Who',
   'la.col_kind':'Account',
@@ -1287,7 +1280,7 @@ export default {
   'la.kpi_lockouts_24h':'Lockouts (24h)',
   'la.kpi_shown':'Shown below',
 
-  // ── Platform: organisation inactivity ────────────────────────────────
+  // Platform: organisation inactivity
   'pa.all_activity':'All activity',
   'pa.kpi_inactive':'Gone quiet',
   'pa.kpi_never_login':'Never signed in',
@@ -1300,36 +1293,36 @@ export default {
   'pt.restore_selected':'Restore selected',
   'pt.archive_open_confirm':'{n} of the selected ticket(s) have not been resolved yet. Archive them anyway?',
 
-  // ── Admin: per-organisation limits ───────────────────────────────────
+  // Admin: per-organisation limits
   'admin.max_file_mb':'Largest attachment (MB)',
   'admin.max_file_hint':'The biggest single file anyone here may attach to an idea. The platform keeps its own ceiling above this, so a number set higher than the platform allows is trimmed to it.',
   'admin.situation_preview':'Problem preview length',
   'admin.situation_preview_hint':'How many characters of the problem statement colleagues who are not reviewing the idea can read. Around 180 is a sentence or two.',
   'admin.screen_protection':'Protect ideas on screen',
-  'admin.sp_hint':'Hides idea text whenever the window loses focus or the page is printed, and stamps the reader’s name across it. It makes capture awkward and any leak traceable. It cannot stop a phone camera pointed at the monitor — no web page can.',
+  'admin.sp_hint':'Hides idea text whenever the window loses focus or the page is printed, and stamps the reader’s name across it. It makes capture awkward and any leak traceable. It cannot stop a phone camera pointed at the monitor - no web page can.',
   'admin.status_active':'Active',
   'admin.status_inactive':'Inactive',
   'filter.all_roles':'All levels',
 
-  // ── Leaderboard sharing ──────────────────────────────────────────────
+  // Leaderboard sharing
   'lb.share_mine':'Share my score',
   'lb.share_top5':'Share top 5',
   'lb.share_text':'Copy as text',
   'lb.share_ok':'Shared.',
-  'lb.share_saved':'Image saved — attach it wherever you like.',
+  'lb.share_saved':'Image saved - attach it wherever you like.',
   'lb.share_no_rank':'You are not on this leaderboard yet. Submit an idea to get on it.',
 
-  // ── Information bubbles added with the above ─────────────────────────
-  'info.patentable':'A tick meaning “this might be new enough to protect as intellectual property”. Anyone can raise it on their own idea, and any reviewer can raise it on any idea. It is only a flag for a closer look — it does not affect whether the idea is approved, and it is separate from the formal patentability decision an administrator records later.',
+  // Information bubbles added with the above
+  'info.patentable':'A tick meaning “this might be new enough to protect as intellectual property”. Anyone can raise it on their own idea, and any reviewer can raise it on any idea. It is only a flag for a closer look - it does not affect whether the idea is approved, and it is separate from the formal patentability decision an administrator records later.',
   'info.max_file_mb':'The largest single file anyone in your organisation may attach to an idea. MB stands for megabyte: a photo from a phone is usually 2 to 5 MB, a scanned drawing 1 to 2 MB. The platform holds its own maximum above this, so setting a bigger number here can never let through a file the server itself will refuse.',
-  'info.situation_preview':'How much of the problem statement is shown to colleagues who are neither the author nor a reviewer. They see the opening lines and nothing more, so an idea cannot be lifted before it has been assessed. Measured in characters — 180 is roughly a sentence or two.',
+  'info.situation_preview':'How much of the problem statement is shown to colleagues who are neither the author nor a reviewer. They see the opening lines and nothing more, so an idea cannot be lifted before it has been assessed. Measured in characters - 180 is roughly a sentence or two.',
   'info.screen_protection':'Hides idea text the moment the browser window loses focus, which is what most screen-capture tools do first, and lays the reader’s own name faintly across the page so anything that does get captured can be traced back. Printing produces a notice instead of the ideas. Be clear about the limit: no web page can stop a phone camera pointed at the monitor. What genuinely protects an idea is that the full text is never sent to people who are not entitled to it.',
-  'info.ip_address':'IP stands for internet protocol. An IP address is the number the internet uses to identify the connection a request came from — roughly, which office, home line or mobile network. It is not a person, and several people behind the same office connection share one.',
+  'info.ip_address':'IP stands for internet protocol. An IP address is the number the internet uses to identify the connection a request came from - roughly, which office, home line or mobile network. It is not a person, and several people behind the same office connection share one.',
   'detail.submitted_at':'Submitted on',
   'form.attach_too_big':'"{name}" is {size} MB. This organisation allows {mb} MB per file.',
 
 
-  // ── Section visibility ───────────────────────────────────────────────
+  // Section visibility
   'section.situation':'The problem (extract)',
   'section.solution':'The proposal (one line)',
   'section.benefits':'Benefits',
@@ -1340,24 +1333,24 @@ export default {
   'section.timeline':'Approval history',
   'idea.section_hidden':'Your organisation does not show {section} to colleagues outside an idea.',
   'admin.employee_sections':'What colleagues can read on someone else’s idea',
-  'admin.employee_sections_hint':'Applies only to people who are neither the author, a co-suggester, nor a reviewer of that idea. The title, code, status, department, impact and score are always visible — they are what makes an idea findable and what the leaderboard counts. Authors always read their own idea in full, and reviewers always read what they are judging.',
+  'admin.employee_sections_hint':'Applies only to people who are neither the author, a co-suggester, nor a reviewer of that idea. The title, code, status, department, impact and score are always visible - they are what makes an idea findable and what the leaderboard counts. Authors always read their own idea in full, and reviewers always read what they are judging.',
   'admin.sections_chosen':'{n} section(s) open to colleagues.',
   'admin.sections_none':'Colleagues see the title and nothing else.',
 
-  // ── Login activity, continued ────────────────────────────────────────
+  // Login activity, continued
   'la.col_location':'Region (from time zone)',
 
-  // ── Information bubbles ──────────────────────────────────────────────
+  // Information bubbles
   'info.employee_sections':'Which parts of somebody else’s idea an ordinary colleague may read. It does not affect the author, who always sees their own idea in full, nor anyone reviewing it, who has to read what they are deciding on. Untick a section and it disappears for everybody else, with a short note in its place so the idea does not look half-filled-in. The safest starting point is the one-line proposal alone: people can see what is being worked on without being able to lift the detail.',
-  'info.approx_location':'Roughly where the sign-in came from, worked out from the time zone the browser reports about itself. The IP address is deliberately NOT looked up anywhere: that would mean sending our own administrators’ addresses to somebody else’s service on every sign-in, and behind a hosting provider a private address cannot be resolved regardless. Treat it as a hint, not evidence — a time zone is a band of the world, it follows whatever the machine is set to, and anyone travelling or on a VPN will report elsewhere.',
+  'info.approx_location':'Roughly where the sign-in came from, worked out from the time zone the browser reports about itself. The IP address is deliberately NOT looked up anywhere: that would mean sending our own administrators’ addresses to somebody else’s service on every sign-in, and behind a hosting provider a private address cannot be resolved regardless. Treat it as a hint, not evidence - a time zone is a band of the world, it follows whatever the machine is set to, and anyone travelling or on a VPN will report elsewhere.',
 
   'hier.lookup_title':'Look up a reporting line',
   'hier.lookup_hint':'Start typing a name, employee number or email and pick the person. You will see everyone above them, all the way to the top, and everyone who reports to them. This is the route an idea of theirs travels for approval.',
-  'hier.lookup_ph':'Type a name, employee number or email…',
+  'hier.lookup_ph':'Type a name, employee number or email...',
   'hier.lookup_none':'Nobody matches that.',
   'hier.this_person':'the person you looked up',
   'hier.chain_up':'Reports up through',
-  'hier.chain_top':'Nobody is above this person — they are at the top of the chart.',
+  'hier.chain_top':'Nobody is above this person - they are at the top of the chart.',
   'hier.direct_reports':'Reports directly to them',
   'hier.no_reports':'Nobody reports to this person.',
   'btn.clear':'Clear',
@@ -1365,13 +1358,13 @@ export default {
   'idea.summary_only_hint':'Download a one-page summary. The full write-up is shown to whoever raised this idea and to the people reviewing it.',
 
   'nav.plans':'Plans',
-  'info.billing_status':'Where this organisation stands on payment. A trial is the free evaluation period; active means they are paid up; expired means the time has run out. Kept separate from the Status column, which is what a person deliberately did to the account — an organisation can be put on hold for a reason that has nothing to do with money, and paying should not silently undo that.',
-  'info.trial_days':'How many days of free evaluation this organisation gets. Counted from today whenever you change it, so entering 30 means thirty days from now — not thirty added to whatever is left. Enter 0 for no trial, meaning billing starts immediately.',
+  'info.billing_status':'Where this organisation stands on payment. A trial is the free evaluation period; active means they are paid up; expired means the time has run out. Kept separate from the Status column, which is what a person deliberately did to the account - an organisation can be put on hold for a reason that has nothing to do with money, and paying should not silently undo that.',
+  'info.trial_days':'How many days of free evaluation this organisation gets. Counted from today whenever you change it, so entering 30 means thirty days from now - not thirty added to whatever is left. Enter 0 for no trial, meaning billing starts immediately.',
   'info.gst_mode':'Whether the amount you typed already contains GST, or GST is added on top of it. Getting this the wrong way round is an 18% error on every invoice, which is why it is asked rather than assumed. The breakdown underneath shows what the organisation will actually pay.',
   'nav.help':'Help',
-  'info.request_allowance':'How many requests this plan allows an organisation each month. Every page an employee opens is a handful of requests, so the number is large by design: roughly 15,000 per permitted user per month, which is about thirty times what ordinary use costs. Leave it empty for no limit. Set it too low and you do not slow the product down, you stop it — a flat 2,000-a-month figure was once applied to ordinary page loads and took a live customer offline. Going over the allowance warns first; requests are only refused past a grace band, and signing in and Support always keep working.',
+  'info.request_allowance':'How many requests this plan allows an organisation each month. Every page an employee opens is a handful of requests, so the number is large by design: roughly 15,000 per permitted user per month, which is about thirty times what ordinary use costs. Leave it empty for no limit. Set it too low and you do not slow the product down, you stop it - a flat 2,000-a-month figure was once applied to ordinary page loads and took a live customer offline. Going over the allowance warns first; requests are only refused past a grace band, and signing in and Support always keep working.',
 
-  // ── The organisation's own billing page ──
+  // The organisation's own billing page
   'nav.my_billing':'Billing',
   'bill.title':'Billing',
   'bill.sub':'What your organisation pays for the platform, and when it is next due.',
@@ -1386,8 +1379,8 @@ export default {
   'bill.due':'Next due',
   'bill.periods':'Periods to pay for',
   'bill.pay':'Pay {amount}',
-  'bill.opening':'Opening…',
-  'bill.test_mode':'Test mode — no real money',
+  'bill.opening':'Opening...',
+  'bill.test_mode':'Test mode - no real money',
   'bill.paid':'Payment received. Thank you.',
   'bill.cancelled':'Payment window closed. Nothing was charged.',
   'bill.failed':'The payment did not go through.',
@@ -1405,8 +1398,8 @@ export default {
   'bill.h_status':'Status', 'bill.h_ref':'Reference',
   'bill.changes':'Recent changes',
   'bill.b_held':'Your organisation is on hold.',
-  'bill.b_held_body':'Nobody can sign in until payment is received. Everything — ideas, history, points and files — is kept and returns the moment it is.',
-  'bill.b_overdue':'Payment overdue — {n} day(s) left',
+  'bill.b_held_body':'Nobody can sign in until payment is received. Everything - ideas, history, points and files - is kept and returns the moment it is.',
+  'bill.b_overdue':'Payment overdue - {n} day(s) left',
   'bill.b_overdue_body':'Your organisation will be put on hold if payment is not received in {n} day(s). Nobody will be able to sign in until it is.',
   'bill.b_soon':'Renewal due in {n} day(s)',
   'bill.b_soon_body':'Pay before the due date to avoid any interruption.',
@@ -1414,9 +1407,7 @@ export default {
   'notif.open':'Open',
   'notif.showing':'Showing {shown} of {total}',
 
-  // ── Platform → Payments ──
-  // Every MSME's billing state on one screen. The per-organisation controls
-  // already existed one drill-down deep; this is the view across all of them.
+  // Platform Payments Every MSME's billing state on one screen.
   'nav.billing':'Payments',
   'msgb.title':'Payments',
   'msgb.sub':'What every organisation is on, what they owe, and who is about to lapse.',
@@ -1463,10 +1454,10 @@ export default {
   'msgb.s_exempt':'Not billed',
   'msgb.s_lapsed':'Lapsed',
   'msgb.s_expiring':'{n} day(s) left',
-  'msgb.s_trial':'Trial — {n} day(s)',
-  'msgb.s_paying':'Paid — {n} day(s)',
+  'msgb.s_trial':'Trial - {n} day(s)',
+  'msgb.s_paying':'Paid - {n} day(s)',
   'msgb.m_plan':'Plan',
-  'msgb.m_plan_none':'— no plan —',
+  'msgb.m_plan_none':'- no plan -',
   'msgb.m_plan_hint':'{base} + {gst} GST = {total}. Up to {users} users.',
   'msgb.m_plan_btn':'Assign this plan',
   'msgb.m_plan_saved':'Plan assigned.',
@@ -1477,21 +1468,21 @@ export default {
   'msgb.m_paid_hint':'How many billing periods this payment covers. Enter 1 for one period. The paid-until date moves forward by that much, and an organisation on hold is switched back on. This only records that money arrived - it does not collect it.',
   'msgb.m_paid_btn':'Record payment',
   'msgb.m_paid_saved':'Payment recorded.',
-  'msgb.m_paid_needs_plan':'Assign a plan first — there is no amount or period to extend without one.',
+  'msgb.m_paid_needs_plan':'Assign a plan first - there is no amount or period to extend without one.',
   'msgb.st_grace':'In grace',
   'msgb.g_title':'Razorpay payment gateway',
   'msgb.g_off':'Not taking payments',
-  'msgb.g_live':'Live — {mode} keys',
+  'msgb.g_live':'Live - {mode} keys',
   'msgb.g_on_hint':'Organisation administrators can pay their subscription from inside the application.',
-  'msgb.g_off_hint':'While this is off, nobody can pay online — subscriptions have to be recorded by hand after a transfer.',
+  'msgb.g_off_hint':'While this is off, nobody can pay online - subscriptions have to be recorded by hand after a transfer.',
   'msgb.g_configure':'Configure',
   'msgb.g_hide':'Hide',
   'msgb.g_key_id':'Key ID',
-  'msgb.g_key_id_hint':'From the Razorpay dashboard, under Settings → API Keys. Begins rzp_test_ while you are testing and rzp_live_ when you go live. This one is public — the checkout window needs it.',
+  'msgb.g_key_id_hint':'From the Razorpay dashboard, under Settings → API Keys. Begins rzp_test_ while you are testing and rzp_live_ when you go live. This one is public - the checkout window needs it.',
   'msgb.g_secret':'Key Secret',
   'msgb.g_secret_ph':'Paste the secret shown when the key was created',
   'msgb.g_secret_stored':'A secret is stored. Leave this empty to keep it; paste a new one to replace it. It is never sent back to this screen.',
-  'msgb.g_secret_none':'No secret stored yet. Razorpay shows it once, when the key pair is created — if it has been lost, generate a new pair.',
+  'msgb.g_secret_none':'No secret stored yet. Razorpay shows it once, when the key pair is created - if it has been lost, generate a new pair.',
   'msgb.g_business':'Business name',
   'msgb.g_business_hint':'What the customer sees at the top of the Razorpay checkout window.',
   'msgb.g_save':'Save keys',
@@ -1500,10 +1491,10 @@ export default {
   'msgb.g_disable':'Turn payments off',
   'msgb.g_saved':'Payment gateway updated.',
   'msgb.m_note':'Note',
-  'msgb.m_note_ph':'Optional — kept in the billing history',
+  'msgb.m_note_ph':'Optional - kept in the billing history',
 
-  // ── Platform → Settings → Messaging ──
-  // The SMS/DLT connector, one-time-code policy, and email queue health.
+  // Platform Settings Messaging The SMS/DLT connector, one-time-code policy, and email queue
+  // health.
   'ps.tab_messaging':'Messaging & ZeptoMail',
   'ps.default_chain':'Default Approval Chain',
   'ps.default_chain_hint':'Every new organisation starts with this sequence and can change it in its own Organisation Settings.',
@@ -1518,11 +1509,11 @@ export default {
   'msgg.enable_connector_hint':'Switch it on once the fields below are filled in and the test has passed. Nothing is sent through it while this is off.',
   'msgg.params':'Gateway credentials',
   'msgg.entity_id':'Principal Entity ID (PE ID)',
-  'msgg.entity_id_hint':'The registration issued to your business on the DLT portal — about 19 digits.',
+  'msgg.entity_id_hint':'The registration issued to your business on the DLT portal - about 19 digits.',
   'msgg.sender_id':'Header / Sender ID',
   'msgg.sender_id_hint':'The six characters the recipient sees as the sender. Must be exactly the header approved on the DLT portal.',
   'msgg.template_id':'Content Template ID',
-  'msgg.template_id_hint':'The approved wording this message uses — about 19 digits. A wrong ID is dropped by the carrier with no error.',
+  'msgg.template_id_hint':'The approved wording this message uses - about 19 digits. A wrong ID is dropped by the carrier with no error.',
   'msgg.api_key':'Gateway API key',
   'msgg.api_key_ph':'Paste the key from your gateway',
   'msgg.api_key_stored':'A key is stored. Leave this empty to keep it; type a new one to replace it.',
@@ -1532,18 +1523,18 @@ export default {
   'msgg.show':'Show',
   'msgg.hide':'Hide',
   'msgg.endpoint':'Gateway endpoint URL',
-  'msgg.endpoint_hint':'Where messages are posted. Must be https — anything else would put the key and the number on the wire in clear.',
+  'msgg.endpoint_hint':'Where messages are posted. Must be https - anything else would put the key and the number on the wire in clear.',
   'msgg.template_text':'Registered template wording',
   'msgg.template_text_hint':'Copy this exactly as approved on the DLT portal, including punctuation. {#var#} marks each substituted value: the first is the code, the second is the number of minutes. If this does not match the registered template the carrier silently drops every message.',
   'msgg.incomplete':'Not ready to send:',
   'msgg.save':'Save changes',
-  'msgg.saving':'Saving…',
+  'msgg.saving':'Saving...',
   'msgg.saved':'Messaging settings saved.',
 
   'msgg.test_title':'Test the connection',
-  'msgg.test_hint':'Sends a real message to the number below using the registered template. This costs one message and is the only way to prove the template is genuinely approved — a check that only validated the fields would pass on a template the carrier has never seen.',
+  'msgg.test_hint':'Sends a real message to the number below using the registered template. This costs one message and is the only way to prove the template is genuinely approved - a check that only validated the fields would pass on a template the carrier has never seen.',
   'msgg.test_btn':'Send test message',
-  'msgg.testing':'Sending…',
+  'msgg.testing':'Sending...',
   'msgg.test_accepted':'Accepted by the gateway',
   'msgg.test_refused':'The gateway refused it',
   'msgg.gateway_ref':'Gateway reference',
@@ -1562,13 +1553,13 @@ export default {
   'msgg.code_length':'Code length',
   'msgg.code_length_hint':'Digits. Six is the norm; four is easier to guess and eight is harder to read off a screen.',
   'msgg.ttl':'Code lifetime (seconds)',
-  'msgg.ttl_hint':'How long a code stays usable. Five minutes is the default — long enough to read a text and type it, short enough that an intercepted code is worthless by the time anybody could use it.',
+  'msgg.ttl_hint':'How long a code stays usable. Five minutes is the default - long enough to read a text and type it, short enough that an intercepted code is worthless by the time anybody could use it.',
   'msgg.attempts':'Wrong guesses allowed',
   'msgg.attempts_hint':'The code is burned after this many wrong answers, so a six-digit code cannot be guessed at network speed.',
   'msgg.resend':'Resend wait (seconds)',
   'msgg.resend_hint':'How long somebody must wait before asking for another code. Set 0 to remove the wait entirely, which is usually only wanted during testing.',
 
-  'msgg.mail_title':'ZeptoMail — platform email',
+  'msgg.mail_title':'ZeptoMail - platform email',
   'msgg.mail_sub':'Carries anything an organisation’s own SMTP cannot: codes sent to an email address, registration acknowledgements, and mail for any customer who has not set up a mail server of their own. A customer who has configured SMTP keeps using it.',
   'msgg.mail_enable':'Use ZeptoMail for platform email',
   'msgg.mail_enable_hint':'While this is off, mail for an organisation with no SMTP host of its own cannot be delivered at all.',
@@ -1598,10 +1589,10 @@ export default {
   'msgg.email_stuck_hint':'The oldest message has been waiting since {since}. Either no organisation has SMTP configured, or the background job is not running on this server.',
   'msgg.email_clear':'Nothing is waiting that ought to be sent.',
   'msgg.email_orgs_on':'Organisations sending',
-  'msgg.email_off_backlog':'{n} queued message(s) belong to organisations that have email switched off. They are not stuck — nobody asked for them to be sent. They will go out if that organisation turns email on, or can be left where they are.',
+  'msgg.email_off_backlog':'{n} queued message(s) belong to organisations that have email switched off. They are not stuck - nobody asked for them to be sent. They will go out if that organisation turns email on, or can be left where they are.',
 
   'msgg.recent':'Recent sends',
-  'msgg.recent_hint':'The last 20 delivery attempts, newest first. Recipients are masked and the message body is never stored — only whether the gateway accepted it. Accepted is not the same as delivered to the handset.',
+  'msgg.recent_hint':'The last 20 delivery attempts, newest first. Recipients are masked and the message body is never stored - only whether the gateway accepted it. Accepted is not the same as delivered to the handset.',
   'msgg.recent_none':'Nothing sent yet.',
   'msgg.col_when':'When',
   'msgg.col_to':'To',
@@ -1618,7 +1609,7 @@ export default {
   'lb.weekly':'Weekly',
   'lb.share_email':'Email it',
   'lb.ideas_word':'ideas',
-  'lb.email_more':'…and {n} more on the full leaderboard.',
+  'lb.email_more':'...and {n} more on the full leaderboard.',
   'lb.email_footer':'Sent from Kalpion.',
   'lb.download_pdf':'Download PDF',
   'lb.pdf_failed':'The leaderboard PDF could not be created.',
@@ -1626,7 +1617,7 @@ export default {
   'lb.send_hr_hint':'Sends the {period} leaderboard as a PDF attachment, for Rewards & Recognition.',
   'lb.hr_email':'HR email address',
   'lb.hr_note':'Note (optional)',
-  'lb.hr_note_ph':'Anything HR should know — the quarter this covers, who to recognise first.',
+  'lb.hr_note_ph':'Anything HR should know - the quarter this covers, who to recognise first.',
   'lb.hr_sent':'Leaderboard sent to {email}.',
   'analytics.status_dist':'Status Distribution',
   'analytics.impact_dist':'Impact Area Distribution',
@@ -1642,13 +1633,13 @@ export default {
   'admin.uf_phone_invalid':'Enter a valid mobile number, including the country or area code.',
   'admin.uf_username':'Username',
   'admin.uf_username_ph':'e.g. yashas123',
-  'admin.uf_login_hint':'Give a username or an email address — at least one, as it is how the person signs in. A username is 3–30 characters (letters, numbers, dot, underscore, hyphen) and must be unique across the whole platform.',
+  'admin.uf_login_hint':'Give a username or an email address - at least one, as it is how the person signs in. A username is 3-30 characters (letters, numbers, dot, underscore, hyphen) and must be unique across the whole platform.',
   'admin.uf_no_email':'No email',
   'admin.max_file_ceiling':'The biggest single file anyone here may attach. IFQM allows up to {n} MB, so a larger number is trimmed to it.',
   'admin.uf_pw_will_email':'This employee has an email address, so a temporary password will be emailed to them directly. You will not need to pass anything on.',
   'admin.uf_pw_will_derive':'No email address given, so the temporary password will be the first 4 letters of their name plus the last 4 digits of their phone number. It will be shown to you once, and you must pass it on yourself.',
-  'admin.uf_pw_emailed':'Account created. A temporary password has been emailed to {email}. Ask them to check their inbox — there is nothing for you to pass on.',
-  'admin.uf_pw_email_failed':'Account created, but the email to {email} could not be sent. The password below is the only copy — pass it on yourself, or the employee will not be able to sign in.',
+  'admin.uf_pw_emailed':'Account created. A temporary password has been emailed to {email}. Ask them to check their inbox - there is nothing for you to pass on.',
+  'admin.uf_pw_email_failed':'Account created, but the email to {email} could not be sent. The password below is the only copy - pass it on yourself, or the employee will not be able to sign in.',
   'admin.uf_pw_once':'This is shown once and cannot be looked up again. Copy it before closing this window.',
   'admin.uf_pw_copied':'Password copied',
   'profile.phone_change':'Change',
@@ -1665,7 +1656,7 @@ export default {
   'pa.wl_add':'Add exception',
   'pa.wl_entry_ph':'ravi@gmail.com or gmail.com',
   'pa.wl_note_ph':'Why is this allowed? (recommended)',
-  'pa.wl_hint':'One address allows only that person. A bare domain reopens the whole provider for everybody — use it sparingly.',
+  'pa.wl_hint':'One address allows only that person. A bare domain reopens the whole provider for everybody - use it sparingly.',
   'pa.wl_empty':'No exceptions. Only company email addresses are accepted.',
   'pa.wl_col_entry':'Address or domain',
   'pa.wl_col_scope':'Scope',
@@ -1709,14 +1700,14 @@ export default {
   'pl.gst_excl':'GST is added on top of the amount above',
   'pl.org_pays':'The organisation pays',
   'pl.monthly_allowance':'Monthly request allowance',
-  'pl.search_ph':'Search name, code or description…',
+  'pl.search_ph':'Search name, code or description...',
   'pl.unlimited':'Unlimited',
   'qc.in_qc':'In QC',
   'qc.in_qc_hint':'Approved and sent to the QC tool, where it is tracked as work.',
   'qc.failed':'QC send failed',
   'qc.failed_hint':'Approved, but the last attempt to send it to the QC tool did not succeed. It can be sent again.',
   'manual.download':'Download user manual',
-  'manual.preparing':'Preparing…',
+  'manual.preparing':'Preparing...',
   'manual.missing':'The user manual is not available on this deployment.',
   'manual.failed':'The manual could not be downloaded just now.',
   'audit.when':'When',
@@ -1727,7 +1718,7 @@ export default {
   'hier.rename_done':'Done renaming',
   'hier.rename_hint':'Leave a box empty to use the built-in name. Renaming changes what people see, never how the chain works.',
   'hier.stage_waiting':'Waiting at',
-  'review.at_stage':'Waiting for {stage} approval — step {n} of {total}',
+  'review.at_stage':'Waiting for {stage} approval - step {n} of {total}',
   'review.approve_advance':'Approve and send onward',
   'review.approve_final':'Give final approval',
   'review.will_advance':'This does not approve the idea. It passes it to {stage} for their approval.',
@@ -1737,10 +1728,10 @@ export default {
   'review.sent_to_named':'Approved. Now with {name} as {stage}.',
   'review.no_next_stage':'Approved, but nobody holds any later role in the approval path. An administrator has been told.',
   'review.reject_reason_ph':'Why is this being rejected? The submitter will read this.',
-  'review.reject_needs_reason':'A rejection needs a reason — the submitter cannot act on "no" alone.',
-  'hier.stage_nobody':'Nobody holds {role} — ideas will step over this stage',
+  'review.reject_needs_reason':'A rejection needs a reason - the submitter cannot act on "no" alone.',
+  'hier.stage_nobody':'Nobody holds {role} - ideas will step over this stage',
   'hier.stage_holders':'{n} person(s) can act here',
-  'hier.gap_warning':'Nobody in this organisation holds: {stages}. Ideas reaching those stages are stepped over — recorded on the idea, but not the approval you configured. Give somebody those roles, or remove the stages.',
+  'hier.gap_warning':'Nobody in this organisation holds: {stages}. Ideas reaching those stages are stepped over - recorded on the idea, but not the approval you configured. Give somebody those roles, or remove the stages.',
   'admin.uf_phone_hint':'Required. Sign-in codes and password resets are sent here.',
-  'review.admin_readonly':'You can see everything here, but administrators do not approve or reject ideas — that is kept independent of administration. Use View to read an idea.',
+  'review.admin_readonly':'You can see everything here, but administrators do not approve or reject ideas - that is kept independent of administration. Use View to read an idea.',
 };

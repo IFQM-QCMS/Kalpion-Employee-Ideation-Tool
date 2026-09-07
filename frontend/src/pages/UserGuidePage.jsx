@@ -3,25 +3,9 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { guideForRole } from '../content/userGuides';
 
-/*
- * The user manual, in the app.
- *
- * The manual used to be a PDF behind a download button on three dashboards.
- * This replaces it: the same content, as a page, with the role decided from the
- * signed-in user so nobody has to pick which of the three manuals is theirs.
- */
+// The user manual, in the app.
 
-/*
- * **bold** and nothing else.
- *
- * The manuals use exactly one kind of inline emphasis — the name of a button or
- * a screen — so that is the only thing supported. A general markdown renderer
- * would be a dependency and a sanitiser to worry about, for one asterisk pair.
- *
- * Split on the delimiter rather than replacing into HTML: this returns React
- * elements, so nothing here can ever inject markup, and dangerouslySetInnerHTML
- * never enters the picture.
- */
+// bold** and nothing else.
 function RichText({ children }) {
   const parts = String(children ?? '').split(/\*\*/);
   return (
@@ -39,8 +23,8 @@ function Block({ block }) {
   }
 
   if (block.note) {
-    // The PDF's boxed asides. They are warnings and caveats — the things people
-    // get wrong — so they keep a visual weight of their own here too.
+    // The PDF's boxed asides. They are warnings and caveats - the things people get wrong - so
+    // they keep a visual weight of their own here too.
     return (
       <div style={{
         margin:'0 0 14px', padding:'12px 14px',
@@ -70,7 +54,7 @@ function Block({ block }) {
           <li key={i} style={{ marginBottom:6 }}>
             {typeof b === 'string'
               ? <RichText>{b}</RichText>
-              : <><strong>{b.term}</strong>{b.text ? <> — <RichText>{b.text}</RichText></> : null}</>}
+              : <><strong>{b.term}</strong>{b.text ? <> - <RichText>{b.text}</RichText></> : null}</>}
           </li>
         ))}
       </ul>
@@ -110,14 +94,7 @@ export default function UserGuidePage() {
 
   const guide = useMemo(() => guideForRole(user?.role), [user?.role]);
 
-  /*
-   * Search filters whole sections, not lines.
-   *
-   * A manual answers questions in paragraphs; showing the three matching
-   * sentences with their surroundings removed is how you get an answer that
-   * reads as complete and is not. So a section either matches and is shown
-   * intact, or it is not shown.
-   */
+  // Search filters whole sections, not lines.
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return guide.sections;
@@ -156,11 +133,7 @@ export default function UserGuidePage() {
       </div>
 
       <div style={{ display:'flex', gap:20, alignItems:'flex-start' }}>
-        {/*
-          Contents. Hidden below 900px rather than stacked: on a phone it would
-          push the manual itself a full screen down, and the search box above
-          does the same job in less space.
-        */}
+        {/* Contents. Hidden below 900px rather than stacked: on a phone it would push the manual itself a full screen down, and the search box above does the same job in less space. */}
         <nav className="guide-toc card" style={{ position:'sticky', top:16, width:230, flexShrink:0, fontSize:13 }}>
           <div style={{ fontWeight:700, marginBottom:8, color:'var(--heading)' }}>{t('guide.contents')}</div>
           {guide.sections.map((s) => (
@@ -169,8 +142,8 @@ export default function UserGuidePage() {
               href={`#${s.id}`}
               onClick={(e) => {
                 e.preventDefault();
-                // Clear the filter first: jumping to a section that the current
-                // search has hidden would otherwise scroll to nothing.
+                // Clear the filter first: jumping to a section that the current search has hidden would
+                // otherwise scroll to nothing.
                 setQuery('');
                 requestAnimationFrame(() => {
                   document.getElementById(s.id)?.scrollIntoView({ behavior:'smooth', block:'start' });

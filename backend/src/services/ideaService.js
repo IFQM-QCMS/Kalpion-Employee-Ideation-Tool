@@ -1,22 +1,4 @@
-/**
- * Idea service — Node port of PHP api/ideas.php (idea lifecycle + workflow).
- *
- * Actions ported here: list, my, review, get, submit, draft, review_action,
- * dashboard, assign_reviewers, reviewer_decision, check_duplicate, bulk_review,
- * update_roi, update_implementation.
- *
- * Deferred to Module 4 (Voting), where they belong: board, community_vote
- * (they physically live in ideas.php but are community-voting features).
- *
- * SQL, role scoping, workflow/escalation rules, points, notifications, emails,
- * and status transitions mirror the PHP exactly.
- *
- * Intentional migration difference: PHP wrapped user-provided name fields in
- * htmlspecialchars() (esc) before returning JSON, because the old vanilla-JS
- * frontend injected them via innerHTML. The React frontend escapes on render,
- * so we return raw values — applying esc() here would double-escape in React.
- * XSS protection thus moves from the server to React's automatic escaping.
- */
+/** Idea service - Node port of PHP api/ideas.php (idea lifecycle + workflow). */
 import config from '../config/index.js';
 import { computeAIScoreWithReason } from './aiService.js';
 import { getApprovalConfig, advanceStage, rolePlaysStages } from './settingsService.js';
@@ -30,71 +12,37 @@ import { IDEA_SECTIONS, employeeSections } from './ideaSections.js';
 const POINTS = config.points;
 
 const INDIVIDUAL_ROLES = ['trainee', 'employee'];
-// department_manager sits with the other line roles: it sees its own reports'
-// ideas. plant_head is org-wide, so it sits with the admin set and sees all of
-// them — the same split executive already had.
+// department_manager sits with the other line roles: it sees its own reports' ideas.
+// plant_head is org-wide, so it sits with the admin set and sees all of them - the same
+// split executive already had.
 const TEAM_ROLES = ['team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager'];
 const ADMIN_ROLES = ['plant_head', 'executive', 'admin', 'super_admin'];
 const PRIVILEGED_ANON = ['manager', 'department_manager', 'senior_manager', 'plant_head', 'executive', 'admin', 'super_admin'];
 
-/**
- * Roles that may read an idea's full proposed solution. Everyone else — the
- * general employee population browsing All Ideas — sees a one-line summary.
- *
- * The reasoning: the solution IS the intellectual contribution. Publishing it
- * verbatim to the whole organisation the moment it is filed lets anyone restate
- * it as their own before the original is even reviewed, which quietly punishes
- * the people the leaderboard is meant to reward. The headline, impact, score
- * and status all stay public, so the pipeline is still transparent — only the
- * "how" is held back until a reviewer has it.
- */
+/** Roles that may read an idea's full proposed solution. */
 const PRIVILEGED_SOLUTION = PRIVILEGED_ANON;
 
-/**
- * MOM §14.5 — Time Required is a fixed three-band dropdown.
- * MOM §14.6 — solution category tags.
- * Both are validated against these lists rather than stored as free text, so a
- * typo cannot create a fourth band or a one-off tag that breaks every filter.
- */
+/** MOM §14.5 - Time Required is a fixed three-band dropdown. */
 export const TIME_REQUIRED_BANDS = ['lt_3m', '3_6m', '6_12m'];
 export const SOLUTION_TAGS = ['process_improvement', 'quality', 'cost', 'delivery'];
 
-/** MOM §13.10 — patentability, a separate axis from approval status. */
+/** MOM §13.10 - patentability, a separate axis from approval status. */
 export const PATENTABILITY_VALUES = [
   'not_assessed', 'not_patentable', 'possible', 'recommended', 'filed',
 ];
 
-/**
- * MOM §13.1 — solution visibility is now the organisation's choice, not a
- * constant. `everyone` restores the pre-MOM behaviour; `managers_only` is the
- * strictest, hiding the text from peers entirely.
- *
- * Reading the org setting costs one cached settings lookup per request, which
- * the callers already perform for other reasons.
+/*
+ * MOM §13.1 - solution visibility is now the organisation's choice, not a constant.
+ * `everyone` restores the pre-MOM behaviour; `managers_only` is the strictest, hiding the
+ * text from peers entirely.
  */
-/**
- * MOM §14.10 — who may read the AI's assessment of an idea.
- *
- * Voting itself stays open to everyone; that was never in question. What the
- * minutes flag is the *prediction*: the machine's score reasoning, which reads
- * as a verdict on somebody's idea before a human has looked at it. Shown to the
- * whole floor it discourages people whose first attempt scored badly, which is
- * the opposite of what a suggestion scheme is for.
- *
- * The minutes say "confirm scope", so this is a setting rather than a guess.
- * The default is the cautious reading — managers and above — and an
- * organisation that disagrees can open it up without a code change.
- */
+/** MOM §14.10 - who may read the AI's assessment of an idea. */
 function predictionMode(settings) {
   const v = String(settings?.prediction_visibility ?? 'seniors');
   return ['seniors', 'everyone'].includes(v) ? v : 'seniors';
 }
 
-/**
- * Hide the AI reasoning from people not entitled to it. The score itself stays
- * visible — it is a sorting aid and removing it would make the list unreadable.
- * Only the written justification is held back.
- */
+/** Hide the AI reasoning from people not entitled to it. */
 export function safeUid(user) {
   if (!user || user.id === undefined || user.id === null) return 0;
   const cleaned = String(user.id).replace(/\D/g, '');
@@ -119,11 +67,7 @@ export function visibilityMode(settings) {
   return ['authors_reviewers', 'managers_only', 'everyone'].includes(v) ? v : 'authors_reviewers';
 }
 
-/**
- * First sentence of a solution, or a hard-truncated opening — whichever is
- * shorter. Never returns a fragment that runs to the character limit without
- * an ellipsis, so a summary is always visibly a summary.
- */
+/** First sentence of a solution, or a hard-truncated opening - whichever is shorter. */
 export function summariseSolution(text, limit = 140) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
   if (!clean) return '';
@@ -133,21 +77,10 @@ export function summariseSolution(text, limit = 140) {
   // Cut on a word boundary so the preview does not end mid-word.
   const cut = clean.slice(0, limit);
   const lastSpace = cut.lastIndexOf(' ');
-  return (lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…';
+  return (lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd() + '...';
 }
 
-/**
- * Trim a problem statement down to an extract.
- *
- * The solution was already held back from uninvolved colleagues, but the
- * situation was not - and a well-written situation often contains the whole
- * insight. Somebody who reads "we scrap 40 units a shift because the fixture
- * shifts after 200 cycles" has the idea, whether or not they can see the
- * proposed fix.
- *
- * Cuts on a sentence boundary where one is close enough, otherwise on a word
- * boundary, so an extract is never a fragment ending mid-word.
- */
+/** Trim a problem statement down to an extract. */
 export function previewText(text, limit = 180) {
   const clean = String(text ?? '').replace(/\s+/g, ' ').trim();
   if (!clean || clean.length <= limit) return clean;
@@ -155,17 +88,10 @@ export function previewText(text, limit = 180) {
   const lastStop = Math.max(window.lastIndexOf('. '), window.lastIndexOf('! '), window.lastIndexOf('? '));
   if (lastStop > limit * 0.5) return clean.slice(0, lastStop + 1);
   const lastSpace = window.lastIndexOf(' ');
-  return (lastSpace > limit * 0.6 ? window.slice(0, lastSpace) : window).trimEnd() + '…';
+  return (lastSpace > limit * 0.6 ? window.slice(0, lastSpace) : window).trimEnd() + '...';
 }
 
-/*
- * Strip the sections this organisation does not let ordinary colleagues see.
- *
- * Called only for viewers who are already outside the idea. It empties fields
- * rather than deleting them, and records what was withheld in `hidden_sections`
- * so the screen can say "your organisation does not show this" instead of
- * rendering what looks like an idea nobody bothered to fill in.
- */
+// Strip the sections this organisation does not let ordinary colleagues see.
 function applySectionVisibility(idea, allowed) {
   const hidden = IDEA_SECTIONS.filter((x) => !allowed.includes(x));
   if (!hidden.length) { idea.hidden_sections = []; return idea; }
@@ -183,9 +109,7 @@ function applySectionVisibility(idea, allowed) {
       case 'benefits':
         idea.tangible_benefit = null;
         idea.intangible_benefit = null;
-        // These two are benefit text under different column names. Leaving them
-        // behind meant the section looked closed on screen while the export
-        // still printed it.
+        // These two are benefit text under different column names.
         idea.benefits_expected = null;
         idea.support_required = null;
         break;
@@ -223,22 +147,7 @@ function applySectionVisibility(idea, allowed) {
   return idea;
 }
 
-/**
- * Is this person inside this idea?
- *
- * Inside means: they wrote it, they are credited on it, they have been asked to
- * decide on it, or they are senior enough that deciding on ideas is their job.
- * Everybody else is a bystander - entitled to know the idea exists and roughly
- * what it is about, and nothing more.
- *
- * The same question drives three separate decisions, so it is answered once:
- * how much text the server sends, which sections it strips, and whether the
- * screen offers a "view full idea" button at all. Answering it three times in
- * three places is how they drift apart.
- *
- * Deliberately does NOT consider solution_visibility. That setting governs how
- * much text a bystander receives; it does not make them a participant.
- */
+/** Is this person inside this idea? */
 export function isInsideIdea(user, idea) {
   const uid = Number(user?.id);
   if (!uid) return false;
@@ -246,21 +155,18 @@ export function isInsideIdea(user, idea) {
   if (Number(idea.submitter_id) === uid) return true;
   if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
   if (Number(idea.current_reviewer_id) === uid) return true;
-  // Populated by get(); absent on list rows, where the four checks above are
-  // what the list query can answer.
+  // Populated by get(); absent on list rows, where the four checks above are what the list
+  // query can answer.
   if ((idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid)) return true;
   if ((idea.co_suggesters || []).some((c) => Number(c.id) === uid)) return true;
   return false;
 }
 
-/**
- * May this viewer read the full solution of this idea?
- * The author and their co-suggesters always can; so can whoever has to judge it.
- */
+/** May this viewer read the full solution of this idea? */
 export function canReadSolution(user, idea, mode = 'authors_reviewers') {
   const uid = Number(user.id);
-  // The author always sees their own proposal, in every mode. A setting that
-  // could hide someone's own writing from them would be a bug, not a policy.
+  // The author always sees their own proposal, in every mode. A setting that could hide
+  // someone's own writing from them would be a bug, not a policy.
   if (Number(idea.submitter_id) === uid) return true;
   if (mode === 'everyone') return true;
   if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
@@ -270,18 +176,14 @@ export function canReadSolution(user, idea, mode = 'authors_reviewers') {
   return false;
 }
 
-/**
- * Replace the full solution with a summary unless the viewer is entitled to it.
- * Mutates and returns the row. `solution_redacted` lets the UI say why the text
- * is short instead of looking like the field was left empty.
- */
+/** Replace the full solution with a summary unless the viewer is entitled to it. */
 function redactSolution(user, idea, mode = 'authors_reviewers', previewChars = 180) {
   idea.solution_summary = summariseSolution(idea.proposed_solution);
   if (!canReadSolution(user, idea, mode)) {
     idea.proposed_solution = null;
     idea.solution_redacted = true;
-    // The situation goes the same way. Whoever may not read the fix may not
-    // read the whole problem either - only enough to know what it is about.
+    // The situation goes the same way. Whoever may not read the fix may not read the whole
+    // problem either - only enough to know what it is about.
     idea.situation_summary = previewText(idea.present_situation, previewChars);
     idea.present_situation = null;
     idea.situation_redacted = true;
@@ -293,25 +195,20 @@ function redactSolution(user, idea, mode = 'authors_reviewers', previewChars = 1
   return idea;
 }
 
-// ── LIST ────────────────────────────────────────────────────────────
+// LIST
 export async function list(db, user, { status, search, impact, archived, tag, time_required: timeReq } = {}) {
   const where = [];
   const params = [];
 
-  /*
-   * Archived ideas are hidden unless explicitly asked for (MOM §13.2). This is
-   * a filter, not a delete: the points already awarded, the workflow history and
-   * the ROI figures all survive, which is exactly why archiving exists instead
-   * of a delete button.
-   */
+  // Archived ideas are hidden unless explicitly asked for (MOM §13.2).
   if (String(archived) === '1' || archived === true) {
     where.push('i.archived_at IS NOT NULL');
   } else if (String(archived) !== 'all') {
     where.push('i.archived_at IS NULL');
   }
 
-  // §14.6 — filter by solution tag. Matched on the CSV with delimiters on both
-  // sides so `cost` cannot match `cost_saving`.
+  // §14.6 - filter by solution tag. Matched on the CSV with delimiters on both sides so
+  // `cost` cannot match `cost_saving`.
   if (tag && SOLUTION_TAGS.includes(tag)) {
     where.push("CONCAT(',', IFNULL(i.solution_tags,''), ',') LIKE ?");
     params.push(`%,${tag},%`);
@@ -361,20 +258,14 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
       idea.avatar_initials = '?';
-      idea.department = '—';
+      idea.department = '-';
     }
-    // The browse list never carries a full solution over the wire, even for
-    // people entitled to read one — they get it from the detail endpoint. A
-    // hundred rows of verbatim proposals sitting in the browser is exactly the
-    // leak this is meant to close, and it is invisible to anyone reading only
-    // the rendered table.
-    // Whether this person is a participant in this idea, not merely allowed to
-    // read some of it. The screens use it to decide whether to offer a full
-    // view at all, rather than offering one that opens a mostly-empty overlay.
+    // The browse list never carries a full solution over the wire, even for people entitled to
+    // read one - they get it from the detail endpoint.
     idea.viewer_inside = isInsideIdea(user, idea);
     redactSolution(user, idea, mode, previewChars);
-    // The browse list shows a one-line gist. If the organisation does not let
-    // ordinary colleagues read even that, the column has to be empty for them.
+    // The browse list shows a one-line gist. If the organisation does not let ordinary
+    // colleagues read even that, the column has to be empty for them.
     if (idea.solution_redacted && !listSections.includes('solution')) {
       idea.solution_summary = null;
       idea.solution_hidden_by_policy = true;
@@ -387,7 +278,7 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
   return { success: true, ideas };
 }
 
-// ── MY ──────────────────────────────────────────────────────────────
+// MY
 export async function my(db, user) {
   const uid = Number(user.id);
   const [ideas] = await db.execute(
@@ -405,42 +296,7 @@ export async function my(db, user) {
   return { success: true, ideas };
 }
 
-/**
- * Move ideas that are waiting on somebody who does not exist.
- *
- * ── Why this is needed even though submit and approve both skip ──────────
- *
- * Those two only run when somebody acts. An idea can become unactionable
- * without anybody acting at all:
- *
- *   • the person it was routed to leaves and is deactivated;
- *   • the only holder of its stage leaves and is deactivated;
- *   • an administrator edits the chain and the idea's stage is now filled by
- *     nobody;
- *   • a migration placed it at a stage that was correct under the old chain;
- *   • it was waiting for a role nobody held, and somebody has now been given
- *     that role — a plant head appointed a week after the department manager
- *     approved.
- *
- * The last one is not hypothetical — it is how six ideas came to be sitting at
- * `immediate_manager` in a tenant with no manager, invisible to every queue in
- * the product and unable to move, because moving requires an approval and
- * approving requires somebody who can.
- *
- * ── Where it searches from ─────────────────────────────────────────────────
- *
- * An idea that has never been approved by anyone restarts from the beginning of
- * the chain: it has not passed those stages, it was merely placed past them, so
- * beginning again is a correction rather than a repetition.
- *
- * An idea that HAS approvals searches forward only. Sending it back would ask
- * people to approve something they already approved, and would let a chain edit
- * silently undo decisions that were properly made.
- *
- * Nothing is ever approved by this. An idea with nowhere to go is parked at the
- * stage that is blocking it, so the next pass asks whether THAT role has been
- * filled rather than re-examining a stage which already finished with it.
- */
+/** Move ideas that are waiting on somebody who does not exist. */
 export async function repairStrandedIdeas(db) {
   const cfg = await getApprovalConfig(db);
   if (!cfg.approvers.length) return { checked: 0, moved: 0, stranded: 0 };
@@ -461,22 +317,7 @@ export async function repairStrandedIdeas(db) {
   let stranded = 0;
 
   for (const idea of rows) {
-    /*
-     * ── Is this idea in a state somebody can act on? ────────────────────────
-     *
-     * Three things have to be true, and the old version only checked one.
-     *
-     * It used to ask "does anybody hold this idea's stage?" and stop there. So
-     * an idea assigned to a person who had since been deactivated looked
-     * perfectly healthy — their ROLE still had holders — while the one queue it
-     * appeared in belonged to somebody who no longer logs in. The idea sat
-     * there indefinitely with no sign anything was wrong.
-     *
-     * Unassigned is deliberately treated as needing repair rather than as
-     * broken: the queue still offers those to every holder of the role, so
-     * nothing is lost meanwhile, but if somebody suitable now exists the idea
-     * should be pointed at them.
-     */
+    // Is this idea in a state somebody can act on?
     const stageSpec = cfg.approvers.find((a) => a.stage === idea.current_stage);
     const stageExists = !!stageSpec;
     const assigneeAlive = idea.current_reviewer_id
@@ -484,23 +325,7 @@ export async function repairStrandedIdeas(db) {
       && Number(idea.current_reviewer_id) !== Number(idea.submitter_id);
 
     if (stageExists && assigneeAlive) {
-      /*
-       * ── Assigned, alive, and possibly the wrong person ─────────────────────
-       *
-       * Everything above asks whether SOMEBODY can act. This asks whether it is
-       * the RIGHT somebody.
-       *
-       * Ideas routed before the reporting line was consulted went to whichever
-       * holder of the role sorted first — so Jitesh's idea could be sitting
-       * with Mark while Elisa, his actual manager, has never seen it. Those
-       * ideas are alive and assigned, so nothing else here would ever look at
-       * them again, and they would stay wrong until somebody approved them.
-       *
-       * Only ever moved TOWARDS the author's own line, and only when that line
-       * actually produces somebody. An idea is never un-assigned by this: a
-       * correction that empties the field would take it out of one queue
-       * without putting it in another.
-       */
+      // Everything above asks whether SOMEBODY can act.
       const own = await lineHolderFor(db, idea.submitter_id, stageSpec.role);
       if (!own || Number(own.id) === Number(idea.current_reviewer_id)) continue;
 
@@ -510,24 +335,16 @@ export async function repairStrandedIdeas(db) {
       );
       try {
         await addNotification(db, own.id, 'Idea Awaiting Your Approval',
-          `Idea ${idea.idea_code} — "${idea.title}" — is now with you as `
+          `Idea ${idea.idea_code} - "${idea.title}" - is now with you as `
           + `${cfg.labels[idea.current_stage] || idea.current_stage}.`, idea.id);
       } catch { /* best effort: the routing is the thing that matters */ }
-      logger.info(`idea ${idea.idea_code}: moved to ${own.name} — the submitter's own `
+      logger.info(`idea ${idea.idea_code}: moved to ${own.name} - the submitter's own `
         + `${cfg.labels[idea.current_stage] || idea.current_stage}`);
       moved++;
       continue;
     }
 
-    /*
-     * Where to resume from.
-     *
-     * An idea that has been approved at least once searches FORWARD from where
-     * it is. Sending it back would ask people to approve something they already
-     * approved, and would let a chain edit silently undo decisions that were
-     * properly made. One with no approvals restarts at the top of the chain,
-     * because nothing has been decided about it yet.
-     */
+    // Where to resume from.
     const from = Number(idea.approvals) > 0 && idea.current_stage
       ? idea.current_stage
       : cfg.approvers[0].stage;
@@ -535,14 +352,9 @@ export async function repairStrandedIdeas(db) {
     const resolved = await resolveActionableStage(db, cfg, from, idea.submitter_id);
 
     if (resolved.stranded || !resolved.stage) {
-      /*
-       * Still nobody. Park it at the stage that is BLOCKING, so the next pass
-       * asks the right question — "can anybody act at plant_head yet?" — rather
-       * than looking at a stage that has already finished with it and
-       * concluding all is well. That mistake is how an idea approved by the
-       * department manager stayed invisible to the plant head who was appointed
-       * a week later.
-       */
+      // Still nobody. Park it at the stage that is BLOCKING, so the next pass asks the right
+      // question - "can anybody act at plant_head yet?" - rather than looking at a stage that
+      // has already finished with it and concluding all is well.
       if (resolved.stage && resolved.stage !== idea.current_stage) {
         const pos = cfg.approvers.findIndex((a) => a.stage === resolved.stage) + 1;
         await db.execute(
@@ -567,15 +379,13 @@ export async function repairStrandedIdeas(db) {
       [resolved.stage, nextAssignee, position, idea.id]
     );
 
-    /*
-     * Tell the new owner. A silent reassignment is an idea that arrives in
-     * somebody's queue with no reason to look at it — and the person it moved
-     * FROM is usually gone, so nobody else is going to mention it.
-     */
+    // Tell the new owner. A silent reassignment is an idea that arrives in somebody's queue
+    // with no reason to look at it - and the person it moved FROM is usually gone, so nobody
+    // else is going to mention it.
     if (resolved.assignee) {
       try {
         await addNotification(db, resolved.assignee.id, 'Idea Awaiting Your Approval',
-          `Idea ${idea.idea_code} — "${idea.title}" — is now with you as `
+          `Idea ${idea.idea_code} - "${idea.title}" - is now with you as `
           + `${cfg.labels[resolved.stage] || resolved.stage}.`, idea.id);
       } catch { /* best effort: the routing is the thing that matters */ }
     }
@@ -586,7 +396,7 @@ export async function repairStrandedIdeas(db) {
       : !idea.current_reviewer_id ? `nobody was assigned at ${was}`
       : `the ${was} it was with is no longer active`;
     logger.info(`idea ${idea.idea_code}: re-routed to ${now}`
-      + `${resolved.assignee ? ` (${resolved.assignee.name})` : ''} — ${why}`);
+      + `${resolved.assignee ? ` (${resolved.assignee.name})` : ''} - ${why}`);
     moved++;
   }
 
@@ -596,20 +406,8 @@ export async function repairStrandedIdeas(db) {
   return { checked: rows.length, moved, stranded };
 }
 
-// ── REVIEW QUEUE ────────────────────────────────────────────────────
-/**
- * The chain, in a shape the browser can render without knowing the rules.
- *
- * The queue used to return ideas and nothing else, so the screen could show
- * that an idea was "Under Review" but not what it was waiting FOR, who had it,
- * or what approving would do next. A reviewer pressing Approve could not tell
- * whether they were sending it onward or closing it — which is the single most
- * consequential thing about the button they are pressing.
- *
- * Sent per request rather than cached in the client, because an administrator
- * can change the chain at any moment and a stale copy would describe a journey
- * the server is no longer taking.
- */
+// REVIEW QUEUE
+/** The chain, in a shape the browser can render without knowing the rules. */
 function chainSummary(cfg, role) {
   const steps = cfg.approvers.map((a, i) => ({
     stage: a.stage,
@@ -626,31 +424,7 @@ export async function review(db, user) {
   const uid = Number(user.id);
   const cfg = await getApprovalConfig(db);
 
-  /*
-   * ── What is waiting on me ───────────────────────────────────────────────
-   *
-   * Two conditions, and both are needed.
-   *
-   * The idea must be at a stage MY ROLE plays in this organisation's chain —
-   * that is the chain deciding the sequence, and it is not negotiable.
-   *
-   * And it must have been routed to ME. Jitesh reports to Elisa; Mark manages
-   * a different team. Matching on the stage alone put Jitesh's idea in front of
-   * both of them, and whichever manager opened it first could approve it — so
-   * an idea could be decided by somebody with no connection to the work, while
-   * the manager who could actually judge it never knew it existed.
-   *
-   * ── The unassigned case, and why it is not simply excluded ──────────────
-   *
-   * `current_reviewer_id IS NULL` means nobody could be identified for that
-   * stage: an incomplete org chart, a row created before this routing existed,
-   * or a stage whose holder was deactivated. Dropping those from every queue
-   * would hide the idea from the entire organisation, which is how an idea
-   * disappears without anybody being told. They are offered to every holder of
-   * the stage's role instead — the old behaviour, kept exactly where it is the
-   * lesser evil, and the hourly repair pass assigns them properly as soon as
-   * somebody suitable exists.
-   */
+  // Two conditions, and both are needed.
   const myStages = rolePlaysStages(cfg, user.role);
 
   if (myStages.length) {
@@ -678,18 +452,7 @@ export async function review(db, user) {
     return { success: true, ideas, chain: chainSummary(cfg, user.role) };
   }
 
-  /*
-   * The org-wide queue, for the people whose remit actually is org-wide.
-   *
-   * This used to be a bare `else`, so any role that was not in reviewer_roles
-   * landed here — including roles the organisation had deliberately left out of
-   * its chain. A team lead excluded from a manager-and-above chain did not get
-   * an empty queue; they got EVERY idea in the organisation, which is both more
-   * than they should see and the reason they were able to act on them.
-   *
-   * Someone outside the chain now gets an empty queue, which is the honest
-   * answer: there is nothing waiting on them.
-   */
+  // The org-wide queue, for the people whose remit actually is org-wide.
   const orgWideRoles = [...new Set([...ADMIN_ROLES, ...cfg.final_roles])];
   if (!orgWideRoles.includes(user.role)) {
     return { success: true, ideas: [] };
@@ -712,7 +475,7 @@ export async function review(db, user) {
   return { success: true, ideas };
 }
 
-// ── GET single ──────────────────────────────────────────────────────
+// GET single
 export async function get(db, user, id) {
   id = Number(id) || 0;
   const uid = Number(user.id);
@@ -749,15 +512,7 @@ export async function get(db, user, id) {
   idea.co_suggesters = cosug;
   idea.co_suggesters_display = cosug.map((c) => c.name).join(', ');
 
-  /*
-   * The trail, with the stage each action was taken at.
-   *
-   * `w.stage` is what was recorded at the time; `actor_role` is what that
-   * person is now. They are both here because they answer different questions
-   * and the older rows only have the second one — see migration 036. A reader
-   * showing "in what capacity" prefers the recorded stage and falls back to the
-   * current role, and must not present the fallback as though it were a record.
-   */
+  // The trail, with the stage each action was taken at.
   const [wf] = await db.execute(
     `SELECT w.*, u.name AS actor_name, u.role AS actor_role, u.employee_id AS actor_employee_id
      FROM idea_workflow w JOIN users u ON u.id = w.actor_id
@@ -766,16 +521,7 @@ export async function get(db, user, id) {
   );
   idea.workflow = wf;
 
-  /*
-   * This organisation's chain, travelling with the idea.
-   *
-   * The closure PDF has to print "team lead approved and passed it to the
-   * immediate manager" using THIS tenant's names for those steps — an
-   * organisation that calls its team leads Shift Incharges gets that word. The
-   * labels live in the tenant's own settings, so they have to come from here;
-   * a renderer cannot look them up, and hard-coding the catalogue names would
-   * print a document describing somebody else's organisation.
-   */
+  // This organisation's chain, travelling with the idea.
   try {
     const cfg = await getApprovalConfig(db);
     idea.approval_chain = {
@@ -789,8 +535,8 @@ export async function get(db, user, id) {
       total: cfg.approvers.length,
     };
   } catch {
-    // A settings read that fails must not take the idea down with it. The PDF
-    // falls back to the actor's role, which is worse but is not nothing.
+    // A settings read that fails must not take the idea down with it. The PDF falls back to
+    // the actor's role, which is worse but is not nothing.
     idea.approval_chain = null;
   }
 
@@ -808,16 +554,14 @@ export async function get(db, user, id) {
     idea.reviewers = [];
   }
 
-  // Hold back the full proposal from colleagues who are neither its authors nor
-  // its judges. Assigned reviewers count even when they are not the *current*
-  // reviewer — in a multi-reviewer workflow every one of them has to read it.
+  // Hold back the full proposal from colleagues who are neither its authors nor its judges.
   const detailSettings = await getOrgSettings(db);
   const mode = visibilityMode(detailSettings);
   const detailPreview = parseInt(detailSettings.situation_preview_chars, 10) || 180;
   const isAssignedReviewer = (idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid);
   const isCoSuggester = (idea.co_suggesters || []).some((c) => Number(c.id) === uid);
-  // An assigned reviewer or co-suggester reads the full text in every mode
-  // except managers_only, which is the whole point of that mode.
+  // An assigned reviewer or co-suggester reads the full text in every mode except
+  // managers_only, which is the whole point of that mode.
   idea.viewer_inside = isInsideIdea(user, idea);
   if ((isAssignedReviewer || isCoSuggester) && mode !== 'managers_only') {
     idea.solution_summary = summariseSolution(idea.proposed_solution);
@@ -827,8 +571,8 @@ export async function get(db, user, id) {
     idea.hidden_sections = [];
   } else {
     redactSolution(user, idea, mode, detailPreview);
-    // Somebody who could not be given the full text is by definition outside
-    // this idea, so the organisation's section rules apply to them.
+    // Somebody who could not be given the full text is by definition outside this idea, so the
+    // organisation's section rules apply to them.
     if (idea.solution_redacted) {
       applySectionVisibility(idea, employeeSections(detailSettings));
     } else {
@@ -837,12 +581,8 @@ export async function get(db, user, id) {
   }
   redactPrediction(user, idea, predictionMode(detailSettings));
 
-  /*
-   * MOM §13.13 — "Under review by ___" as one readable line, rather than making
-   * the viewer reconstruct it from the workflow timeline. Multi-reviewer ideas
-   * name everyone still outstanding; hierarchical ones name the single current
-   * reviewer. A closed idea reports its outcome instead.
-   */
+  // MOM §13.13 - "Under review by ___" as one readable line, rather than making the viewer
+  // reconstruct it from the workflow timeline.
   idea.review_stage = (() => {
     if (['Approved', 'Rejected', 'Implemented'].includes(idea.status)) {
       return { state: 'closed', status: idea.status, names: [] };
@@ -863,15 +603,11 @@ export async function get(db, user, id) {
     idea.submitter_name = 'Anonymous';
     idea.submitter_email = null;
     idea.avatar_initials = '?';
-    idea.department = '—';
-    idea.business_unit = '—';
+    idea.department = '-';
+    idea.business_unit = '-';
     idea.manager_name = null;
 
-    // The header fields are not the only place the author's name appears. The
-    // approval timeline carries an actor name on every entry — starting with
-    // the submitter's own "Submitted" row — and the co-suggester list names the
-    // people who raised it with them. Masking the header alone still told any
-    // colleague exactly who filed the anonymous report.
+    // The header fields are not the only place the author's name appears.
     idea.workflow = (idea.workflow || []).map((w) => (
       Number(w.actor_id) === Number(idea.submitter_id)
         ? { ...w, actor_name: 'Anonymous', actor_role: null }
@@ -886,7 +622,7 @@ export async function get(db, user, id) {
   return { success: true, idea };
 }
 
-// ── SUBMIT / SAVE DRAFT ─────────────────────────────────────────────
+// SUBMIT / SAVE DRAFT
 export async function submitOrDraft(db, user, action, b) {
   const title = String(b.title ?? '').trim();
   const sit = String(b.present_situation ?? '').trim();
@@ -895,11 +631,7 @@ export async function submitOrDraft(db, user, action, b) {
   const impLvl = b.impact_level ?? 'Medium';
   const tangible = String(b.tangible_benefit ?? '').trim();
   const intang = String(b.intangible_benefit ?? '').trim();
-  // Co-suggesters: accept a full array (co_suggester_ids) OR the two legacy
-  // fields. The first two are mirrored into the legacy ideas.co_suggester_*_id
-  // columns (so existing read paths keep working); the complete list is written
-  // to the idea_co_suggesters junction after the row is saved. Self-references
-  // and duplicates are dropped.
+  // Co-suggesters: accept a full array (co_suggester_ids) OR the two legacy fields.
   const rawCoIds = Array.isArray(b.co_suggester_ids)
     ? b.co_suggester_ids
     : [b.co_suggester_1_id, b.co_suggester_2_id];
@@ -911,16 +643,13 @@ export async function submitOrDraft(db, user, action, b) {
   const challengeId = b.challenge_id ? Number(b.challenge_id) : null;
   const templateType = String(b.template_type ?? '').trim() || null;
 
-  /*
-   * MOM §14.5 / §14.6. Both validated against a fixed list rather than stored as
-   * typed: an unrecognised value becomes NULL instead of creating a fourth time
-   * band or a one-off tag that every filter would then miss.
-   */
+  // MOM §14.5 / §14.6. Both validated against a fixed list rather than stored as typed: an
+  // unrecognised value becomes NULL instead of creating a fourth time band or a one-off tag
+  // that every filter would then miss.
   const timeRequired = TIME_REQUIRED_BANDS.includes(String(b.time_required ?? ''))
     ? String(b.time_required) : null;
-  // Anyone may raise the flag - the submitter who thinks their idea is novel,
-  // or a senior reviewing it. It records a claim; the organisation's own
-  // assessment lives in `patentability` and is not touched here.
+  // Anyone may raise the flag - the submitter who thinks their idea is novel, or a senior
+  // reviewing it.
   const patentableFlag = (b.patentable_flag === true || b.patentable_flag === 1
     || b.patentable_flag === '1') ? 1 : 0;
   const solutionTags = [...new Set(
@@ -929,34 +658,21 @@ export async function submitOrDraft(db, user, action, b) {
       .filter((x) => SOLUTION_TAGS.includes(x))
   )].join(',') || null;
 
-  /*
-   * Business case. Every field is optional — a half-formed idea is still worth
-   * capturing, and the reviewer can ask for the rest. Blank stays NULL rather
-   * than becoming an empty string so "not answered" is distinguishable from
-   * "answered with nothing" on the detail screen and in exports.
-   */
+  // Business case. Every field is optional - a half-formed idea is still worth capturing,
+  // and the reviewer can ask for the rest.
   const investment = String(b.investment_required ?? '').trim().slice(0, 255) || null;
   const feasibilityIn = String(b.feasibility ?? '').trim();
   const feasibility = ['Low', 'Medium', 'High'].includes(feasibilityIn) ? feasibilityIn : null;
   const implDuration = String(b.implementation_duration ?? '').trim().slice(0, 120) || null;
-  // A malformed date would be written as 0000-00-00 (or rejected outright in
-  // strict mode); anything that is not a plain YYYY-MM-DD is simply not a date.
+  // A malformed date would be written as 0000-00-00 (or rejected outright in strict mode);
+  // anything that is not a plain YYYY-MM-DD is simply not a date.
   const expectedDateIn = String(b.expected_implementation_date ?? '').trim();
   const expectedDate = /^\d{4}-\d{2}-\d{2}$/.test(expectedDateIn) ? expectedDateIn : null;
   const benefitsExpected = String(b.benefits_expected ?? '').trim() || null;
   const supportRequired = String(b.support_required ?? '').trim() || null;
 
-  /*
-   * The title column is VARCHAR(255) and only its PRESENCE was checked, so a
-   * longer one travelled all the way to MySQL and came back as "Data too long
-   * for column 'title'". That surfaced as a 500 — an internal error for what is
-   * an ordinary validation failure, and a message the person typing could do
-   * nothing with. Rejected here instead, saying what to do about it.
-   *
-   * Deliberately not truncated. `investment_required` above is sliced because
-   * losing the tail of a free-text note is harmless; silently cutting somebody's
-   * title changes what their idea is called without telling them.
-   */
+  // The title column is VARCHAR(255) and only its PRESENCE was checked, so a longer one
+  // travelled all the way to MySQL and came back as "Data too long for column 'title'".
   if (title.length > 255) {
     throw badRequest(
       `The title is too long (${title.length} characters, limit 255). `
@@ -987,8 +703,8 @@ export async function submitOrDraft(db, user, action, b) {
   let reviewDueDate = null;
   let currentReviewerId = null;
   let currentStage = null;
-  // Carried out of the block so the workflow note can be written after the row
-  // exists — a skipped stage is only meaningful next to the idea it skipped.
+  // Carried out of the block so the workflow note can be written after the row exists - a
+  // skipped stage is only meaningful next to the idea it skipped.
   let submitStageNote = null;
   if (action === 'submit') {
     let slaDays = 7;
@@ -1000,35 +716,13 @@ export async function submitOrDraft(db, user, action, b) {
     } catch { /* keep default */ }
     reviewDueDate = addDays(slaDays);
 
-    /*
-     * ── The idea enters the chain at stage one ────────────────────────────
-     *
-     * This used to set current_reviewer_id to the submitter's own manager and
-     * nothing else, which is how the whole approval sequence came to be driven
-     * by the reporting tree: the first reviewer was whoever the submitter
-     * reported to, whatever role they held and wherever that sat in the
-     * configured chain.
-     *
-     * The chain decides now. The idea starts at the first approver stage, and
-     * a person is chosen because they HOLD THAT STAGE'S ROLE — preferring the
-     * submitter's own manager when the manager happens to hold it, since an
-     * idea is better read by somebody who knows the work.
-     *
-     * A stage with nobody in it leaves current_reviewer_id NULL. That is not a
-     * failure: the review queue offers ideas to everyone holding the stage
-     * role, so the idea is still actionable the moment somebody is given it.
-     */
+    // This used to set current_reviewer_id to the submitter's own manager and nothing else,
+    // which is how the whole approval sequence came to be driven by the reporting tree: the
+    // first reviewer was whoever the submitter reported to, whatever role they held and
+    // wherever that sat in the configured chain.
     const cfg = await getApprovalConfig(db);
 
-    /*
-     * Enter the chain at the first stage somebody can actually act on.
-     *
-     * Not simply the first stage. A chain routinely names roles an
-     * organisation has not filled — on this platform, five of six tenants had
-     * nobody in ANY approval role — and an idea parked at a stage with no
-     * holder is invisible to every queue in the product. Skipping is recorded
-     * on the idea below, so the trail says which step was passed and why.
-     */
+    // Enter the chain at the first stage somebody can actually act on.
     if (cfg.first_stage) {
       const resolved = await resolveActionableStage(db, cfg, cfg.first_stage.stage, user.id);
       currentStage = resolved.stage;
@@ -1115,21 +809,14 @@ export async function submitOrDraft(db, user, action, b) {
   } catch {}
 
   if (action === 'submit' && !wasAlreadySubmitted) {
-    /*
-     * If entering the chain meant passing stages nobody holds, that goes on the
-     * SUBMITTED entry rather than a row of its own.
-     *
-     * idea_workflow.actor_id is NOT NULL and every reader inner-joins users on
-     * it, so a system row with no actor cannot be stored and would not be shown
-     * if it could. Folding it in also puts the skip at the moment it happened,
-     * attributed to the action that caused it.
-     */
+    // If entering the chain meant passing stages nobody holds, that goes on the SUBMITTED
+    // entry rather than a row of its own.
     let submitNote = null;
     if (submitStageNote && submitStageNote.skipped.length) {
       const cfgLabels = (await getApprovalConfig(db)).labels;
       const names = submitStageNote.skipped.map((k) => cfgLabels[k] || k).join(', ');
       const plural = submitStageNote.skipped.length > 1;
-      submitNote = `[Skipped ${names} — nobody in this organisation holds ${plural ? 'those roles' : 'that role'}]`;
+      submitNote = `[Skipped ${names} - nobody in this organisation holds ${plural ? 'those roles' : 'that role'}]`;
 
       const [cr] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
       await reportChainGap(db, { id: ideaId, idea_code: cr[0]?.idea_code || `#${ideaId}` },
@@ -1147,22 +834,7 @@ export async function submitOrDraft(db, user, action, b) {
     try { await addWorkflow(db, ideaId, user.id, 'Submitted', submitNote, 'originator'); } catch {}
     try { await addPoints(db, user.id, POINTS.submit); } catch {}
 
-    /*
-     * Tell the person the idea was actually ROUTED to.
-     *
-     * This used to notify `user.manager_id` — the submitter's line manager,
-     * whoever that is and whatever role they hold. That is not necessarily the
-     * person the chain put the idea with: the first stage might be Team Lead
-     * while the author's manager_id points at a department manager, or the
-     * author's own stage was skipped, or their manager holds no role in the
-     * chain at all. So the one person who could act on the idea got no mail,
-     * and somebody who could not act on it got one asking them to.
-     *
-     * currentReviewerId is what resolveActionableStage decided, so the notice
-     * and the queue always name the same person. Null means the stage is open
-     * to every holder of its role — nobody in particular to write to, and the
-     * idea is in all of their queues.
-     */
+    // Tell the person the idea was actually ROUTED to.
     if (currentReviewerId) {
       try {
         await addNotification(
@@ -1186,18 +858,7 @@ export async function submitOrDraft(db, user, action, b) {
 
   const [crows] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
 
-  /*
-   * Tell the person who submitted it that it arrived.
-   *
-   * Only them: an acknowledgement is addressed to one reader and nobody else
-   * needs a copy. The manager already has their own notice above, and sending
-   * this to a wider list would turn every submission into inbox noise for
-   * people who cannot act on it.
-   *
-   * Sent only on a real submission, never on a saved draft and never on the
-   * re-save of something already submitted, or somebody editing their idea
-   * three times would be thanked three times for the same thing.
-   */
+  // Tell the person who submitted it that it arrived.
   if (action === 'submit' && !wasAlreadySubmitted && user.email) {
     try {
       const code = crows[0].idea_code;
@@ -1213,9 +874,9 @@ export async function submitOrDraft(db, user, action, b) {
         + `Thank you for taking the time to write it up.`
       );
     } catch (e) {
-      // A confirmation that could not be sent must never fail the submission it
-      // is confirming. The idea is saved; the email is a courtesy.
-      logger.warn(`idea ${ideaId}: submitter acknowledgement not queued — ${e.message}`);
+      // A confirmation that could not be sent must never fail the submission it is confirming.
+      // The idea is saved; the email is a courtesy.
+      logger.warn(`idea ${ideaId}: submitter acknowledgement not queued - ${e.message}`);
     }
   }
 
@@ -1228,19 +889,8 @@ export async function submitOrDraft(db, user, action, b) {
   };
 }
 
-// ── REVIEW ACTION (approve / reject / implement + escalation) ───────
-/**
- * Serialise everything that decides one idea's fate.
- *
- * The duplicate-action guard below reads, then writes. Two clicks that land in
- * the same millisecond — a double-tapped Approve button, or a retry from a
- * flaky connection — both read "no recent action" and both wrote one, so an
- * idea could be approved five times over with five audit entries. A named lock
- * held for the length of the decision makes the read-then-write atomic across
- * every request and every application instance (it lives in MySQL, not in this
- * process). It must be taken and released on the SAME connection, hence the
- * dedicated one rather than the pool.
- */
+// REVIEW ACTION (approve / reject / implement + escalation)
+/** Serialise everything that decides one idea's fate. */
 async function withIdeaDecisionLock(db, ideaId, fn) {
   const conn = await db.getConnection();
   const lockName = `ifqm_idea_decision_${ideaId}`;
@@ -1267,41 +917,10 @@ export async function reviewAction(db, user, b) {
   return withIdeaDecisionLock(db, ideaId, () => reviewActionLocked(db, user, ideaId, decision, comment));
 }
 
-/**
- * The first stage from `startStage` onwards that somebody can actually act on.
- *
- * "Somebody" excludes the submitter: a team lead who submits an idea cannot be
- * the team lead who approves it, so a stage whose only holder is the author is
- * as empty as one with nobody in it.
- *
- * @returns {{stage, role, assignee, skipped: string[], stranded: boolean}}
- *   stranded — no stage in the rest of the chain has anybody who can act. The
- *   caller leaves the idea where it is and tells the administrators.
- */
-/**
- * Walk the submitter's reporting line upward and return the first person on it
- * who holds `role`.
- *
- * ── Why the line, and not the role ────────────────────────────────────────
- *
- * An organisation has many managers. Jitesh reports to Elisa; Mark is also a
- * manager, of a different team, and has no business reading Jitesh's idea, let
- * alone approving it. Choosing by role alone put the idea in front of both of
- * them and let whichever one got there first decide it — so an idea could be
- * approved by somebody who had never met the person who wrote it, and Elisa,
- * who could actually judge whether the thing was worth doing, might never see
- * it at all.
- *
- * The reporting tree answers "which manager is YOURS". It is not being used to
- * decide the SEQUENCE — that mistake is what the ordered stage list exists to
- * prevent, and the chain still decides which stage comes next. It decides only
- * WHO fills the stage the chain has already chosen.
- *
- * The walk is bounded and remembers where it has been: manager_id is edited by
- * hand on an admin screen, and a cycle (two people managing each other, or
- * somebody set as their own manager) would otherwise spin forever inside a
- * request. A depth cap alone would not do it — a two-person cycle never gets
- * deeper.
+/** The first stage from `startStage` onwards that somebody can actually act on. */
+/*
+ * Walk the submitter's reporting line upward and return the first person on it who holds
+ * `role`.
  */
 async function lineHolderFor(db, submitterId, role) {
   const seen = new Set([Number(submitterId)]);
@@ -1318,11 +937,9 @@ async function lineHolderFor(db, submitterId, role) {
     if (seen.has(Number(boss.id))) return null; // a cycle in the org chart
     seen.add(Number(boss.id));
 
-    /*
-     * An inactive manager is stepped over rather than treated as the end of
-     * the line: somebody on long leave should not stop their whole team's
-     * ideas, and the person above them is the natural stand-in.
-     */
+    // An inactive manager is stepped over rather than treated as the end of the line: somebody
+    // on long leave should not stop their whole team's ideas, and the person above them is the
+    // natural stand-in.
     if (boss.role === role && boss.status === 'active' && Number(boss.id) !== Number(submitterId)) {
       return { id: boss.id, name: boss.name, email: boss.email };
     }
@@ -1331,45 +948,9 @@ async function lineHolderFor(db, submitterId, role) {
   return null;
 }
 
-/**
- * The first stage from `startStage` onwards that somebody can actually act on,
- * and the specific person it belongs to.
- *
- * "Somebody" excludes the submitter: a team lead who submits an idea cannot be
- * the team lead who approves it, so a stage whose only holder is the author is
- * as empty as one with nobody in it.
- *
- * Who fills the stage is decided in three steps, in this order:
- *
- *   1. The submitter's own reporting line. This is the answer whenever the org
- *      chart is complete, and it is the one people expect.
- *   2. Failing that, the role's only holder — if there is exactly one, "the"
- *      plant head is unambiguous whatever the reporting line says, and refusing
- *      to route to them because a manager_id was left blank would strand the
- *      idea for a data-entry reason.
- *   3. Failing that — several holders and none of them in the submitter's line
- *      — nobody is chosen, and the administrators are told the reporting line
- *      is incomplete.
- *
- * ── Why step 3 assigns nobody rather than picking somebody ────────────────
- *
- * Picking is the obvious thing to do and it is a trap. Assigning the idea to
- * whichever holder sorts first would mean the queue shows it to that one person
- * — and the guard on the approve endpoint would then refuse everybody else, so
- * an arbitrary tie-break would have quietly decided who was allowed to approve.
- * If that person is on leave, the idea does not move at all, and the reason is
- * invisible: it is sitting in the queue of somebody who is not looking.
- *
- * Leaving it unassigned falls back to the behaviour this routing replaced: any
- * holder of the stage's role may act on it. That is exactly right here, because
- * "which of these managers is the author's" is a question the data cannot
- * answer — and a guess presented as an answer is worse than saying so. The
- * `offLine` flag is what says so, to the only people who can fix it.
- *
- * @returns {{stage, role, assignee, skipped: string[], stranded: boolean, offLine: boolean}}
- *   assignee — null when the stage is open to every holder of its role.
- *   stranded — no stage in the rest of the chain has anybody who can act. The
- *   caller parks the idea at the stage that is blocking and tells the admins.
+/*
+ * The first stage from `startStage` onwards that somebody can actually act on, and the
+ * specific person it belongs to.
  */
 async function resolveActionableStage(db, cfg, startStage, submitterId) {
   const approvers = cfg.approvers;
@@ -1377,7 +958,7 @@ async function resolveActionableStage(db, cfg, startStage, submitterId) {
   if (i < 0) i = 0;
 
   const skipped = [];
-  let blockedAt = null;   // the first stage that had nobody — where the idea waits
+  let blockedAt = null;   // the first stage that had nobody - where the idea waits
 
   for (; i < approvers.length; i++) {
     const { stage, role } = approvers[i];
@@ -1397,13 +978,13 @@ async function resolveActionableStage(db, cfg, startStage, submitterId) {
     );
 
     if (rows.length === 1) {
-      // Unambiguous. "The" plant head is the plant head whether or not anybody
-      // filled in a manager_id.
+      // Unambiguous. "The" plant head is the plant head whether or not anybody filled in a
+      // manager_id.
       return { stage, role, assignee: rows[0], skipped, stranded: false, offLine: false };
     }
     if (rows.length > 1) {
-      // Several, and the data cannot say which is the author's. Open to all of
-      // them, and flagged so somebody fixes the org chart.
+      // Several, and the data cannot say which is the author's. Open to all of them, and flagged
+      // so somebody fixes the org chart.
       return { stage, role, assignee: null, skipped, stranded: false, offLine: true };
     }
 
@@ -1411,18 +992,7 @@ async function resolveActionableStage(db, cfg, startStage, submitterId) {
     skipped.push(stage);
   }
 
-  /*
-   * Nothing in the rest of the chain can act.
-   *
-   * The idea is reported as blocked AT THE STAGE THAT IS MISSING, not at the
-   * stage it came from. That distinction is the whole bug behind "the plant
-   * head sometimes cannot give final approval": an idea approved by the
-   * department manager with no plant head in the organisation used to be left
-   * sitting at department_manager. It had already been approved there, so the
-   * hourly repair pass saw a stage with a living holder and left it alone — and
-   * when a plant head was finally appointed, nothing ever moved the idea to
-   * them. It waited at a stage that was already done with it, forever.
-   */
+  // Nothing in the rest of the chain can act.
   return {
     stage: blockedAt || (approvers[approvers.length - 1]?.stage ?? null),
     role: blockedAt ? cfg.approvers.find((a) => a.stage === blockedAt).role : null,
@@ -1433,11 +1003,7 @@ async function resolveActionableStage(db, cfg, startStage, submitterId) {
   };
 }
 
-/**
- * Say, once, that the chain has a hole in it — to the only people who can mend
- * it. Org admins cannot approve ideas, so this is not a request to act on the
- * idea; it is a request to fix the configuration.
- */
+/** Say, once, that the chain has a hole in it - to the only people who can mend it. */
 async function reportChainGap(db, idea, message) {
   try {
     const [admins] = await db.execute(
@@ -1451,57 +1017,22 @@ async function reportChainGap(db, idea, message) {
   }
 }
 
-/**
- * Tell the submitter their idea advanced a stage.
- *
- * ── Why this is worth a notification ──────────────────────────────────────
- *
- * Under the old engine an idea was usually decided by the first person who
- * touched it, so there was nothing to report between "submitted" and
- * "approved". Now it can sit through four approvals, and without this the
- * submitter sees an idea marked "Under Review" for a fortnight with no sign
- * that anything is happening — which is exactly how a suggestion scheme stops
- * being used.
- *
- * It says the position, not just the name: "2 of 4" tells somebody how much
- * further there is to go, which the stage name alone does not.
- *
- * Best-effort. A notification that fails must never roll back an approval that
- * succeeded — the decision is the thing that matters, and it is already
- * committed by the time this runs.
- */
+/** Tell the submitter their idea advanced a stage. */
 async function notifySubmitterProgress(db, idea, step) {
   const {
     approverName, fromLabel, toLabel, withName, position, total,
   } = step;
   try {
-    /*
-     * Named on both ends, not just titled.
-     *
-     * "Approved at Team Lead, now with Immediate Manager" describes ranks. What
-     * the author wants to know is which two PEOPLE — who signed it off and
-     * whose desk it is on now — because the first thing anybody does with this
-     * is decide whether to go and ask somebody about it. In an organisation
-     * with nine managers, "with a manager" is not an answer.
-     */
+    // Named on both ends, not just titled.
     const by = approverName ? `${approverName} (${fromLabel})` : fromLabel;
     const withWhom = withName ? `${withName}, your ${toLabel}` : toLabel;
 
     await addNotification(db, idea.submitter_id, 'Your idea moved forward',
-      `Idea ${idea.idea_code} — "${idea.title}" — was approved by ${by} `
+      `Idea ${idea.idea_code} - "${idea.title}" - was approved by ${by} `
       + `and is now being reviewed by ${withWhom} (step ${position} of ${total}).`,
       idea.id);
 
-    /*
-     * And by email, not only in the app.
-     *
-     * Most of the people this platform is for do not sit at a desk with the
-     * dashboard open. An idea can spend a fortnight travelling four stages, and
-     * an author who hears nothing in that time concludes the thing went into a
-     * drawer — which is how a suggestion scheme quietly stops being used. The
-     * in-app notification only reaches somebody who has already come back to
-     * look; the email is what reaches somebody who has not.
-     */
+    // And by email, not only in the app.
     const [subRows] = await db.execute(
       'SELECT email, name FROM users WHERE id = ?', [idea.submitter_id]);
     const sub = subRows[0];
@@ -1509,19 +1040,19 @@ async function notifySubmitterProgress(db, idea, step) {
       await queueEmail(db, sub.email, sub.name,
         `Your idea ${idea.idea_code} has moved forward`,
         `Dear ${sub.name},\n\n`
-        + `Good news — your idea "${idea.title}" (${idea.idea_code}) has been approved by ${by}.\n\n`
+        + `Good news - your idea "${idea.title}" (${idea.idea_code}) has been approved by ${by}.\n\n`
         + `It is now being reviewed by ${withWhom}. That is step ${position} of ${total} `
         + `in your organisation's approval path.\n\n`
         + 'We will let you know as soon as it moves again.');
     }
   } catch (e) {
-    logger.warn(`idea ${idea.idea_code}: could not notify submitter of progress — ${e.message}`);
+    logger.warn(`idea ${idea.idea_code}: could not notify submitter of progress - ${e.message}`);
   }
 }
 
 async function reviewActionLocked(db, user, ideaId, decision, comment) {
-  // Both administrator roles. super_admin was not named here, so the one
-  // account that can promote people to admin could also approve ideas.
+  // Both administrator roles. super_admin was not named here, so the one account that can
+  // promote people to admin could also approve ideas.
   if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from approving or acting on submitted ideas.');
   }
@@ -1535,7 +1066,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
 
   const wfAction = ({ Approved: 'Approved', Rejected: 'Rejected', Implemented: 'Implemented' })[decision] || 'Reviewed';
 
-  // Idempotency guard — no duplicate identical workflow entry within 10s
+  // Idempotency guard - no duplicate identical workflow entry within 10s
   const [dup] = await db.execute(
     'SELECT COUNT(*) AS c FROM idea_workflow WHERE idea_id=? AND actor_id=? AND action=? AND created_at > NOW() - INTERVAL 10 SECOND',
     [ideaId, user.id, wfAction]
@@ -1546,20 +1077,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
 
   const cfg = await getApprovalConfig(db);
 
-  /*
-   * ── Where is this idea, and may this person act on it? ──────────────────
-   *
-   * The chain is an ordered list of stages and the idea records which one it
-   * is waiting at. Both questions are answered from that, not from the
-   * reporting tree.
-   *
-   * What this replaced: approving looked up the approver's OWN manager_id and
-   * escalated to them if their role happened to appear somewhere in the chain,
-   * falling through to Approved otherwise. So a team lead with no manager on
-   * file approved outright, and one whose manager was a department manager
-   * skipped a stage. The configured chain described a journey the engine never
-   * took.
-   */
+  // Where is this idea, and may this person act on it?
   const stageKey = idea.current_stage || cfg.first_stage?.stage || null;
   const stageSpec = cfg.approvers.find((a) => a.stage === stageKey);
   const stageRole = stageSpec ? stageSpec.role : null;
@@ -1576,19 +1094,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
 
   const isCommittee = (idea.workflow_type ?? 'hierarchical') === 'multi_reviewer';
 
-  /*
-   * "Implemented" is not a step in the approval chain.
-   *
-   * It was offered in the same dropdown as Approve and Reject, and because it
-   * is not 'Approved' it slipped past every stage check and wrote the status
-   * straight onto the row — so any reviewer at any stage could take an idea
-   * from Submitted to Implemented in one action, past the entire chain and past
-   * the people whose job it was to decide.
-   *
-   * Implementation is what happens AFTER an approval, and it has its own route
-   * with its own role guard. The invariant is asserted here because this is the
-   * function that was being used to dodge it.
-   */
+  // "Implemented" is not a step in the approval chain.
   if (decision === 'Implemented' && idea.status !== 'Approved') {
     throw forbidden(
       'An idea has to be approved before it can be marked implemented. '
@@ -1596,20 +1102,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     );
   }
 
-  /*
-   * ── Approving out of turn ───────────────────────────────────────────────
-   *
-   * Only the role the idea is currently waiting on may APPROVE it. A plant
-   * head cannot reach down and approve something still sitting with the team
-   * lead — that is precisely the skipping this work exists to stop, and it
-   * would also rob the intermediate approvers of a decision the chain says is
-   * theirs.
-   *
-   * REJECTING is deliberately open to anyone in the chain. Sending an idea up
-   * three more stages to collect approvals before somebody says no wastes
-   * everybody's time, and a rejection is visible and reversible by
-   * resubmission in a way a wrongly-granted approval is not.
-   */
+  // Only the role the idea is currently waiting on may APPROVE it.
   if (decision === 'Approved' && !isCommittee) {
     if (!stageRole) {
       throw new ApiError(409,
@@ -1623,76 +1116,29 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
       );
     }
 
-    /*
-     * Holding the right role is not enough — it has to be YOUR idea to decide.
-     *
-     * Jitesh reports to Elisa. Mark is also a manager and is not in Jitesh's
-     * line, so Mark approving Jitesh's idea is somebody signing off work they
-     * have no relationship to. The queue no longer offers it to him; this is
-     * the same rule at the door, because the queue is a screen and this is the
-     * endpoint, and a rule that lives only in a screen is not a rule.
-     *
-     * An unassigned idea (current_reviewer_id IS NULL) stays open to any holder
-     * of the stage's role. Nobody could be identified for it — an incomplete
-     * org chart, or a row from before this routing existed — and refusing
-     * everybody would leave it undecidable by anyone at all.
-     */
+    // Holding the right role is not enough - it has to be YOUR idea to decide.
     const assignedTo = idea.current_reviewer_id;
     if (assignedTo && Number(assignedTo) !== Number(user.id)) {
       const [owner] = await db.execute('SELECT name FROM users WHERE id = ?', [assignedTo]);
       throw forbidden(
         `This idea is with ${owner[0]?.name || 'another ' + label(stageKey)} for `
-        + `${label(stageKey)} approval — they are the submitter's ${label(stageKey)}. `
+        + `${label(stageKey)} approval - they are the submitter's ${label(stageKey)}. `
         + 'Ideas go to the approver in the reporting line of whoever wrote them.'
       );
     }
   }
 
-  /*
-   * ── Approve: advance one stage, or close ────────────────────────────────
-   */
+  // Approve: advance one stage, or close.
   if (decision === 'Approved' && !isCommittee) {
     const next = advanceStage(cfg, stageKey);
 
     if (next) {
-      /*
-       * Move to the next stage somebody can act on, skipping any that nobody
-       * holds, and route it to the approver in the SUBMITTER's own line — not
-       * to whoever happens to hold the role. Where the org chart cannot answer
-       * that, the stage is left open to every holder rather than guessed at;
-       * see resolveActionableStage.
-       */
+      // Move to the next stage somebody can act on, skipping any that nobody holds, and route it
+      // to the approver in the SUBMITTER's own line - not to whoever happens to hold the role.
       const resolved = await resolveActionableStage(db, cfg, next.stage, idea.submitter_id);
 
       if (resolved.stranded) {
-        /*
-         * Nothing further in the chain can act.
-         *
-         * The approval that just happened is real and is recorded. What cannot
-         * happen is the NEXT one: an approval nobody gave must never be
-         * written, and "there was no one to ask" is not consent.
-         *
-         * ── Where the idea waits, and the bug that came from getting it wrong
-         *
-         * It is parked at the stage that is BLOCKING — the empty one — and not
-         * at the stage that just approved it. That one line is the whole of
-         * "the plant head sometimes cannot give final approval".
-         *
-         * It used to stay put. So an idea approved by the department manager in
-         * an organisation with no plant head sat at department_manager with an
-         * Approved entry against it. The hourly repair pass asks "can anybody
-         * act at this idea's stage?", saw a perfectly healthy department
-         * manager, and moved on. When a plant head was finally appointed,
-         * nothing looked at that idea again — it was not stranded by the only
-         * test the repair knew how to make. It waited forever at a stage that
-         * had already finished with it, while the department manager kept
-         * seeing it in their queue and the plant head never saw it at all.
-         *
-         * Parked at the empty stage, both halves work by themselves: the
-         * department manager's queue is clear because their stage is done, and
-         * the repair pass finds an idea at a stage nobody holds and re-routes
-         * it the moment somebody is appointed.
-         */
+        // Nothing further in the chain can act.
         const blockedAt = resolved.stage || stageKey;
         const position = cfg.approvers.findIndex((a) => a.stage === blockedAt) + 1;
         await db.execute(
@@ -1704,7 +1150,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         );
 
         await addWorkflow(db, ideaId, user.id, 'Approved',
-          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — waiting for ${label(blockedAt)}, which nobody holds]`.trim(),
+          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} - waiting for ${label(blockedAt)}, which nobody holds]`.trim(),
           stageKey);
         await reportChainGap(db, idea,
           `Idea ${idea.idea_code} was approved at ${label(stageKey)} and is now waiting for `
@@ -1713,7 +1159,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         return {
           success: true, decision: 'Waiting', stage: blockedAt,
           stage_label: label(blockedAt), escalated_to: null, points_awarded: 0,
-          detail: `Waiting for ${label(blockedAt)} — nobody holds that role yet.`,
+          detail: `Waiting for ${label(blockedAt)} - nobody holds that role yet.`,
         };
       }
 
@@ -1721,12 +1167,12 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
       const assignee = resolved.assignee;
       const position = cfg.approvers.findIndex((a) => a.stage === nextStageKey) + 1;
 
-      // Appended to this approval's own entry — see the note at submit.
+      // Appended to this approval's own entry - see the note at submit.
       let skipNote = '';
       if (resolved.skipped.length) {
         const names = resolved.skipped.map(label).join(', ');
         const plural = resolved.skipped.length > 1;
-        skipNote = ` [Skipped ${names} — nobody holds ${plural ? 'those roles' : 'that role'}]`;
+        skipNote = ` [Skipped ${names} - nobody holds ${plural ? 'those roles' : 'that role'}]`;
         await reportChainGap(db, idea,
           `Idea ${idea.idea_code} skipped ${names} because nobody holds ${plural ? 'those roles' : 'that role'}. `
           + `Assign ${plural ? 'them' : 'it'}, or remove the stage from the approval path.`);
@@ -1740,19 +1186,16 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         [nextStageKey, assignee ? assignee.id : null, position, ideaId]
       );
 
-      /*
-       * The stage is recorded on the entry, not inferred later from the
-       * actor's role — see addWorkflow. It is what the closure PDF prints in
-       * its POSITION column.
-       */
+      // The stage is recorded on the entry, not inferred later from the actor's role - see
+      // addWorkflow.
       const withWhom = assignee ? `${assignee.name} as ${label(nextStageKey)}` : label(nextStageKey);
       await addWorkflow(db, ideaId, user.id, 'Approved',
-        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} — now with ${withWhom}]${skipNote}`.trim(),
+        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} - now with ${withWhom}]${skipNote}`.trim(),
         stageKey);
 
       if (assignee) {
         await addNotification(db, assignee.id, 'Idea Awaiting Your Approval',
-          `Idea ${idea.idea_code} — "${idea.title}" — was approved at ${label(stageKey)} and is now with you as ${label(nextStageKey)}.`,
+          `Idea ${idea.idea_code} - "${idea.title}" - was approved at ${label(stageKey)} and is now with you as ${label(nextStageKey)}.`,
           ideaId);
         if (assignee.email) {
           await queueEmail(db, assignee.email, assignee.name,
@@ -1761,13 +1204,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         }
       }
 
-      /*
-       * If we had to pick somebody outside the submitter's reporting line, say
-       * so. The idea still moves — holding it up over an org-chart gap would
-       * punish the author for an administrator's data entry — but somebody is
-       * about to approve an idea from a team they may have nothing to do with,
-       * and that should not happen silently.
-       */
+      // If we had to pick somebody outside the submitter's reporting line, say so.
       if (resolved.offLine) {
         await reportChainGap(db, idea,
           `Idea ${idea.idea_code} is open to every ${label(nextStageKey)} rather than to one `
@@ -1795,16 +1232,13 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
       };
     }
 
-    // No next stage — this was the last one, so the idea is approved outright.
+    // No next stage - this was the last one, so the idea is approved outright.
     await db.execute(
       "UPDATE ideas SET current_stage = NULL, current_reviewer_id = NULL WHERE id = ?", [ideaId]);
   }
 
-  /*
-   * Anything that closes the idea — a final approval, any rejection, an
-   * implementation — takes it off the chain. Leaving a stage key on a closed
-   * idea would put it back in somebody's queue.
-   */
+  // Anything that closes the idea - a final approval, any rejection, an implementation -
+  // takes it off the chain.
   if (decision !== 'Approved' || !isCommittee) {
     await db.execute(
       'UPDATE ideas SET current_stage = NULL, current_reviewer_id = NULL WHERE id = ?', [ideaId]);
@@ -1815,8 +1249,8 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
   const [codeRows] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
   const ideaCode = codeRows[0]?.idea_code || `#${ideaId}`;
 
-  // stageKey is where this person was standing when they decided — the final
-  // stage for a closing approval, or wherever in the chain a rejection came from.
+  // stageKey is where this person was standing when they decided - the final stage for a
+  // closing approval, or wherever in the chain a rejection came from.
   await addWorkflow(db, ideaId, user.id, wfAction, comment || null, stageKey);
 
   const pts = ({ Approved: POINTS.approved, Implemented: POINTS.implemented })[decision] || 0;
@@ -1836,27 +1270,15 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     'SELECT email, name, points FROM users WHERE id=?', [idea.submitter_id]);
   const sub = subRows[0];
   if (sub && sub.email) {
-    /*
-     * The end of the road gets its own letter.
-     *
-     * Every other step says "it moved". This one says it is finished, and that
-     * deserves to read like it: who gave the final approval and in what
-     * capacity, that the idea is now eligible to go to QC and be built, and
-     * what it earned. The scheme runs on people believing that writing an idea
-     * down leads somewhere, and this is the only message that proves it did.
-     *
-     * The score is stated in both halves — what this approval added, and the
-     * running total including the points for submitting in the first place —
-     * because "+40 points" alone does not tell somebody where they stand.
-     */
+    // The end of the road gets its own letter.
     if (decision === 'Approved') {
       const finalLabel = label(stageKey) || 'the final approver';
       const total = Number(sub.points ?? 0);
       await queueEmail(db, sub.email, sub.name,
-        `Congratulations — your idea ${ideaCode} has been approved`,
+        `Congratulations - your idea ${ideaCode} has been approved`,
         `Dear ${sub.name},\n\n`
         + `Congratulations. Your idea "${idea.title}" (${ideaCode}) has been approved by `
-        + `${user.name} (${finalLabel}) — the last step in your organisation's approval path.\n\n`
+        + `${user.name} (${finalLabel}) - the last step in your organisation's approval path.\n\n`
         + 'It is now ready to be sent to the quality system and taken forward for '
         + 'implementation.\n\n'
         + (pts > 0
@@ -1866,14 +1288,14 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         + (comment ? `Comments from the approver: ${comment}\n\n` : '')
         + 'Thank you for taking the trouble to write it up.');
     } else {
-      await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} — ${decision}`, msg);
+      await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} - ${decision}`, msg);
     }
   }
 
   return { success: true, decision, points_awarded: pts };
 }
 
-// ── DASHBOARD ───────────────────────────────────────────────────────
+// DASHBOARD
 export async function dashboard(db, user) {
   const uid = safeUid(user);
   const role = user?.role || 'employee';
@@ -1900,22 +1322,7 @@ export async function dashboard(db, user) {
   if ([...TEAM_ROLES, ...ADMIN_ROLES].includes(role)) {
     try {
       if (TEAM_ROLES.includes(role)) {
-        /*
-         * The same rule as the review queue, deliberately.
-         *
-         * This counter and that list are the same claim made twice — "N ideas
-         * are waiting on your decision" and then the ideas themselves — and
-         * they used to be computed from different rules. The card matched
-         * `current_reviewer_id = me OR (unassigned AND I am the submitter's
-         * manager)` with no reference to the chain at all, so it counted ideas
-         * sitting at stages this person plays no part in, counted their own
-         * ideas, and missed unassigned ones at a stage they DO hold. A
-         * dashboard that says 4 above a list of 2 is not a rounding
-         * difference; it is the product telling somebody their work is
-         * somewhere they cannot find it.
-         *
-         * Built from cfg so a chain edit moves both together.
-         */
+        // The same rule as the review queue, deliberately.
         const cfg = await getApprovalConfig(db);
         const myStages = rolePlaysStages(cfg, role);
         const stageIn = myStages.length ? myStages.map(() => '?').join(',') : null;
@@ -1996,10 +1403,10 @@ export async function dashboard(db, user) {
   };
 }
 
-// ── ASSIGN REVIEWERS (→ multi_reviewer workflow) ────────────────────
+// ASSIGN REVIEWERS ( multi_reviewer workflow)
 export async function assignReviewers(db, user, b) {
-  // Both administrator roles. super_admin was not named here, so the one
-  // account that can promote people to admin could also approve ideas.
+  // Both administrator roles. super_admin was not named here, so the one account that can
+  // promote people to admin could also approve ideas.
   if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from routing ideas.');
   }
@@ -2014,26 +1421,10 @@ export async function assignReviewers(db, user, b) {
 
   // Submitter cannot be a reviewer; de-dupe
   reviewerIds = [...new Set(reviewerIds.filter((rid) => rid !== Number(idea.submitter_id)))];
-  if (!reviewerIds.length) throw badRequest('No valid reviewers — submitter cannot review own idea.');
+  if (!reviewerIds.length) throw badRequest('No valid reviewers - submitter cannot review own idea.');
 
-  /*
-   * ── An idea may only be routed UPWARD ───────────────────────────────────
-   *
-   * This endpoint took any user id at all, and routing to a committee takes the
-   * idea OFF the sequential chain (workflow_type becomes multi_reviewer). So a
-   * department manager could hand an idea down to a team lead, the stages above
-   * the department manager were never visited, and the decision was made by
-   * people junior to the person who routed it. That is not a committee — it is
-   * a way round the chain, and it undoes the whole point of a sequence that
-   * ends at the plant head.
-   *
-   * Same level is allowed: a panel of fellow department managers is a real and
-   * reasonable thing. Below is not.
-   *
-   * Seniority comes from THIS organisation's configured chain first, so an
-   * organisation that has reordered its own hierarchy gets its own answer
-   * rather than a built-in opinion about job titles. See seniorityRanks.
-   */
+  // This endpoint took any user id at all, and routing to a committee takes the idea OFF the
+  // sequential chain (workflow_type becomes multi_reviewer).
   const cfg = await getApprovalConfig(db);
   const ranks = seniorityRanks(cfg.stages);
   const myRank = rankOf(ranks, user.role);
@@ -2048,8 +1439,8 @@ export async function assignReviewers(db, user, b) {
       throw badRequest(`${c.name} is not an active account and cannot be given a review.`);
     }
     const theirRank = rankOf(ranks, c.role);
-    // -1 is "holds no role in any approval path" — an employee, a trainee, or
-    // an administrator, who is barred from deciding anything anyway.
+    // -1 is "holds no role in any approval path" - an employee, a trainee, or an
+    // administrator, who is barred from deciding anything anyway.
     if (theirRank < 0) notApprovers.push(c.name);
     else if (theirRank < myRank) tooJunior.push(c.name);
   }
@@ -2081,14 +1472,14 @@ export async function assignReviewers(db, user, b) {
   }
 
   await addWorkflow(db, ideaId, user.id, 'Reviewed',
-    `Routed to committee (${reviewerIds.length} reviewers — all must approve)`);
+    `Routed to committee (${reviewerIds.length} reviewers - all must approve)`);
   await addNotification(db, idea.submitter_id, 'Idea Under Committee Review',
     `Your idea ${idea.idea_code} has been routed to a review committee.`, ideaId);
 
   return { success: true, reviewer_count: reviewerIds.length };
 }
 
-// ── REVIEWER INDIVIDUAL DECISION ────────────────────────────────────
+// REVIEWER INDIVIDUAL DECISION
 export async function reviewerDecision(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const decision = String(b.decision ?? '').toLowerCase();
@@ -2119,18 +1510,8 @@ export async function reviewerDecision(db, user, b) {
   const rejected = allDecisions.filter((d) => d === 'rejected').length;
   const pending = allDecisions.filter((d) => d === 'pending').length;
 
-  /*
-   * A committee decides unanimously: one rejection ends it, and it is approved
-   * once everyone has approved.
-   *
-   * This replaces a configurable percentage. The percentage was a second,
-   * competing description of "who has to agree" — an idea could satisfy the
-   * named approval chain and still be rejected by an unrelated number, and the
-   * number itself was read from the org config in one mode and from a snapshot
-   * on the idea row in the others, so two committees running the same day could
-   * be judged by different rules. Unanimity needs no configuration and is what
-   * every organisation on the platform had set in practice.
-   */
+  // A committee decides unanimously: one rejection ends it, and it is approved once everyone
+  // has approved.
   let newStatus = null;
   let pts = 0;
   if (rejected > 0) {
@@ -2157,7 +1538,7 @@ export async function reviewerDecision(db, user, b) {
   return { success: true, new_status: newStatus, approved, rejected, pending, total };
 }
 
-// ── DUPLICATE DETECTION ─────────────────────────────────────────────
+// DUPLICATE DETECTION
 export async function checkDuplicate(db, title) {
   title = String(title ?? '').trim();
   if (title.length < 5) return { success: true, duplicates: [] };
@@ -2173,10 +1554,10 @@ export async function checkDuplicate(db, title) {
   return { success: true, duplicates: rows };
 }
 
-// ── BULK REVIEW ─────────────────────────────────────────────────────
+// BULK REVIEW
 export async function bulkReview(db, user, b) {
-  // Both administrator roles. super_admin was not named here, so the one
-  // account that can promote people to admin could also approve ideas.
+  // Both administrator roles. super_admin was not named here, so the one account that can
+  // promote people to admin could also approve ideas.
   if (user.role === 'admin' || user.role === 'super_admin') {
     throw forbidden('Org Admins are strictly prohibited from approving or reviewing ideas.');
   }
@@ -2188,25 +1569,7 @@ export async function bulkReview(db, user, b) {
     throw badRequest('idea_ids array and valid decision (Approved/Rejected) required.');
   }
 
-  /*
-   * ── Bulk goes through the same door as one-at-a-time ────────────────────
-   *
-   * This used to write `status = decision` straight onto every row. That
-   * bypassed the approval chain completely: a team lead selecting twenty ideas
-   * and clicking "Approve all" marked all twenty Approved outright — past every
-   * remaining stage, and eligible to be pushed to QCMS, which is gated on
-   * exactly that status.
-   *
-   * It was also the quieter of the two ways to skip the chain, because the
-   * single-idea path at least walked the reporting tree. There is no reason for
-   * bulk to have its own rules; it is the same decision, taken repeatedly. So
-   * it calls reviewAction() per idea and inherits every check — out-of-turn
-   * approval, own-idea, the advance, the notifications.
-   *
-   * One idea failing does not abandon the rest. A selection usually contains a
-   * mix, and refusing the whole batch because one of them was the reviewer's
-   * own idea would be worse than skipping that one and saying so.
-   */
+  // This used to write `status = decision` straight onto every row.
   let processed = 0;
   const skipped = [];
   for (const ideaId of ideaIds) {
@@ -2221,7 +1584,7 @@ export async function bulkReview(db, user, b) {
   return { success: true, processed, skipped_count: skipped.length, skipped };
 }
 
-// ── UPDATE ROI ──────────────────────────────────────────────────────
+// UPDATE ROI
 export async function updateRoi(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const roiValue = (b.roi_value !== undefined && b.roi_value !== '') ? Number(b.roi_value) : null;
@@ -2244,7 +1607,7 @@ export async function updateRoi(db, user, b) {
   return { success: true };
 }
 
-// ── UPDATE IMPLEMENTATION TRACKING ──────────────────────────────────
+// UPDATE IMPLEMENTATION TRACKING
 export async function updateImplementation(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const ownerId = b.implementation_owner_id ? Number(b.implementation_owner_id) : null;
@@ -2266,8 +1629,7 @@ export async function updateImplementation(db, user, b) {
   return { success: true };
 }
 
-// ── small utils ─────────────────────────────────────────────────────
-// Local-time formatters (PHP date() uses server-local time; avoid the UTC
+// small utils Local-time formatters (PHP date() uses server-local time; avoid the UTC
 // off-by-one that toISOString() could cause on DATE values near midnight).
 const p2 = (n) => String(n).padStart(2, '0');
 function nowDateTime() {
@@ -2292,13 +1654,8 @@ export default {
   repairStrandedIdeas,
 };
 
-// ── ARCHIVE / PATENTABILITY (MOM §13.2, §13.10) ─────────────────────
-/**
- * Only the org's own admins may archive. It is not destructive — the row, its
- * points, its workflow history and its ROI figures all stay — but it removes an
- * idea from everyone else's working lists, which is a decision that belongs to
- * whoever runs the programme rather than to any reviewer.
- */
+// ARCHIVE / PATENTABILITY (MOM §13.2, §13.10)
+/** Only the org's own admins may archive. */
 const ORG_ADMIN_ROLES = ['admin', 'super_admin'];
 
 function assertOrgAdmin(user, what) {
@@ -2307,13 +1664,7 @@ function assertOrgAdmin(user, what) {
   }
 }
 
-/**
- * Archive or restore an idea.
- *
- * Deliberately reversible and deliberately logged: an idea vanishing from the
- * list with no trace of who removed it is indistinguishable from a bug, and the
- * submitter is entitled to an answer.
- */
+/** Archive or restore an idea. */
 export async function setArchived(db, user, b) {
   assertOrgAdmin(user, 'archive ideas');
   const ideaId = Number(b.idea_id) || 0;
@@ -2341,13 +1692,7 @@ export async function setArchived(db, user, b) {
   };
 }
 
-/**
- * Record a patentability decision.
- *
- * Separate from `status` on purpose (MOM §13.10): an idea can be approved and
- * unpatentable, or rejected on cost grounds and still worth a provisional
- * filing. Folding it into the status enum would lose exactly those cases.
- */
+/** Record a patentability decision. */
 export async function setPatentability(db, user, b) {
   assertOrgAdmin(user, 'record a patentability decision');
   const ideaId = Number(b.idea_id) || 0;
@@ -2362,16 +1707,12 @@ export async function setPatentability(db, user, b) {
   );
   if (!res.affectedRows) throw notFound('Idea not found');
 
-  await addWorkflow(db, ideaId, user.id, 'Patentability', `${value}${note ? ` — ${note}` : ''}`);
+  await addWorkflow(db, ideaId, user.id, 'Patentability', `${value}${note ? ` - ${note}` : ''}`);
   return { success: true, patentability: value, message: 'Patentability recorded.' };
 }
 
-/*
- * The submitter's own "this may be patentable" tick, and the same tick from
- * anybody senior enough to review. It is a flag raised by a person, separate
- * from `patentability`, which is the organisation's formal assessment and stays
- * an admin-only field.
- */
+// The submitter's own "this may be patentable" tick, and the same tick from anybody senior
+// enough to review.
 export async function setPatentableFlag(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   if (!ideaId) throw badRequest('idea_id required.');
@@ -2405,17 +1746,7 @@ export async function setPatentableFlag(db, user, b) {
   };
 }
 
-/*
- * Bulk archive — MOM follow-up. Filtering an old idea out of a view does not
- * archive it, so an administrator asking to "clear out last year" had to open
- * every idea one at a time. This archives a whole selection in one statement.
- *
- * Two ways to choose what to archive:
- *   ids            an explicit list, from tick boxes on the screen
- *   before_date    everything submitted before that date
- * Draft ideas are never touched: they belong to their author and are not yet
- * part of the organisation's record.
- */
+// Bulk archive - MOM follow-up.
 export async function bulkArchive(db, user, b) {
   assertOrgAdmin(user, 'archive ideas');
   const archive = !(b.archived === false || b.archived === 0 || b.archived === '0');
@@ -2441,8 +1772,8 @@ export async function bulkArchive(db, user, b) {
     where.push('submitted_at < ?');
     params.push(`${beforeDate} 00:00:00`);
   }
-  // Archiving skips what is already archived, and restoring skips what is not,
-  // so re-running the same request is harmless.
+  // Archiving skips what is already archived, and restoring skips what is not, so re-running
+  // the same request is harmless.
   where.push(archive ? 'archived_at IS NULL' : 'archived_at IS NOT NULL');
 
   const [rows] = await db.execute(
@@ -2466,8 +1797,8 @@ export async function bulkArchive(db, user, b) {
     );
   }
 
-  // One timeline entry per idea, so the change is visible from the idea itself
-  // and not only from the audit trail.
+  // One timeline entry per idea, so the change is visible from the idea itself and not only
+  // from the audit trail.
   for (const id of targetIds) {
     await addWorkflow(db, id, user.id, archive ? 'Archived' : 'Restored',
       archive ? 'Archived in bulk.' : 'Restored in bulk.');

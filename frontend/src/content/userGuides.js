@@ -1,59 +1,10 @@
-/*
- * ─────────────────────────────────────────────────────────────────────────────
- *  The user manuals, as data.
- * ─────────────────────────────────────────────────────────────────────────────
- *
- * These were three PDFs behind a download button. A download is a bad way to
- * ship a manual for this product: it leaves the app, it cannot be searched from
- * inside the app, it is a second thing to keep in step with the software, and
- * on a shop-floor phone — which is most of this audience — opening a PDF is a
- * chore that ends with pinch-zooming a page laid out for A4.
- *
- * So the same content lives here and renders as a page. The wording is the
- * PDFs' own, section for section.
- *
- * ── Where this deliberately differs from the PDF ──────────────────────────
- *
- * A manual that describes a screen the reader is not looking at is worse than
- * no manual, so where the product has moved since the PDFs were written, this
- * follows the product. Everything else is the PDFs' own wording.
- *
- * What differs, and why:
- *
- *   Date of birth / password rule   the field is gone and the formula is now
- *                                   username + phone (MOM 24/08 §6).
- *   Approval Path                   was "Escalation preview"; the "only for
- *                                   large companies" note is gone (§9).
- *   Ideas Sent to QC                one name for what was "forwarded" and
- *                                   "pushed" (§11).
- *   Leaderboard                     gained a PDF export and forwarding to HR
- *                                   (§1, §8), so both are described.
- *   User Guide                      this page exists, so it is in the menus it
- *                                   lists.
- *
- * ── Shape ────────────────────────────────────────────────────────────────────
- *
- *   { id, title, blocks: [...] }
- *
- *   { p: '...' }                      a paragraph
- *   { note: '...' }                   the PDF's boxed asides
- *   { steps: ['...'] }                a numbered list
- *   { bullets: [...] }                a bulleted list; an item may be
- *                                     { term, text } for the PDF's lead-in bold
- *   { table: { head: [...], rows: [[...]] } }
- *
- * Bold in the PDF is written as **like this** and rendered as <strong>. It is
- * the only inline markup used, deliberately — this is a manual, not a CMS, and
- * a second syntax would be a parser to maintain.
- */
+// The user manuals, as data.
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Employee
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const EMPLOYEE = {
   role: 'employee',
-  title: 'User Manual — Employees',
+  title: 'User Manual - Employees',
   subtitle: 'Kalpion',
   sections: [
     {
@@ -63,13 +14,13 @@ const EMPLOYEE = {
         { p: "Go to your organisation's Kalpion web address. On the Sign In screen:" },
         {
           steps: [
-            'Type your **Username**, **Email**, or **Phone number** — any one of the three works.',
+            'Type your **Username**, **Email**, or **Phone number** - any one of the three works.',
             'Type your **Password**.',
             'Click **Sign In**.',
           ],
         },
         {
-          p: 'First time signing in? Your admin gave you a temporary password — either emailed to you, '
+          p: 'First time signing in? Your admin gave you a temporary password - either emailed to you, '
             + 'or handed to you directly if your account has no email address. After you sign in with it, '
             + "you'll immediately be asked to **Choose a new password**:",
         },
@@ -84,11 +35,11 @@ const EMPLOYEE = {
         { p: 'You cannot use any other part of the app until this is done.' },
         {
           p: 'Forgot your password? Click **Forgot your password?** on the Sign In screen, enter your '
-            + 'registered email, and click **Send reset link**. Check your email for a link — it works for one hour.',
+            + 'registered email, and click **Send reset link**. Check your email for a link - it works for one hour.',
         },
         {
           note: 'Once you\'re past your first sign-in, there is no "change password" button anywhere in the app. '
-            + 'If you ever forget your password again later, use **Forgot your password?** on the Sign In screen — '
+            + 'If you ever forget your password again later, use **Forgot your password?** on the Sign In screen - '
             + 'that is the only way.',
         },
         {
@@ -119,12 +70,12 @@ const EMPLOYEE = {
         { p: "Click **Submit Idea** in the sidebar. You'll go through 6 short steps:" },
         {
           steps: [
-            '**Situation** — give your idea a short title and describe the current problem (at least 20 characters). If a similar idea already exists, you\'ll see a warning — worth a quick look before continuing.',
-            '**Solution** — describe your proposed solution, optionally note the expected benefits, pick one or more categories, and choose an impact level (Low/Medium/High/Critical).',
-            '**Business Case** (all optional) — if you know them, add estimated cost, feasibility, time to implement, and what support you\'d need. You can skip this step entirely if you don\'t have this information yet.',
-            '**Attachments** (optional) — attach any supporting files (PDF, Word, Excel, or images).',
-            '**Co-Suggesters** (optional) — search for and add any colleagues who helped come up with the idea.',
-            '**Review & Submit** — check everything, tick the box if you think the idea might be worth patenting, then click either **Submit New Idea** to send it for review, or **Save Draft** to keep working on it later (drafts are private — only you can see them).',
+            '**Situation** - give your idea a short title and describe the current problem (at least 20 characters). If a similar idea already exists, you\'ll see a warning - worth a quick look before continuing.',
+            '**Solution** - describe your proposed solution, optionally note the expected benefits, pick one or more categories, and choose an impact level (Low/Medium/High/Critical).',
+            '**Business Case** (all optional) - if you know them, add estimated cost, feasibility, time to implement, and what support you\'d need. You can skip this step entirely if you don\'t have this information yet.',
+            '**Attachments** (optional) - attach any supporting files (PDF, Word, Excel, or images).',
+            '**Co-Suggesters** (optional) - search for and add any colleagues who helped come up with the idea.',
+            '**Review & Submit** - check everything, tick the box if you think the idea might be worth patenting, then click either **Submit New Idea** to send it for review, or **Save Draft** to keep working on it later (drafts are private - only you can see them).',
           ],
         },
         { p: 'Use **Back** and **Next** to move between steps.' },
@@ -143,7 +94,7 @@ const EMPLOYEE = {
               ['Submitted / Under Review', 'Being reviewed by your manager or reviewer'],
               ['Approved', 'Accepted'],
               ['Implemented', 'Approved and now put into practice'],
-              ['Rejected', "Not accepted — click View to see the reviewer's reason"],
+              ['Rejected', "Not accepted - click View to see the reviewer's reason"],
             ],
           },
         },
@@ -166,7 +117,7 @@ const EMPLOYEE = {
       blocks: [
         {
           p: 'Click **Idea Board** to see ideas laid out for everyone to browse and vote on. Use the up and down '
-            + "arrows to upvote or downvote an idea (you can't vote on your own). You can also give a 1–5 star "
+            + "arrows to upvote or downvote an idea (you can't vote on your own). You can also give a 1-5 star "
             + "rating from inside an idea's details.",
         },
       ],
@@ -203,7 +154,7 @@ const EMPLOYEE = {
       blocks: [
         {
           bullets: [
-            { term: 'User Guide', text: 'this page — the full manual for your role, always current with the app you are using.' },
+            { term: 'User Guide', text: 'this page - the full manual for your role, always current with the app you are using.' },
             { term: 'Help', text: 'a searchable list of frequently asked questions.' },
             { term: 'Support', text: 'click **+ Raise a Ticket** to send a question or problem directly to the IFQM support team. Fill in a subject, category, priority, and your message, then click Send. You\'ll get a ticket number and can track replies and add follow-up messages from the same page.' },
           ],
@@ -255,13 +206,11 @@ const EMPLOYEE = {
   ],
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Organisation Admin
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const ORG_ADMIN = {
   role: 'admin',
-  title: 'User Manual — Organisation Admin',
+  title: 'User Manual - Organisation Admin',
   subtitle: 'Kalpion',
   sections: [
     {
@@ -274,10 +223,10 @@ const ORG_ADMIN = {
         },
         {
           p: "If your account was just created for you, you'll be asked to set a permanent password the first time "
-            + 'you sign in — enter the temporary one you were given, then choose and confirm a new one.',
+            + 'you sign in - enter the temporary one you were given, then choose and confirm a new one.',
         },
         {
-          p: 'Forgot your password? Use the **Forgot your password?** link on the Sign In screen — it emails you a '
+          p: 'Forgot your password? Use the **Forgot your password?** link on the Sign In screen - it emails you a '
             + 'reset link valid for one hour.',
         },
         {
@@ -309,7 +258,7 @@ const ORG_ADMIN = {
         {
           p: "Your landing page after signing in. It shows your organisation's overall idea pipeline: totals, how "
             + 'many are under review, approved, and implemented, plus a status chart and a recent activity feed. '
-            + 'This page is for viewing only — nothing to configure here.',
+            + 'This page is for viewing only - nothing to configure here.',
         },
       ],
     },
@@ -322,10 +271,10 @@ const ORG_ADMIN = {
         {
           steps: [
             'Click **+ Add User**.',
-            'Fill in **Full Name**, **Employee ID**, **Phone** (required — used to send codes), and either a **Username** or **Email** (at least one is needed to sign in).',
+            'Fill in **Full Name**, **Employee ID**, **Phone** (required - used to send codes), and either a **Username** or **Email** (at least one is needed to sign in).',
             'Choose their **Role**, **Manager**, **Department**, **Business Unit**, and **Location**. The role list '
-            + 'includes every stage your approval path can use — Team Lead, Project Lead, Manager, Department Manager, '
-            + 'Senior Manager, Plant Head and Executive — so make sure somebody actually holds each role your chain relies on.',
+            + 'includes every stage your approval path can use - Team Lead, Project Lead, Manager, Department Manager, '
+            + 'Senior Manager, Plant Head and Executive - so make sure somebody actually holds each role your chain relies on.',
             'Click **Save User**.',
           ],
         },
@@ -335,17 +284,17 @@ const ORG_ADMIN = {
         },
         {
           bullets: [
-            { term: 'With an email address', text: 'a temporary password is generated and emailed to them directly. You never see it and have nothing to pass on — just tell them to check their inbox.' },
-            { term: 'Without an email address', text: 'the temporary password is the first 4 letters of their name plus the last 4 digits of their phone number — "Yashas" on 7975495881 becomes yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information — avoid sending it in an unprotected email).' },
+            { term: 'With an email address', text: 'a temporary password is generated and emailed to them directly. You never see it and have nothing to pass on - just tell them to check their inbox.' },
+            { term: 'Without an email address', text: 'the temporary password is the first 4 letters of their name plus the last 4 digits of their phone number - "Yashas" on 7975495881 becomes yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. It is shown to you once, on screen, because you have to pass it on yourself (in person, by phone, or however your organisation shares this kind of information - avoid sending it in an unprotected email).' },
           ],
         },
         {
           note: 'A password built from a username and a phone number can be worked out by any colleague who knows both. '
-            + 'It only lasts until the employee signs in — they are forced to replace it before they can use '
-            + 'anything else — but ask them to do that promptly.',
+            + 'It only lasts until the employee signs in - they are forced to replace it before they can use '
+            + 'anything else - but ask them to do that promptly.',
         },
         {
-          note: 'You cannot create another Admin account yourself — only IFQM\'s built-in super-admin account can '
+          note: 'You cannot create another Admin account yourself - only IFQM\'s built-in super-admin account can '
             + 'promote someone to Admin.',
         },
         { p: 'To add many employees at once:' },
@@ -354,7 +303,7 @@ const ORG_ADMIN = {
             'Click **Bulk Import**.',
             'Click **Download Excel template**, fill it in (one row per employee), and save it.',
             'Upload the filled sheet. The system checks it first without creating anything yet, and shows you how many rows will be created vs. skipped (with reasons for anything skipped).',
-            'Click **Create {n} employees** to finish. This runs in the background — you can close the window and it will keep going. Existing employees are never changed by an import, only new ones are added.',
+            'Click **Create {n} employees** to finish. This runs in the background - you can close the window and it will keep going. Existing employees are never changed by an import, only new ones are added.',
           ],
         },
         {
@@ -364,7 +313,7 @@ const ORG_ADMIN = {
         },
         {
           note: 'The template no longer has a date-of-birth column. If you are still using an older sheet that has '
-            + 'one, you do not need to delete it — the column is simply ignored.',
+            + 'one, you do not need to delete it - the column is simply ignored.',
         },
         {
           p: "To edit or remove someone: find them in the User List and click **Edit** or **Remove**. If they've "
@@ -383,16 +332,16 @@ const ORG_ADMIN = {
         },
         {
           bullets: [
-            { term: 'The first step, Originator', text: "is fixed and can't be removed — it represents whoever submitted the idea." },
+            { term: 'The first step, Originator', text: "is fixed and can't be removed - it represents whoever submitted the idea." },
             { term: 'Use + Add a stage', text: 'to add an approval step (Immediate Manager, Team Lead, Project Lead, Department Manager, Senior Manager, Plant Head, Executive), and the up/down arrows to reorder them.' },
             { term: 'The last stage in your list', text: 'makes the final decision.' },
             { term: 'Click Save Workflow', text: "when you're happy with it, or **Reset to Platform Defaults** to go back to the standard chain." },
-            { term: 'Approval Path', text: 'below the list, reads the chain back to you as a single line — the order an idea will actually travel. If it does not say what you expected, the list above is wrong.' },
+            { term: 'Approval Path', text: 'below the list, reads the chain back to you as a single line - the order an idea will actually travel. If it does not say what you expected, the list above is wrong.' },
           ],
         },
         {
           note: 'Only the roles in this list can approve or reject anything. A role you leave out has no say in the '
-            + 'process — if your chain starts at Department Manager, a Team Lead will not see ideas in their review '
+            + 'process - if your chain starts at Department Manager, a Team Lead will not see ideas in their review '
             + 'queue and will be refused if they try to act on one.',
         },
         { p: 'The same screen also has:' },
@@ -442,7 +391,7 @@ const ORG_ADMIN = {
     },
     {
       id: 'reviewing',
-      title: "8. Reviewing Ideas — What You Can and Can't Do",
+      title: "8. Reviewing Ideas - What You Can and Can't Do",
       blocks: [
         {
           p: '**Important:** as an organisation admin, you are **not** allowed to approve, reject, or decide on '
@@ -451,7 +400,7 @@ const ORG_ADMIN = {
         },
         {
           bullets: [
-            { term: 'Go to Review Queue', text: 'to look at what\'s pending — use the **View** button only.' },
+            { term: 'Go to Review Queue', text: 'to look at what\'s pending - use the **View** button only.' },
             { term: 'Go to All Ideas', text: 'to browse, search, and export every idea in your organisation (Export CSV or Export PDF), or to archive old ideas in bulk (Bulk Archive).' },
             { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (QCMS), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to QC**. Click **Push all to QCMS**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your QCMS API key, and click Save)." },
           ],
@@ -469,7 +418,7 @@ const ORG_ADMIN = {
         {
           bullets: [
             { term: 'Download PDF', text: 'saves the ranking for the period you are viewing as a document, with the organisation name, the period and the date printed on it. This is the one to file or attach.' },
-            { term: 'Send to HR', text: 'emails that PDF directly to an address you choose, with an optional note. Use this to hand the ranking to whoever runs Rewards & Recognition — they receive the full ranking as an attachment, not a summary.' },
+            { term: 'Send to HR', text: 'emails that PDF directly to an address you choose, with an optional note. Use this to hand the ranking to whoever runs Rewards & Recognition - they receive the full ranking as an attachment, not a summary.' },
           ],
         },
         {
@@ -482,11 +431,11 @@ const ORG_ADMIN = {
         },
         {
           bullets: [
-            { term: 'Pick a period', text: 'Weekly, Fortnightly, Monthly, Quarterly, Half-yearly or Yearly — or your own dates. It opens on the LAST COMPLETE period rather than the one in progress, because you decide March\'s award in April and a half-finished month is a list that is still going to change.' },
+            { term: 'Pick a period', text: 'Weekly, Fortnightly, Monthly, Quarterly, Half-yearly or Yearly - or your own dates. It opens on the LAST COMPLETE period rather than the one in progress, because you decide March\'s award in April and a half-finished month is a list that is still going to change.' },
             { term: 'Everyone, not a top ten', text: 'every person who submitted in that period appears, in order, and the count is printed above the table. The Leaderboard screen stops at twenty; a reward list that quietly cuts off at twenty is how the twenty-first person never finds out they were close.' },
-            { term: 'Scored on the period', text: 'points EARNED in that window, not a lifetime total. Each row shows the two halves — points for submitting, points for what those ideas went on to achieve — so a score somebody queries can be checked on sight.' },
+            { term: 'Scored on the period', text: 'points EARNED in that window, not a lifetime total. Each row shows the two halves - points for submitting, points for what those ideas went on to achieve - so a score somebody queries can be checked on sight.' },
             { term: 'Download Excel', text: 'five sheets: a summary, the full leaderboard, every idea in full, the approval trail one row per decision, and the attachments. This is the one to sort, filter and paste into a payroll sheet.' },
-            { term: 'Download PDF', text: 'the same figures as a document to file, circulate or produce two years later. It carries each idea complete — the situation, the proposal, the benefits — then who approved it, in what capacity, and on what date.' },
+            { term: 'Download PDF', text: 'the same figures as a document to file, circulate or produce two years later. It carries each idea complete - the situation, the proposal, the benefits - then who approved it, in what capacity, and on what date.' },
           ],
         },
         {
@@ -497,7 +446,7 @@ const ORG_ADMIN = {
         },
         {
           note: 'Anonymous ideas are listed without their author, here as everywhere else. Attachments are '
-            + 'named and dated in the pack but the files themselves are not embedded — download those from '
+            + 'named and dated in the pack but the files themselves are not embedded - download those from '
             + 'the idea if HR needs them.',
         },
       ],
@@ -520,7 +469,7 @@ const ORG_ADMIN = {
         {
           p: "Go to **Billing** to see your organisation's current plan, amount due, and next due date. If online "
             + 'payment is enabled for your organisation, choose how many periods to pay for and click '
-            + '**Pay {amount}** — this opens a secure payment window. Your payment history is listed further down '
+            + '**Pay {amount}** - this opens a secure payment window. Your payment history is listed further down '
             + 'the page.',
         },
       ],
@@ -542,7 +491,7 @@ const ORG_ADMIN = {
       blocks: [
         {
           p: 'Go to **Help** for frequently asked questions, or **Support** to raise a ticket directly with the '
-            + "IFQM team — as an admin, you'll see every ticket raised across your organisation, not just your own.",
+            + "IFQM team - as an admin, you'll see every ticket raised across your organisation, not just your own.",
         },
       ],
     },
@@ -583,9 +532,9 @@ const ORG_ADMIN = {
       blocks: [
         {
           bullets: [
-            "You cannot approve or reject ideas — that's kept separate from administration on purpose.",
-            'You cannot promote anyone directly to Admin — only IFQM can do that.',
-            'There\'s no "change password" screen after your first login — use the Sign In page\'s reset link if you ever forget it.',
+            "You cannot approve or reject ideas - that's kept separate from administration on purpose.",
+            'You cannot promote anyone directly to Admin - only IFQM can do that.',
+            'There\'s no "change password" screen after your first login - use the Sign In page\'s reset link if you ever forget it.',
           ],
         },
       ],
@@ -593,13 +542,11 @@ const ORG_ADMIN = {
   ],
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Platform Console (Superadmin)
-// ─────────────────────────────────────────────────────────────────────────────
+
 
 const PLATFORM_ADMIN = {
   role: 'platform_admin',
-  title: 'User Manual — IFQM Platform Console (Superadmin)',
+  title: 'User Manual - IFQM Platform Console (Superadmin)',
   subtitle: 'Kalpion',
   sections: [
     {
@@ -607,14 +554,14 @@ const PLATFORM_ADMIN = {
       title: '1. Signing In',
       blocks: [
         {
-          p: "Go to the platform's web address and sign in on the same Sign In screen everyone uses — there is no "
+          p: "Go to the platform's web address and sign in on the same Sign In screen everyone uses - there is no "
             + 'separate platform-admin login page. Enter your email or mobile number and your password, then click '
-            + "**Sign In**. Once signed in, you're taken straight to the platform console and kept there — you "
+            + "**Sign In**. Once signed in, you're taken straight to the platform console and kept there - you "
             + "cannot browse into any individual organisation's screens.",
         },
         {
           p: 'Your account is created for you by another platform admin (see §9.6). Use **Forgot your password?** '
-            + 'on the Sign In screen if you ever forget it — it emails you a reset link.',
+            + 'on the Sign In screen if you ever forget it - it emails you a reset link.',
         },
       ],
     },
@@ -624,11 +571,11 @@ const PLATFORM_ADMIN = {
       blocks: [
         {
           p: 'The left sidebar shows **Organisations, Registrations, Support Tickets, Plans, Billing, Login '
-            + 'Activity, Settings** — this is your entire console. The top bar shows dark mode, language, '
+            + 'Activity, Settings** - this is your entire console. The top bar shows dark mode, language, '
             + 'notifications, and a chip reading "Superadmin signed in as {your name}", plus Logout.',
         },
         {
-          note: "Clicking your name chip doesn't do anything useful for this account — ignore it. There's no "
+          note: "Clicking your name chip doesn't do anything useful for this account - ignore it. There's no "
             + 'personal profile page for platform admins.',
         },
         {
@@ -651,7 +598,7 @@ const PLATFORM_ADMIN = {
           p: 'To create a new organisation directly (skipping the self-service application process): click '
             + "**+ New Organisation**, fill in the organisation name, its code (auto-fills, but you can edit it), "
             + "and the first admin's name/email/password, then click **Create Organisation**. You'll get a one-time "
-            + "confirmation popup with the assigned code and admin email — there's no way to retrieve this again, "
+            + "confirmation popup with the assigned code and admin email - there's no way to retrieve this again, "
             + 'so note it down.',
         },
         { p: 'To act on an existing organisation, click the menu on its row:' },
@@ -680,13 +627,13 @@ const PLATFORM_ADMIN = {
         {
           bullets: [
             { term: 'Reject', text: 'asks for a reason (optional), then rejects. Nothing is provisioned.' },
-            { term: 'Approve', text: "opens a dialog to confirm the organisation code, pick a plan (or decide later), set a trial length, and add an internal note, then click **Approve and create workspace**. This is the moment the organisation and its first admin account actually get created — nothing exists before this. You'll get a one-time banner showing the new admin's temporary password; copy it down, it won't be shown again." },
+            { term: 'Approve', text: "opens a dialog to confirm the organisation code, pick a plan (or decide later), set a trial length, and add an internal note, then click **Approve and create workspace**. This is the moment the organisation and its first admin account actually get created - nothing exists before this. You'll get a one-time banner showing the new admin's temporary password; copy it down, it won't be shown again." },
           ],
         },
         {
-          p: '**Personal email exceptions** — normally an application needs a real company email domain. If a '
+          p: '**Personal email exceptions** - normally an application needs a real company email domain. If a '
             + 'legitimate small business only has a Gmail-style address, click **Manage** at the top of the page to '
-            + 'add an exception — either one exact address, or a whole domain (which reopens that provider for '
+            + 'add an exception - either one exact address, or a whole domain (which reopens that provider for '
             + 'everyone, so use it sparingly). Always add a reason; it stays on record.',
         },
       ],
@@ -702,14 +649,14 @@ const PLATFORM_ADMIN = {
         {
           bullets: [
             { term: 'Subscription and billing', text: 'assign or change their plan, set trial length, and record a payment (extends their paid period and lifts a hold if they were suspended for non-payment). Each of these three is its own separate button on purpose, so fixing a typo can\'t accidentally also record a payment.' },
-            { term: 'Usage', text: 'employees, ideas, approvals, implementations, QCMS pushes, storage — counts only.' },
-            { term: 'Organisation Admin Contacts', text: 'your support contacts for this org. Click **Reset Password** next to any admin to issue them a new temporary password immediately (no confirmation) — it\'s shown once, copy it down, and it signs out their existing sessions.' },
-            { term: 'Manage Organisation', text: 'rename the org or change its code (this breaks existing login links and signs everyone out — warn them first), and suspend/reactivate.' },
+            { term: 'Usage', text: 'employees, ideas, approvals, implementations, QCMS pushes, storage - counts only.' },
+            { term: 'Organisation Admin Contacts', text: 'your support contacts for this org. Click **Reset Password** next to any admin to issue them a new temporary password immediately (no confirmation) - it\'s shown once, copy it down, and it signs out their existing sessions.' },
+            { term: 'Manage Organisation', text: 'rename the org or change its code (this breaks existing login links and signs everyone out - warn them first), and suspend/reactivate.' },
             { term: 'Danger Zone', text: 'deleting an organisation. Type the organisation\'s exact code to confirm, optionally tick "Also permanently delete the database and all of its data," then click **Delete Organisation**.' },
           ],
         },
         {
-          note: 'This is the single most destructive action in the whole console — there is no further confirmation '
+          note: 'This is the single most destructive action in the whole console - there is no further confirmation '
             + 'beyond typing the code correctly, and it cannot be undone.',
         },
       ],
@@ -720,17 +667,17 @@ const PLATFORM_ADMIN = {
       blocks: [
         {
           p: 'Click **Support Tickets** to see every request raised by any organisation, platform-wide. Click a '
-            + 'ticket to open its thread — you can reply to the customer, or tick **"Internal note — IFQM staff '
+            + 'ticket to open its thread - you can reply to the customer, or tick **"Internal note - IFQM staff '
             + 'only"** to leave a note nobody outside IFQM sees (these appear with a clearly different, dashed '
             + 'border so they\'re never confused with a customer-visible reply). Status and Priority dropdowns save '
             + 'automatically as you change them.',
         },
         {
           p: "Click **+ New Ticket** to open a ticket on an organisation's behalf yourself (maintenance notices, "
-            + 'incident follow-ups) — pick the organisation, write a subject and message, and send.',
+            + 'incident follow-ups) - pick the organisation, write a subject and message, and send.',
         },
         {
-          p: 'Use the bulk-archive panel to tidy away many resolved/closed tickets at once — archiving is '
+          p: 'Use the bulk-archive panel to tidy away many resolved/closed tickets at once - archiving is '
             + 'reversible, nothing is deleted.',
         },
       ],
@@ -740,18 +687,18 @@ const PLATFORM_ADMIN = {
       title: '7. Plans',
       blocks: [
         {
-          p: 'Click **Plans** to manage the catalogue every organisation can be assigned to — this affects the '
+          p: 'Click **Plans** to manage the catalogue every organisation can be assigned to - this affects the '
             + 'whole platform going forward, but editing or retiring a plan never changes what an existing customer '
             + 'is already paying.',
         },
         {
           p: 'Click **+ New Plan** for a 4-step wizard: Info (name, code, tier, description) → Pricing (amount, '
             + 'billing cycle including a genuine non-expiring Lifetime option, GST handling) → Limits (max users, '
-            + 'storage, monthly request allowance — a "Use suggested" button fills in a sensible number for you) → '
+            + 'storage, monthly request allowance - a "Use suggested" button fills in a sensible number for you) → '
             + 'Review, where you must explicitly confirm the price before **Save plan configuration** unlocks.',
         },
         {
-          p: 'Click **Delete** next to an active plan to retire it — a confirmation explains plainly that this only '
+          p: 'Click **Delete** next to an active plan to retire it - a confirmation explains plainly that this only '
             + 'removes it from future selection; every organisation already on it keeps their price and access '
             + 'exactly as-is.',
         },
@@ -762,12 +709,12 @@ const PLATFORM_ADMIN = {
       title: '8. Billing (platform-wide)',
       blocks: [
         {
-          p: "Click **Billing** to see every organisation's payment status in one table — distinct from any single "
+          p: "Click **Billing** to see every organisation's payment status in one table - distinct from any single "
             + "organisation's own billing screen. Summary tiles up top flag organisations with no plan set, expiring "
             + 'soon, or already lapsed.',
         },
         {
-          p: 'Click **Manage** on any row to assign/change their plan, set trial length, or record a payment — same '
+          p: 'Click **Manage** on any row to assign/change their plan, set trial length, or record a payment - same '
             + 'three independent actions as the organisation detail page.',
         },
         { p: 'Two buttons matter here:' },
@@ -793,20 +740,20 @@ const PLATFORM_ADMIN = {
         },
         { p: '**9.2 Organisation Settings**' },
         {
-          p: "Look up and edit one organisation's own settings on their behalf — SLA, feature flags, and their SMTP "
-            + 'mail settings — without signing in as them.',
+          p: "Look up and edit one organisation's own settings on their behalf - SLA, feature flags, and their SMTP "
+            + 'mail settings - without signing in as them.',
         },
         { p: '**9.3 Messaging & ZeptoMail**' },
         {
           p: 'Genuinely platform-wide. Configure the SMS/DLT gateway (for one-time-code delivery), the OTP sign-in '
-            + 'policy (code length, lifetime, retry limits), and the ZeptoMail email provider — used for welcome '
+            + 'policy (code length, lifetime, retry limits), and the ZeptoMail email provider - used for welcome '
             + "emails to newly onboarded employees, and as a fallback when a tenant hasn't set up their own mail. "
             + 'Use **Send test message / Send test email** to prove a setting actually works before anyone depends '
-            + 'on it — a test SMS costs a real message credit.',
+            + 'on it - a test SMS costs a real message credit.',
         },
         { p: '**9.4 Maintenance**' },
         {
-          p: 'The platform-wide kill switch. Turning it on locks out every organisation immediately — sessions '
+          p: 'The platform-wide kill switch. Turning it on locks out every organisation immediately - sessions '
             + 'already open stop working on their next request; your own platform-admin access is unaffected so you '
             + 'can turn it back off. Turning it on asks you to confirm; turning it off does not. You can also edit '
             + 'the notice shown to locked-out users.',
@@ -819,7 +766,7 @@ const PLATFORM_ADMIN = {
         { p: '**9.6 Platform Admins**' },
         {
           p: 'Manage who can access this console. **Add Platform Admin** to create a new account (minimum '
-            + '12-character password) — remember, every account here can reach every organisation. Use '
+            + '12-character password) - remember, every account here can reach every organisation. Use '
             + '**Change My Password** to update your own.',
         },
       ],
@@ -829,7 +776,7 @@ const PLATFORM_ADMIN = {
       title: '10. Login Activity',
       blocks: [
         {
-          p: 'Click **Login Activity** to see sign-in history for IFQM staff only — not your customers\' own '
+          p: 'Click **Login Activity** to see sign-in history for IFQM staff only - not your customers\' own '
             + 'employees signing into their organisations. Filter by outcome (signed in / wrong password / locked '
             + 'out), search by name or address, and export to CSV. Data here is kept for 180 days.',
         },
@@ -871,10 +818,10 @@ const PLATFORM_ADMIN = {
       blocks: [
         {
           bullets: [
-            'You genuinely cannot see individual employees, idea content, or files belonging to any organisation — only counts. The one exception is what a customer writes into a support ticket.',
+            'You genuinely cannot see individual employees, idea content, or files belonging to any organisation - only counts. The one exception is what a customer writes into a support ticket.',
             "Deleting an organisation cannot be undone. It's gated only by typing the org's exact code correctly.",
-            'Run sweep on the Billing page has no confirmation — always click Preview lapses first.',
-            "Turning Maintenance Mode ON asks you to confirm. Turning it off does not — it's treated as always safe.",
+            'Run sweep on the Billing page has no confirmation - always click Preview lapses first.',
+            "Turning Maintenance Mode ON asks you to confirm. Turning it off does not - it's treated as always safe.",
             'Editing New-Tenant Defaults only affects organisations created after the change, never existing ones.',
             'Retiring a plan never affects organisations already on it.',
           ],
@@ -884,14 +831,7 @@ const PLATFORM_ADMIN = {
   ],
 };
 
-/*
- * Which manual a person gets.
- *
- * Keyed on the same role strings the rest of the app uses. Anyone who is not a
- * platform admin or an org admin is an employee as far as the manual is
- * concerned — a team lead and a plant head do the same things in this product,
- * and three manuals is already two more than most people will read.
- */
+// Which manual a person gets.
 export function guideForRole(role) {
   if (role === 'platform_admin') return PLATFORM_ADMIN;
   if (role === 'admin' || role === 'super_admin') return ORG_ADMIN;

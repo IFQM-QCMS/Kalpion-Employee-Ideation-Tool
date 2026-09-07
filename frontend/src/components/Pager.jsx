@@ -1,28 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 
-/*
- * Client-side paging for the long lists in this application.
- *
- * Every list screen used to render every row it had been given. With a handful
- * of organisations that is invisible; at a thousand it is thousands of DOM
- * nodes built on each keystroke of a filter, and the browser - not the server -
- * is what stops responding. Twenty rows to a page keeps the work constant
- * whatever the dataset does.
- *
- * Deliberately client-side. These endpoints already return a bounded set, so
- * the fix belongs where the cost actually is; a screen that needs server paging
- * (login activity, once it has months of history) says so at its call site.
- */
+// Client-side paging for the long lists in this application.
 export const PAGE_SIZE = 20;
 
-/**
- * Slice a list into the current page, and keep the page number honest.
- *
- * Returns everything a caller needs, including `reset` for when a filter
- * changes. Filtering while on page 7 of 7 otherwise leaves the reader on an
- * empty page wondering where their data went, so the page number is clamped
- * back into range whenever the list shrinks under it.
- */
+/** Slice a list into the current page, and keep the page number honest. */
 export function usePager(items, size = PAGE_SIZE) {
   const [page, setPage] = useState(1);
   const list = Array.isArray(items) ? items : [];
@@ -44,15 +25,14 @@ export function usePager(items, size = PAGE_SIZE) {
   };
 }
 
-/**
- * The control itself. Renders nothing at all for a single page, because a
- * pager under a four-row table is noise.
+/*
+ * The control itself. Renders nothing at all for a single page, because a pager under a
+ * four-row table is noise.
  */
 export default function Pager({ page, pages, total, from, to, setPage, noun = 'rows' }) {
   if (pages <= 1) return null;
 
-  // A window around the current page, so a hundred pages do not produce a
-  // hundred buttons.
+  // A window around the current page, so a hundred pages do not produce a hundred buttons.
   const window = [];
   const start = Math.max(1, Math.min(page - 2, pages - 4));
   for (let i = start; i < start + 5 && i <= pages; i += 1) window.push(i);
@@ -76,11 +56,11 @@ export default function Pager({ page, pages, total, from, to, setPage, noun = 'r
       <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
         <button type="button" style={btn(false)} disabled={page === 1}
           onClick={() => setPage(page - 1)}>Prev</button>
-        {start > 1 && <span style={{ color: 'var(--subtle)', fontSize: 12 }}>…</span>}
+        {start > 1 && <span style={{ color: 'var(--subtle)', fontSize: 12 }}>...</span>}
         {window.map((n) => (
           <button key={n} type="button" style={btn(n === page)} onClick={() => setPage(n)}>{n}</button>
         ))}
-        {start + 5 <= pages && <span style={{ color: 'var(--subtle)', fontSize: 12 }}>…</span>}
+        {start + 5 <= pages && <span style={{ color: 'var(--subtle)', fontSize: 12 }}>...</span>}
         <button type="button" style={btn(false)} disabled={page === pages}
           onClick={() => setPage(page + 1)}>Next</button>
       </div>

@@ -62,17 +62,7 @@ export default function ChallengesPage() {
 
       {error   && <div className="alert alert-danger">{error}</div>}
 
-      {/*
-        One row per challenge.
-        The deadline is the fact people come to this page for, and in a column
-        it can be compared across challenges — which was impossible when it sat
-        inline in a sentence whose length varied with the creator's name.
-
-        Expiry was also computed three separate times inside the old card, once
-        per thing that depended on it, each with its own copy of the rule. They
-        could not disagree today, but the next edit to one of them is exactly
-        how they would start to. It is decided once, per row, here.
-      */}
+      {/* One row per challenge. The deadline is the fact people come to this page for, and in a column it can be compared across challenges - which was impossible when it sat inline in a sentence whose length varied with the creator's name. */}
       <div className="card" style={{ overflowX:'auto' }}>
         <table className="table">
           <thead>
@@ -91,9 +81,9 @@ export default function ChallengesPage() {
               <tr><td colSpan="6" className="text-center">{t('challenges.none')}</td></tr>
             )}
             {list.map(c => {
-              // parseServerDate, not new Date: the API sends naive datetimes and
-              // reading them as local time made a challenge look closed hours
-              // before it was — or still open hours after it shut.
+              // parseServerDate, not new Date: the API sends naive datetimes and reading them as local
+              // time made a challenge look closed hours before it was - or still open hours after it
+              // shut.
               const due     = parseServerDate(c.deadline);
               const expired = c.status === 'closed' || (due && due.getTime() < Date.now());
               return (
@@ -109,7 +99,7 @@ export default function ChallengesPage() {
                       </div>
                     )}
                   </td>
-                  <td>{c.creator_name||'—'}</td>
+                  <td>{c.creator_name||'-'}</td>
                   <td style={{ whiteSpace:'nowrap' }}>
                     {c.deadline
                       ? <span className={`chip ${expired ? 'chip-danger' : ''}`}>{fmtDate(c.deadline)}</span>
@@ -117,10 +107,7 @@ export default function ChallengesPage() {
                   </td>
                   <td>{c.idea_count||0}</td>
                   <td>
-                    {/* chip-*, not badge-*: badge classes are per-status
-                        (badge-approved, badge-rejected...) and a challenge has
-                        no idea status. badge-success/badge-danger were never
-                        defined in the stylesheet at all. */}
+                    {/* chip-*, not badge-*: badge classes are per-status (badge-approved, badge-rejected...) and a challenge has no idea status. badge-success/badge-danger were never defined in the stylesheet at all. */}
                     <span className={`chip ${expired ? 'chip-danger' : 'chip-success'}`}>
                       {expired ? t('challenges.status_closed') : t('challenges.status_active')}
                     </span>

@@ -1,40 +1,10 @@
-/**
- * A platform admin proving they hold the address and the number on the account.
- *
- * ── Why this account and not the others ────────────────────────────────────
- *
- * A platform admin reaches every tenant on the platform — every organisation's
- * people, their ideas, their billing and their support history. It is the widest
- * credential the product issues, and until now it was created by typing a name,
- * an address and a password into a form. Nothing checked that the address
- * existed, that anybody read it, or that the number belonged to the person being
- * handed the keys. A typo in the email field produced a fully working account
- * whose intended owner could never receive a password reset — and the account
- * still worked, for whoever did receive the mail.
- *
- * ── Both channels, not either ──────────────────────────────────────────────
- *
- * Two separate purposes rather than one that accepts whichever arrives first.
- * The property being established is that the account is reachable on two
- * independent channels: an address alone can be taken by whoever holds that
- * mailbox, and a number alone leaves nobody to send a reset to. Letting one
- * stand in for the other would collect a proof and call the job done.
- *
- * ── When the codes are sent ────────────────────────────────────────────────
- *
- * At first sign-in, not at creation. The person being given the account is not
- * at the keyboard when it is made — somebody else is making it for them — so
- * codes sent then would sit unread in a mailbox and a handset until they
- * expired, and the account would look broken on the one screen it is allowed to
- * reach. Asking for them when the right person is present is both safer and the
- * only version that works.
- */
+/** A platform admin proving they hold the address and the number on the account. */
 import { masterDb } from '../database/master.js';
 import * as verification from './verificationService.js';
 import { badRequest, notFound } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
-/** channel → the row column it proves, and the verification purpose. */
+/** channel the row column it proves, and the verification purpose. */
 const CHANNELS = {
   email: { column: 'email_verified_at', purpose: 'platform_admin_email', field: 'email' },
   phone: { column: 'phone_verified_at', purpose: 'platform_admin_phone', field: 'phone' },
@@ -73,14 +43,7 @@ export async function status(actor) {
   return { success: true, ...stateOf(row), email: row.email, phone: row.phone };
 }
 
-/**
- * Send a code to one of the two channels.
- *
- * The destination comes from the ROW, never from the request. Taking it from
- * the caller would turn this into a way to point an unverified account at an
- * address or a handset of the caller's choosing and then verify it — which is
- * the whole thing being prevented, wearing the flow's own clothes.
- */
+/** Send a code to one of the two channels. */
 export async function sendCode(actor, body = {}) {
   const channel = String(body.channel ?? '').trim().toLowerCase();
   const spec = CHANNELS[channel];
@@ -88,8 +51,8 @@ export async function sendCode(actor, body = {}) {
 
   const row = await loadAdmin(actor);
   if (row[spec.column]) {
-    // Already proved. Not an error — a double-click on Send should not read as
-    // a failure — but no second code goes out.
+    // Already proved. Not an error - a double-click on Send should not read as a failure - but
+    // no second code goes out.
     return { success: true, already_verified: true, ...stateOf(row) };
   }
 
@@ -109,13 +72,7 @@ export async function sendCode(actor, body = {}) {
   return { success: true, channel, ...sent, ...stateOf(row) };
 }
 
-/**
- * Accept a code and record the proof.
- *
- * The timestamp is written only after verifyCode has consumed the code, so a
- * wrong guess cannot mark anything verified, and a replayed code cannot either
- * — verificationService marks it consumed.
- */
+/** Accept a code and record the proof. */
 export async function confirmCode(actor, body = {}) {
   const channel = String(body.channel ?? '').trim().toLowerCase();
   const spec = CHANNELS[channel];

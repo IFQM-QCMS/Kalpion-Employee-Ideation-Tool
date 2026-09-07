@@ -1,6 +1,4 @@
-/**
- * Export controller — sends raw CSV / HTML (not JSON). Maps to api/export.php.
- */
+/** Export controller - sends raw CSV / HTML (not JSON). */
 import * as exportService from '../services/exportService.js';
 import * as ideaService from '../services/ideaService.js';
 import { buildIdeaPdf, buildIdeaGistPdf } from '../services/ideaPdfService.js';
@@ -26,18 +24,7 @@ export const ideas = asyncHandler(async (req, res) => {
   res.send(csv);
 });
 
-/**
- * GET /api/export/leaderboard-pdf — the leaderboard as a document.
- *
- * HR run Rewards & Recognition from this, and the CSV they had was not a
- * document: open it a month later and it is a grid of numbers with nothing on
- * it saying which period it covers or when it was produced. This carries the
- * organisation's name, the period and the timestamp, so it can be attached to
- * a mail, tabled in a meeting and filed as the record afterwards.
- *
- * The period comes from the query string and is whitelisted by the leaderboard
- * service itself — it maps to a fixed SQL fragment and is never interpolated.
- */
+/** GET /api/export/leaderboard-pdf - the leaderboard as a document. */
 export const leaderboardPdf = asyncHandler(async (req, res) => {
   const period = String(req.query.period || 'all');
   const data = await leaderboardService.leaderboard(req.db, period);
@@ -55,32 +42,7 @@ export const leaderboardPdf = asyncHandler(async (req, res) => {
   doc.pipe(res);
 });
 
-/**
- * POST /api/export/leaderboard/send — forward the leaderboard to HR.
- *
- * MOM 24/08 §1. The leaderboard is what Rewards & Recognition is decided from,
- * and getting it to the people who run R&R was a copy-paste into a mail client:
- * the existing "Email" button opens a mailto:, which cannot carry an
- * attachment, so what HR received was ten lines of plain text with no record of
- * the period or the numbers behind it.
- *
- * This sends the actual document.
- *
- * ── Why it is restricted ──────────────────────────────────────────────────
- *
- * The route is guarded by requireRole (see exportRoutes) rather than a check in
- * here, which is how every other restricted route in this file is done.
- *
- * It needs guarding because an endpoint that takes an arbitrary address and
- * sends mail from the platform's own verified domain is a spam relay if anyone
- * can reach it — the message arrives carrying IFQM's authentication, which is
- * exactly what makes it worth abusing. The leaderboard itself is not sensitive;
- * the ability to send mail as IFQM is.
- *
- * The recipient is validated rather than trusted: a header-injection attempt
- * ("hr@x.com\nBcc: …") fails the pattern before it reaches the transport, and
- * headerSafe() in the mailer strips CR/LF as a second line of defence.
- */
+/** POST /api/export/leaderboard/send - forward the leaderboard to HR. */
 export const sendLeaderboard = asyncHandler(async (req, res) => {
   const to = String(req.body?.to || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(to)) {
@@ -95,11 +57,8 @@ export const sendLeaderboard = asyncHandler(async (req, res) => {
   const rows = data.individuals || [];
   if (!rows.length) throw badRequest('There is nothing on the leaderboard for this period yet.');
 
-  /*
-   * The PDF has to be a Buffer, not a stream: an attachment is sent as one
-   * value and the transport cannot wait on a stream it did not create. So the
-   * document is collected before the mail is composed.
-   */
+  // The PDF has to be a Buffer, not a stream: an attachment is sent as one value and the
+  // transport cannot wait on a stream it did not create.
   const pdf = await new Promise((resolve, reject) => {
     const chunks = [];
     const doc = buildLeaderboardPdf(rows, { orgName, period });
@@ -112,7 +71,7 @@ export const sendLeaderboard = asyncHandler(async (req, res) => {
   const top = rows.slice(0, 5)
     .map((r, i) => `<tr><td style="padding:3px 12px 3px 0">${i + 1}.</td>`
       + `<td style="padding:3px 12px 3px 0"><b>${esc(r.name)}</b></td>`
-      + `<td style="padding:3px 0;color:#667089">${esc(r.department) || '—'}</td>`
+      + `<td style="padding:3px 0;color:#667089">${esc(r.department) || '-'}</td>`
       + `<td style="padding:3px 0 3px 12px;text-align:right">${esc(r.points)} pts</td></tr>`)
     .join('');
 
@@ -126,7 +85,7 @@ export const sendLeaderboard = asyncHandler(async (req, res) => {
 </div>`;
 
   const emailed = await sendViaPlatform(
-    to, '', `Idea leaderboard — ${orgName}`, html,
+    to, '', `Idea leaderboard - ${orgName}`, html,
     [{
       filename: `leaderboard_${period}_${new Date().toISOString().slice(0, 10)}.pdf`,
       content: pdf,
@@ -155,25 +114,11 @@ export const analytics = asyncHandler(async (req, res) => {
   res.send(html);
 });
 
-// Single idea → Closure Summary PDF. The route restricts this to the review
-// hierarchy; the idea is loaded through the caller's own tenant pool, so an id
-// from another organisation simply 404s (no cross-tenant read is possible).
+// Single idea Closure Summary PDF.
 export const ideaPdf = asyncHandler(async (req, res) => {
   const { idea } = await ideaService.get(req.db, req.user, req.params.id);
 
-  /*
-   * Two documents, chosen by who is asking.
-   *
-   * Somebody inside the idea - its author, a colleague credited on it, or one
-   * of the people reviewing it - gets the closure summary: the full working
-   * record. Everybody else gets a one-page gist.
-   *
-   * The split is not only about what the reader may read. ideaService has
-   * already emptied the fields they are not entitled to, so handing them the
-   * closure form would produce two pages of blank boxes: it looks like a broken
-   * export and it invites the reader to wonder what was removed. A document
-   * that says "summary" on its face is both safer and more honest.
-   */
+  // Two documents, chosen by who is asking.
   const inside = idea.viewer_inside === true;
   const code = idea.idea_code || idea.id;
   const filename = inside
@@ -188,29 +133,9 @@ export const ideaPdf = asyncHandler(async (req, res) => {
   else buildIdeaGistPdf(idea, res, req.user);
 });
 
-/**
- * GET /api/export/user-guide — the manual for whoever is asking.
- *
- * ── Why the role decides the file ──────────────────────────────────────────
- *
- * There are three manuals, and handing an employee the platform-admin one is
- * not a small mistake. It describes screens they cannot open, a console they
- * have no account for, and other organisations they must never learn exist —
- * so the wrong manual is both useless to them and a disclosure of how the
- * vendor side works.
- *
- * The role comes from the SESSION, never from the request. A `?role=` would be
- * a way for anybody to ask for the platform-admin manual by typing it.
- *
- * ── Falling back rather than failing ───────────────────────────────────────
- *
- * A role with no manual of its own gets the employee one, because every role
- * here submits and tracks ideas as well as whatever else they do. Only a
- * deployment shipped without the folder at all gets a 404, and it says so
- * plainly rather than serving a broken download.
- */
+/** GET /api/export/user-guide - the manual for whoever is asking. */
 const MANUALS = {
-  // Platform staff — the vendor console.
+  // Platform staff - the vendor console.
   platform_admin: {
     file: 'Manual_PlatformAdmin.pdf',
     name: 'Kalpion-Platform-Admin-Manual.pdf',
@@ -218,8 +143,8 @@ const MANUALS = {
   // Whoever runs one organisation: users, approval chain, analytics, billing.
   admin: { file: 'Manual_OrgAdmin.pdf', name: 'Kalpion-Organisation-Admin-Manual.pdf' },
   super_admin: { file: 'Manual_OrgAdmin.pdf', name: 'Kalpion-Organisation-Admin-Manual.pdf' },
-  // Everybody else. Reviewers included: they submit and track like anyone else,
-  // and the approval queue is covered in the employee manual.
+  // Everybody else. Reviewers included: they submit and track like anyone else, and the
+  // approval queue is covered in the employee manual.
   employee: { file: 'Manual_Employee.pdf', name: 'Kalpion-Employee-Manual.pdf' },
 };
 
@@ -247,8 +172,8 @@ export const userGuide = asyncHandler(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${pick.name}"`);
-  // Streamed rather than read into memory: each is a few hundred kilobytes and
-  // several people may ask at once.
+  // Streamed rather than read into memory: each is a few hundred kilobytes and several
+  // people may ask at once.
   return createReadStream(file).pipe(res);
 });
 

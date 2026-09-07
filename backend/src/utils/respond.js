@@ -1,20 +1,12 @@
-/**
- * Response helpers that mirror the PHP `respond()` shape exactly.
- *
- * PHP:  respond(['success' => false, 'error' => '...'], 401)
- * Node: respond(res, { success: false, error: '...' }, 401)
- *
- * The JSON body shape is kept byte-for-byte compatible with the PHP API so
- * the existing/ported frontend consumes it without changes.
- */
+/** Response helpers that mirror the PHP `respond()` shape exactly. */
 export function respond(res, data, code = 200) {
   return res.status(code).json(data);
 }
 
-/**
- * Typed application error. Thrown from services/controllers and converted to
- * the `{ success:false, error }` shape by the central error handler, matching
- * how PHP `respond([...], code)` short-circuits a request.
+/*
+ * Typed application error. Thrown from services/controllers and converted to the `{
+ * success:false, error }` shape by the central error handler, matching how PHP
+ * `respond([...], code)` short-circuits a request.
  */
 export class ApiError extends Error {
   constructor(status, message, extra = {}) {

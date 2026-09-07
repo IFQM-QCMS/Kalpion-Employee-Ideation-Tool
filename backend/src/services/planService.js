@@ -1,13 +1,4 @@
-/**
- * The plan catalogue — what IFQM sells.
- *
- * Money is handled in paise, as whole numbers, everywhere below. A price is an
- * exact quantity and a floating-point number is not: ₹2,500.10 has no exact
- * binary representation, and the error compounds the moment 18% tax is applied
- * and then a proportion of it is refunded. The screens send and receive rupees
- * because that is what a person types; the conversion happens here, once, at
- * the boundary.
- */
+/** The plan catalogue - what IFQM sells. */
 import { masterDb } from '../database/master.js';
 import { badRequest, notFound } from '../utils/respond.js';
 
@@ -22,26 +13,13 @@ export const CYCLE_DAYS = {
   quarterly: 91,
   half_yearly: 182,
   yearly: 365,
-  one_time: 3650,      // a long fixed term — it does still expire
-  /*
-   * Lifetime has no length, and null is the honest way to say so. Every caller
-   * has to decide what that means rather than receive a number that quietly
-   * behaves like an expiry date.
-   *
-   * one_time above is the cautionary case: 3650 days was described as
-   * "effectively perpetual", but the date is real and the nightly sweep reads
-   * it, so in ten years it would expire an organisation sold a plan that does
-   * not expire — long enough that nobody remembers why, near enough that it
-   * arrives.
-   */
+  one_time: 3650,      // a long fixed term - it does still expire
+  // Lifetime has no length, and null is the honest way to say so.
   lifetime: null,
-  /*
-   * Pay as you go bills every month, so the period is a month — but the AMOUNT
-   * is not the plan's amount. amount_paise on a PAYG plan is the price of one
-   * active user for one month, and what is owed is that times however many
-   * people signed in. usageBillingService owns that arithmetic; this constant
-   * only says how long a period lasts.
-   */
+  // Pay as you go bills every month, so the period is a month - but the AMOUNT is not the
+  // plan's amount. amount_paise on a PAYG plan is the price of one active user for one
+  // month, and what is owed is that times however many people signed in. usageBillingService
+  // owns that arithmetic; this constant only says how long a period lasts.
   payg: 30,
 };
 
@@ -61,18 +39,7 @@ const CYCLE_LABEL = {
   payg: 'Pay as you go',
 };
 
-/**
- * A sensible monthly request allowance for a plan with this many users.
- *
- * The arithmetic, so nobody has to guess: a signed-in person costs roughly 500
- * requests on a working day — a notification poll every two minutes, a screen
- * refreshing while they read it, and ordinary navigation. Over 22 working days
- * that is about 11,000 a month. Rounded to 15,000 to leave room for a heavy
- * user, a bulk import and a few exports.
- *
- * No user cap means no request cap: a limit derived from "unlimited" is a
- * contradiction, and a trial should never meet one at all.
- */
+/** A sensible monthly request allowance for a plan with this many users. */
 export function suggestQuota(maxUsers) {
   const n = parseInt(maxUsers, 10);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -89,13 +56,7 @@ export function toPaise(rupees) {
 
 export const toRupees = (paise) => (Number(paise) || 0) / 100;
 
-/**
- * What an organisation is actually charged, tax broken out.
- *
- * With GST included, the stored amount already contains the tax and has to be
- * worked backwards. With GST excluded, the tax is added on top. Both appear on
- * invoices, so both are computed here rather than in a screen.
- */
+/** What an organisation is actually charged, tax broken out. */
 export function priceBreakdown(plan) {
   const amount = Number(plan.amount_paise) || 0;
   const rate = Number(plan.gst_percent) || 0;
@@ -122,30 +83,24 @@ export function decoratePlan(row) {
     gst_rupees: toRupees(b.gst_paise),
     total_rupees: toRupees(b.total_paise),
     cycle_label: CYCLE_LABEL[row.billing_cycle] || row.billing_cycle,
-    // null for a lifetime plan, and left null rather than defaulted to 365 — the
-  // screens read this to decide whether to show a renewal date at all.
+    // null for a lifetime plan, and left null rather than defaulted to 365 - the screens read
+    // this to decide whether to show a renewal date at all.
   cycle_days: isLifetime(row.billing_cycle) ? null : (CYCLE_DAYS[row.billing_cycle] || 365),
   is_lifetime: isLifetime(row.billing_cycle),
   is_payg: isPayg(row.billing_cycle),
-  // Reads as a price on every other plan and as a RATE on this one, so the
-  // screens can label it without knowing the cycle rules.
+  // Reads as a price on every other plan and as a RATE on this one, so the screens can label
+  // it without knowing the cycle rules.
   unit_label: isPayg(row.billing_cycle) ? 'per active user / month' : null,
-    // "Unlimited" is NULL, not 0. Zero would be a real limit meaning nobody may
-    // join, which is never what an operator means by leaving a box empty.
+    // "Unlimited" is NULL, not 0. Zero would be a real limit meaning nobody may join, which is
+    // never what an operator means by leaving a box empty.
     max_users_label: row.max_users == null ? 'Unlimited' : String(row.max_users),
     storage_label: row.storage_gb == null ? 'Unlimited' : `${row.storage_gb} GB`,
     quota_label: row.api_quota_monthly == null
       ? 'Unlimited'
       : `${Number(row.api_quota_monthly).toLocaleString('en-IN')} / month`,
     // What this plan's allowance would be if it were derived from its user cap.
-    // Shown next to the field so an operator can see whether the stored number
-    // is sane rather than having to work it out.
     suggested_quota: suggestQuota(row.max_users),
-    /*
-     * Whether this plan may be deleted. Sent so the console can leave the
-     * Delete button out rather than showing one that always fails — an
-     * operator who is told "no" only after clicking reads it as a bug.
-     */
+    // Whether this plan may be deleted.
     is_permanent: !!permanentReason(row),
     permanent_reason: permanentReason(row),
   };
@@ -230,23 +185,15 @@ function validate(body, { partial = false } = {}) {
     out.is_custom = body.is_custom === true || body.is_custom === 1 || body.is_custom === '1' ? 1 : 0;
   }
 
-  // A blank limit means unlimited, which is NULL. Written out rather than using
-  // `parseInt(v) || null`, because that turns a deliberate 0 into unlimited.
+  // A blank limit means unlimited, which is NULL. Written out rather than using `parseInt(v)
+  // || null`, because that turns a deliberate 0 into unlimited.
   const limit = (v) => {
     if (v === '' || v === null || v === undefined) return null;
     const n = parseInt(v, 10);
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
   if (has('max_users') || !partial) out.max_users = limit(body.max_users);
-  /*
-   * The monthly request allowance.
-   *
-   * Sized from the user cap: roughly 15,000 requests per permitted user per
-   * month, which is about thirty times what ordinary use costs. A blank field
-   * means unlimited. Getting this wrong is how a live customer was locked out
-   * of their own workspace once already, so `suggestQuota` below exists to stop
-   * anybody typing a number off the top of their head.
-   */
+  // The monthly request allowance.
   if (has('api_quota_monthly') || !partial) out.api_quota_monthly = limit(body.api_quota_monthly);
   if (has('api_quota_total')) out.api_quota_total = limit(body.api_quota_total);
   if (has('max_departments') || !partial) out.max_departments = limit(body.max_departments);
@@ -284,15 +231,7 @@ export async function updatePlan(id, body) {
 
   const data = validate(body, { partial: true });
 
-  /*
-   * A permanent plan keeps its code and, for LIFETIME, its billing cycle.
-   *
-   * Editing is otherwise free — but renaming the code is the same as deleting
-   * the plan as far as every lookup here is concerned, and moving LIFETIME onto
-   * a cycle with a length would give the organisations held on it an expiry
-   * date. Both are the deletion this guard exists to prevent, arrived at
-   * through the edit form instead.
-   */
+  // A permanent plan keeps its code and, for LIFETIME, its billing cycle.
   const permanent = permanentReason(existing);
   if (permanent) {
     if (data.code && data.code !== existing.code) {
@@ -327,25 +266,8 @@ export async function updatePlan(id, body) {
   return { success: true, message: 'Plan updated.' };
 }
 
-/**
- * Retiring a plan does not delete it.
- *
- * Organisations point at plans, and their history refers to them. Deleting one
- * an organisation is on would leave that organisation pointing at nothing, and
- * would erase what they were charged and why. Retired plans stop appearing on
- * the list an approver picks from; everything else is untouched.
- */
-/**
- * The plan a brand-new organisation starts on.
- *
- * Every approved organisation is put on this automatically, so that none of
- * them exists unpriced: an organisation with no plan has no trial end date, so
- * it never lapses, is never billed, and quietly stays free forever because
- * nobody remembered to go back to it.
- *
- * Found by code first and by tier second, so renaming the plan in the console
- * does not break the lookup.
- */
+/** Retiring a plan does not delete it. */
+/** The plan a brand-new organisation starts on. */
 export async function defaultTrialPlan() {
   const [[byCode]] = await masterDb().execute(
     "SELECT * FROM plans WHERE code = 'TRIAL' LIMIT 1"
@@ -357,25 +279,7 @@ export async function defaultTrialPlan() {
   return byTier || null;
 }
 
-/*
- * Plans that may be edited but never removed.
- *
- * TRIAL is a dependency: every approved organisation is put on it, so deleting
- * it breaks approval itself — later, quietly, for whoever next approves an
- * application rather than for whoever deleted the plan.
- *
- * LIFETIME is a promise. IFQM's founding members were given permanent free
- * access to the platform, and that commitment outlives whoever is sitting in
- * the console today. Retiring the plan does not cut those organisations off on
- * the day it happens — they keep their `billing_status = 'exempt'` row and the
- * nightly sweep still skips them — which is exactly the danger: the plan would
- * vanish from the list an approver picks from, and the next founding member to
- * be onboarded would silently be put on something that expires. The failure
- * would surface months later as a renewal notice sent to L&T.
- *
- * The value is the sentence shown when somebody tries. Editing is untouched in
- * both cases: price, name, limits and description are all still theirs.
- */
+// Plans that may be edited but never removed.
 const PERMANENT_PLANS = {
   TRIAL:
     'The Trial plan cannot be deleted - every newly approved organisation starts on it. '

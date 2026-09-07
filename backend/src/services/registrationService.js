@@ -1,19 +1,4 @@
-/**
- * MSME self-registration.
- *
- * An organisation applies for itself; a platform admin approves; only then is a
- * tenant database provisioned. Nothing an anonymous caller does here touches a
- * tenant schema — the worst a flood of junk applications can do is fill a
- * review queue, which is why this file is heavy on validation and light on
- * side effects.
- *
- * The corporate-domain rule is the one deliberate piece of friction: an
- * ideation platform is sold to a company, not to a person, and a free-mail
- * address gives no evidence the applicant speaks for the business. It is a
- * filter for accident and casual abuse, not a security control — anyone
- * determined can register a domain — so it sits alongside human approval
- * rather than replacing it.
- */
+/** MSME self-registration. */
 import { masterDb } from '../database/master.js';
 import { ApiError, badRequest, notFound } from '../utils/respond.js';
 import { assignPlan, defaultTrialDays } from './subscriptionService.js';
@@ -24,37 +9,10 @@ import { createTenant } from './platformService.js';
 import bcrypt from 'bcryptjs';
 import * as verification from './verificationService.js';
 
-/*
- * ── Proving the applicant owns the address and the number ──────────────────
- *
- * Both are delegated to verificationService, the same machinery the rest of the
- * product uses for one-time codes. What was here before did its own thing and
- * got three parts of it wrong: the code came from Math.random(), which is
- * predictable from previous output; wrong guesses were never counted, so six
- * digits could be walked at network speed; and the row it wrote used a purpose
- * value the column could not store, so every request answered 500 — email
- * verification at sign-up had never once worked.
- *
- * announce: true — unlike sign-in, these report honestly whether the code went
- * out. The applicant is typing their own address into a form they are filling
- * in and already knows whether they own it, so there is nothing to disclose;
- * and a form that cannot say "that did not send" leaves somebody waiting for a
- * code that is never coming.
- */
+// Both are delegated to verificationService, the same machinery the rest of the product
+// uses for one-time codes.
 export async function sendRegistrationEmailOtp(email, meta = {}) {
-  /*
-   * AWAITED. It was not, and checkCorporateEmail is async.
-   *
-   * Without the await, `check` is a Promise. A Promise has no `.ok`, so the
-   * test read undefined, took the failure branch every single time, and threw
-   * badRequest(undefined) — a 400 with no message on it. Every organisation
-   * that tried to verify its email address at sign-up got that 400, whatever
-   * address they typed, and the response could not even say why.
-   *
-   * The one other caller of this function (approve(), further down) awaited it
-   * correctly, which is why the same rule worked there and only the sign-up
-   * form was broken.
-   */
+  // AWAITED. It was not, and checkCorporateEmail is async.
   const check = await checkCorporateEmail(String(email || '').trim().toLowerCase());
   if (!check.ok) throw badRequest(check.reason);
   return verification.sendCode({
@@ -80,8 +38,7 @@ export async function verifyRegistrationPhoneOtp(phone, code) {
   return { success: true, verified: true, message: 'Mobile number verified successfully.' };
 }
 
-/* Consumer mailbox providers. A company applying from one of these is either a
-   sole trader using personal email (ask them to use a domain) or noise. */
+// Consumer mailbox providers.
 const FREE_EMAIL_DOMAINS = new Set([
   'gmail.com', 'googlemail.com', 'yahoo.com', 'yahoo.co.in', 'yahoo.co.uk', 'ymail.com',
   'rocketmail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'outlook.in', 'live.com',
@@ -92,7 +49,7 @@ const FREE_EMAIL_DOMAINS = new Set([
   'tuta.io', 'qq.com', '163.com', '126.com', 'naver.com', 'daum.net',
 ]);
 
-/* Throwaway-mailbox services. Same intent as above: keep the queue reviewable. */
+// Throwaway-mailbox services. Same intent as above: keep the queue reviewable.
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   'mailinator.com', 'guerrillamail.com', 'sharklasers.com', '10minutemail.com',
   'temp-mail.org', 'tempmail.com', 'throwawaymail.com', 'yopmail.com', 'trashmail.com',
@@ -110,9 +67,7 @@ const TURNOVER_BANDS = [
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-/* Statutory identifier formats. Each is checked only when supplied — an MSME
-   below the GST threshold genuinely has no GSTIN, and rejecting the form over a
-   field the applicant cannot fill would be a bug, not diligence. */
+// Statutory identifier formats.
 const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const UDYAM_RE = /^UDYAM-[A-Z]{2}-[0-9]{2}-[0-9]{7}$/;
 const CIN_RE = /^[LUu][0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
@@ -128,18 +83,9 @@ export function emailDomain(email) {
   return at === -1 ? '' : str(email).slice(at + 1).toLowerCase();
 }
 
-/**
+/*
  * Has a platform admin allowed this address, or its whole provider, through the
  * corporate-email rule?
- *
- * Two shapes of entry, checked in that order of specificity: the exact address,
- * then the bare domain. Allowing 'ravi@gmail.com' lets one person apply;
- * allowing 'gmail.com' reopens the provider for everybody.
- *
- * A registry that cannot be read answers "not allowed". That is the safe way
- * round: the failure then shows up as an applicant being told to use a work
- * address, which is visible and recoverable, rather than as the rule silently
- * switching itself off for everyone.
  */
 export async function isAllowedFreeEmail(email) {
   const e = str(email).toLowerCase();
@@ -156,39 +102,10 @@ export async function isAllowedFreeEmail(email) {
   }
 }
 
-/**
- * Is this a corporate address we will accept an application from?
- *
- * ── Why the free-provider rule is enforced at all ──────────────────────────
- *
- * FREE_EMAIL_DOMAINS has sat above since this file was written, with a comment
- * explaining exactly why a company applying from Gmail is either a sole trader
- * on personal email or noise — and nothing consulted it. Only disposable
- * mailboxes were refused.
- *
- * It matters more now than it did. Udyam, GSTIN, PAN and CIN came off the
- * registration form, and those numbers were how a reviewer checked an applicant
- * against the public registers. With them gone the work email domain is the
- * strongest remaining signal that an application comes from a real business.
- *
- * ── And why it is not enforced alone ───────────────────────────────────────
- *
- * A genuine two-person engineering firm very often has no domain at all. A rule
- * meant to filter noise would quietly exclude the customer, so the exception
- * ships with it: a platform admin can allow one address, or a whole provider,
- * without a deployment.
- *
- * @returns {Promise<{ ok: boolean, reason?: string, allowed_by_exception?: boolean }>}
- */
-/**
- * The half of the rule that needs no database: is this a well-formed address on
- * a domain we would never accept whatever anybody says?
- *
- * Split out so validateApplication() can stay synchronous and pure. The
- * provider rule needs the registry, and threading a database read through a
- * validator that is otherwise a function of its argument would make every
- * caller — and every test — carry a connection to ask whether a string looks
- * like an email.
+/** Is this a corporate address we will accept an application from? */
+/*
+ * The half of the rule that needs no database: is this a well-formed address on a domain
+ * we would never accept whatever anybody says?
  */
 export function checkEmailShape(email) {
   const e = str(email).toLowerCase();
@@ -198,18 +115,13 @@ export function checkEmailShape(email) {
   if (!domain || !domain.includes('.')) {
     return { ok: false, reason: 'Enter a valid email address.' };
   }
-  // A bare TLD or a single-label host is not a valid email domain. Checked
-  // before the lists, because neither can meaningfully contain one.
+  // A bare TLD or a single-label host is not a valid email domain. Checked before the lists,
+  // because neither can meaningfully contain one.
   const labels = domain.split('.');
   if (labels.length < 2 || labels.some((l) => !l)) {
     return { ok: false, reason: 'Enter a valid work email address.' };
   }
-  /*
-   * Disposable mailboxes are refused outright and are NOT whitelistable. A
-   * throwaway address is not a small business without a domain; it is an
-   * address designed to stop existing, and an approved workspace whose only
-   * contact has evaporated helps nobody.
-   */
+  // Disposable mailboxes are refused outright and are NOT whitelistable.
   if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
     return { ok: false, reason: 'Temporary email addresses are not accepted.' };
   }
@@ -238,15 +150,12 @@ function normaliseSlug(raw) {
   return str(raw).toLowerCase().replace(/[^a-z0-9_-]/g, '');
 }
 
-/**
- * Validate an application and return the row to insert.
- * Throws ApiError(400) with a single, actionable message on the first problem.
- */
+/** Validate an application and return the row to insert. */
 
 export function validateApplication(body) {
   const companyName = str(body.company_name);
   if (companyName.length < 2 || companyName.length > 150) {
-    throw badRequest('Enter your registered company name (2–150 characters).');
+    throw badRequest('Enter your registered company name (2-150 characters).');
   }
 
   const contactEmail = str(body.contact_email).toLowerCase();
@@ -260,22 +169,15 @@ export function validateApplication(body) {
 
   let slug = normaliseSlug(body.proposed_slug);
   if (!slug) {
-    // Derive one from the domain's second-level label so the applicant is not
-    // forced to invent an identifier they have no opinion about.
+    // Derive one from the domain's second-level label so the applicant is not forced to invent
+    // an identifier they have no opinion about.
     slug = normaliseSlug(emailDomain(contactEmail).split('.')[0]);
   }
   if (slug.length < 2 || slug.length > 30) {
-    throw badRequest('Organisation code must be 2–30 characters (letters, numbers, - and _).');
+    throw badRequest('Organisation code must be 2-30 characters (letters, numbers, - and _).');
   }
 
-  /*
-   * A mobile number is required, not optional.
-   *
-   * It is what the SMS code is sent to, at registration and at every later
-   * point where the account has to be proved — password reset above all. An
-   * account with no number on file cannot use any of it, and the gap only
-   * shows up on the day somebody is locked out.
-   */
+  // A mobile number is required, not optional.
   const phone = str(body.contact_phone);
   if (!phone) throw badRequest('Enter the contact mobile number.');
   if (!PHONE_RE.test(phone)) throw badRequest('Enter a valid contact phone number.');
@@ -283,24 +185,7 @@ export function validateApplication(body) {
     throw badRequest('Enter a full mobile number, including the area or country code.');
   }
 
-  /*
-   * Verified, not merely shaped.
-   *
-   * GSTIN_RE accepted anything with the right pattern, so 27AAAAA0000A1Z9 —
-   * which is not a GSTIN — went straight through to a reviewer, who had no way
-   * to tell it from a real one.
-   *
-   * A GSTIN carries its own check digit, a state code, and the holder's PAN.
-   * verifyGstin() confirms all three agree, which costs nothing and catches
-   * every typo and every invented number. It cannot confirm the number was
-   * actually ISSUED — that needs a GSTN lookup through a GSP, which is a paid
-   * contract; see docs/GSTIN_VERIFICATION.md. The messages are careful not to
-   * claim more than was checked.
-   *
-   * The PAN is passed in so the two fields are checked against each other: the
-   * GSTIN contains the PAN, so a form where they disagree has one of them
-   * wrong, and that is worth catching before a human is asked to look.
-   */
+  // Verified, not merely shaped.
   const gstin = upper(body.gstin);
   if (gstin) {
     const g = verifyGstin(gstin, upper(body.pan));
@@ -345,7 +230,7 @@ export function validateApplication(body) {
   if (pincode && !PINCODE_RE.test(pincode)) throw badRequest('Enter a valid 6-digit PIN code.');
 
   const nic = str(body.nic_code);
-  if (nic && !/^[0-9]{2,5}$/.test(nic)) throw badRequest('NIC code is 2–5 digits.');
+  if (nic && !/^[0-9]{2,5}$/.test(nic)) throw badRequest('NIC code is 2-5 digits.');
 
   const website = str(body.website);
   if (website && !/^https?:\/\/\S+\.\S+/.test(website)) {
@@ -358,67 +243,15 @@ export function validateApplication(body) {
   const stateName = str(body.state);
   const country = str(body.country) || 'India';
 
-  /*
-   * Everything above validates the FORM of a value if one was supplied. This
-   * block is about whether it was supplied at all.
-   *
-   * ── The statutory identifiers are no longer asked for ──────────────────────
-   *
-   * Udyam, GSTIN, PAN, CIN and the website used to be required here, and the
-   * form collected them on its own step. They are no longer on the form, so
-   * requiring them would refuse every application the product now sends.
-   *
-   * The COLUMNS are deliberately kept, and so is the format checking above:
-   * every application already submitted keeps its numbers, the platform screens
-   * go on showing them, and anything supplied by an older client or a future
-   * step is still stored and still validated. What changed is that an absent
-   * value is now an absent value rather than a rejection.
-   */
-  /*
-   * MOM 29 Jul 2026 §13 sets this list, and it is deliberately shorter than it
-   * was.
-   *
-   * MANDATORY — who the business is, provably, plus the two statutory numbers a
-   * reviewer checks against the public registers. GSTIN and PAN came off the
-   * form for a while when the whole statutory step was removed; §13 puts them
-   * back, and they are the reason the domain rule is not the only check on
-   * whether an applicant is a real company.
-   *
-   * OPTIONAL — everything §13 calls "other details": designation, NIC code,
-   * turnover band, and the whole registered address. None of them decides
-   * whether an application can be assessed, and each one is another field
-   * between somebody deciding to try the product and actually doing so. They
-   * are still validated when supplied and still stored.
-   *
-   * Udyam and CIN stay off the form entirely: §13 does not ask for them, a
-   * proprietorship never has a CIN, and an MSME below the threshold has no
-   * Udyam registration to give.
-   */
+  // Everything above validates the FORM of a value if one was supplied.
+  // MOM 29 Jul 2026 §13 sets this list, and it is deliberately shorter than it was.
   const required = [
     [companyName, 'registered company name'],
     [phone, 'contact phone number'],
     [gstin, 'GSTIN'],
     [pan, 'business PAN'],
     [entityType, 'entity type'],
-    /*
-     * MSME category is NOT required, and asking for it here was a live bug.
-     *
-     * The sign-up form stopped collecting it under MOM 24/08 — the platform
-     * does not differentiate organisations by size, so filing every applicant
-     * into a band collected an answer nothing acts on and implied a tiering
-     * that does not exist. The field went from the form; this line did not go
-     * with it.
-     *
-     * So every application since then failed on submit with "Enter your MSME
-     * category" against a form that has no such field. There was no way to
-     * complete it and nothing on screen to suggest what was wrong — an
-     * applicant could only conclude the product was broken, which for the one
-     * page that turns interest into a customer is about as bad as it gets.
-     *
-     * It stays validated and stored when supplied (see above and the insert
-     * below), exactly like Udyam, CIN and the website: applications already
-     * carrying one keep it, and the platform screens go on showing it.
-     */
+    // MSME category is NOT required, and asking for it here was a live bug.
     [str(body.sector), 'sector'],
   ];
   for (const [value, label] of required) {
@@ -460,33 +293,7 @@ export function validateApplication(body) {
   };
 }
 
-/**
- * Tell IFQM that somebody has applied.
- *
- * ── Why this exists ────────────────────────────────────────────────────────
- *
- * An application landed in a queue that nobody is looking at. The applicant is
- * told "we will email you once it has been reviewed", and until somebody
- * happened to open the console that was a promise with no mechanism behind it.
- * The first working day of a customer's relationship with the product was
- * silence of unknown length.
- *
- * ── Who it goes to ─────────────────────────────────────────────────────────
- *
- * Every platform admin, because "the person who checks registrations" is not a
- * role the schema knows about — anybody with console access may be the one who
- * acts. The billing contact is included when one is configured, since that is
- * the address IFQM already publishes for commercial questions.
- *
- * ── Why it can never fail the submission ───────────────────────────────────
- *
- * The whole thing is wrapped and swallowed. An applicant who filled in a long
- * form, verified an address and verified a phone must not be told their
- * application failed because OUR notification could not be delivered — the row
- * is already committed and the queue is the source of truth. A failure is
- * logged loudly instead, because a notification that silently stopped working
- * is exactly the thing nobody notices.
- */
+/** Tell IFQM that somebody has applied. */
 export async function notifyPlatformOfApplication(reg, reference, registrationId = null) {
   const { sendViaPlatform } = await import('./mailerService.js');
   const master = masterDb();
@@ -521,7 +328,7 @@ export async function notifyPlatformOfApplication(reg, reference, registrationId
 
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
   <p style="margin:0 0 4px"><b>${esc(reg.company_name)}</b> has applied for a workspace.</p>
-  <p style="margin:0 0 14px;color:#667089">Reference ${esc(reference)} — waiting in the registration queue.</p>
+  <p style="margin:0 0 14px;color:#667089">Reference ${esc(reference)} - waiting in the registration queue.</p>
   <table style="border-collapse:collapse;font-size:14px">
     ${line('Contact', reg.contact_name)}
     ${line('Designation', reg.contact_designation)}
@@ -538,24 +345,13 @@ export async function notifyPlatformOfApplication(reg, reference, registrationId
   <p style="margin:14px 0 0;color:#667089">Open the platform console to approve or reject it.</p>
 </div>`;
 
-  const subject = `New workspace application — ${reg.company_name} (${reference})`;
+  const subject = `New workspace application - ${reg.company_name} (${reference})`;
   const results = await Promise.allSettled(
     [...recipients].map(([email, name]) => sendViaPlatform(email, name, subject, html))
   );
   const sent = results.filter((r) => r.status === 'fulfilled' && r.value && r.value.success !== false).length;
 
-  /*
-   * Stamped only when somebody actually accepted the message.
-   *
-   * Left NULL on failure so the hourly pass picks it up again. The notice used
-   * to be sent once and forgotten: an application submitted while mail was down
-   * sat in the queue with nobody aware of it, which is exactly what this notice
-   * exists to prevent — the admins do not sit refreshing the console. That is
-   * not hypothetical, mail on this platform was dead for weeks.
-   *
-   * Best-effort in its own right: failing to record a success is far better
-   * than failing the send, and the worst case is one duplicate notice.
-   */
+  // Stamped only when somebody actually accepted the message.
   if (sent && registrationId) {
     try {
       await master.execute(
@@ -563,52 +359,29 @@ export async function notifyPlatformOfApplication(reg, reference, registrationId
         [registrationId]
       );
     } catch (e) {
-      logger.warn(`registration notice: ${reference} sent but not stamped — ${e.message}`);
+      logger.warn(`registration notice: ${reference} sent but not stamped - ${e.message}`);
     }
   }
 
   if (sent) logger.info(`registration notice: ${reference} sent to ${sent} platform recipient(s)`);
-  else logger.error(`registration notice: ${reference} reached nobody — will retry hourly`);
-  // Returned rather than only logged so the recipient selection can be asserted
-  // on without a mail server: who it goes to is the part worth testing, and it
-  // is decided entirely before anything is sent.
+  else logger.error(`registration notice: ${reference} reached nobody - will retry hourly`);
+  // Returned rather than only logged so the recipient selection can be asserted on without a
+  // mail server: who it goes to is the part worth testing, and it is decided entirely before
+  // anything is sent.
   return { recipients: recipients.size, sent };
 }
 
-/**
- * POST /api/registrations — public.
- *
- * Returns only a reference number. It deliberately does NOT say whether the
- * domain was already known: "this company already has an account" told to an
- * anonymous caller is a free customer-list lookup.
- */
+/** POST /api/registrations - public. */
 export async function submitRegistration(body, meta = {}) {
   const row = validateApplication(body);
   const master = masterDb();
 
-  /*
-   * The provider rule, applied again at the door that actually creates the row.
-   *
-   * In practice an application cannot reach here from a blocked provider — the
-   * address must carry a consumed one-time code, and the only thing that issues
-   * one is sendRegistrationEmailOtp, which applies the same rule. This is not
-   * relying on that. The two doors are separate code paths that can be changed
-   * independently, and the cost of checking twice is one indexed lookup against
-   * the cost of an unnoticed hole in the only check on who may apply.
-   */
+  // The provider rule, applied again at the door that actually creates the row.
   const policy = await checkCorporateEmail(row.contact_email);
   if (!policy.ok) throw badRequest(policy.reason);
 
-  /*
-   * Both the address and the number must have been proved, in the last half
-   * hour, by a code this server issued and consumed.
-   *
-   * Checked HERE rather than trusted from the form. The browser knows it
-   * verified them, but the browser is not what we are asking — anyone can post
-   * this endpoint directly with verified: true in the body, and a claim about a
-   * check is not the check. The two lookups read the consumed code rows, which
-   * only exist if the codes actually came back.
-   */
+  // Both the address and the number must have been proved, in the last half hour, by a code
+  // this server issued and consumed.
   const [emailOk, phoneOk] = await Promise.all([
     verification.wasVerified(row.contact_email, 'registration_verify'),
     verification.wasVerified(row.contact_phone, 'registration_phone'),
@@ -619,8 +392,8 @@ export async function submitRegistration(body, meta = {}) {
     throw badRequest(`Please verify your ${what} with the code we send before submitting.`);
   }
 
-  // Already a live tenant on this domain, or an application in flight? Answer
-  // the applicant identically either way and let the reviewer see the clash.
+  // Already a live tenant on this domain, or an application in flight? Answer the applicant
+  // identically either way and let the reviewer see the clash.
   const [pending] = await master.execute(
     `SELECT id FROM tenant_registrations
       WHERE status = 'pending' AND (contact_email = ? OR email_domain = ?) LIMIT 1`,
@@ -656,10 +429,10 @@ export async function submitRegistration(body, meta = {}) {
   const reference = `REG-${res.insertId}`;
   logger.info(`registration: ${row.company_name} (${row.email_domain}) queued as ${reference}`);
 
-  // Deliberately not awaited. The application is committed; the applicant
-  // should not wait on our outbound mail server to be told so.
+  // Deliberately not awaited. The application is committed; the applicant should not wait on
+  // our outbound mail server to be told so.
   notifyPlatformOfApplication(row, reference, res.insertId).catch((e) =>
-    logger.error(`registration notice: ${reference} failed — ${e.message}`));
+    logger.error(`registration notice: ${reference} failed - ${e.message}`));
 
   return {
     success: true,
@@ -669,29 +442,7 @@ export async function submitRegistration(body, meta = {}) {
   };
 }
 
-/**
- * Try again for applications the platform was never told about.
- *
- * Run hourly. Every platform admin is emailed the moment a company applies, but
- * that is one attempt on a channel that can be down — and when it is down,
- * nothing about the failure is visible to the people who needed the message.
- * They are not watching the console; that is the entire reason the email exists.
- *
- * ── The bounds, and why each one is there ──────────────────────────────────
- *
- * Only PENDING applications. One that has since been approved or rejected has
- * been seen by a human, and announcing it now would be noise about a decision
- * already taken.
- *
- * Only the last 14 days. An application nobody acted on for a fortnight has a
- * problem this email will not solve, and a retry loop with no horizon means a
- * permanently misconfigured mail sender re-reads the whole table every hour
- * forever.
- *
- * A handful per pass, oldest first. A backlog drains over a few hours rather
- * than arriving as one indistinguishable burst — which is how a real
- * notification gets deleted along with the rest.
- */
+/** Try again for applications the platform was never told about. */
 export async function retryUnsentRegistrationNotices() {
   const master = masterDb();
   let rows = [];
@@ -705,9 +456,9 @@ export async function retryUnsentRegistrationNotices() {
         LIMIT 10`
     );
   } catch (e) {
-    // A registry without migration 040 has no such column. Nothing to do, and
-    // certainly nothing worth failing the scheduler over.
-    logger.warn(`registration notice retry: skipped — ${e.message}`);
+    // A registry without migration 040 has no such column. Nothing to do, and certainly
+    // nothing worth failing the scheduler over.
+    logger.warn(`registration notice retry: skipped - ${e.message}`);
     return { checked: 0, sent: 0 };
   }
   if (!rows.length) return { checked: 0, sent: 0 };
@@ -718,20 +469,17 @@ export async function retryUnsentRegistrationNotices() {
       const r = await notifyPlatformOfApplication(reg, `REG-${reg.id}`, reg.id);
       if (r.sent) sent += 1;
     } catch (e) {
-      logger.warn(`registration notice retry: REG-${reg.id} failed again — ${e.message}`);
+      logger.warn(`registration notice retry: REG-${reg.id} failed again - ${e.message}`);
     }
   }
   if (sent) logger.info(`registration notice retry: ${sent} of ${rows.length} delivered`);
   return { checked: rows.length, sent };
 }
 
-/** GET /api/platform/registrations — platform admin. */
-/* ── The corporate-email exception list ──────────────────────────────────────
- *
- * Platform-admin only. Small enough to return whole: an operator who has
- * hundreds of these has a policy problem rather than a paging problem, and
- * seeing all of them at once is the point — the list is meant to be reviewed.
- */
+/** GET /api/platform/registrations - platform admin. */
+// Platform-admin only. Small enough to return whole: an operator who has hundreds of these
+// has a policy problem rather than a paging problem, and seeing all of them at once is the
+// point - the list is meant to be reviewed.
 
 /** Classify an entry as one address or a whole provider, or reject it. */
 export function parseWhitelistEntry(raw) {
@@ -740,8 +488,8 @@ export function parseWhitelistEntry(raw) {
 
   if (v.includes('@')) {
     if (!EMAIL_RE.test(v)) return { ok: false, reason: 'That is not a valid email address.' };
-    // Checked before the provider test below, or a throwaway address would be
-    // turned away with the wrong reason ("that is a company domain").
+    // Checked before the provider test below, or a throwaway address would be turned away with
+    // the wrong reason ("that is a company domain").
     if (DISPOSABLE_EMAIL_DOMAINS.has(emailDomain(v))) {
       return {
         ok: false,
@@ -749,20 +497,7 @@ export function parseWhitelistEntry(raw) {
           + 'An approved workspace whose only contact address is designed to stop existing helps nobody.',
       };
     }
-    /*
-     * A company address may be added, and the list says so.
-     *
-     * This used to be refused, on the reasoning that acme.com was never blocked
-     * so allowing it granted nothing. True at the time, and it stopped somebody
-     * adding an entry that did nothing. But it also made the list a
-     * personal-mailbox exception list rather than a record of who IFQM has
-     * approved, and an organisation of any size may now be admitted this way.
-     *
-     * `redundant` is returned so the caller can say plainly that the address
-     * would have been accepted anyway. That is the useful half of the old
-     * refusal — the information — without refusing an entry somebody has a
-     * reason to keep on file.
-     */
+    // A company address may be added, and the list says so.
     return {
       ok: true,
       entry: v,
@@ -782,8 +517,8 @@ export function parseWhitelistEntry(raw) {
         + 'An approved workspace whose only contact address is designed to stop existing helps nobody.',
     };
   }
-  // Same as above: any domain may be recorded, and a domain that was never
-  // blocked is flagged as redundant rather than rejected.
+  // Same as above: any domain may be recorded, and a domain that was never blocked is
+  // flagged as redundant rather than rejected.
   return { ok: true, entry: v, entry_type: 'domain', redundant: !FREE_EMAIL_DOMAINS.has(v) };
 }
 
@@ -816,9 +551,7 @@ export async function addWhitelistEntry({ entry, note = '' } = {}, actor = null)
     success: true,
     entry: parsed.entry,
     entry_type: parsed.entry_type,
-    // The entry was accepted, but it grants nothing that was not already
-    // permitted. Worth saying so, or somebody adds a company domain believing
-    // they have unblocked something that was never blocked.
+    // The entry was accepted, but it grants nothing that was not already permitted.
     redundant: !!parsed.redundant,
   };
 }
@@ -872,14 +605,7 @@ async function requireRegistration(id) {
   return rows[0];
 }
 
-/**
- * POST /api/platform/registrations/:id/approve
- *
- * Provisions the tenant and hands back a one-time admin password. The password
- * is generated here rather than chosen by the applicant: at this point they
- * have not proved control of the mailbox, so the credential has to travel out
- * of band, and must_change_password forces it to be replaced on first sign-in.
- */
+/** Provisions the tenant and hands back a one-time admin password. */
 export async function approveRegistration(id, {
   adminId = null, adminName = null, slug: slugOverride = '',
   planId = null, trialDays = null, billingNote = '',
@@ -891,7 +617,7 @@ export async function approveRegistration(id, {
 
   const slug = normaliseSlug(slugOverride || reg.proposed_slug);
   if (slug.length < 2 || slug.length > 30) {
-    throw badRequest('Organisation code must be 2–30 characters.');
+    throw badRequest('Organisation code must be 2-30 characters.');
   }
 
   const master = masterDb();
@@ -900,8 +626,8 @@ export async function approveRegistration(id, {
     throw new ApiError(409, `Organisation code "${slug}" is taken. Approve with a different code.`);
   }
 
-  // A temporary password the operator relays; 24 base64url chars comfortably
-  // clears the strength check createTenant applies.
+  // A temporary password the operator relays; 24 base64url chars comfortably clears the
+  // strength check createTenant applies.
   const { randomBytes } = await import('node:crypto');
   const tempPassword = randomBytes(18).toString('base64url');
 
@@ -913,41 +639,18 @@ export async function approveRegistration(id, {
     admin_password: tempPassword,
   });
 
-  /*
-   * Put the new organisation on a plan straight away.
-   *
-   * This is the right moment: the approver has the company's details in front
-   * of them — size, turnover, sector — which is exactly what decides which plan
-   * they belong on. Leaving it until later means somebody has to remember, and
-   * an organisation with no plan has no trial end date, so it would never lapse
-   * and never be billed.
-   *
-   * If no plan is chosen, the trial still starts. A workspace nobody has priced
-   * yet should be evaluating, not quietly free forever.
-   */
+  // Put the new organisation on a plan straight away.
   const days = trialDays === null || trialDays === undefined || trialDays === ''
     ? await defaultTrialDays()
     : Math.max(0, Math.min(365, parseInt(trialDays, 10) || 0));
 
-  /*
-   * Every approved organisation starts on the trial plan.
-   *
-   * The approver may still pick one, but leaving the box alone no longer leaves
-   * the organisation unpriced. That was the previous behaviour and it produced
-   * workspaces with no plan at all - which meant no trial end date, so they
-   * never lapsed, were never billed, and stayed free until somebody happened to
-   * notice. The billing screen showed them as "None set".
-   *
-   * A paid plan cannot carry a trial (see assignPlan), so a chosen paid plan is
-   * applied with no trial and starts its period immediately; that is a
-   * deliberate approval of a paying customer, not an evaluation.
-   */
+  // Every approved organisation starts on the trial plan.
   let effectivePlanId = planId;
   if (!effectivePlanId) {
     const trialPlan = await defaultTrialPlan();
     effectivePlanId = trialPlan?.id || null;
     if (!trialPlan) {
-      logger.warn(`registration ${reg.id}: no trial plan on file — organisation starts unpriced`);
+      logger.warn(`registration ${reg.id}: no trial plan on file - organisation starts unpriced`);
     }
   }
 
@@ -963,9 +666,9 @@ export async function approveRegistration(id, {
         note: billingNote,
       }, { id: adminId, name: adminName });
     } catch (e) {
-      // A billing mishap must not undo a workspace that has just been created.
-      // The organisation exists and can be put on a plan from its own page.
-      logger.warn(`registration ${reg.id}: plan not applied — ${e.message}`);
+      // A billing mishap must not undo a workspace that has just been created. The organisation
+      // exists and can be put on a plan from its own page.
+      logger.warn(`registration ${reg.id}: plan not applied - ${e.message}`);
     }
   } else if (days > 0) {
     const endsAt = new Date(Date.now() + days * 86400000)
@@ -984,17 +687,15 @@ export async function approveRegistration(id, {
     [created.tenant_id, adminId, planId || null, days, reg.id]
   );
 
-  // The approved organisation's own domain becomes its tenant domain, so a user
-  // arriving from a company link resolves to the right org without a code.
+  // The approved organisation's own domain becomes its tenant domain, so a user arriving
+  // from a company link resolves to the right org without a code.
   await master.execute('UPDATE tenants SET domain = ? WHERE id = ?', [reg.email_domain, created.tenant_id]);
 
   logger.info(`registration REG-${reg.id} approved → tenant ${slug} (${created.tenant_id})`);
 
-  /*
-   * Awaited, unlike the application notice earlier in this file, because the
-   * answer changes what the console tells the operator to do next: hand the
-   * password over themselves, or not.
-   */
+  // Awaited, unlike the application notice earlier in this file, because the answer changes
+  // what the console tells the operator to do next: hand the password over themselves, or
+  // not.
   const { sendTemporaryPassword } = await import('./mailerService.js');
   const emailed = await sendTemporaryPassword({
     email: reg.contact_email, name: reg.contact_name, orgName: reg.company_name,
@@ -1006,14 +707,12 @@ export async function approveRegistration(id, {
     tenant_id: created.tenant_id,
     slug,
     admin_email: reg.contact_email,
-    // Still returned even when the email went. Mail fails, and an operator
-    // holding the only copy of a credential is the difference between
-    // "resend it" and "provision the whole thing again".
+    // Still returned even when the email went.
     temp_password: tempPassword,
     password_emailed: emailed,
     message: emailed
       ? `Organisation created. The temporary password has been emailed to ${reg.contact_email}.`
-      : 'Organisation created, but the welcome email could not be sent — share the '
+      : 'Organisation created, but the welcome email could not be sent - share the '
         + 'temporary password with the applicant yourself. It is shown once.',
   };
 }

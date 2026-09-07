@@ -1,23 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-/*
-  Public marketing page — the first thing an unauthenticated visitor sees at "/".
-  Sign-in moved to /login so this page can do the selling.
+// Public marketing page - the first thing an unauthenticated visitor sees at "/".
 
-  Audience: the owner or plant/ops head of an Indian MSME, who has 20–300 staff,
-  no IT department, and a suggestion box nobody has opened in a year. Every
-  section answers one of their four objections in order: "we already tried
-  this", "my people won't use software", "what does it actually cost me", and
-  "is my data safe". The claims are all things the product genuinely does —
-  there are no invented customers, logos or statistics on this page, because a
-  fake testimonial is the fastest way to lose a buyer who checks.
-
-  Styling follows LoginPage: one scoped <style> block, existing CSS variables
-  only, so the page inherits light/dark theming and needs no new dependency.
-*/
-
-/* ── Icons (inline so the page ships no icon dependency) ──────────────────── */
+// Icons (inline so the page ships no icon dependency)
 const Ico = ({ d, size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -35,9 +21,7 @@ const IcoUsers  = () => <Ico d={<><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4
 const IcoClip   = () => <Ico d={<><path d="M15 2H9a1 1 0 0 0-1 1v2h8V3a1 1 0 0 0-1-1z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="m9 14 2 2 4-4"/></>} />;
 const IcoArrow  = () => <Ico d={<><path d="M5 12h14M13 6l6 6-6 6"/></>} size={18} />;
 
-/* Fade sections in as they enter the viewport. Disabled outright when the
-   visitor has asked for reduced motion — a marketing page is not a reason to
-   ignore that. */
+// Fade sections in as they enter the viewport.
 function useReveal(rootRef) {
   useEffect(() => {
     const root = rootRef.current;
@@ -45,9 +29,9 @@ function useReveal(rootRef) {
     const nodes = root.querySelectorAll('.rv');
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-    // The hidden-until-revealed state is applied here rather than in the
-    // stylesheet, so a visitor whose JS never runs (or an IntersectionObserver
-    // that never fires) gets a fully visible page instead of a blank one.
+    // The hidden-until-revealed state is applied here rather than in the stylesheet, so a
+    // visitor whose JS never runs (or an IntersectionObserver that never fires) gets a fully
+    // visible page instead of a blank one.
     root.classList.add('reveal-on');
     const io = new IntersectionObserver((entries) => {
       entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
@@ -59,12 +43,7 @@ function useReveal(rootRef) {
 
 const inr = (n) => '₹' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n));
 
-/* Savings estimator.
-
-   Deliberately built out of the visitor's OWN numbers, with every assumption
-   named on screen. An MSME owner has been shown enough vendor ROI charts built
-   on invented industry averages to distrust one more; letting them move the
-   sliders and watch the arithmetic is both more persuasive and more honest. */
+// Savings estimator.
 function Estimator() {
   const [staff, setStaff]   = useState(60);
   const [part,  setPart]    = useState(40);   // % of staff who submit at least one idea a year
@@ -116,7 +95,7 @@ function Estimator() {
         <p className="calc-note">
           Assumes each contributor raises {IDEAS_PER_PARTICIPANT} ideas a year and{' '}
           {Math.round(IMPLEMENT_RATE * 100)}% survive review. These are your inputs,
-          not our claims — the platform's job is to make the first two numbers
+          not our claims - the platform's job is to make the first two numbers
           measurable instead of anecdotal.
         </p>
       </div>
@@ -143,7 +122,7 @@ export default function LandingPage() {
          * ── The marketing page wears IFQM's brand, not the product's theme ──
          *
          * This page is the front door, and it sits next to ifqm.org.in in a
-         * visitor's mind — the same organisation, reached two ways. It looked
+         * visitor's mind - the same organisation, reached two ways. It looked
          * like neither: it inherited the APP's palette, which is a light
          * working surface designed to be stared at for eight hours, and next to
          * the corporate site it read as an unrelated product.
@@ -182,7 +161,7 @@ export default function LandingPage() {
           --text-muted:#9db1cb;
           --subtle:#7f95b3;
 
-          /* Edges, at low contrast — a navy panel on a navy ground needs a
+          /* Edges, at low contrast - a navy panel on a navy ground needs a
              seam, not a frame. */
           --border:rgba(255,255,255,.13);
           --border-strong:rgba(255,255,255,.26);
@@ -239,7 +218,7 @@ export default function LandingPage() {
          * The wordmark.
          *
          * It was 17px of the same Inter the body text uses, which made it a
-         * label sitting next to a logo rather than a mark of its own — the
+         * label sitting next to a logo rather than a mark of its own - the
          * plate carried all the identity and the name carried none.
          *
          * Sora at 700, a size up, with the tracking pulled in: a wordmark is
@@ -254,7 +233,7 @@ export default function LandingPage() {
         .ifqm-lp .logo img{height:38px;background:#fff;border-radius:9px;padding:5px 8px;object-fit:contain;
           box-shadow:0 6px 18px rgba(79,70,229,.16)}
         .ifqm-lp .logo small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted);letter-spacing:0}
-        /* The plate grows with the name so the two stay in proportion — a
+        /* The plate grows with the name so the two stay in proportion - a
            bigger word beside the old 34px mark reads as a mismatch. */
         @media (max-width:640px){
           .ifqm-lp .logo span{font-size:20px}
@@ -303,8 +282,8 @@ export default function LandingPage() {
          * It was three grey circles imitating a macOS title bar. That is a
          * decoration pretending to be a window: this is not a window, nothing
          * closes, and the pattern is on every template landing page there is.
-         * A titled panel with a live indicator says the same thing — "this is
-         * the product" — without the costume.
+         * A titled panel with a live indicator says the same thing - "this is
+         * the product" - without the costume.
          */
         .ifqm-lp .mock-bar{display:flex;align-items:center;gap:8px;padding:0 2px 13px;
           border-bottom:1px solid var(--border);margin-bottom:13px}
@@ -336,7 +315,7 @@ export default function LandingPage() {
          * "idea → review → done". It also kept its place in lane one and
          * landed ON TOP of whatever was already in the lanes it travelled to,
          * so the live page showed two headlines printed over each other in the
-         * In-review column — the first thing anybody saw.
+         * In-review column - the first thing anybody saw.
          *
          * Removed rather than repaired. Making it dodge the other cards needs
          * absolute positioning and hand-tuned offsets that break at every
@@ -469,7 +448,7 @@ export default function LandingPage() {
          *
          * 46px is the top of the range business software actually ships at, and
          * light-on-dark still needs the compensation the previous note
-         * describes — so the weight stays up rather than the size.
+         * describes - so the weight stays up rather than the size.
          */
         .ifqm-lp h1{font-size:clamp(32px,3.6vw,46px);line-height:1.14;font-weight:760;letter-spacing:-.018em;margin:0}
         .ifqm-lp .lede{font-size:17px;line-height:1.68}
@@ -481,7 +460,7 @@ export default function LandingPage() {
          *
          * A flat gold word, not gradient-clipped text. The gradient was two
          * golds a shade apart, so it cost a paint trick and a transparent
-         * fallback to produce something indistinguishable from one colour —
+         * fallback to produce something indistinguishable from one colour -
          * and background-clip:text drops to invisible wherever it is not
          * supported, which is a poor trade for an effect nobody can see.
          */
@@ -505,7 +484,7 @@ export default function LandingPage() {
         .ifqm-lp .glow-a{background:radial-gradient(50% 50% at 50% 50%,rgba(201,169,97,.07),transparent 72%)}
         .ifqm-lp .glow-b{background:radial-gradient(50% 50% at 50% 50%,rgba(90,140,210,.09),transparent 72%)}
 
-        /* The secondary button was a light surface with light text — invisible
+        /* The secondary button was a light surface with light text - invisible
            on both counts once the surface went dark. Outlined instead. */
         .ifqm-lp .b-ghost{background:rgba(255,255,255,.06);color:var(--heading);border-color:var(--border-strong)}
         .ifqm-lp .b-ghost:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.4)}
@@ -519,7 +498,7 @@ export default function LandingPage() {
          *
          * It was a white-on-indigo panel: an indigo-to-purple gradient, white
          * heading, and a white button with --primary text. Swapping --primary
-         * to gold broke all three at once — the gradient ran gold into purple,
+         * to gold broke all three at once - the gradient ran gold into purple,
          * the white heading sat on gold at roughly 1.9:1, and the white button
          * had gold text on it at about the same. Contrast that low is not a
          * matter of taste; it is unreadable in daylight on a phone, which is
@@ -527,7 +506,7 @@ export default function LandingPage() {
          *
          * So the band becomes what it should be on this palette: a deeper navy
          * panel, edged in gold, with the gold saved for the one button that
-         * matters. White type stays — it was always right, just on the wrong
+         * matters. White type stays - it was always right, just on the wrong
          * ground.
          */
         .ifqm-lp .cta{
@@ -544,7 +523,7 @@ export default function LandingPage() {
         .ifqm-lp .cta small{color:rgba(255,255,255,.74)}
       `}</style>
 
-      {/* ── NAV ──────────────────────────────────────────────────────────── */}
+      {/* NAV */}
       <nav className={`nav${scrolled ? ' on' : ''}`}>
         <div className="nav-in">
           <Link to="/" className="logo">
@@ -565,7 +544,7 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* ── HERO ─────────────────────────────────────────────────────────── */}
+      {/* HERO */}
       <section className="hero">
         <div className="glow glow-a" aria-hidden="true" />
         <div className="glow glow-b" aria-hidden="true" />
@@ -574,7 +553,7 @@ export default function LandingPage() {
             <h1>The best ideas in your business are already <span className="em">inside your team</span>.</h1>
             <p className="lede">
               Your machine operator knows which changeover wastes an hour. Your billing
-              clerk knows which step is done twice. IFQM gives them one place to say so —
+              clerk knows which step is done twice. IFQM gives them one place to say so -
               and gives you a scored, routed, tracked pipeline instead of a dusty
               suggestion box.
             </p>
@@ -587,7 +566,7 @@ export default function LandingPage() {
               <span><Ico size={15} d={<path d="m5 12 5 5L20 7" />} /> Works on any phone</span>
               <span><Ico size={15} d={<path d="m5 12 5 5L20 7" />} /> 7 Indian languages</span>
             </div>
-            <p className="hero-note">Free while in preview — no card, no commitment.</p>
+            <p className="hero-note">Free while in preview - no card, no commitment.</p>
           </div>
 
           <div className="rv in mock" aria-hidden="true">
@@ -615,14 +594,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── PROBLEM ──────────────────────────────────────────────────────── */}
+      {/* PROBLEM */}
       <section className="sec alt" id="problem">
         <div className="wrap">
           <div className="head-c rv">
             <span className="kicker">Why suggestion boxes die</span>
             <h2>You didn't have an idea problem. You had a follow-up problem.</h2>
             <p className="sec-sub">
-              Most MSMEs have already tried this once — a box on the wall, a WhatsApp
+              Most MSMEs have already tried this once - a box on the wall, a WhatsApp
               group, a form nobody filled twice. They fail for the same three reasons,
               and each one is a workflow gap, not a motivation gap.
             </p>
@@ -641,8 +620,8 @@ export default function LandingPage() {
               <span className="x">The pile problem</span>
               <h3>Everything lands on one desk</h3>
               <p>
-                Fifty suggestions arrive at the owner's desk unsorted — half duplicates,
-                half impossible — so none get read properly.
+                Fifty suggestions arrive at the owner's desk unsorted - half duplicates,
+                half impossible - so none get read properly.
               </p>
               <p className="fix"><b>Fixed</b> Ideas are scored on six dimensions, deduplicated on entry, and routed to whoever should actually decide.</p>
             </div>
@@ -651,7 +630,7 @@ export default function LandingPage() {
               <h3>No one can show it worked</h3>
               <p>
                 Improvements happen, but nothing links them back to the person who
-                suggested it — so the programme feels like goodwill, not a result.
+                suggested it - so the programme feels like goodwill, not a result.
               </p>
               <p className="fix"><b>Fixed</b> Implementation and savings are tracked per idea, with an audit trail and exportable reports.</p>
             </div>
@@ -659,7 +638,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── HOW IT WORKS ─────────────────────────────────────────────────── */}
+      {/* HOW IT WORKS */}
       <section className="sec" id="how">
         <div className="wrap">
           <div className="head-c rv">
@@ -674,7 +653,7 @@ export default function LandingPage() {
             <div className="step rv"><div className="n">1</div><h3>Your team submits</h3>
               <p>A guided wizard turns a rough thought into a real proposal: the situation, the fix, the business case, photos. In their own language, from their own phone.</p></div>
             <div className="step rv"><div className="n">2</div><h3>The platform scores</h3>
-              <p>Each idea gets a 0–100 quality score across six dimensions and a duplicate check, so the good ones surface instead of drowning.</p></div>
+              <p>Each idea gets a 0-100 quality score across six dimensions and a duplicate check, so the good ones surface instead of drowning.</p></div>
             <div className="step rv"><div className="n">3</div><h3>The right person reviews</h3>
               <p>Ideas escalate up your hierarchy or go to a review committee with your own approval threshold. Overdue reviews are flagged, not forgotten.</p></div>
             <div className="step rv"><div className="n">4</div><h3>Results come back</h3>
@@ -683,28 +662,28 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── FEATURES ─────────────────────────────────────────────────────── */}
+      {/* FEATURES */}
       <section className="sec alt" id="features">
         <div className="wrap">
           <div className="head-c rv">
             <span className="kicker">What you get</span>
             <h2>Everything the programme needs, nothing you have to maintain</h2>
             <p className="sec-sub">
-              One workspace for your organisation — your logo, your categories, your
+              One workspace for your organisation - your logo, your categories, your
               approval rules, your data in its own database.
             </p>
           </div>
           <div className="feats">
             <div className="feat rv"><div className="ic"><IcoBulb /></div><h3>Guided idea capture</h3>
-              <p>Multi-step submission with attachments, co-suggesters and live duplicate detection — so proposals arrive complete the first time.</p></div>
+              <p>Multi-step submission with attachments, co-suggesters and live duplicate detection - so proposals arrive complete the first time.</p></div>
             <div className="feat rv"><div className="ic"><IcoSpark /></div><h3>Automatic quality scoring</h3>
-              <p>Every idea rated 0–100 on six dimensions. Works out of the box with a built-in scorer; plug in OpenAI or Gemini if you want more.</p></div>
+              <p>Every idea rated 0-100 on six dimensions. Works out of the box with a built-in scorer; plug in OpenAI or Gemini if you want more.</p></div>
             <div className="feat rv"><div className="ic"><IcoRoute /></div><h3>Approval workflow you configure</h3>
               <p>Hierarchy escalation or a review committee, your own stages and thresholds, SLA timers on every pending decision.</p></div>
             <div className="feat rv"><div className="ic"><IcoTrophy /></div><h3>Points, leaderboards, challenges</h3>
               <p>10 points to submit, 25 when approved, 65 when implemented. Run themed challenges when you need ideas on one specific problem.</p></div>
             <div className="feat rv"><div className="ic"><IcoGlobe /></div><h3>Seven Indian languages</h3>
-              <p>English, हिन्दी, मराठी, ಕನ್ನಡ, తెలుగు, தமிழ் and മലയാളം — because your shop floor and your office rarely share one language.</p></div>
+              <p>English, हिन्दी, मराठी, ಕನ್ನಡ, తెలుగు, தமிழ் and മലയാളം - because your shop floor and your office rarely share one language.</p></div>
             <div className="feat rv"><div className="ic"><IcoChart /></div><h3>Analytics and ROI tracking</h3>
               <p>Participation by department, pipeline health, implementation value, and an append-only audit log. Export to Excel or PDF for your review meeting.</p></div>
             <div className="feat rv"><div className="ic"><IcoUsers /></div><h3>Onboard the whole team at once</h3>
@@ -717,7 +696,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── VALUE / ESTIMATOR ────────────────────────────────────────────── */}
+      {/* VALUE / ESTIMATOR */}
       <section className="sec" id="value">
         <div className="wrap">
           <div className="head-c rv">
@@ -725,14 +704,14 @@ export default function LandingPage() {
             <h2>What is one unheard idea a month costing you?</h2>
             <p className="sec-sub">
               Move the sliders to your own numbers. No industry averages, no borrowed
-              case studies — just the arithmetic you would do on paper anyway.
+              case studies - just the arithmetic you would do on paper anyway.
             </p>
           </div>
           <div className="rv"><Estimator /></div>
         </div>
       </section>
 
-      {/* ── TRUST ────────────────────────────────────────────────────────── */}
+      {/* TRUST */}
       <section className="sec alt">
         <div className="wrap">
           <div className="rv">
@@ -745,14 +724,14 @@ export default function LandingPage() {
           </div>
           <div className="sec-list">
             <div className="sl rv"><IcoShield /><span><b>Separate database per organisation</b>Your ideas and your people are not in a shared table with another company's.</span></div>
-            <div className="sl rv"><IcoUsers /><span><b>Roles that match a real org</b>Employee, reviewer, admin and super admin — people see what their job needs, and nothing else.</span></div>
+            <div className="sl rv"><IcoUsers /><span><b>Roles that match a real org</b>Employee, reviewer, admin and super admin - people see what their job needs, and nothing else.</span></div>
             <div className="sl rv"><IcoClip /><span><b>Append-only audit log</b>Every status change is recorded with who did it and when. Useful for ISO and quality audits.</span></div>
             <div className="sl rv"><IcoGlobe /><span><b>Nothing to install</b>Runs in the browser your team already has. No app store, no laptops required, no rollout project.</span></div>
           </div>
         </div>
       </section>
 
-      {/* ── FAQ ──────────────────────────────────────────────────────────── */}
+      {/* FAQ */}
       <section className="sec" id="faq">
         <div className="wrap">
           <div className="rv">
@@ -765,22 +744,22 @@ export default function LandingPage() {
             <details className="rv"><summary>Will people on the shop floor actually use it?</summary>
               <p>That is the real risk, and it is why the design pushes back on it in three ways: the interface is available in seven Indian languages, an idea can be submitted from a phone in a few minutes, and every submitter can see exactly where their idea has reached. Points, leaderboards and time-boxed challenges exist to make the first month of habit-building easier.</p></details>
             <details className="rv"><summary>What does it cost?</summary>
-              <p>Every organisation starts with a 14-day free trial — the whole product, no card, nothing withheld. After that you go onto a plan sized to your business, quoted when we approve your application. Plans are priced per organisation rather than per seat, so inviting the whole shop floor does not change the bill. GST is shown separately on every quote.</p></details>
+              <p>Every organisation starts with a 14-day free trial - the whole product, no card, nothing withheld. After that you go onto a plan sized to your business, quoted when we approve your application. Plans are priced per organisation rather than per seat, so inviting the whole shop floor does not change the bill. GST is shown separately on every quote.</p></details>
             <details className="rv"><summary>What happens when the trial ends?</summary>
-              <p>We tell you before it does, not after. Access pauses if a plan is not in place, but nothing is deleted — your ideas, your people and your history stay exactly as they are, and everything resumes the moment payment is arranged. You can export your data at any point, including while access is paused.</p></details>
+              <p>We tell you before it does, not after. Access pauses if a plan is not in place, but nothing is deleted - your ideas, your people and your history stay exactly as they are, and everything resumes the moment payment is arranged. You can export your data at any point, including while access is paused.</p></details>
             <details className="rv"><summary>How quickly do you reply to support?</summary>
-              <p>Within one working day for any ticket, and within four working hours for anything marked urgent — Monday to Saturday, 9am to 6pm IST. Support is raised from inside the app, so we can see which organisation is asking without you explaining it first. Support stays reachable even if your access has paused for payment.</p></details>
+              <p>Within one working day for any ticket, and within four working hours for anything marked urgent - Monday to Saturday, 9am to 6pm IST. Support is raised from inside the app, so we can see which organisation is asking without you explaining it first. Support stays reachable even if your access has paused for payment.</p></details>
             <details className="rv"><summary>Who can see our ideas?</summary>
-              <p>Only your own people, according to the role you give them. Each organisation runs on its own database with its own admin. IFQM's own staff can see counts — how many people, how many ideas — for support and billing, and never the content of an idea.</p></details>
+              <p>Only your own people, according to the role you give them. Each organisation runs on its own database with its own admin. IFQM's own staff can see counts - how many people, how many ideas - for support and billing, and never the content of an idea.</p></details>
             <details className="rv"><summary>Do we need an IT person to run it?</summary>
-              <p>No. Everything an administrator needs — users, categories, approval stages, branding, exports — is a screen in the app. Bulk user import takes a spreadsheet.</p></details>
+              <p>No. Everything an administrator needs - users, categories, approval stages, branding, exports - is a screen in the app. Bulk user import takes a spreadsheet.</p></details>
             <details className="rv"><summary>Can we get our data out?</summary>
               <p>Yes. Ideas, reviews and analytics export to Excel and PDF, and an integration API can push approved ideas into a quality or CAPA system you already run.</p></details>
           </div>
         </div>
       </section>
 
-      {/* ── FINAL CTA ────────────────────────────────────────────────────── */}
+      {/* FINAL CTA */}
       <section className="sec">
         <div className="wrap">
           <div className="cta rv">

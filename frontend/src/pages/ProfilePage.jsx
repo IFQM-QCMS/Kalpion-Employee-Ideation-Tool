@@ -5,15 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { usersApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
 
-/*
- * Changing your own mobile number, verified by a code sent to the NEW number.
- *
- * The number is not cosmetic: sign-in codes and password-reset codes go to it,
- * so anybody who can change it unchallenged can redirect both. Proving the new
- * number is held is the point — and the server notifies the old address and old
- * number afterwards, so a change nobody made is visible to the person it was
- * made against.
- */
+// Changing your own mobile number, verified by a code sent to the NEW number.
 function PhoneChange({ current, onChanged, t }) {
   const { showToast } = useToast();
   const [open, setOpen]   = useState(false);
@@ -52,7 +44,7 @@ function PhoneChange({ current, onChanged, t }) {
   if (!open) {
     return (
       <>
-        {current || '–'}
+        {current || '-'}
         <a className="link" style={{ marginLeft: 10, fontSize: 12 }} onClick={() => setOpen(true)}>
           {t('profile.phone_change')}
         </a>
@@ -102,14 +94,13 @@ const EDITABLE = [
 const CELL = { padding:'11px 13px',borderRadius:10,background:'var(--surface-2,var(--chip-bg))',border:'1px solid var(--border)' };
 const CAP  = { fontSize:11,fontWeight:700,color:'var(--subtle)',textTransform:'uppercase',letterSpacing:.4 };
 
-/* A read-only fact, with a line saying why where that is not obvious. A field
-   nobody can edit and nobody explains reads as broken. */
+// A read-only fact, with a line saying why where that is not obvious.
 function Detail({ label, value, note }) {
   return (
     <div style={CELL}>
       <div style={CAP}>{label}</div>
       <div style={{ marginTop:5,fontSize:13.5,fontWeight:600,color:value?'var(--text)':'var(--subtle)',overflowWrap:'anywhere' }}>
-        {value || '—'}
+        {value || '-'}
       </div>
       {note && <div style={{ marginTop:4,fontSize:10.5,color:'var(--subtle)' }}>{note}</div>}
     </div>
@@ -162,14 +153,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Details as labelled cards, not a bare two-column table.
-          The table put a grey label against a dash for every empty field, so a
-          profile with nothing filled in read as broken rather than as new — and
-          offered no way to fix any of it.
-
-          The three descriptive fields are editable. Role, points and reporting
-          line are not: they decide what an idea can reach and who judges it,
-          and the server ignores them whatever this form sends. */}
+      {/* Details as labelled cards, not a bare two-column table. */}
       <div className="card" style={{ marginTop:16 }}>
         <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14,gap:12,flexWrap:'wrap' }}>
           <div style={{ fontWeight:700,fontSize:13,color:'var(--heading)' }}>{t('profile.details')}</div>

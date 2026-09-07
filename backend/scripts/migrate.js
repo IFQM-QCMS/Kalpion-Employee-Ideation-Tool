@@ -1,24 +1,4 @@
-/**
- * Migration runner with applied-tracking:  npm run migrate   (from backend/)
- *
- * Both schema incidents in this project's history had the same root cause: four
- * overlapping SQL files and no record of what had been applied where. This
- * replaces guesswork with a ledger — `ifqm_master.schema_migrations` records
- * (db_name, filename), and only unrecorded pairs are applied.
- *
- * Rules:
- *   • forward-only: fixing a bad migration means writing a new one, not editing
- *     an applied file (already-run copies of the old text can never be updated)
- *   • *_master.sql files target ifqm_master; everything else targets every
- *     tenant schema in the registry
- *   • a tenant created AFTER a migration shipped gets current columns from
- *     tenant_schema.sql, so the runner also back-fills its ledger rows the
- *     first time it sees the tenant (the files are idempotent, so re-applying
- *     would be harmless — but the ledger should reflect reality)
- *
- * Usable as a CLI (npm run migrate) and as a module (setup.js imports
- * runMigrations so the two entry points share one code path and one ledger).
- */
+/** Migration runner with applied-tracking: npm run migrate (from backend/). */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,12 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
 const MIGRATIONS_DIR = path.join(ROOT, 'db', 'migrations');
 
-/**
- * Apply pending migrations over an open multi-statement connection.
- * @param {import('mysql2/promise').Connection} conn
- * @param {(msg: string) => void} log
- * @param {string} masterName  registry schema name (tests use a scratch one)
- */
+/** Apply pending migrations over an open multi-statement connection. */
 export async function runMigrations(conn, log = console.log, masterName = 'ifqm_master') {
   await conn.query(`
     CREATE TABLE IF NOT EXISTS \`${masterName}\`.schema_migrations (
@@ -72,11 +47,11 @@ export async function runMigrations(conn, log = console.log, masterName = 'ifqm_
     }
   }
 
-  log(ran ? `done — ${ran} migration application(s).` : 'up to date — nothing to apply.');
+  log(ran ? `done - ${ran} migration application(s).` : 'up to date - nothing to apply.');
   return ran;
 }
 
-// ── CLI ─────────────────────────────────────────────────────────────────────
+// CLI
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const { default: dotenv } = await import('dotenv');
   dotenv.config({ path: path.join(__dirname, '..', '.env') });
@@ -86,7 +61,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
   try {
     conn = await mysql.createConnection({
       host: process.env.MASTER_DB_HOST || 'localhost',
-      // Non-3306 port / TLS for managed MySQL — see src/config/index.js.
+      // Non-3306 port / TLS for managed MySQL - see src/config/index.js.
       port: parseInt(process.env.DB_PORT, 10) || 3306,
       ssl: String(process.env.DB_SSL || '').toLowerCase() === 'true'
         ? ((process.env.DB_SSL_CA || '').trim()

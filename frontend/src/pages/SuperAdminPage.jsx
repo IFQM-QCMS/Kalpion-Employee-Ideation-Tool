@@ -28,7 +28,7 @@ function renderHierarchyNode(node, depth, t) {
         </div>
         <div style={{ flex:1,minWidth:180 }}>
           <div style={{ fontWeight:700,fontSize:13,color:'var(--text)' }}>{node.name}</div>
-          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{node.employee_id} · {node.department||'–'} · {node.location||'–'}</div>
+          <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{node.employee_id} · {node.department||'-'} · {node.location||'-'}</div>
         </div>
         <span className="badge" style={{ background:`${color}18`,color,border:`1px solid ${color}40`,fontWeight:700 }}>{formatRole(node.role, t)}</span>
         <div style={{ display:'flex',gap:16,fontSize:12,color:'var(--subtle)' }}>
@@ -166,7 +166,7 @@ export default function SuperAdminPage() {
                   <div key={i} className="tl-item">
                     <div className="tl-dot tl-dot-blue" style={{ fontSize:9,fontWeight:800 }}>{(r.action||'').substring(0,3).toUpperCase()}</div>
                     <div>
-                      <div className="tl-title">{r.idea_code} — {r.title||''}</div>
+                      <div className="tl-title">{r.idea_code} - {r.title||''}</div>
                       <div style={{ fontSize:11,color:'var(--subtle)',marginTop:2 }}>{translateStatus(r.action, t)} · <strong>{r.actor_name}</strong> · {timeAgo(r.created_at,t)}</div>
                     </div>
                   </div>
@@ -205,10 +205,7 @@ export default function SuperAdminPage() {
       {/* Hierarchy */}
       {tab === 1 && (
         <div className="card" style={{ marginTop:16 }}>
-          {/* Bulk import can put thousands of employees in a tenant. The org
-              chart renders a node per person and recurses through the reporting
-              lines, so past a few thousand it simply locks the tab up. Say so
-              instead of hanging. */}
+          {/* Bulk import can put thousands of employees in a tenant. */}
           {data.truncated && (
             <div className="alert alert-warning" style={{ marginBottom:12,fontSize:12,lineHeight:1.6 }}>
               {t('sa.too_many_tree', { shown: data.limit, total: data.stats?.total ?? 0 })}
@@ -256,10 +253,10 @@ export default function SuperAdminPage() {
                       </td>
                       <td style={{ fontSize:12,color:'var(--subtle)' }}>{u.employee_id}</td>
                       <td><span className="badge" style={{ background:`${color}18`,color,border:`1px solid ${color}40` }}>{formatRole(u.role, t)}</span></td>
-                      <td>{u.department||'–'}</td>
-                      <td>{u.business_unit||'–'}</td>
+                      <td>{u.department||'-'}</td>
+                      <td>{u.business_unit||'-'}</td>
                       <td style={{ fontSize:12 }}>{u.email}</td>
-                      <td style={{ fontSize:12,color:'var(--subtle)' }}>{u.manager_name||'—'}</td>
+                      <td style={{ fontSize:12,color:'var(--subtle)' }}>{u.manager_name||'-'}</td>
                       <td><strong>{u.points}</strong></td>
                       <td>{u.idea_count}</td>
                     </tr>

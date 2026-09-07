@@ -1,15 +1,4 @@
-/**
- * Leaderboard service — Node port of the `leaderboard` action in PHP
- * api/users.php. Returns individual rankings, department rankings, and the top
- * ideas, with an optional period filter (monthly | quarterly | yearly | all).
- *
- * The period filter is applied inside the `LEFT JOIN ideas i ON ... <filter>`
- * clause (exactly as PHP), so it constrains which ideas join rather than which
- * users appear — users with no ideas in the period still rank by points.
- *
- * `period` is whitelisted to a fixed SQL fragment (never interpolated from raw
- * input), preserving the PHP behaviour without any injection surface.
- */
+/** Leaderboard service - Node port of the `leaderboard` action in PHP api/users.php. */
 
 const PERIOD_FILTERS = {
   weekly: 'AND YEARWEEK(i.submitted_at, 1) = YEARWEEK(NOW(), 1)',

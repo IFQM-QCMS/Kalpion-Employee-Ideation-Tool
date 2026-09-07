@@ -2,21 +2,7 @@ import { useState } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 
-/*
- * Bulk archive.
- *
- * Filtering a list only changes what one person is looking at. Archiving takes
- * the records out of everybody's default view, and until now had to be done one
- * at a time — which is why nobody did it and the lists kept growing.
- *
- * Two ways to choose: everything currently on screen (whatever filters produced
- * it), or everything older than a date. Both are reversible from the same
- * panel, because an archive you cannot undo is a delete wearing a nicer name.
- *
- * Used by All Ideas for an organisation admin, and by the platform support
- * queue. The caller supplies the request function and the ids on screen; this
- * component owns nothing but the confirmation.
- */
+// Bulk archive.
 export default function BulkArchivePanel({
   visibleIds = [],
   onRun,                       // ({ ids?, before_date?, archived }) => Promise<{affected}>

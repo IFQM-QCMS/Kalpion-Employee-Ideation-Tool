@@ -1,36 +1,6 @@
--- ─────────────────────────────────────────────────────────────────────────────
---  Migration 001 — Production hardening
---
---  Apply to EVERY tenant database (ifqm_<slug>) and, where marked, to the
---  master registry (ifqm_master). Idempotent: safe to re-run.
---
---    mysql -u root -p ifqm_<slug> < db/migrations/001_production_hardening.sql
---
---  What this adds and why:
---
---  1. users.password_changed_at
---     A JWT is a self-contained 8-hour credential. Before this, resetting a
---     password did not invalidate sessions already issued with the old one — an
---     attacker who had stolen a token kept access for the rest of its life even
---     after the victim "secured" the account. Tokens are now rejected if they
---     were issued before the account's last password change.
---
---  2. users.deactivated_at
---     Audit trail for offboarding.
---
---  3. password_reset_tokens.selector
---     Verifying a reset token used to bcrypt-compare the candidate against
---     EVERY unexpired row in the table — O(n) key-stretching per request, i.e. a
---     cheap way to burn all the server's CPU. Tokens are now `selector.verifier`:
---     the selector is an indexed lookup, and exactly one bcrypt compare runs.
---
---  4. login_attempts (master DB)
---     Brute-force lockout lived in a process-local Map: it reset on every deploy
---     or crash, did not exist for a second worker process, and grew without
---     bound. Persisting it makes the lockout real.
--- ─────────────────────────────────────────────────────────────────────────────
+-- Migration 001 - Production hardening
 
--- ── 1–3: run against each TENANT database ───────────────────────────────────
+-- 1-3: run against each TENANT database
 
 -- MySQL has no "ADD COLUMN IF NOT EXISTS", so guard each one.
 SET @sql := IF(
@@ -51,12 +21,12 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Existing accounts: treat "now" as their last password change so that tokens
--- minted before this migration are not all invalidated retroactively.
+-- Existing accounts: treat "now" as their last password change so that tokens minted
+-- before this migration are not all invalidated retroactively.
 UPDATE users SET password_changed_at = NOW() WHERE password_changed_at IS NULL;
 
--- Some tenants were provisioned before this table existed, which made password
--- reset fail outright for them. Create it if it is missing, then migrate.
+-- Some tenants were provisioned before this table existed, which made password reset fail
+-- outright for them.
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   user_id     INT NOT NULL,
@@ -76,8 +46,8 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Any token issued under the old (selector-less) scheme can no longer be
--- verified, so clear them out; users simply request a new link.
+-- Any token issued under the old (selector-less) scheme can no longer be verified, so
+-- clear them out; users simply request a new link.
 DELETE FROM password_reset_tokens WHERE selector IS NULL;
 
 SET @sql := IF(
@@ -98,8 +68,8 @@ SET @sql := IF(
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- Hot-path indexes. Login hits users(email,status) on every attempt; the idea
--- lists filter and sort on these constantly.
+-- Hot-path indexes. Login hits users(email,status) on every attempt; the idea lists filter
+-- and sort on these constantly.
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'

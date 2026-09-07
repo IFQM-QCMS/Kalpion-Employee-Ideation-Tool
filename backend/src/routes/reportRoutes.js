@@ -1,6 +1,6 @@
-/**
- * Report routes — /api/reports/*  (JSON analytics + audit log)
- * Ported from the `analytics` / `audit` actions of PHP api/users.php.
+/*
+ * Report routes - /api/reports/* (JSON analytics + audit log) Ported from the `analytics`
+ * / `audit` actions of PHP api/users.php.
  */
 import { Router } from 'express';
 import * as reports from '../controllers/reportController.js';

@@ -1,57 +1,21 @@
-/**
- * Test harness. Import this FIRST in every test file — before anything that
- * touches src/ — because the app's config reads process.env at import time and
- * dotenv never overrides values that are already set. Setting them here is what
- * points the entire app at scratch databases instead of the real ones.
- *
- * The suite provisions:
- *   ifqm_test_master  registry (from db/master.sql, name-rewritten), with the
- *                     shipped seed tenants REPLACED by two test orgs — so no
- *                     code path, including default-tenant fallback, can ever
- *                     resolve to a real database.
- *   ifqm_test_a       tenant "orga"  (default) — admin + employee seeded
- *   ifqm_test_b       tenant "orgb"            — admin seeded
- *
- * Everything is dropped in teardown. Safe to run on a machine with live data.
+/*
+ * Test harness. Import this FIRST in every test file - before anything that touches src/ -
+ * because the app's config reads process.env at import time and dotenv never overrides
+ * values that are already set.
  */
 process.env.NODE_ENV = 'test';
 process.env.MASTER_DB_NAME = 'ifqm_test_master';
 process.env.FALLBACK_DB_NAME = 'ifqm_test_a'; // even the last-resort fallback stays in test land
 process.env.AUTH_RATE_LIMIT = '10000';        // per-IP limiter must not throttle the suite
-// The suite is also a load generator — the 300/min global cap is real (and is
-// itself exercised deliberately), but leaving it in force here would 429 the
-// concurrency and throughput cases and mask what they are actually measuring.
+// The suite is also a load generator - the 300/min global cap is real (and is itself
+// exercised deliberately), but leaving it in force here would 429 the concurrency and
+// throughput cases and mask what they are actually measuring.
 process.env.GLOBAL_RATE_LIMIT = '1000000';
-/*
- * The hard attachment ceiling, pinned rather than inherited.
- *
- * The platform ceiling a console admin sets is clamped by this, so leaving it
- * to whatever the developer happens to have in .env would make the upload-limit
- * case pass or fail depending on the machine — and it would pass for the wrong
- * reason on a machine where the two numbers happened to coincide.
- */
+// The hard attachment ceiling, pinned rather than inherited.
 process.env.MAX_FILE_MB = '50';
 
-/*
- * ── Nothing may leave this machine during a test run ───────────────────────
- *
- * config/index.js calls dotenv.config() on the real backend/.env, and dotenv
- * does not override variables already set — which is what makes the lines above
- * work. But nothing was overriding the DELIVERY settings, so a suite run
- * inherited the live SMS gateway and the live mail account. Any case that
- * caused a code to be issued would have sent a real text through the contracted
- * gateway (which bills per message) or a real email through the platform
- * sender, to whatever address the fixture happened to carry.
- *
- * The mock SMS provider writes the message to the log instead of sending it,
- * which is exactly what the one-time-code cases need: the whole path runs, the
- * row is written, the delivery is recorded, and no handset is involved. It is
- * refused in production by smsService, so this cannot mask a real deployment.
- *
- * The mail account is blanked rather than pointed somewhere, so platformMailReady()
- * is false and an email send fails locally and instantly instead of opening a
- * connection to the internet from a test.
- */
+// config/index.js calls dotenv.config() on the real backend/.env, and dotenv does not
+// override variables already set - which is what makes the lines above work.
 process.env.SMS_PROVIDER = 'log';
 process.env.PLATFORM_SMTP_HOST = '';
 process.env.PLATFORM_SMTP_USER = '';
@@ -77,8 +41,8 @@ const { default: config } = await import('../src/config/index.js');
 
 export const TEST_DBS = ['ifqm_test_master', 'ifqm_test_a', 'ifqm_test_b'];
 
-// Cost 4: test users need valid bcrypt hashes, not slow ones. The stored hash
-// carries its own cost, so login verifies these exactly as it would cost-12.
+// Cost 4: test users need valid bcrypt hashes, not slow ones. The stored hash carries its
+// own cost, so login verifies these exactly as it would cost-12.
 const cheapHash = (pw) => bcrypt.hashSync(pw, 4);
 
 export const PASSWORDS = {
@@ -101,18 +65,11 @@ export async function setupSuite() {
     charset: 'utf8mb4',
   });
 
-  /*
-   * The harness reads and writes timestamps on its own connection, so it has to
-   * keep the same clock as the app — whose pools pin every session to UTC.
-   *
-   * Left unpinned, a test comparing TIMESTAMPDIFF(MINUTE, NOW(), expires_at)
-   * measures a row the app stamped in UTC against a NOW() in the developer's
-   * local zone, and a token with an hour of life reports -270 minutes on a
-   * machine in India. The row was correct; the two clocks were not.
-   */
+  // The harness reads and writes timestamps on its own connection, so it has to keep the
+  // same clock as the app - whose pools pin every session to UTC.
   await adminConn.query("SET time_zone = '+00:00'");
 
-  // Start from nothing every run — half-torn-down state must not leak between runs.
+  // Start from nothing every run - half-torn-down state must not leak between runs.
   for (const db of TEST_DBS) await adminConn.query(`DROP DATABASE IF EXISTS \`${db}\``);
 
   // Registry: the real master.sql, rewritten to the test schema name.
@@ -121,8 +78,8 @@ export async function setupSuite() {
     .replaceAll('ifqm_master', 'ifqm_test_master');
   await adminConn.query(masterSql);
 
-  // Replace shipped seed tenants with the two test orgs. Without this, the
-  // seeded default tenant points at ifqm_ideation — a REAL database.
+  // Replace shipped seed tenants with the two test orgs. Without this, the seeded default
+  // tenant points at ifqm_ideation - a REAL database.
   await adminConn.query(`
     USE ifqm_test_master;
     DELETE FROM tenants;
@@ -170,22 +127,22 @@ export async function sql(dbName, statement, params = []) {
   return rows;
 }
 
-// ── HTTP helpers ────────────────────────────────────────────────────────────
+// HTTP helpers
 
 export async function api(method, urlPath, { token, body, raw } = {}) {
   const headers = {};
   if (token) headers.Authorization = `Bearer ${token}`;
   let payload;
   if (raw !== undefined) {
-    payload = raw; // e.g. FormData — fetch sets its own content-type
+    payload = raw; // e.g. FormData - fetch sets its own content-type
   } else if (body !== undefined) {
     headers['Content-Type'] = 'application/json';
     payload = JSON.stringify(body);
   }
   const res = await fetch(baseUrl + urlPath, { method, headers, body: payload });
-  // Read the body once as text, then try to parse JSON — so a non-JSON response
-  // (a CSV, an HTML report, a PDF download) is still inspectable via `text` and
-  // `contentType` instead of vanishing.
+  // Read the body once as text, then try to parse JSON - so a non-JSON response (a CSV, an
+  // HTML report, a PDF download) is still inspectable via `text` and `contentType` instead
+  // of vanishing.
   const text = await res.text();
   let data = null;
   try { data = JSON.parse(text); } catch { /* non-JSON body */ }
@@ -194,13 +151,13 @@ export async function api(method, urlPath, { token, body, raw } = {}) {
     data,
     text,
     contentType: res.headers.get('content-type') || '',
-    // Response headers matter to several checks (security headers, attachment
-    // disposition, rate-limit budget), so expose them rather than the body alone.
+    // Response headers matter to several checks (security headers, attachment disposition,
+    // rate-limit budget), so expose them rather than the body alone.
     headers: Object.fromEntries(res.headers.entries()),
   };
 }
 
-/** Base URL of the running instance — for checks that need a raw fetch. */
+/** Base URL of the running instance - for checks that need a raw fetch. */
 export const getBaseUrl = () => baseUrl;
 
 export async function login(email, password, orgSlug = '') {
@@ -210,7 +167,7 @@ export async function login(email, password, orgSlug = '') {
   return { status, token: data?.token, user: data?.user, error: data?.error };
 }
 
-/** Mint a token directly (same signer the server uses) — for tamper tests. */
+/** Mint a token directly (same signer the server uses) - for tamper tests. */
 export { signToken };
 
 /** A minimal valid PNG (red 1×1) and a fake one, for upload validation tests. */

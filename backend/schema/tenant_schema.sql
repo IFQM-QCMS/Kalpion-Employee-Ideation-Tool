@@ -1,70 +1,40 @@
--- ============================================================
---  IFQM Consolidated Per-Tenant Schema (used for provisioning)
---
---  This is the source schema.sql + the tables that previously lived only in
---  schema_updates.sql (idea_comments, challenges, email_queue). The original
---  schema.sql referenced idea_comments in an index but never created the
---  table, so provisioning a new tenant from schema.sql alone failed. This
---  consolidated file produces a tenant identical to the existing working DBs.
---
---  KEEP THIS FILE IN STEP WITH db/migrations/*.sql.
---  createTenant() provisions a new organisation from THIS FILE ALONE — it never
---  runs the migrations, which exist to upgrade databases that already exist. So
---  anything a migration adds must also be born here, or every organisation
---  created from the UI starts life missing it. That is not hypothetical: the
---  columns from migrations 001 and 002 were absent here, and "Create New
---  Organisation" died on `Unknown column 'password_changed_at' in 'field list'`
---  while the modal showed only a generic "Server error. Please try again."
--- ============================================================
+-- IFQM Consolidated Per-Tenant Schema (used for provisioning)
 
 CREATE TABLE IF NOT EXISTS users (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   employee_id     VARCHAR(20)  NOT NULL UNIQUE,
-  -- Sign-in name, unique across the WHOLE platform (migration 025), because
-  -- login_directory resolves an identifier to an organisation through a single
-  -- primary key — that is what allows signing in without an org code.
+  -- Sign-in name, unique across the WHOLE platform (migration 025), because login_directory
+  -- resolves an identifier to an organisation through a single primary key - that is what
+  -- allows signing in without an org code.
   username        VARCHAR(50)  NULL DEFAULT NULL,
   name            VARCHAR(100) NOT NULL,
-  -- Nullable since migration 025: an employee with no company mailbox had to be
-  -- given a fabricated address before an account could exist. An account needs
-  -- at least one of username/email, enforced in userService so the error can
-  -- name the field to fill in.
+  -- Nullable since migration 025: an employee with no company mailbox had to be given a
+  -- fabricated address before an account could exist.
   email           VARCHAR(150) NULL DEFAULT NULL UNIQUE,
   password_hash   VARCHAR(255) NOT NULL,
   phone           VARCHAR(20),
   department      VARCHAR(100),
   business_unit   VARCHAR(100),
   location        VARCHAR(100),
-  -- department_manager / plant_head are appended at the END on purpose: an ENUM
-  -- is stored as the ordinal of its member, so a tenant created from this file
-  -- must number its members exactly as migration 003 leaves an upgraded one.
+  -- department_manager / plant_head are appended at the END on purpose: an ENUM is stored as
+  -- the ordinal of its member, so a tenant created from this file must number its members
+  -- exactly as migration 003 leaves an upgraded one.
   role            ENUM('trainee','employee','team_lead','project_lead','manager','senior_manager','executive','admin','super_admin','department_manager','plant_head') NOT NULL DEFAULT 'employee',
   manager_id      INT NULL,
   points          INT NOT NULL DEFAULT 0,
   avatar_initials VARCHAR(4),
   status          ENUM('active','inactive') NOT NULL DEFAULT 'active',
   created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
-  -- ── from migration 001 (production hardening) ──
-  -- Stamped into every token so the auth middleware can reject sessions opened
-  -- before the password last changed. createTenant writes it on the org's first
-  -- admin, so a tenant born without this column cannot be created at all.
+  -- from migration 001 (production hardening) Stamped into every token so the auth
+  -- middleware can reject sessions opened before the password last changed. createTenant
+  -- writes it on the org's first admin, so a tenant born without this column cannot be
+  -- created at all.
   password_changed_at DATETIME NULL DEFAULT NULL,
   deactivated_at      DATETIME NULL DEFAULT NULL,
-  -- ── from migration 002 (bulk user import) ──
+  -- from migration 002 (bulk user import)
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   date_of_birth        DATE NULL DEFAULT NULL,
   -- Neither of these is written any more (migration 031).
-  --
-  -- MOM 29 Jul 2026 §13.4 first narrowed this from a full date to a birth YEAR,
-  -- because the derived temporary password only ever used the year and the rest
-  -- was personal data held for no purpose. The same argument then applied to the
-  -- year: it was required of every employee in order to build one throwaway
-  -- credential, and nothing else in the product read it. The password is built
-  -- from the phone number now, which every account already has.
-  --
-  -- Both columns are kept, not dropped: organisations onboarded under the old
-  -- rule have real values here, and erasing them is a decision for the customer
-  -- to ask for rather than something to do quietly in an unrelated release.
   salutation           VARCHAR(10) NULL DEFAULT NULL,
   first_name           VARCHAR(60) NULL DEFAULT NULL,
   last_name            VARCHAR(60) NULL DEFAULT NULL,
@@ -88,52 +58,44 @@ CREATE TABLE IF NOT EXISTS ideas (
   impact_level             ENUM('Low','Medium','High') DEFAULT 'Medium',
   tangible_benefit         TEXT,
   intangible_benefit       TEXT,
-  -- ── business case, captured at submission (from migration 003) ──
-  -- All optional: every idea filed before these existed would otherwise have
-  -- become retrospectively invalid. expected_implementation_date is the
-  -- SUBMITTER's estimate; implementation_target_date below is what the
-  -- implementation owner commits to after approval — deliberately separate.
+  -- business case, captured at submission (from migration 003) All optional: every idea
+  -- filed before these existed would otherwise have become retrospectively invalid.
+  -- expected_implementation_date is the SUBMITTER's estimate; implementation_target_date
+  -- below is what the implementation owner commits to after approval - deliberately
+  -- separate.
   investment_required      VARCHAR(255) NULL DEFAULT NULL,
   feasibility              ENUM('Low','Medium','High') NULL DEFAULT NULL,
   implementation_duration  VARCHAR(120) NULL DEFAULT NULL,
   expected_implementation_date DATE NULL DEFAULT NULL,
   benefits_expected        TEXT NULL DEFAULT NULL,
   support_required         TEXT NULL DEFAULT NULL,
-  -- ── MOM 29 Jul 2026 (migration 010) ──
-  -- Time Required: three fixed bands. implementation_duration above stays as
-  -- free text — it holds real data on older ideas and cannot be coerced safely.
+  -- MOM 29 Jul 2026 (migration 010) Time Required: three fixed bands.
+  -- implementation_duration above stays as free text - it holds real data on older ideas and
+  -- cannot be coerced safely.
   time_required            ENUM('lt_3m','3_6m','6_12m') NULL DEFAULT NULL,
-  -- Process Improvement / QCD. CSV of tag keys: the set is fixed and small, and
-  -- is never queried relationally, so a join table would be ceremony.
+  -- Process Improvement / QCD.
   solution_tags            VARCHAR(255) NULL DEFAULT NULL,
   -- Patentability is a separate axis from approval: an idea can be approved and
   -- unpatentable, or rejected and still worth a provisional filing.
   patentability            ENUM('not_assessed','not_patentable','possible','recommended','filed') NOT NULL DEFAULT 'not_assessed',
-  -- Claimed by a person at submission, as distinct from the organisation's
-  -- assessment above. An employee ticking this is a prompt to look, not a
-  -- verdict, so it must never overwrite the admin's decision.
+  -- Claimed by a person at submission, as distinct from the organisation's assessment above.
   patentable_flag          TINYINT(1) NOT NULL DEFAULT 0,
   patentable_flagged_by    INT NULL DEFAULT NULL,
   patentability_note       TEXT NULL DEFAULT NULL,
-  -- Archiving hides an idea from working lists without destroying its points,
-  -- audit trail or ROI figures. NULL = live.
+  -- Archiving hides an idea from working lists without destroying its points, audit trail or
+  -- ROI figures.
   archived_at              DATETIME NULL DEFAULT NULL,
   archived_by              INT NULL DEFAULT NULL,
   ai_score                 INT DEFAULT 0,
   ai_reason                TEXT,
   workflow_type            ENUM('hierarchical','multi_reviewer') NOT NULL DEFAULT 'hierarchical',
-  -- Historical only (migration 024). Committee decisions are unanimous; nothing
-  -- reads or writes this. Kept so the record of how already-decided ideas were
-  -- judged is not rewritten.
+  -- Historical only (migration 024).
   upvotes                  INT NOT NULL DEFAULT 0,
   downvotes                INT NOT NULL DEFAULT 0,
   escalation_level         INT NOT NULL DEFAULT 0,
-  -- ── from migration 032 ──
-  -- The approval stage this idea is waiting at ('team_lead', 'plant_head'...),
-  -- NULL for drafts, closed ideas and committee ideas — none of which travel
-  -- the chain. The KEY, not an index: an admin may reorder or remove stages
-  -- while ideas are in flight, and a stored index would silently come to mean
-  -- a different stage.
+  -- from migration 032 The approval stage this idea is waiting at ('team_lead',
+  -- 'plant_head'...), NULL for drafts, closed ideas and committee ideas - none of which
+  -- travel the chain.
   current_stage            VARCHAR(40) NULL DEFAULT NULL,
   current_reviewer_id      INT NULL,
   review_due_date          DATE NULL,
@@ -186,9 +148,7 @@ CREATE TABLE IF NOT EXISTS idea_attachments (
   FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
 );
 
--- Co-suggesters beyond the two legacy ideas.co_suggester_*_id columns. An idea
--- can credit any number of colleagues; the first two are also mirrored into the
--- legacy columns so existing read paths keep working.
+-- Co-suggesters beyond the two legacy ideas.co_suggester_*_id columns.
 CREATE TABLE IF NOT EXISTS idea_co_suggesters (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -206,10 +166,8 @@ CREATE TABLE IF NOT EXISTS idea_workflow (
   actor_id   INT NOT NULL,
   action     ENUM('Submitted','Reviewed','Approved','Rejected','Implemented','Commented','Reopened') NOT NULL,
   comment    TEXT,
-  -- The approval stage this action was taken AT, recorded rather than derived
-  -- (migration 036). Joining users for `role` would answer what that person's
-  -- job is today, so a promotion would silently rewrite every approval they
-  -- ever gave. The closure PDF prints this.
+  -- The approval stage this action was taken AT, recorded rather than derived (migration
+  -- 036).
   stage      VARCHAR(40) NULL,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (idea_id)  REFERENCES ideas(id) ON DELETE CASCADE,
@@ -251,7 +209,7 @@ CREATE TABLE IF NOT EXISTS idea_community_votes (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Discussion threads (was schema_updates.sql only) ─────────────────
+-- Discussion threads (was schema_updates.sql only)
 CREATE TABLE IF NOT EXISTS idea_comments (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -265,7 +223,7 @@ CREATE TABLE IF NOT EXISTS idea_comments (
   FOREIGN KEY (parent_id) REFERENCES idea_comments(id) ON DELETE SET NULL
 );
 
--- ── Innovation challenges (was schema_updates.sql only) ──────────────
+-- Innovation challenges (was schema_updates.sql only)
 CREATE TABLE IF NOT EXISTS challenges (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   title       VARCHAR(255) NOT NULL,
@@ -278,10 +236,9 @@ CREATE TABLE IF NOT EXISTS challenges (
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Idea categories (from migration 003) ─────────────────────────────
--- Every organisation owns its own list and may add to or delete from it.
--- ideas.impact_areas still stores the chosen names as comma-separated text, so
--- deleting a category never rewrites the ideas that were submitted under it.
+-- Idea categories (from migration 003) Every organisation owns its own list and may add to
+-- or delete from it. ideas.impact_areas still stores the chosen names as comma-separated
+-- text, so deleting a category never rewrites the ideas that were submitted under it.
 CREATE TABLE IF NOT EXISTS idea_categories (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   name       VARCHAR(80) NOT NULL,
@@ -297,17 +254,14 @@ INSERT IGNORE INTO idea_categories (name, sort_order) VALUES
   ('Delivery',     4),
   ('Sustenance',   5);
 
--- ── Email queue (was schema_updates.sql only) ────────────────────────
+-- Email queue (was schema_updates.sql only)
 CREATE TABLE IF NOT EXISTS email_queue (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   to_email   VARCHAR(150) NOT NULL,
   to_name    VARCHAR(100),
   subject    VARCHAR(255) NOT NULL,
   body       TEXT NOT NULL,
-  -- 'processing' is a claim marker taken for the length of one send. It was
-  -- missing here while the code wrote it, so on a strict server (Aiven runs
-  -- STRICT_ALL_TABLES) every drain threw error 1265 and no mail was ever sent.
-  -- Migration 038.
+  -- 'processing' is a claim marker taken for the length of one send.
   status     ENUM('pending','processing','sent','failed') NOT NULL DEFAULT 'pending',
   attempts   INT NOT NULL DEFAULT 0,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -335,16 +289,13 @@ CREATE TABLE IF NOT EXISTS org_settings (
 INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('review_sla_days',           '7'),
   ('escalation_days',           '14'),
-  -- §14.8 removed anonymous submission. Kept as a setting, not ripped out:
-  -- ideas already filed anonymously must keep that promise.
+  -- §14.8 removed anonymous submission.
   ('anonymous_allowed',         '0'),
   ('public_board_enabled',      '1'),
   ('challenges_enabled',        '1'),
-  -- ON by default. Seeded '0' until migration 037, which meant every new
-  -- organisation had notification mail switched off, nobody knew the setting
-  -- existed, and the email_queue filled up forever without a single delivery
-  -- attempt. The switch is for an organisation that wants no outbound mail —
-  -- it was never meant to be the starting state.
+  -- ON by default. Seeded '0' until migration 037, which meant every new organisation had
+  -- notification mail switched off, nobody knew the setting existed, and the email_queue
+  -- filled up forever without a single delivery attempt.
   ('email_enabled',             '1'),
   ('smtp_host',                 ''),
   ('smtp_port',                 '587'),
@@ -352,17 +303,11 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('smtp_pass',                 ''),
   ('smtp_from',                 ''),
   ('smtp_from_name',            'Kalpion'),
-  -- The approval chain, as one ordered sequence (migration 024). It replaced
-  -- approval_mode / approval_reviewer_roles / approval_final_approver_roles /
-  -- approval_threshold, which described this same chain three different ways
-  -- and disagreed with each other.
-  -- Migration 032: the default chain includes the team lead, and the labels
-  -- are a per-tenant override so an organisation can call a stage whatever it
-  -- calls it without the stored keys changing.
+  -- The approval chain, as one ordered sequence (migration 024).
   ('approval_stages',           'originator,team_lead,immediate_manager,department_manager,plant_head'),
   ('approval_stage_labels',     '{}'),
-  -- MOM 29 Jul 2026. solution_visibility replaces what used to be a constant in
-  -- ideaService: authors_reviewers | managers_only | everyone.
+  -- MOM 29 Jul 2026. solution_visibility replaces what used to be a constant in ideaService:
+  -- authors_reviewers | managers_only | everyone.
   ('solution_visibility',       'authors_reviewers'),
   ('idea_tags_enabled',         '1'),
   ('patentability_enabled',     '1'),
@@ -370,23 +315,19 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('prediction_visibility',     'seniors'),
   -- §7.2: deterrents against casually copying idea text. Off by default.
   ('content_protection',        '0'),
-  -- Each organisation sets its own attachment ceiling, bounded by the
-  -- platform-wide maximum so one tenant cannot decide to accept 2 GB uploads.
+  -- Each organisation sets its own attachment ceiling, bounded by the platform-wide maximum
+  -- so one tenant cannot decide to accept 2 GB uploads.
   ('max_file_mb',               '10'),
-  -- Deterrents on the screens that list ideas. On by default: idea text is the
-  -- thing this product exists to protect.
+  -- Deterrents on the screens that list ideas.
   ('idea_screen_protection',    '1'),
   ('situation_preview_chars',   '180'),
-  -- Which parts of somebody else's idea an ordinary colleague may read. See
-  -- ideaSections.js for the vocabulary; empty means title only.
+  -- Which parts of somebody else's idea an ordinary colleague may read.
   ('employee_visible_sections', 'solution');
 
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   user_id     INT NOT NULL,
-  -- selector: from migration 001. Reset verification used to bcrypt-compare the
-  -- candidate against every unexpired row — O(n) key-stretching per request.
-  -- Tokens are `selector.verifier`: an indexed lookup, then one bcrypt compare.
+  -- selector: from migration 001.
   selector    CHAR(32) NULL,
   token_hash  VARCHAR(255) NOT NULL,
   expires_at  DATETIME NOT NULL,
@@ -396,7 +337,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   INDEX idx_prt_expires (expires_at)
 );
 
--- ── Bulk employee import (from migration 002) ────────────────────────
+-- Bulk employee import (from migration 002)
 CREATE TABLE IF NOT EXISTS user_import_jobs (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   actor_id        INT NULL,
@@ -407,11 +348,8 @@ CREATE TABLE IF NOT EXISTS user_import_jobs (
   total_rows      INT NOT NULL DEFAULT 0,
   processed_rows  INT NOT NULL DEFAULT 0,
   created_count   INT NOT NULL DEFAULT 0,
-  -- ── from migration 031 ──
-  -- An import sends welcome emails, and mail fails in ways an INSERT does not.
-  -- Those accounts are created and valid, so the job must not report failure —
-  -- but an admin still has to be able to find out that fifty people never got
-  -- the password they are waiting for.
+  -- from migration 031 An import sends welcome emails, and mail fails in ways an INSERT does
+  -- not.
   emailed_count      INT NOT NULL DEFAULT 0,
   email_failed_count INT NOT NULL DEFAULT 0,
   skipped_count   INT NOT NULL DEFAULT 0,
@@ -436,12 +374,9 @@ CREATE TABLE IF NOT EXISTS user_import_errors (
   INDEX idx_import_err_job (job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ── Secondary indexes ────────────────────────────────────────────────────────
--- These were `CREATE INDEX IF NOT EXISTS`, which is MariaDB-only syntax: it runs
--- on a local XAMPP box and fails with a bare syntax error on real MySQL 8 (any
--- managed host). The guarded form below is the same idiom migration 001 uses,
--- is idempotent on both engines, and keeps this file re-runnable as a repair
--- tool for a half-built schema.
+-- Secondary indexes These were `CREATE INDEX IF NOT EXISTS`, which is MariaDB-only syntax:
+-- it runs on a local XAMPP box and fails with a bare syntax error on real MySQL 8 (any
+-- managed host).
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
@@ -474,8 +409,8 @@ SET @sql := IF(
   'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
--- "What is waiting on ME" — the review queue matches the routed approver AND
--- the stage AND the status, so all three belong in one index (migration 036).
+-- "What is waiting on ME" - the review queue matches the routed approver AND the stage AND
+-- the status, so all three belong in one index (migration 036).
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
@@ -566,9 +501,7 @@ SET @sql := IF(
   'SELECT 1'
 );
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
--- The ideas list orders by updated_at DESC (LIMIT 100). Without this the query
--- full-scans + filesorts every request; under load that caused 500s. With it the
--- optimiser reads the index in order and stops at 100 rows (verified by EXPLAIN).
+-- The ideas list orders by updated_at DESC (LIMIT 100).
 SET @sql := IF(
   (SELECT COUNT(*) FROM information_schema.STATISTICS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'

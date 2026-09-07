@@ -1,24 +1,9 @@
-/**
- * The Rewards & Recognition pack, as a workbook and as a PDF.
- *
- * ── Two formats because they are read by two different people ─────────────
- *
- * The spreadsheet is for HR to work IN: sort it, filter it, paste a column into
- * a payroll sheet, add a "reward given" column of their own. The PDF is for HR
- * to file and circulate — the thing attached to an approval email, read on a
- * phone, and produced two years later when somebody asks why a particular
- * person got a certificate.
- *
- * Both carry the same numbers from the same query, so the two can never
- * disagree. That matters more than it sounds: a spreadsheet and a PDF of "the
- * same" report that differ by one person is how a reward process loses its
- * credibility, and the cause is always two code paths computing separately.
- */
+/** The Rewards & Recognition pack, as a workbook and as a PDF. */
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import { registerFonts, makeTextScriptAware } from './pdfFonts.js';
 
-// ── Shared formatting ───────────────────────────────────────────────────────
+// Shared formatting
 
 const s = (v) => (v == null ? '' : String(v));
 
@@ -39,25 +24,17 @@ function fmtDateTime(v) {
   return `${fmtDate(v)} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} UTC`;
 }
 
-/**
- * One line describing what an approver did and where they stood.
- *
- * The stage is what was RECORDED at the time (migration 036), so somebody
- * promoted since still reads as the capacity they signed in. Rows from before
- * that column existed fall back to the actor's current role and say so with a
- * "?", because presenting a guess as a record is the one thing an audit trail
- * must not do.
- */
+/** One line describing what an approver did and where they stood. */
 function trailLine(w) {
-  const who = s(w.actor_name) || '—';
+  const who = s(w.actor_name) || '-';
   const where = w.stage_label
     ? w.stage_label
     : (w.actor_role ? `${s(w.actor_role).replace(/_/g, ' ')} ?` : '');
-  return `${fmtDateTime(w.created_at)} — ${who}${where ? ` (${where})` : ''}: ${s(w.action)}`
-    + (w.comment ? ` — "${s(w.comment)}"` : '');
+  return `${fmtDateTime(w.created_at)} - ${who}${where ? ` (${where})` : ''}: ${s(w.action)}`
+    + (w.comment ? ` - "${s(w.comment)}"` : '');
 }
 
-// ── Workbook ────────────────────────────────────────────────────────────────
+// Workbook
 
 const HEAD_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0B2545' } };
 const HEAD_FONT = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
@@ -72,24 +49,18 @@ function styleHeader(ws) {
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: ws.columnCount } };
 }
 
-/**
- * The pack as a workbook.
- *
- * Five sheets, because HR asked five different questions and one flat table
- * cannot answer them all without repeating an idea's full text on every row of
- * its approval trail.
- */
+/** The pack as a workbook. */
 export async function buildRewardsWorkbook(data, orgName) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'Kalpion';
   wb.created = new Date();
 
-  // ── 1. Summary — what this document covers ──
+  // 1. Summary - what this document covers
   const sum = wb.addWorksheet('Summary');
   sum.columns = [{ width: 34 }, { width: 60 }];
   const put = (k, v) => sum.addRow([k, v]);
   put('Organisation', orgName || '');
-  put('Report', 'Rewards & Recognition — leaderboard');
+  put('Report', 'Rewards & Recognition - leaderboard');
   put('Period', `${data.range.label} (${data.range.display})`);
   put('Generated', fmtDateTime(new Date().toISOString()));
   put('', '');
@@ -105,10 +76,7 @@ export async function buildRewardsWorkbook(data, orgName) {
     + ` · Implemented ${data.points_scheme.implemented}`);
   put('Approval path', (data.chain || []).map((c) => `${c.position}. ${c.label}`).join('  →  '));
   put('', '');
-  /*
-   * Said in the document, not only in the code. Whoever reads this in a year
-   * needs to know which window an idea was counted in without going to ask.
-   */
+  // Said in the document, not only in the code.
   put('How the period is applied',
     'An idea counts in the period it was SUBMITTED in, even where its approval came later. '
     + 'Each idea carries its own dates below.');
@@ -119,7 +87,7 @@ export async function buildRewardsWorkbook(data, orgName) {
   sum.getColumn(1).font = { bold: true };
   sum.getColumn(2).alignment = { wrapText: true, vertical: 'top' };
 
-  // ── 2. Leaderboard — everybody, in order ──
+  // 2. Leaderboard - everybody, in order
   const lb = wb.addWorksheet('Leaderboard');
   lb.columns = [
     { header: 'Rank', key: 'rank', width: 7 },
@@ -134,8 +102,8 @@ export async function buildRewardsWorkbook(data, orgName) {
     { header: 'Implemented', key: 'ideas_implemented', width: 12 },
     { header: 'Rejected', key: 'ideas_rejected', width: 10 },
     { header: 'In review', key: 'ideas_pending', width: 11 },
-    { header: 'Points — submission', key: 'points_submission', width: 18 },
-    { header: 'Points — outcomes', key: 'points_from_ideas', width: 17 },
+    { header: 'Points - submission', key: 'points_submission', width: 18 },
+    { header: 'Points - outcomes', key: 'points_from_ideas', width: 17 },
     { header: 'Points this period', key: 'points_period', width: 17 },
     { header: 'Points lifetime', key: 'points_lifetime', width: 15 },
     { header: 'Avg AI score', key: 'avg_ai_score', width: 13 },
@@ -146,11 +114,11 @@ export async function buildRewardsWorkbook(data, orgName) {
     lb.addRow({ ...p, role: s(p.role).replace(/_/g, ' ') });
   }
   styleHeader(lb);
-  // The two components sit beside the total on purpose: a score somebody is
-  // rewarded against should be checkable without re-deriving it.
+  // The two components sit beside the total on purpose: a score somebody is rewarded against
+  // should be checkable without re-deriving it.
   lb.getColumn('points_period').font = { bold: true };
 
-  // ── 3. Ideas — the whole of each one ──
+  // 3. Ideas - the whole of each one
   const id = wb.addWorksheet('Ideas');
   id.columns = [
     { header: 'Idea code', key: 'idea_code', width: 14 },
@@ -194,7 +162,7 @@ export async function buildRewardsWorkbook(data, orgName) {
   styleHeader(id);
   id.eachRow((row, n) => { if (n > 1) row.alignment = { vertical: 'top', wrapText: true }; });
 
-  // ── 4. Approval trail — one row per decision ──
+  // 4. Approval trail - one row per decision
   const tr = wb.addWorksheet('Approval trail');
   tr.columns = [
     { header: 'Idea code', key: 'idea_code', width: 14 },
@@ -218,8 +186,8 @@ export async function buildRewardsWorkbook(data, orgName) {
         who: w.actor_name,
         emp: w.actor_employee_id,
         position: w.stage_label || s(w.actor_role).replace(/_/g, ' '),
-        // Spelled out rather than left as a bare "?" — a spreadsheet gets
-        // filtered, and "inferred" is a word somebody can filter on.
+        // Spelled out rather than left as a bare "?" - a spreadsheet gets filtered, and "inferred"
+        // is a word somebody can filter on.
         recorded: w.stage_label ? 'recorded' : 'inferred from role today',
         action: w.action,
         comment: w.comment,
@@ -228,7 +196,7 @@ export async function buildRewardsWorkbook(data, orgName) {
   }
   styleHeader(tr);
 
-  // ── 5. Attachments ──
+  // 5. Attachments
   const at = wb.addWorksheet('Attachments');
   at.columns = [
     { header: 'Idea code', key: 'idea_code', width: 14 },
@@ -253,7 +221,7 @@ export async function buildRewardsWorkbook(data, orgName) {
   return wb;
 }
 
-// ── PDF ─────────────────────────────────────────────────────────────────────
+// PDF
 
 const NAVY = '#0b2545';
 const INK = '#1f2937';
@@ -266,35 +234,18 @@ const PAGE_H = 841.89;
 const RIGHT = PAGE_W - MARGIN;
 const CONTENT_W = RIGHT - MARGIN;
 
-/**
- * The pack as a PDF.
- *
- * Portrait, because it is read on a phone as often as printed, and because the
- * leaderboard is the part people actually look at — the idea dossiers behind it
- * are reference material somebody turns to when a specific award is questioned.
- *
- * Streamed into `res` rather than buffered: a year's pack for a 500-person site
- * runs to hundreds of pages, and holding all of it in memory to compute a
- * Content-Length nobody reads would be the one thing that makes this fall over
- * on the smallest instance we support.
- */
+/** The pack as a PDF. */
 export function buildRewardsPdf(data, res, orgName) {
   const doc = new PDFDocument({
     size: 'A4', margin: MARGIN, bufferPages: true,
     info: {
-      Title: `Rewards & Recognition — ${data.range.display}`,
+      Title: `Rewards & Recognition - ${data.range.display}`,
       Author: orgName || 'Kalpion',
     },
   });
   registerFonts(doc);
-  /*
-   * Every string in this document is user data — names, idea text, comments —
-   * and an Indian shop floor writes them in Kannada, Tamil and Devanagari as
-   * readily as in English. This makes each doc.text() pick a face that can
-   * actually shape what it is given, instead of drawing a row of blank boxes
-   * with correct advance widths, which is the failure mode that looks fine
-   * until somebody who reads the script opens it.
-   */
+  // Every string in this document is user data - names, idea text, comments - and an Indian
+  // shop floor writes them in Kannada, Tamil and Devanagari as readily as in English.
   makeTextScriptAware(doc);
   doc.pipe(res);
 
@@ -332,16 +283,16 @@ export function buildRewardsPdf(data, res, orgName) {
 
   const kv = (k, v) => {
     doc.font('reg').fontSize(8.6);
-    const h = Math.max(12, doc.heightOfString(s(v) || '—', { width: CONTENT_W - 150 }));
+    const h = Math.max(12, doc.heightOfString(s(v) || '-', { width: CONTENT_W - 150 }));
     room(h + 4);
     doc.font('bold').fontSize(8.2);
     doc.fillColor(MUTED).text(k, MARGIN, y, { width: 142, lineBreak: false });
     doc.font('reg').fontSize(8.6);
-    doc.fillColor(INK).text(s(v) || '—', MARGIN + 148, y, { width: CONTENT_W - 148 });
+    doc.fillColor(INK).text(s(v) || '-', MARGIN + 148, y, { width: CONTENT_W - 148 });
     y += h + 4;
   };
 
-  // ── Cover ──
+  // Cover
   doc.font('bold').fontSize(20);
   doc.fillColor(NAVY).text('Rewards & Recognition', MARGIN, y, { width: CONTENT_W });
   y += 26;
@@ -364,14 +315,14 @@ export function buildRewardsPdf(data, res, orgName) {
     + ` · Implemented ${data.points_scheme.implemented}`);
   kv('Approval path', (data.chain || []).map((c) => `${c.position}. ${c.label}`).join('  →  '));
   y += 6;
-  para('An idea counts in the period it was SUBMITTED in, even where its approval came later — '
+  para('An idea counts in the period it was SUBMITTED in, even where its approval came later - '
     + 'crediting the effort to when the work was done. Each idea below carries its own dates. '
     + 'Anonymous submissions are listed without their author. Attachments are named but not '
     + 'embedded.', 8, MUTED);
 
-  // ── Leaderboard, everybody ──
+  // Leaderboard, everybody
   y += 8;
-  heading('LEADERBOARD', `${data.people.length} people — complete, not a top ten`);
+  heading('LEADERBOARD', `${data.people.length} people - complete, not a top ten`);
 
   const cols = [
     { k: 'rank', label: '#', w: 24 },
@@ -410,7 +361,7 @@ export function buildRewardsPdf(data, res, orgName) {
     y += 15;
   });
 
-  // ── One dossier per idea ──
+  // One dossier per idea
   y += 10;
   heading('THE IDEAS BEHIND THESE SCORES', `${data.ideas.length} in this period`);
 
@@ -423,13 +374,13 @@ export function buildRewardsPdf(data, res, orgName) {
     y += 4;
     doc.rect(MARGIN, y, CONTENT_W, 18).fill('#eef2f7');
     doc.font('bold').fontSize(9);
-    doc.fillColor(NAVY).text(`${s(i.idea_code)} — ${s(i.title)}`, MARGIN + 6, y + 5,
+    doc.fillColor(NAVY).text(`${s(i.idea_code)} - ${s(i.title)}`, MARGIN + 6, y + 5,
       { width: CONTENT_W - 12, lineBreak: false });
     y += 24;
 
     kv('Submitted by', `${s(i.submitter_name)}`
       + (i.submitter_employee_id ? ` (${s(i.submitter_employee_id)})` : '')
-      + (i.submitter_department ? ` — ${s(i.submitter_department)}` : ''));
+      + (i.submitter_department ? ` - ${s(i.submitter_department)}` : ''));
     if ((i.co_suggesters || []).length) {
       kv('Co-suggesters', i.co_suggesters.map((c) => `${c.name} (${c.employee_id})`).join(', '));
     }
@@ -448,7 +399,7 @@ export function buildRewardsPdf(data, res, orgName) {
     }
     if (i.support_required) kv('Support required', i.support_required);
     if (i.impact_level || i.impact_areas) {
-      kv('Impact', `${s(i.impact_level)}${i.impact_areas ? ` — ${s(i.impact_areas)}` : ''}`);
+      kv('Impact', `${s(i.impact_level)}${i.impact_areas ? ` - ${s(i.impact_areas)}` : ''}`);
     }
     if (i.challenge_title) kv('Challenge', i.challenge_title);
     kv('Points awarded', s(i.points_awarded ?? 0));
@@ -478,7 +429,7 @@ export function buildRewardsPdf(data, res, orgName) {
       doc.fillColor(MUTED).text('ATTACHMENTS', MARGIN, y, { width: CONTENT_W });
       y += 12;
       for (const a of i.attachments) {
-        const line = `${s(a.filename)} — ${s(a.section)} section, uploaded ${fmtDateTime(a.uploaded_at)}`;
+        const line = `${s(a.filename)} - ${s(a.section)} section, uploaded ${fmtDateTime(a.uploaded_at)}`;
         doc.font('reg').fontSize(8);
         const h = doc.heightOfString(line, { width: CONTENT_W - 12 });
         room(h + 3);
@@ -492,14 +443,7 @@ export function buildRewardsPdf(data, res, orgName) {
     y += 8;
   }
 
-  /*
-   * Footer on every page.
-   *
-   * The bottom margin is zeroed while it is written: PDFKit starts a new page
-   * whenever text would cross the bottom margin, and the footer sits below it by
-   * design — so writing there ADDS a page and draws the footer on the new one.
-   * Every export used to gain a trailing blank page that way.
-   */
+  // Footer on every page.
   const range = doc.bufferedPageRange();
   for (let p = 0; p < range.count; p++) {
     doc.switchToPage(range.start + p);
@@ -507,7 +451,7 @@ export function buildRewardsPdf(data, res, orgName) {
     doc.page.margins.bottom = 0;
     doc.font('reg').fontSize(7);
     doc.fillColor(MUTED).text(
-      `${orgName || ''} — Rewards & Recognition, ${data.range.display}`,
+      `${orgName || ''} - Rewards & Recognition, ${data.range.display}`,
       MARGIN, PAGE_H - MARGIN + 4, { width: CONTENT_W - 80, lineBreak: false });
     doc.text(`Page ${p + 1} of ${range.count}`,
       RIGHT - 80, PAGE_H - MARGIN + 4, { width: 80, align: 'right', lineBreak: false });

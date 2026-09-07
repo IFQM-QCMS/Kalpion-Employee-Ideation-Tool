@@ -1,149 +1,159 @@
-# Deployment settings — Kalpion
+# Deployment settings
 
-Two hosted pieces, and each needs values that live in a dashboard rather than in
-this repository. `render.yaml` declares every backend key with `sync: false`
-precisely so no value is committed, and every `.env*` is gitignored.
+Values that live in a dashboard or an env file rather than in this repository.
+`render.yaml` declares every backend key with `sync: false` so nothing is
+committed, and every `.env*` is gitignored.
 
-| | URL |
+Local companions holding the values to paste (not in git):
+
+| File | For |
 |---|---|
-| Frontend (Vercel) | https://kalpion-employee-ideation-tool.vercel.app |
-| Backend (Render)  | https://kalpion-eit.onrender.com |
-| Database (Aiven)  | shared by both deployments; migrations 024–040 applied |
+| `.env.ifqm` | the IFQM server, `https://kalpion.ifqm.org.in` |
+| `.env.render` | the Render backend |
+| `.env.vercel` | the Vercel frontend |
 
-Local companions, gitignored, holding the values to paste:
-`.env.render` and `.env.vercel`.
+## Branch
 
----
+Deploy `main`. `sms-otp-kaleyra-dlt` is a merged feature branch and is not
+ahead of `main`.
 
-## 1. Vercel — `VITE_API_URL` is missing `/api`
+## Backend
 
-**This is currently wrong, and it breaks every request.**
-
-Settings → Environment Variables → Production:
+Runs from `backend/`. Node 18 or newer.
 
 ```
-VITE_API_URL=https://kalpion-eit.onrender.com/api
+cd backend
+npm ci
+npm run setup      # first time only: builds the schema and applies migrations
+npm start          # node server.js, listens on PORT (default 4000)
 ```
 
-It is set to `https://kalpion-eit.onrender.com` today, with no `/api`.
-`api.js` uses the value as the axios `baseURL` and appends paths to it, so a
-sign-in currently goes to:
+Health check: `GET /api/health`.
+
+The server refuses to start in production if `JWT_SECRET` is missing or under 32
+characters, the database password is empty, the database user is `root`, or
+`CORS_ORIGIN` still mentions localhost. It prints what is wrong and exits; read
+the banner rather than treating it as a crash.
+
+Other things it needs:
+
+- `backend/uploads/` writable, on storage that survives a restart. Attachments
+  and tenant logos live there and are not served by `express.static`.
+- `RUN_BACKGROUND_JOBS` set to `0` on every instance but one. It drives the
+  email queue drain, approval-chain repair, retention purge, billing sweep and
+  registration-notice retry, and two instances would drain the same queue.
+- `TRUST_PROXY=1` behind a single reverse proxy, or every sign-in is logged from
+  the proxy's address.
+
+## Frontend
+
+Built separately and served as static files with an SPA fallback, so that every
+non-asset path rewrites to `/index.html` (nginx: `try_files $uri /index.html;`).
 
 ```
-https://kalpion-eit.onrender.com/auth/login      → 404 {"error":"Unknown action"}
+cd frontend
+npm ci
+npm run build      # -> frontend/dist
 ```
 
-instead of:
+`VITE_API_URL` is compiled into the bundle at build time, not read at runtime.
+Changing it needs a rebuild, not a restart. Saving it without rebuilding leaves
+the old URL inside the JavaScript browsers are already being served.
+
+The trailing `/api` matters: `api.js` uses the value as the axios `baseURL` and
+appends paths to it.
 
 ```
-https://kalpion-eit.onrender.com/api/auth/login  → 200
+VITE_API_URL=https://kalpion.ifqm.org.in/api
 ```
 
-Both verified against the live service.
-
-The value is compiled into the bundle at **build** time — Vite substitutes
-`import.meta.env.VITE_API_URL` during the build — so **redeploy after changing
-it**. Saving the variable alone leaves the old URL inside the JavaScript
-browsers are already being served.
-
----
-
-## 2. Render — `CORS_ORIGIN` does not name the frontend
-
-**Also currently wrong, and blocks the browser even once §1 is fixed.**
-
-Environment → add or correct:
+## The three URL settings must agree
 
 ```
-CORS_ORIGIN=https://kalpion-employee-ideation-tool.vercel.app,https://kalpion-employee-ideation-tool-git-main-yashas2.vercel.app
-FRONTEND_BASE_URL=https://kalpion-employee-ideation-tool.vercel.app
+VITE_API_URL=https://kalpion.ifqm.org.in/api      # frontend, at build time
+CORS_ORIGIN=https://kalpion.ifqm.org.in           # backend
+FRONTEND_BASE_URL=https://kalpion.ifqm.org.in     # backend
 ```
 
-Measured against the running service — a CORS preflight from each origin:
+`CORS_ORIGIN` is an exact-match allowlist, not a pattern. A trailing slash,
+`http` instead of `https`, or a different sub-domain all fail, and the failure
+reaches the user as a generic network error that never mentions CORS. It takes a
+comma-separated list where more than one origin is needed.
 
-| Origin | Result |
-|---|---|
-| `https://kalpion-employee-ideation-tool.vercel.app` | **500 — blocked** |
-| `https://eit-sage.vercel.app` (the old frontend) | 500 — blocked |
-| `http://localhost:5173` | 204 — allowed |
+`FRONTEND_BASE_URL` builds the link inside password-reset emails.
 
-Only localhost passes, and only because `app.js` allows it by pattern. So
-`CORS_ORIGIN` on this service is unset or holds something matching neither
-frontend.
+Vercel issues a unique URL per deployment, which changes on every push and
+cannot be allowlisted. Use the production domain or the stable branch alias.
 
-It is an **exact-match allowlist**, not a pattern. A trailing slash, `http`
-instead of `https`, or a different sub-domain all fail — and the failure reaches
-the user as a generic network error with nothing naming CORS, which is why it is
-worth getting right in one go rather than by trial.
-
-`FRONTEND_BASE_URL` is separate and also matters: it builds the link in a
-password-reset email. Wrong, and resets point at a site that no longer serves
-this backend.
-
-### Deployment URLs cannot be allowlisted
-
-Vercel issues a unique URL per deployment
-(`…-oftdmhk7q-yashas2.vercel.app`). Those change on every push, so they can
-never be in the list. Use the production domain, plus the stable per-branch
-alias above if you want preview builds to reach the API.
-
----
-
-## 3. The rest of the Render environment
-
-Everything else is in `.env.render`, ready to paste: database, JWT secret,
-platform mail, SMS/DLT, points, background jobs.
-
-Two worth knowing:
-
-- **`DB_SSL_CA`** carries the Aiven CA inline as PEM, so no certificate file is
-  needed on the host.
-- **`RUN_BACKGROUND_JOBS`** must be left blank or `1` on exactly one instance.
-  It drives the email queue drain, the approval-chain repair and the
-  registration-notice retry. Two instances would both drain the same queue, and
-  the claim-and-attempt update is not atomic enough for that to be safe.
-
-## 4. Database — nothing to do
-
-The new backend already reaches Aiven: `/api/auth/maintenance` returns a real
-answer, which is a read of `platform_settings`. Migrations 024–040 are applied
-and `migrate-remote.mjs --dry` reports "up to date".
-
-To apply future migrations, from `backend/` with **absolute** paths — the script
-resolves relative to its own directory, not the working one:
+Check it with a preflight:
 
 ```
-node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.render C:/xampp/htdocs/ifqm/ca.pem --dry
-node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.render C:/xampp/htdocs/ifqm/ca.pem
-```
-
-The env keys it reads are `MASTER_DB_HOST` / `MASTER_DB_USER` / `MASTER_DB_PASS`
-— not `DB_HOST` / `DB_USER` / `DB_PASSWORD`.
-
----
-
-## Checking it worked
-
-After fixing both and redeploying the frontend:
-
-```
-curl -i -X OPTIONS https://kalpion-eit.onrender.com/api/auth/login \
-  -H "Origin: https://kalpion-employee-ideation-tool.vercel.app" \
+curl -i -X OPTIONS https://kalpion.ifqm.org.in/api/auth/login \
+  -H "Origin: https://kalpion.ifqm.org.in" \
   -H "Access-Control-Request-Method: POST"
 ```
 
-Expect **204** with an `access-control-allow-origin` header. A 500 means the
-origin is still not in the list.
+204 with an `access-control-allow-origin` header is right. A 500 means the
+origin is not in the list.
 
-Then confirm the frontend was rebuilt, not just re-saved:
+## Mail and SMS
+
+Both are env-only, with no screen in the platform console. Leave either block
+out and the sign-up page says so: "Codes by email are not available right now",
+or "Codes by SMS are unavailable at the moment".
+
+`PLATFORM_MAIL_API_KEY` is the provider's API token, not the SMTP password.
+ZeptoMail issues the two separately and the wrong one returns a 401 that reads
+like a bad password.
+
+`PLATFORM_MAIL_TRANSPORT=api` skips SMTP entirely. Use it on a host that blocks
+outbound SMTP, where the port hangs rather than refusing.
+
+`SMS_SENDER_ID` is six characters. The registration is written `IFQMID-T`; the
+`-T` is Jio's category annotation and is stripped before sending.
+
+DLT template ids and their approved wording stay together in
+`backend/src/config/smsTemplates.js`. Do not move either half into an env file:
+the carrier checks the two against each other, an env value overrides the code,
+and a mismatch is accepted by the gateway and then dropped by the carrier with
+no error at either end.
+
+## Database
+
+Migrations are not applied by a deploy. They are always a deliberate step.
+
+A ledger in `ifqm_master.schema_migrations` records which files have run against
+which schema, so the runner is forward-only and re-running is safe.
+
+Fresh database:
 
 ```
-curl -s https://kalpion-employee-ideation-tool.vercel.app/ \
-  | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js'
+cd backend
+npm run setup      # master.sql, tenant schemas, then every migration
 ```
 
-Fetch that bundle and check it contains `kalpion-eit.onrender.com/api` — with
-the `/api`. If the suffix is missing, the variable was saved but not rebuilt.
+Existing database, local credentials:
 
-**Note:** the Render free instance sleeps. The first request after idle takes
-about 50 seconds, which is a cold start and not a fault.
+```
+cd backend
+npm run migrate
+```
+
+Remote managed database, credentials read from a file rather than the command
+line. Use absolute paths, since the script resolves relative to its own
+directory:
+
+```
+node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.ifqm C:/xampp/htdocs/ifqm/ca.pem --dry
+node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.ifqm C:/xampp/htdocs/ifqm/ca.pem
+```
+
+It reads `MASTER_DB_HOST` / `MASTER_DB_USER` / `MASTER_DB_PASS`, not
+`DB_HOST` / `DB_USER` / `DB_PASSWORD`.
+
+Use a database user restricted to the `ifqm_%` schemas. The app refuses to start
+as `root` in production.
+
+`DB_SSL_CA` carries the provider's CA inline, so no certificate file is needed
+on the host. On Render it must be flattened to one line with `\n`, because a
+value ends at the first real newline there.

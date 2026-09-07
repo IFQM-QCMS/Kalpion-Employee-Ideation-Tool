@@ -1,7 +1,4 @@
-/**
- * Comment routes — /api/comments/*
- * Ported from PHP api/comments.php. All actions require authentication.
- */
+/** Comment routes - /api/comments/* Ported from PHP api/comments.php. */
 import { Router } from 'express';
 import * as comments from '../controllers/commentController.js';
 import { requireAuth } from '../middleware/auth.js';

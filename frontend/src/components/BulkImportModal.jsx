@@ -3,16 +3,7 @@ import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { userImportApi } from '../services/api';
 
-/**
- * Bulk employee import.
- *
- * Three steps, deliberately: pick a file → see exactly what will happen (dry
- * run, writes nothing) → confirm. Creating a few thousand accounts is not
- * something to do on a single click with no preview.
- *
- * The commit re-validates server-side; the preview is a courtesy, never the
- * authority.
- */
+/** Bulk employee import. */
 export default function BulkImportModal({ onClose, onImported }) {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -108,7 +99,7 @@ export default function BulkImportModal({ onClose, onImported }) {
         <div className="modal-body" style={{ minHeight:280 }}>
           {error && <div className="alert alert-danger">{error}</div>}
 
-          {/* ── Step 1: template ── */}
+          {/* Step 1: template */}
           {!job && (
             <div style={{ marginBottom:18 }}>
               <div style={{ fontSize:13,fontWeight:700,color:'var(--heading)',marginBottom:6 }}>
@@ -123,7 +114,7 @@ export default function BulkImportModal({ onClose, onImported }) {
             </div>
           )}
 
-          {/* ── Step 2: file ── */}
+          {/* Step 2: file */}
           {!job && (
             <div style={{ marginBottom:18 }}>
               <div style={{ fontSize:13,fontWeight:700,color:'var(--heading)',marginBottom:6 }}>
@@ -146,7 +137,7 @@ export default function BulkImportModal({ onClose, onImported }) {
             </div>
           )}
 
-          {/* ── Step 3: preview ── */}
+          {/* Step 3: preview */}
           {preview && !job && (
             <div>
               <div style={{ fontSize:13,fontWeight:700,color:'var(--heading)',marginBottom:8 }}>
@@ -180,15 +171,7 @@ export default function BulkImportModal({ onClose, onImported }) {
                           <td>{s.employee_id}</td>
                           <td>{s.name}</td>
                           <td>{s.role}</td>
-                          {/*
-                            Two different things can be in this column, and
-                            conflating them would mislead in the worst
-                            direction: an admin who sees a blank where a
-                            password should be assumes the import is broken,
-                            and an admin shown a password for a row that was
-                            emailed one goes and reads out a string that was
-                            never set. Rows with an address say so instead.
-                          */}
+                          {/* Two different things can be in this column, and conflating them would mislead in the worst direction: an admin who sees a blank where a password should be assumes the import is broken, and an admin shown a password for a row that was emailed one goes and reads out a string that was never set. */}
                           <td>
                             {s.password_emailed
                               ? <span style={{ fontSize:11,color:'var(--text-muted)' }}>{t('imp.pw_emailed')}</span>
@@ -212,7 +195,7 @@ export default function BulkImportModal({ onClose, onImported }) {
                         {preview.errors.map((e, i) => (
                           <tr key={i}>
                             <td style={{ width:50,color:'var(--subtle)' }}>#{e.row_number}</td>
-                            <td style={{ width:120 }}>{e.employee_id || '—'}</td>
+                            <td style={{ width:120 }}>{e.employee_id || '-'}</td>
                             <td>{e.message}</td>
                           </tr>
                         ))}
@@ -227,7 +210,7 @@ export default function BulkImportModal({ onClose, onImported }) {
             </div>
           )}
 
-          {/* ── Step 4: progress / result ── */}
+          {/* Step 4: progress / result */}
           {job && (
             <div style={{ textAlign:'center',padding:'10px 0' }}>
               {running && (

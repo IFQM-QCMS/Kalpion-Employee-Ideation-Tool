@@ -1,19 +1,4 @@
-/**
- * Minimal structured logger.
- *
- * Replaces PHP's `error_log(...)` calls. Writes timestamped lines to stdout
- * (stderr for errors) — and, in production or when LOG_TO_FILE=1, appends the
- * same lines to daily files so a crash trail survives the terminal that
- * launched the process. Under pm2/systemd, stdout alone ends up wherever the
- * supervisor puts it; the files are the copy the operator can always find.
- *
- *   logs/ifqm-YYYY-MM-DD.log    everything
- *   logs/error-YYYY-MM-DD.log   errors only (the file to check first)
- *
- * Daily filenames are the rotation: no size tracking, no rename races, and
- * cleanup is "delete old files by name". LOG_DIR overrides the location.
- * Kept dependency-free on purpose.
- */
+/** Minimal structured logger. */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +18,7 @@ function ensureDir() {
     fs.mkdirSync(LOG_DIR, { recursive: true });
     dirReady = true;
   } catch {
-    // Unwritable log dir must never take the app down — console still works.
+    // Unwritable log dir must never take the app down - console still works.
   }
   return dirReady;
 }
@@ -45,8 +30,8 @@ function appendLine(line, isError) {
   const files = [`ifqm-${day()}.log`];
   if (isError) files.push(`error-${day()}.log`);
   for (const f of files) {
-    // Fire-and-forget append; O_APPEND keeps single writes whole. Logging must
-    // never become the thing the request waits on.
+    // Fire-and-forget append; O_APPEND keeps single writes whole. Logging must never become
+    // the thing the request waits on.
     fs.appendFile(path.join(LOG_DIR, f), line + '\n', () => {});
   }
 }

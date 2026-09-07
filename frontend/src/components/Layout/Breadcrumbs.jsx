@@ -1,18 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useLang } from '../../context/LangContext';
 
-/*
- * Where you are, and how to get back one step.
- *
- * Only drawn where it earns its place — a page nested under something else. On
- * a top-level screen the trail would read "Home / Dashboard", which is a line
- * of furniture telling somebody what the highlighted sidebar item already told
- * them.
- *
- * The trail is built from the route rather than from navigation history, so it
- * is the same whether somebody clicked through, followed a link from an email,
- * or typed the address.
- */
+// Where you are, and how to get back one step.
 
 // Section a path belongs under, and what that section is called.
 const SECTIONS = [
@@ -37,8 +26,8 @@ export default function Breadcrumbs() {
 
   let trail = TRAILS[pathname];
 
-  // A detail page — /platform/tenants/7 — is not in the table by name, so its
-  // section is worked out from the prefix.
+  // A detail page - /platform/tenants/7 - is not in the table by name, so its section is
+  // worked out from the prefix.
   if (!trail) {
     const section = SECTIONS.find(([prefix]) => pathname.startsWith(prefix));
     if (!section) return null;

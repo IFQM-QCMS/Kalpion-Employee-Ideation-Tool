@@ -1,9 +1,4 @@
-/**
- * Central error handler + 404 handler.
- *
- * Converts thrown `ApiError`s (and unexpected errors) into the same
- * `{ success:false, error }` JSON shape the PHP `respond([...], code)` emitted.
- */
+/** Central error handler + 404 handler. */
 import { ApiError } from '../utils/respond.js';
 import logger from '../utils/logger.js';
 
@@ -11,8 +6,8 @@ export function notFoundHandler(req, res) {
   res.status(404).json({ success: false, error: 'Unknown action' });
 }
 
-// MySQL/driver error codes that indicate the DB is unreachable or misconfigured
-// at the connection level — PHP surfaced these as "Database connection failed."
+// MySQL/driver error codes that indicate the DB is unreachable or misconfigured at the
+// connection level - PHP surfaced these as "Database connection failed."
 const DB_CONNECTION_CODES = new Set([
   'ECONNREFUSED',
   'ETIMEDOUT',
@@ -48,10 +43,8 @@ export function errorHandler(err, req, res, _next) {
     return res.status(500).json({ success: false, error: 'Database connection failed.' });
   }
 
-  // Body-parser rejects a request before it ever reaches a handler when the body
-  // is too large or malformed. Those are the CLIENT's fault and carry their own
-  // 4xx status (413 entity.too.large, 400 entity.parse.failed) — surfacing them
-  // as 500s wrongly implicates the server and hides the real cause from callers.
+  // Body-parser rejects a request before it ever reaches a handler when the body is too
+  // large or malformed.
   const clientStatus = err.status || err.statusCode;
   if (err.type && typeof clientStatus === 'number' && clientStatus >= 400 && clientStatus < 500) {
     const msg = err.type === 'entity.too.large'

@@ -1,19 +1,11 @@
-/**
- * QCMS integration — pushes approved ideas from Kalpion into the QCMS
- * (Quality & Continuous Improvement Management System) tool for implementation.
- *
- * We are the SENDER. QCMS exposes POST {base}/ideas with a per-organisation
- * Bearer key (qcms_live_...). This module maps one of our ideas into the QCMS
- * request body (documented in "QCMS Developer Portal & API Documentation") and
- * performs the HTTP call, interpreting the documented responses:
- *   201 → imported   409 → duplicate   401 → bad/disabled key   429 → rate limited
- *
- * The key never reaches the browser: the push runs server-side from here.
+/*
+ * QCMS integration - pushes approved ideas from Kalpion into the QCMS (Quality &
+ * Continuous Improvement Management System) tool for implementation.
  */
 import logger from '../utils/logger.js';
 
-// QCMS's fixed category vocabulary. Our categories are free per-org text, so we
-// map the common ones and fall back to the QCMS default of "Quality".
+// QCMS's fixed category vocabulary. Our categories are free per-org text, so we map the
+// common ones and fall back to the QCMS default of "Quality".
 const QCMS_CATEGORIES = ['Quality', 'Cost', 'Delivery', 'Environment', 'Morale', 'Safety'];
 const CATEGORY_MAP = {
   quality: 'Quality', 'quality improvement': 'Quality',
@@ -33,17 +25,17 @@ function mapCategory(impactAreas) {
 
 const IMPACT_LEVELS = ['Low', 'Medium', 'High'];
 
-/**
- * Resolve the POST /ideas endpoint from a configured base URL, tolerating either
- * form: the base ("…/api/v1/integrations") or the full endpoint already ending
- * in "/ideas" — so pasting the whole URL never produces "…/ideas/ideas".
+/*
+ * Resolve the POST /ideas endpoint from a configured base URL, tolerating either form: the
+ * base (".../api/v1/integrations") or the full endpoint already ending in "/ideas" - so
+ * pasting the whole URL never produces ".../ideas/ideas".
  */
 export function ideasEndpoint(baseUrl) {
   const trimmed = String(baseUrl || '').trim().replace(/\/+$/, '');
   return /\/ideas$/i.test(trimmed) ? trimmed : `${trimmed}/ideas`;
 }
 
-/** First finite number found in a value ("₹ 2,50,000" → 250000), else undefined. */
+/** First finite number found in a value ("₹ 2,50,000" 250000), else undefined. */
 function toNumber(v) {
   if (v === null || v === undefined || v === '') return undefined;
   if (typeof v === 'number' && Number.isFinite(v)) return v;
@@ -52,13 +44,7 @@ function toNumber(v) {
   return Number.isFinite(n) && digits !== '' ? n : undefined;
 }
 
-/**
- * Map one idea row (as returned by listApprovedIdeas) to the QCMS request body.
- * Optional fields are omitted when we have nothing meaningful, so we never send
- * empty strings for numbers.
- * @param {object} idea
- * @returns {object} QCMS payload
- */
+/** Map one idea row (as returned by listApprovedIdeas) to the QCMS request body. */
 export function mapIdeaToQcms(idea) {
   const payload = {
     ideaCode: String(idea.idea_code || ''),
@@ -79,8 +65,8 @@ export function mapIdeaToQcms(idea) {
     : String(idea.co_suggester_names || '').split(',').map((s) => s.trim()).filter(Boolean);
   if (co.length) payload.coSuggesters = co;
 
-  // Financial "tangible benefit": prefer the numeric ROI value; else pull a
-  // number out of the free-text tangible_benefit.
+  // Financial "tangible benefit": prefer the numeric ROI value; else pull a number out of
+  // the free-text tangible_benefit.
   const tangible = toNumber(idea.roi_value) ?? toNumber(idea.tangible_benefit);
   set('tangibleBenefit', tangible);
   set('intangibleBenefit', idea.intangible_benefit);
@@ -93,11 +79,7 @@ export function mapIdeaToQcms(idea) {
   return payload;
 }
 
-/**
- * Push a single idea to QCMS. Never throws for an HTTP/QCMS error — returns a
- * structured result the caller records against the idea.
- * @returns {Promise<{status:'imported'|'duplicate'|'failed', httpStatus:number, message:string, payload:object}>}
- */
+/** Push a single idea to QCMS. */
 export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 }) {
   const payload = mapIdeaToQcms(idea);
   const url = ideasEndpoint(baseUrl);
@@ -126,19 +108,17 @@ export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 
   }
   clearTimeout(timer);
 
-  // Read the body once as text so we can both parse it AND scan it for a
-  // duplicate signal (see below), regardless of shape.
+  // Read the body once as text so we can both parse it AND scan it for a duplicate signal
+  // (see below), regardless of shape.
   let raw = '';
-  try { raw = await res.text(); } catch { /* */ }
+  try { raw = await res.text(); } catch {  }
   let body = {};
   try { body = JSON.parse(raw); } catch { /* non-JSON */ }
   const bodyMsg = (body && (body.message || body.error)) || '';
 
-  // Some QCMS builds do NOT return the documented 409 when an idea already
-  // exists — they leak the underlying unique-constraint error (a Postgres
-  // "duplicate key ... imported_ideas_idea_code_key ... already exists") with a
-  // 500. The idea is nonetheless already in QCMS, so we classify any such
-  // response as a duplicate rather than a hard failure.
+  // Some QCMS builds do NOT return the documented 409 when an idea already exists - they
+  // leak the underlying unique-constraint error (a Postgres "duplicate key...
+  // imported_ideas_idea_code_key... already exists") with a 500.
   const DUP_SIGNAL = /duplicate key|already exists|already imported|uniqueviolation|idea_code.{0,20}key/i;
 
   if (res.status === 201 || res.status === 200) {
@@ -153,8 +133,8 @@ export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 
   if (res.status === 429) {
     return { status: 'failed', httpStatus: 429, payload, message: bodyMsg || 'QCMS rate limit exceeded (100/min). Try again shortly.' };
   }
-  // Keep the QCMS message but cap it — a leaked stack trace would otherwise fill
-  // the status column.
+  // Keep the QCMS message but cap it - a leaked stack trace would otherwise fill the status
+  // column.
   return { status: 'failed', httpStatus: res.status, payload, message: (bodyMsg || `QCMS returned HTTP ${res.status}.`).slice(0, 200) };
 }
 

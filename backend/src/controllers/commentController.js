@@ -1,6 +1,4 @@
-/**
- * Comment controller — HTTP layer over commentService. Maps to api/comments.php.
- */
+/** Comment controller - HTTP layer over commentService. */
 import * as commentService from '../services/commentService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

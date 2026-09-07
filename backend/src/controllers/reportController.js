@@ -1,7 +1,4 @@
-/**
- * Report controller — HTTP layer over reportService.
- * Maps to the `analytics` / `audit` JSON actions of PHP api/users.php.
- */
+/** Report controller - HTTP layer over reportService. */
 import * as reportService from '../services/reportService.js';
 import { respond } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';

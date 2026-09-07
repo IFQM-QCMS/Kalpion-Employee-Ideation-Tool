@@ -1,26 +1,11 @@
--- ============================================================
---  DEPRECATED — do not use this file to provision a machine.
---
---  It aborted on import for months (a type-less `user_id` column at what was
---  line 111) — meaning nobody had successfully used it — and it predates the
---  columns migrations 001/002 added, which auth reads on every request. The
---  column is fixed so the file at least imports, but the canonical sources are:
---
---    db/master.sql                     the registry (ifqm_master)
---    backend/schema/tenant_schema.sql  one complete tenant schema
---    npm run setup (backend/)          builds all of it in one command
--- ============================================================
+-- DEPRECATED - do not use this file to provision a machine.
 
--- ============================================================
---  Kalpion – Database Schema
---  9-role system: trainee, employee, team_lead, project_lead,
---  manager, senior_manager, executive, admin, super_admin
--- ============================================================
+-- Kalpion - Database Schema
 
 CREATE DATABASE IF NOT EXISTS ifqm_ideation CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE ifqm_ideation;
 
--- ── Users / Employees ─────────────────────────────────────────
+-- Users / Employees
 CREATE TABLE IF NOT EXISTS users (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   employee_id     VARCHAR(20)  NOT NULL UNIQUE,
@@ -41,7 +26,7 @@ CREATE TABLE IF NOT EXISTS users (
   FOREIGN KEY (manager_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- ── Ideas ─────────────────────────────────────────────────────
+-- Ideas
 CREATE TABLE IF NOT EXISTS ideas (
   id                        INT AUTO_INCREMENT PRIMARY KEY,
   idea_code                 VARCHAR(20)  NOT NULL UNIQUE,
@@ -83,7 +68,7 @@ CREATE TABLE IF NOT EXISTS ideas (
   FOREIGN KEY (co_suggester_2_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- ── Idea Attachments ──────────────────────────────────────────
+-- Idea Attachments
 CREATE TABLE IF NOT EXISTS idea_attachments (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   idea_id     INT NOT NULL,
@@ -94,7 +79,7 @@ CREATE TABLE IF NOT EXISTS idea_attachments (
   FOREIGN KEY (idea_id) REFERENCES ideas(id) ON DELETE CASCADE
 );
 
--- ── Idea Reviewers (multi-reviewer workflow) ──────────────────
+-- Idea Reviewers (multi-reviewer workflow)
 CREATE TABLE IF NOT EXISTS idea_reviewers (
   id           INT AUTO_INCREMENT PRIMARY KEY,
   idea_id      INT NOT NULL,
@@ -108,7 +93,7 @@ CREATE TABLE IF NOT EXISTS idea_reviewers (
   FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Approval Workflow Log ─────────────────────────────────────
+-- Approval Workflow Log
 CREATE TABLE IF NOT EXISTS idea_workflow (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -120,7 +105,7 @@ CREATE TABLE IF NOT EXISTS idea_workflow (
   FOREIGN KEY (actor_id) REFERENCES users(id)
 );
 
--- ── Idea Votes (1-5 star rating) ────────────────────────────────
+-- Idea Votes (1-5 star rating)
 CREATE TABLE IF NOT EXISTS idea_votes (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -134,7 +119,7 @@ CREATE TABLE IF NOT EXISTS idea_votes (
   CONSTRAINT chk_rating CHECK (rating BETWEEN 1 AND 5)
 );
 
--- ── Community Votes (upvote / downvote) ───────────────────────
+-- Community Votes (upvote / downvote)
 CREATE TABLE IF NOT EXISTS idea_community_votes (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -146,7 +131,7 @@ CREATE TABLE IF NOT EXISTS idea_community_votes (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Notifications ─────────────────────────────────────────────
+-- Notifications
 CREATE TABLE IF NOT EXISTS notifications (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   user_id    INT NOT NULL,
@@ -158,7 +143,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Idea Comments ─────────────────────────────────────────────
+-- Idea Comments
 CREATE TABLE IF NOT EXISTS idea_comments (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
@@ -172,7 +157,7 @@ CREATE TABLE IF NOT EXISTS idea_comments (
   FOREIGN KEY (parent_id) REFERENCES idea_comments(id) ON DELETE SET NULL
 );
 
--- ── Challenges ─────────────────────────────────────────────────
+-- Challenges
 CREATE TABLE IF NOT EXISTS challenges (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   title       VARCHAR(255) NOT NULL,
@@ -185,7 +170,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Org Settings ───────────────────────────────────────────────
+-- Org Settings
 CREATE TABLE IF NOT EXISTS org_settings (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   key_name   VARCHAR(100) NOT NULL UNIQUE,
@@ -193,7 +178,7 @@ CREATE TABLE IF NOT EXISTS org_settings (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- ── Email Queue ────────────────────────────────────────────────
+-- Email Queue
 CREATE TABLE IF NOT EXISTS email_queue (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   to_email   VARCHAR(150) NOT NULL,
@@ -206,7 +191,7 @@ CREATE TABLE IF NOT EXISTS email_queue (
   sent_at    DATETIME NULL
 );
 
--- ── Leaderboard View ──────────────────────────────────────────
+-- Leaderboard View
 CREATE OR REPLACE VIEW leaderboard AS
 SELECT
   u.id, u.name, u.department, u.business_unit, u.points,
@@ -218,20 +203,15 @@ LEFT JOIN ideas i ON i.submitter_id = u.id AND i.status != 'Draft'
 GROUP BY u.id
 ORDER BY u.points DESC;
 
--- ============================================================
--- SEED DATA
--- All passwords = "password"
--- Fresh start — no users. Create your first org via platform admin.
--- ============================================================
+-- SEED DATA All passwords = "password" Fresh start - no users.
 
--- ── Approval Workflow Defaults ─────────────────────────────────────────
--- approval_mode: 'default' = platform hardcoded logic, 'custom' = use stored roles
+-- Approval Workflow Defaults
 INSERT INTO org_settings (key_name, value) VALUES ('approval_mode', 'default') ON DUPLICATE KEY UPDATE value=value;
 INSERT INTO org_settings (key_name, value) VALUES ('approval_reviewer_roles', 'team_lead,project_lead,manager,senior_manager') ON DUPLICATE KEY UPDATE value=value;
 INSERT INTO org_settings (key_name, value) VALUES ('approval_final_approver_roles', 'executive,admin,super_admin') ON DUPLICATE KEY UPDATE value=value;
 INSERT INTO org_settings (key_name, value) VALUES ('approval_threshold', '100') ON DUPLICATE KEY UPDATE value=value;
 
--- ── Password Reset Tokens ────────────────────────────────────────────────
+-- Password Reset Tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id          INT AUTO_INCREMENT PRIMARY KEY,
   user_id     INT NOT NULL,
@@ -241,7 +221,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- ── Performance Indexes (idempotent — MariaDB supports IF NOT EXISTS) ──
+-- Performance Indexes (idempotent - MariaDB supports IF NOT EXISTS)
 CREATE INDEX IF NOT EXISTS idx_ideas_status ON ideas(status);
 CREATE INDEX IF NOT EXISTS idx_ideas_submitted_at ON ideas(submitted_at);
 CREATE INDEX IF NOT EXISTS idx_ideas_submitter_status ON ideas(submitter_id, status);

@@ -1,11 +1,4 @@
-/**
- * Idea-category routes — /api/categories/*
- *
- * Reading is open to every signed-in user: the submission wizard cannot render
- * without it. Writing is the org admin's, and the tenant is resolved from the
- * caller's own token — so an admin can only ever edit their OWN organisation's
- * list, the same containment the branding endpoints rely on.
- */
+/** Reading is open to every signed-in user: the submission wizard cannot render without it. */
 import { Router } from 'express';
 import * as categories from '../controllers/categoryController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';

@@ -1,17 +1,4 @@
-/**
- * Reporting-structure template — MOM 29 Jul 2026 §13.14.
- *
- * "Customizable hierarchy per organization via an Excel template."
- *
- * Deliberately separate from the employee bulk import. That one CREATES people;
- * this one only REWIRES who reports to whom for people who already exist. An
- * admin fixing a reporting line six months after onboarding should not have to
- * open a sheet that can also create accounts, and a mistake here should not be
- * able to invent an employee.
- *
- * The download comes pre-filled with the organisation as it stands today, so
- * the admin edits reality rather than retyping it.
- */
+/** Reporting-structure template - MOM 29 Jul 2026 §13.14. */
 import ExcelJS from 'exceljs';
 import { badRequest } from '../utils/respond.js';
 import logger from '../utils/logger.js';
@@ -64,9 +51,9 @@ export async function buildTemplate(db, orgName = 'Organisation') {
     if (bold) row.font = { bold: true };
     row.alignment = { vertical: 'top', wrapText: true };
   };
-  h(`IFQM — reporting structure for ${orgName}`, '', true);
+  h(`IFQM - reporting structure for ${orgName}`, '', true);
   h('', '');
-  h('What this changes', 'Only who each person reports to. It cannot create, rename, deactivate or delete anybody — use Bulk Import for that.');
+  h('What this changes', 'Only who each person reports to. It cannot create, rename, deactivate or delete anybody - use Bulk Import for that.');
   h('How to use it', 'Edit the manager_employee_id column only, then upload the file in Admin → Hierarchy. Everything else is there so you can see who you are editing.');
   h('Why it matters', 'Submitted ideas escalate up this chain. If somebody reports to the wrong manager, their ideas go to the wrong reviewer.');
   h('Top of the organisation', 'Leave manager_employee_id blank for whoever reports to nobody. There is normally exactly one such person.');
@@ -77,11 +64,7 @@ export async function buildTemplate(db, orgName = 'Organisation') {
   return wb;
 }
 
-/**
- * Read an uploaded sheet and work out what would change — without changing it.
- * Every problem is returned with its row number; the admin confirms before
- * anything is written.
- */
+/** Read an uploaded sheet and work out what would change - without changing it. */
 export async function previewUpload(db, buffer) {
   const wb = new ExcelJS.Workbook();
   try { await wb.xlsx.load(buffer); }
@@ -140,12 +123,7 @@ export async function previewUpload(db, buffer) {
     }
   });
 
-  /*
-   * Cycle check, run against the WHOLE proposed structure rather than row by
-   * row. A loop is only ever visible in combination — each individual line
-   * looks perfectly reasonable — and a loop in the reporting tree means an idea
-   * escalates forever and the hierarchy screen recurses until it dies.
-   */
+  // Cycle check, run against the WHOLE proposed structure rather than row by row.
   const resolve = (empId) => proposed.has(empId) ? proposed.get(empId) : (byEmpId.get(empId)?.manager_employee_id || null);
   for (const empId of seen) {
     let cur = resolve(empId);
@@ -175,17 +153,17 @@ export async function previewUpload(db, buffer) {
 export async function applyUpload(db, buffer) {
   const pv = await previewUpload(db, buffer);
   if (pv.errors.length) {
-    throw badRequest(`The sheet has ${pv.errors.length} problem(s). Fix them and upload again — nothing has been changed.`);
+    throw badRequest(`The sheet has ${pv.errors.length} problem(s). Fix them and upload again - nothing has been changed.`);
   }
-  if (!pv.change_count) return { success: true, updated: 0, message: 'Nothing to change — the sheet matches the current structure.' };
+  if (!pv.change_count) return { success: true, updated: 0, message: 'Nothing to change - the sheet matches the current structure.' };
 
   const [existing] = await db.query('SELECT id, employee_id FROM users');
   const idOf = new Map(existing.map((u) => [String(u.employee_id), u.id]));
 
   let updated = 0;
-  // One statement per person rather than a bulk CASE: the volume is small (a
-  // reporting change touches a handful of people), and a failure part-way
-  // leaves a valid tree rather than a half-applied one.
+  // One statement per person rather than a bulk CASE: the volume is small (a reporting
+  // change touches a handful of people), and a failure part-way leaves a valid tree rather
+  // than a half-applied one.
   for (const c of pv.changes) {
     const personId = idOf.get(c.employee_id);
     const managerId = c.to ? idOf.get(c.to) ?? null : null;

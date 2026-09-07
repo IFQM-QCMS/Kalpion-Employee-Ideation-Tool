@@ -6,20 +6,7 @@ import { platformApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
 import OrgProfilePanel from '../components/OrgProfilePanel';
 
-/*
- * Platform → Organisation detail.
- *
- * This page used to render the tenant's entire staff directory: every employee's
- * name, department, who they report to, and how many ideas they had submitted —
- * to IFQM, the vendor. It now shows the outer layer only, because that is all
- * the API will hand over (see the privacy contract in platformService.js):
- * how big the org is, the spread of roles, aggregate idea counts, and the org's
- * own admin contacts. Individual employees, idea content and uploads stay inside
- * the tenant.
- *
- * What is here instead is the vendor's actual job: keeping the account running —
- * rename, suspend, recover a locked-out admin, close the account.
- */
+// Platform Organisation detail.
 const ROLE_COLORS = {
   admin:'#374151', executive:'#4b5563', plant_head:'#52525b', senior_manager:'#6b7280', department_manager:'#d97706',
   manager:'#f59e0b', project_lead:'#0891b2', team_lead:'#0284c7',
@@ -84,8 +71,8 @@ export default function PlatformTenantsPage() {
     try {
       const res = await platformApi.resetTenantAdminPassword(id, email);
       if (res.data.success) {
-        // Shown once and never retrievable again — the operator has to hand it
-        // over out of band, so it stays on screen until they navigate away.
+        // Shown once and never retrievable again - the operator has to hand it over out of band,
+        // so it stays on screen until they navigate away.
         setTempPw({ email: res.data.admin_email, password: res.data.temp_password });
         showToast(t('pa.temp_pw_issued'), 'success');
       } else showToast(res.data.error || t('msg.server_error'), 'danger');
@@ -160,8 +147,7 @@ export default function PlatformTenantsPage() {
             {t('pa.privacy_note')}
           </div>
 
-          {/* Who this company is, what they are using, and what they pay. All
-              three were previously either invisible or in a database client. */}
+          {/* Who this company is, what they are using, and what they pay. */}
           <OrgProfilePanel
             tenantId={id}
             registration={data.registration}
@@ -170,7 +156,7 @@ export default function PlatformTenantsPage() {
             lastIdeaAt={data.last_idea_at}
             activity={data.activity} />
 
-          {/* Role spread — counts only, no people */}
+          {/* Role spread - counts only, no people */}
           <div className="card" style={{ marginTop:20 }}>
             <div className="card-title">{t('pa.role_spread')}</div>
             {!roles.length ? <div className="empty-state">{t('sa.no_users')}</div> : (
@@ -191,7 +177,7 @@ export default function PlatformTenantsPage() {
             )}
           </div>
 
-          {/* Admin contacts — the one place individual users appear, and only admins */}
+          {/* Admin contacts - the one place individual users appear, and only admins */}
           <div className="card" style={{ marginTop:20 }}>
             <div className="card-title">{t('pa.admin_contacts')}</div>
             <div style={{ fontSize:12,color:'var(--subtle)',marginBottom:12 }}>{t('pa.admin_contacts_sub')}</div>

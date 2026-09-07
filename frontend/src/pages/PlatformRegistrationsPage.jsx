@@ -6,18 +6,7 @@ import InfoDot from '../components/InfoDot';
 import Pager, { usePager } from '../components/Pager';
 import { fmtDate } from '../utils/helpers';
 
-/*
-  Platform → Registrations.
-
-  The review queue used to be a strip on the Organisations dashboard, which was
-  the wrong home for it: approving one provisions a live tenant, and the operator
-  making that call needs every field the applicant submitted in front of them —
-  statutory identifiers, scale, location, who is asking — not a four-line
-  summary next to a donut chart.
-
-  So: its own screen, every field on show, grouped the way the applicant
-  entered them, with the decision controls next to the evidence.
-*/
+// Platform Registrations.
 
 const TABS = [
   ['pending', 'pa.reg_tab_pending'],
@@ -32,8 +21,8 @@ const ENTITY_LABEL = {
   cooperative: 'Co-operative society', trust: 'Trust', society: 'Society', other: 'Other',
 };
 const TURNOVER_LABEL = {
-  under_50l: 'Under ₹50 lakh', '50l_2cr': '₹50 lakh – ₹2 crore', '2cr_10cr': '₹2 – 10 crore',
-  '10cr_50cr': '₹10 – 50 crore', '50cr_250cr': '₹50 – 250 crore', above_250cr: 'Above ₹250 crore',
+  under_50l: 'Under ₹50 lakh', '50l_2cr': '₹50 lakh - ₹2 crore', '2cr_10cr': '₹2 - 10 crore',
+  '10cr_50cr': '₹10 - 50 crore', '50cr_250cr': '₹50 - 250 crore', above_250cr: 'Above ₹250 crore',
 };
 const STATUS_TONE = {
   pending: { bg: 'var(--warning-light)', fg: 'var(--warning)' },
@@ -41,8 +30,10 @@ const STATUS_TONE = {
   rejected: { bg: 'var(--danger-light)', fg: 'var(--danger)' },
 };
 
-/** A labelled value. Renders an em dash rather than vanishing, so a reviewer can
-    see what the applicant chose to leave blank — that is itself information. */
+/*
+ * A labelled value. Renders an em dash rather than vanishing, so a reviewer can see what
+ * the applicant chose to leave blank - that is itself information.
+ */
 function Field({ label, value, mono = false, info = null }) {
   const empty = value === null || value === undefined || value === '';
   return (
@@ -52,7 +43,7 @@ function Field({ label, value, mono = false, info = null }) {
       <div style={{ fontSize: 13, color: empty ? 'var(--subtle)' : 'var(--text)',
                     fontFamily: mono && !empty ? 'ui-monospace,SFMono-Regular,Menlo,monospace' : 'inherit',
                     wordBreak: 'break-word' }}>
-        {empty ? '—' : value}
+        {empty ? '-' : value}
       </div>
     </div>
   );
@@ -70,15 +61,7 @@ function Group({ title, children }) {
   );
 }
 
-/*
- * Exceptions to the corporate-email rule.
- *
- * It lives on this page rather than in Settings because this is where the
- * problem is met: an application is refused, the applicant emails to say they
- * genuinely have no company domain, and the person reading that message is
- * looking at this queue. Putting the lever two screens away is how a policy
- * becomes a reason to email the developer.
- */
+// Exceptions to the corporate-email rule.
 function EmailWhitelist() {
   const { t } = useLang();
   const { showToast } = useToast();
@@ -166,7 +149,7 @@ function EmailWhitelist() {
                     <tr key={row.id}>
                       <td style={{ fontFamily: 'monospace' }}>{row.entry}</td>
                       <td>{t(row.entry_type === 'domain' ? 'pa.wl_scope_domain' : 'pa.wl_scope_address')}</td>
-                      <td style={{ color: 'var(--text-muted)' }}>{row.note || '—'}</td>
+                      <td style={{ color: 'var(--text-muted)' }}>{row.note || '-'}</td>
                       <td style={{ color: 'var(--text-muted)' }}>
                         {fmtDate(row.created_at)}{row.created_by ? ` · ${row.created_by}` : ''}
                       </td>
@@ -226,19 +209,11 @@ export default function PlatformRegistrationsPage() {
       .some((v) => String(v || '').toLowerCase().includes(q)));
   }, [rows, search]);
 
-  /* Twenty applications to a page. */
+  // Twenty applications to a page.
   const pager = usePager(filtered);
   useEffect(() => { pager.reset(); /* eslint-disable-next-line */ }, [search, tab]);
 
-  /*
-   * Approving no longer means typing an org code into a browser prompt.
-   *
-   * The plan and the trial length are decided at exactly this moment - the
-   * approver has the company's size, turnover and sector in front of them,
-   * which is what decides both. Asking later means somebody has to remember,
-   * and an organisation with no plan has no end date, so it would never lapse
-   * and never be billed.
-   */
+  // Approving no longer means typing an org code into a browser prompt.
   function openApproval(reg) {
     setApproving(reg);
   }
@@ -281,8 +256,7 @@ export default function PlatformRegistrationsPage() {
 
   return (
     <>
-      {/* One-time credential. Deliberately not a toast: it must stay on screen
-          until the operator has copied it, because it cannot be shown again. */}
+      {/* One-time credential. Deliberately not a toast: it must stay on screen until the operator has copied it, because it cannot be shown again. */}
       {approving && (
         <ApprovalDialog reg={approving} busy={busy}
           onClose={() => setApproving(null)} onSubmit={submitApproval} />
@@ -337,11 +311,7 @@ export default function PlatformRegistrationsPage() {
         <div className="card"><div className="empty-state">{t('pa.reg_none')}</div></div>
       )}
 
-      {/* A table, not a stack of cards.
-          Image 16: at any real number of applications the card list is a long
-          scroll where nothing lines up, so the columns people actually scan -
-          who applied, when, and what state it is in - cannot be compared down
-          the page. Details stay one click away, in a row beneath. */}
+      {/* A table, not a stack of cards. */}
       <div className="card" style={{ overflowX: 'auto' }}>
         <table className="table" style={{ minWidth: 760 }}>
           <thead>
@@ -471,12 +441,8 @@ export default function PlatformRegistrationsPage() {
   );
 }
 
-/*
- * What happens when an application is approved: a workspace is provisioned, a
- * first administrator account is created, and the organisation goes onto a plan
- * with a trial. All three are decided here, together, because they are one
- * decision.
- */
+// What happens when an application is approved: a workspace is provisioned, a first
+// administrator account is created, and the organisation goes onto a plan with a trial.
 function ApprovalDialog({ reg, busy, onClose, onSubmit }) {
   const { t } = useLang();
   const [slug, setSlug] = useState(reg.proposed_slug || '');
@@ -541,7 +507,7 @@ function ApprovalDialog({ reg, busy, onClose, onSubmit }) {
               <option value="">Decide later</option>
               {plans.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} — ₹{Number(p.total_rupees).toLocaleString('en-IN')} {p.cycle_label.toLowerCase()}
+                  {p.name} - ₹{Number(p.total_rupees).toLocaleString('en-IN')} {p.cycle_label.toLowerCase()}
                   {p.max_users_label !== 'Unlimited' ? ` · up to ${p.max_users_label} users` : ''}
                 </option>
               ))}
@@ -572,13 +538,13 @@ function ApprovalDialog({ reg, busy, onClose, onSubmit }) {
           }}>
             Approving creates the workspace and a first administrator account for{' '}
             <strong>{reg.contact_name}</strong> ({reg.contact_email}). The temporary password is shown
-            once, on the next screen — it is never retrievable afterwards.
+            once, on the next screen - it is never retrievable afterwards.
           </div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-success" disabled={busy} onClick={go}>
-            {busy ? 'Creating…' : 'Approve and create workspace'}
+            {busy ? 'Creating...' : 'Approve and create workspace'}
           </button>
         </div>
       </div>

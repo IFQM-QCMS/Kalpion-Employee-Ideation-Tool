@@ -9,28 +9,7 @@ export function escHtml(str) {
     .replace(/"/g,'&quot;');
 }
 
-/**
- * Parse a timestamp the API sent.
- *
- * ── The bug this fixes ─────────────────────────────────────────────────────
- *
- * The API returns MySQL DATETIMEs as naive strings — "2026-08-24 10:30:00",
- * with no zone on them. `new Date()` reads that as LOCAL time, and the server
- * stores UTC, so every timestamp in the product appeared 5 hours 30 minutes in
- * the past for a user in India: an idea submitted seconds ago read "6h ago",
- * and the activity feed told people things had happened before they did.
- *
- * It was invisible in development, because the local database runs on the same
- * clock as the browser. It only appears once the database is somewhere else —
- * which is to say, in production and nowhere else.
- *
- * The API's contract is now explicit: naive datetime strings are UTC. The
- * server forces its session to UTC so that stays true wherever it is deployed.
- *
- * Anything already carrying a zone — an ISO string ending in Z or an offset —
- * is passed through untouched, so this is safe on values that were already
- * unambiguous.
- */
+/** Parse a timestamp the API sent. */
 export function parseServerDate(value) {
   if (!value) return null;
   if (value instanceof Date) return value;
@@ -42,17 +21,16 @@ export function parseServerDate(value) {
 }
 
 export function fmtDate(dateStr) {
-  if (!dateStr) return '–';
+  if (!dateStr) return '-';
   try {
     return parseServerDate(dateStr).toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'numeric'});
   } catch { return dateStr; }
 }
 
-/* Submission time matters as much as the date - two ideas filed on the same day
-   are ordered by the clock, and people want to see that. Used everywhere an idea
-   or a decision is stamped. */
+// Submission time matters as much as the date - two ideas filed on the same day are
+// ordered by the clock, and people want to see that.
 export function fmtDateTime(dateStr) {
-  if (!dateStr) return '–';
+  if (!dateStr) return '-';
   try {
     return parseServerDate(dateStr).toLocaleString('en-IN', {
       day: '2-digit', month: 'short', year: 'numeric',
@@ -102,14 +80,7 @@ export function scoreBadgeClass(score) {
   return 'score-badge score-none';
 }
 
-/*
- * What a score means, in a word, and what colour to draw it.
- *
- * The number alone was doing no work: 19 and 79 looked the same on screen apart
- * from the digits, and nothing said which end of the scale was good. Same
- * thresholds as scoreBadgeClass above, so the bar and the badge can never
- * disagree about the same idea.
- */
+// What a score means, in a word, and what colour to draw it.
 export function scoreBandKey(score) {
   const s = parseInt(score) || 0;
   if (s >= 75) return 'score.band_strong';
@@ -196,27 +167,7 @@ export function animateCounter(el, target, duration = 900) {
 export const ROLE_PRIV = ['team_lead','project_lead','manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
 export function isPrivileged(role) { return ROLE_PRIV.includes(role); }
 
-/*
- * Who may read organisation-wide reports.
- *
- * ── Why this is not isPrivileged ─────────────────────────────────────────
- *
- * It is a SHORTER list, and the difference is team_lead and project_lead.
- *
- * The sidebar offered Analytics and Audit Trail to anyone isPrivileged() was
- * true for, and both pages used the same test before fetching. The server does
- * not agree: /api/reports/analytics and /api/reports/audit are guarded by a
- * role list that excludes those two. So a team lead saw both items in the
- * menu, clicked one, and got a 403 that the page reported as a failure to load
- * — an error with no explanation, on a screen they were invited to open.
- *
- * The server list is the authority here, because it is the one deciding what
- * data leaves the building. This mirrors it exactly. Kept next to
- * isPrivileged() so the difference between the two is visible rather than
- * discovered.
- *
- * Mirrors: backend/src/routes/reportRoutes.js
- */
+// Who may read organisation-wide reports.
 export const ROLE_REPORTS = ['manager','department_manager','senior_manager','plant_head','executive','admin','super_admin'];
 export function canViewReports(role) { return ROLE_REPORTS.includes(role); }
 export function isAdmin(role) { return role === 'admin'; }
