@@ -6,11 +6,20 @@ committed, and every `.env*` is gitignored.
 
 Local companions holding the values to paste (not in git):
 
-| File | For |
-|---|---|
-| `.env.ifqm` | the IFQM server, `https://kalpion.ifqm.org.in` |
-| `.env.render` | the Render backend |
-| `.env.vercel` | the Vercel frontend |
+Each file is named `.env.<half>.<target>`, so it is obvious which half of the
+app it configures and which deployment it belongs to.
+
+| File | Half | Target |
+|---|---|---|
+| `.env.backend.ifqm` | backend | IFQM server, `https://kalpion.ifqm.org.in` |
+| `.env.frontend.ifqm` | frontend | IFQM server, build-time |
+| `.env.backend.render` | backend | Render |
+| `.env.frontend.vercel` | frontend | Vercel, build-time |
+| `backend/.env` | backend | local development only |
+
+`backend/.env.example` is the committed template and holds no real values. The
+backend reads `backend/.env` and nothing else; the files above are copied into
+it (or into the host's environment store) at deploy time.
 
 ## Branch
 
@@ -144,8 +153,8 @@ line. Use absolute paths, since the script resolves relative to its own
 directory:
 
 ```
-node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.ifqm C:/xampp/htdocs/ifqm/ca.pem --dry
-node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.ifqm C:/xampp/htdocs/ifqm/ca.pem
+node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.backend.ifqm C:/xampp/htdocs/ifqm/ca.pem --dry
+node scripts/migrate-remote.mjs C:/xampp/htdocs/ifqm/.env.backend.ifqm C:/xampp/htdocs/ifqm/ca.pem
 ```
 
 It reads `MASTER_DB_HOST` / `MASTER_DB_USER` / `MASTER_DB_PASS`, not
