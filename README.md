@@ -5,141 +5,183 @@ scores them with AI, routes them through a configurable approval chain, and rewa
 contributors on a live leaderboard - turning a scattered suggestion box into a
 tracked, measurable innovation pipeline.
 
-> Yashas R (25MCAR0042), Adrish Chowdhury (25MCAR0153) and Bhuvan K H (25MCAR0075).
-
 ---
 
 ## What it does
 
 - **Capture** - a guided multi-step wizard turns a rough idea into a complete,
-  structured proposal (situation → solution → business case → attachments →
+  structured proposal (situation, solution, business case, attachments,
   co-suggesters), with live duplicate detection.
-- **Score** - every idea is rated 0–100 across six quality dimensions, using an
+- **Score** - every idea is rated 0-100 across six quality dimensions, using an
   optional AI provider (OpenAI/Gemini) or a built-in heuristic scorer that needs
   no API key.
-- **Route** - ideas escalate up the organisation hierarchy, or go to a review
-  committee with a configurable approval threshold; SLA timers flag overdue reviews.
+- **Route** - ideas escalate one stage at a time up the author's own reporting
+  line, or go to a review committee with a configurable approval threshold; SLA
+  timers flag overdue reviews.
 - **Reward** - points (10 submit / 25 approved / 65 implemented), leaderboards,
   challenges and community voting keep people contributing.
 - **Track** - ROI and implementation tracking, analytics, CSV export, and an
   append-only audit log connect ideas to real outcomes.
+- **Push** - approved ideas can be pushed to the QCMS quality system, with each
+  organisation holding its own API key.
 
 Each organisation is an isolated tenant with its own database, branding, users and
 settings. Platform admins see only aggregate stats - never an organisation's idea
 content.
 
+## Signing in
+
+An employee signs in with a username, an email address or a mobile number. The
+organisation code is optional: a master login directory resolves an identifier to
+its tenant, so people do not have to remember one. Platform admins sign in with
+the organisation code left blank.
+
+One-time codes are available by email and by SMS, for sign-in, password reset,
+registering a new organisation, and verifying a changed mobile number.
+
 ## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | React 18 + Vite SPA, 7-language i18n, per-tenant branding |
+| Frontend | React 18 + Vite SPA, 7-language i18n (en, hi, mr, kn, te, ta, ml), per-tenant branding |
 | Backend | Node.js + Express (modular REST API), MySQL via `mysql2` (raw SQL) |
-| Database | MySQL / MariaDB - `ifqm_master` registry + per-tenant schemas |
+| Database | MySQL / MariaDB - `ifqm_master` registry + a schema per tenant |
 | Auth | JWT (Bearer) + bcrypt, per-account lockout, live role re-check |
 | Security | Helmet, CORS allow-list, rate limiting, HTTPS/HSTS enforcement |
 | AI scoring | Pluggable: OpenAI, Gemini, or built-in heuristic (default) |
-| Email / files | Nodemailer SMTP queue · Multer, tenant-scoped uploads |
+| Email | ZeptoMail over SMTP or its HTTPS API, with a queued sender |
+| SMS | Kaleyra over Jio DLT, with registered content templates |
+| Files | Multer, tenant-scoped uploads served through an authenticated route |
 
 ## Project layout
 
 ```
 ifqm/
 ├── backend/            # Node/Express API (runs on :4000)
-│   ├── src/            # routes · controllers · services · middleware
-│   ├── schema/         # tenant schema for provisioning
-│   ├── scripts/        # setup, migrate, backup, provision-tenant
+│   ├── src/            # routes, controllers, services, middleware
+│   ├── schema/         # tenant schema used when provisioning
+│   ├── scripts/        # setup, migrate, migrate-remote, backup, provision-tenant
 │   └── test/           # HTTP invariant/integration suite
 ├── frontend/           # React + Vite SPA (runs on :5173)
-│   └── src/            # pages · components · context · i18n · services
-└── docs/               # all documentation, generated PDFs and sample data
+│   └── src/            # pages, components, context, i18n, services
+├── db/
+│   ├── master.sql      # the ifqm_master registry
+│   └── migrations/     # forward-only, applied through a ledger
+├── User manuals/       # end-user PDFs
+└── assets/             # logo and favicon
 ```
 
 ## Quick start (development)
 
-**Prerequisites:** Node.js ≥ 18 (tested on 22) and MySQL (e.g. via XAMPP).
+**Prerequisites:** Node.js 18 or newer (developed on 22) and MySQL/MariaDB
+(for example via XAMPP).
 
 ```bash
 # 1. Backend
 cd backend
-cp .env.example .env          # fill in JWT_SECRET, DB creds (see comments in file)
+cp .env.example .env          # fill in JWT_SECRET and DB credentials
 npm install
-npm run setup                 # create schema + seed a demo tenant
+npm run setup                 # build the schema and apply every migration
 npm run dev                   # API on http://localhost:4000
 
-# 2. Frontend (new terminal)
+# 2. Frontend, in a second terminal
 cd frontend
 npm install
-npm run dev                   # app on http://localhost:5173 (proxies /api → :4000)
+npm run dev                   # app on http://localhost:5173
 ```
 
-Open http://localhost:5173. Log in with an organisation code; platform admins log
-in with the org code **left blank**.
+`npm run setup` is idempotent. It creates `backend/.env` from the example if it
+is missing, builds `ifqm_master` from `db/master.sql`, creates a schema for every
+tenant in the registry, and applies all migrations - so it is equally a
+first-time setup and a repair for a half-built database.
 
 ## Testing
 
 ```bash
 cd backend
-npm test                      # drives the real API against scratch databases
+npm test                      # 128 cases, driving the real API
 ```
+
+The suite provisions its own scratch schemas (`ifqm_test_*`) and drops them
+afterwards, so it never touches development data. It forces
+`STRICT_ALL_TABLES` on its sessions so local, CI and production agree about what
+the database will accept.
+
+CI runs the same suite against MariaDB 10.11 on Node 22, and builds the
+frontend, on every push to `main` and every pull request.
+
+## Database migrations
+
+Migrations are never applied by a deploy. They are always a deliberate step.
+
+A ledger in `ifqm_master.schema_migrations` records which file has run against
+which schema, so the runner is forward-only and safe to re-run - only unrecorded
+pairs are applied. Fixing a bad migration means writing a new one, not editing
+one that has already run.
+
+```bash
+cd backend
+npm run migrate                                   # local, from backend/.env
+node scripts/migrate-remote.mjs <env-file> <ca.pem> --dry   # remote, plan only
+node scripts/migrate-remote.mjs <env-file> <ca.pem>         # remote, apply
+```
+
+`migrate-remote.mjs` reads credentials from a file rather than the command line,
+so a database password never reaches shell history. Give it absolute paths - it
+resolves relative to its own directory. It reads `MASTER_DB_HOST` /
+`MASTER_DB_USER` / `MASTER_DB_PASS`.
+
+Files ending `_master.sql` target the registry; everything else is applied to
+every tenant schema.
+
+## Configuration
+
+The backend reads `backend/.env` and nothing else. Environment files for each
+deployment are kept at the repository root, named `.env.<half>.<target>` so it
+is clear which half of the app they configure and where they belong:
+
+| File | Half | Target |
+|---|---|---|
+| `.env.backend.ifqm` | backend | the IFQM server |
+| `.env.frontend.ifqm` | frontend | the IFQM server, at build time |
+| `.env.backend.render` | backend | Render |
+| `.env.frontend.vercel` | frontend | Vercel, at build time |
+| `backend/.env` | backend | local development |
+
+Every one of them is gitignored. `backend/.env.example` is the committed
+template and documents each variable; it holds no real values.
+
+Two settings are worth knowing before a first deploy:
+
+- `VITE_API_URL` is compiled into the frontend bundle at build time, so changing
+  it needs a rebuild rather than a restart, and it must end in `/api`.
+- `CORS_ORIGIN` is an exact-match allowlist, not a pattern. A trailing slash or
+  the wrong scheme fails every request with a generic network error.
+
+In production the server refuses to start with missing or unsafe secrets - a
+short `JWT_SECRET`, an empty database password, a `root` database user, or a
+`CORS_ORIGIN` still pointing at localhost. It prints what is wrong and exits.
 
 ## Deployment
 
-Production setup - least-privilege DB user, TLS, environment hardening and
-tenant provisioning - is documented in [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
-The server refuses to start in `production` with missing or unsafe secrets.
+[`DEPLOYMENT_SETTINGS.md`](DEPLOYMENT_SETTINGS.md) covers the whole of it: which
+branch to deploy, the build and start commands, the settings that must agree
+across the frontend and backend, mail and SMS, and how to run migrations against
+a managed database.
+
+`render.yaml` declares every backend key with `sync: false`, so no value is ever
+committed.
 
 ## Documentation
 
-Everything lives in [`docs/`](docs/). The project root holds only what has to be
-there: this file, `render.yaml` (the deployment host reads it from the root),
-and configuration.
+- [`DEPLOYMENT_SETTINGS.md`](DEPLOYMENT_SETTINGS.md) - deploying, configuring and
+  migrating
+- [`User manuals/`](User%20manuals/) - end-user PDFs for the three roles:
+  employee, organisation admin and platform admin
+- `backend/.env.example` - every environment variable, with what it does and how
+  it fails when it is wrong
+- The in-app user guide at `/user-guide`, linked from the sidebar once signed in
 
-**Start here**
+## Maintainer
 
-- [`docs/Software Architecture.docx`](docs/) - the full architecture and design
-  document: requirements, diagrams, data model, API, security, operations
-- [`docs/TECHNICAL_MANUAL.md`](docs/TECHNICAL_MANUAL.md) - for whoever inherits
-  the code: how it fits together and why the non-obvious parts are that way
-- [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) - end-user guide (roles, submitting,
-  reviewing, admin settings)
-
-**Deploying and running**
-
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) - production deployment
-- [`docs/FREE_DEPLOY.md`](docs/FREE_DEPLOY.md) - zero-cost deployment
-  (Vercel + Render + Aiven), including the day-two workflow
-- [`docs/HOSTING_COMPARISON.md`](docs/HOSTING_COMPARISON.md) - Azure vs AWS vs
-  Hostinger, with a recommendation
-
-**Design and data**
-
-- [`docs/PROJECT_FLOWCHART.md`](docs/PROJECT_FLOWCHART.md) - flows and timeline
-- [`docs/DATA_AND_API_PRIVACY.md`](docs/DATA_AND_API_PRIVACY.md) - what is
-  stored, who can read it, and what is deliberately not collected
-- [`docs/VIEW_COMPARISON.md`](docs/VIEW_COMPARISON.md) - All Ideas vs the Idea Board
-
-**Meeting follow-up**
-
-- [`docs/MOM_29Jul2026_Changes_Implemented.md`](docs/MOM_29Jul2026_Changes_Implemented.md)
-  - what was built after the 29 July review, in plain English
-- [`docs/MOM_29Jul2026_Implementation_Status.md`](docs/MOM_29Jul2026_Implementation_Status.md)
-  - every action item and its state
-
-**Generated files** (rebuild with the scripts in `docs/`)
-
-- `docs/Kalpion_User_Guide.pdf`, `docs/Kalpion_TestCases_Simple.pdf`,
-  `docs/QCMS_TestCases_Simple.pdf`
-- `docs/IFQM_Demo_Employees_500.xlsx` - 500 fictional employees for demos and
-  testing (`node backend/scripts/generate-demo-employees.js`)
-- [`docs/IFQM_Project_Overview.pptx`](docs/IFQM_Project_Overview.pptx) - project
-  overview presentation
-
-## Authors
-
-| Name | Register No. |
-|---|---|
-| Yashas R | 25MCAR0042 |
-| Adrish Chowdhury | 25MCAR0153 |
-| Bhuvan K H | 25MCAR0075 |
-
-Jain (Deemed-to-be) University - Master of Computer Applications (MCA).
+Yashas R - Jain (Deemed-to-be) University, Master of Computer Applications.
