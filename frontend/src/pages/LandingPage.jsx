@@ -230,14 +230,21 @@ export default function LandingPage() {
           font-family:'Sora','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
           font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1;
         }
-        .ifqm-lp .logo img{height:38px;background:#fff;border-radius:9px;padding:5px 8px;object-fit:contain;
-          box-shadow:0 6px 18px rgba(79,70,229,.16)}
+        /* The lockup carries its own navy ground, so it needs no plate behind
+           it - a white one would just frame the tile. */
+        /* Tall enough for the second line of the lockup to be readable - at the
+           old 38px the foundation's name was there but not legible. */
+        .ifqm-lp .logo img{height:46px;border-radius:9px;object-fit:contain;display:block;
+          box-shadow:0 6px 18px rgba(0,0,0,.18)}
+        .ifqm-lp .logo-mark{display:inline-flex;border-radius:9px;transition:opacity .15s ease}
+        .ifqm-lp .logo-mark:hover{opacity:.85}
+        .ifqm-lp .logo-name{color:inherit}
         .ifqm-lp .logo small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted);letter-spacing:0}
         /* The plate grows with the name so the two stay in proportion - a
            bigger word beside the old 34px mark reads as a mismatch. */
         @media (max-width:640px){
           .ifqm-lp .logo span{font-size:20px}
-          .ifqm-lp .logo img{height:32px}
+          .ifqm-lp .logo img{height:38px}
         }
         .ifqm-lp .nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--text-muted);font-weight:500}
         .ifqm-lp .nav-links a:hover{color:var(--text)}
@@ -489,9 +496,10 @@ export default function LandingPage() {
         .ifqm-lp .b-ghost{background:rgba(255,255,255,.06);color:var(--heading);border-color:var(--border-strong)}
         .ifqm-lp .b-ghost:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.4)}
 
-        /* The logo keeps its white plate: the mark is navy-and-magenta and
-           disappears against this background without one. */
-        .ifqm-lp .logo img{box-shadow:0 6px 20px rgba(0,0,0,.35)}
+        /* The lockup's own navy sits close to this background, so it gets a
+           faint edge to stay a distinct object rather than a floating wordmark. */
+        .ifqm-lp .logo img{box-shadow:0 6px 20px rgba(0,0,0,.35);
+          outline:1px solid rgba(255,255,255,.10);outline-offset:-1px}
 
         /*
          * The closing call-to-action band.
@@ -526,10 +534,16 @@ export default function LandingPage() {
       {/* NAV */}
       <nav className={`nav${scrolled ? ' on' : ''}`}>
         <div className="nav-in">
-          <Link to="/" className="logo">
-            <img src="/assets/ifqm-logo.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-            <span>Kalpion</span>
-          </Link>
+          {/* The mark belongs to IFQM and leads to their site; the product name
+              leads home. Two destinations, so they cannot be one link. */}
+          <div className="logo">
+            <a href="https://ifqm.org.in/" className="logo-mark"
+              aria-label="Indian Foundation for Quality Management">
+              <img src="/assets/ifqm-lockup.png" alt="Indian Foundation for Quality Management"
+                onError={(e) => { e.target.style.display = 'none'; }} />
+            </a>
+            <Link to="/" className="logo-name"><span>Kalpion</span></Link>
+          </div>
           <div className="nav-links">
             <a href="#problem">Why</a>
             <a href="#how">How it works</a>

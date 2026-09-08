@@ -41,10 +41,15 @@ export const AREA_KEYS = {
   'Delivery':'area.delivery',
   'Sustenance':'area.sustenance',
   'Cost Reduction':'area.cost_reduction',
+  'Waste Reduction':'area.waste_reduction',
+  'Innovation':'area.innovation',
+  'Simplification':'area.simplification',
+  'Infrastructure':'area.infrastructure',
+  // Retired from the default list, kept so ideas submitted under them still
+  // show a translated name rather than raw English.
   'Quality Improvement':'area.quality_improvement',
   'Customer Satisfaction':'area.customer_satisfaction',
   'Process Efficiency':'area.process_efficiency',
-  'Innovation':'area.innovation',
 };
 export const ROLE_KEYS = {
   trainee:'role.trainee', employee:'role.employee', team_lead:'role.team_lead',

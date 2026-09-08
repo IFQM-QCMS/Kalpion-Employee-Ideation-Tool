@@ -58,11 +58,44 @@ function generateCode(length) {
   return String(v % max).padStart(n, '0');
 }
 
-/** The same generic answer whether or not the number is known. */
+/** The same generic answer whether or not the account is known. */
 const GENERIC = {
   success: true,
-  message: 'If that number belongs to an account, a code has been sent to it.',
+  message: 'If that belongs to an account, a code has been sent to it.',
 };
+
+/*
+ * When the sender itself is down - a blocked provider account, a rejected
+ * password - every request fails identically, and the caller was still told a
+ * code was on its way. People then wait, resend, and wait again for something
+ * that was never sent.
+ *
+ * The failure is remembered for a minute so the next caller is told the truth.
+ * It is deliberately checked BEFORE the account is looked up, and cleared on the
+ * first success: answering "we cannot send right now" only for identifiers that
+ * exist would turn this into a way of testing which addresses are registered,
+ * which is the whole reason the reply above is vague.
+ */
+const OUTAGE_WINDOW_MS = 60_000;
+let outageUntil = 0;
+let outageReason = '';
+
+function noteDeliveryFailure(detail) {
+  outageUntil = Date.now() + OUTAGE_WINDOW_MS;
+  outageReason = String(detail || '');
+}
+
+function noteDeliverySuccess() {
+  outageUntil = 0;
+  outageReason = '';
+}
+
+/** Whether a code could actually be delivered right now. */
+export function deliveryOutage() {
+  return Date.now() < outageUntil
+    ? { down: true, reason: outageReason }
+    : { down: false, reason: '' };
+}
 
 /** The code, in an email. */
 function otpEmailHtml(name, code, minutes) {
@@ -91,6 +124,12 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
     throw new ApiError(503, 'Sign-in by one-time code is not enabled on this platform.');
   }
   if (!['login', 'dev_access'].includes(purpose)) throw badRequest('Invalid purpose.');
+
+  // Before the account is looked up, so this says nothing about the identifier.
+  if (deliveryOutage().down) {
+    throw new ApiError(503,
+      'Codes cannot be sent at the moment. Please sign in with your password, or contact IFQM.');
+  }
 
   const phone = normalizePhone(raw);
   const email = isEmail(raw) ? raw.toLowerCase() : '';
@@ -225,7 +264,12 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
       [sent.channel, inserted.insertId]).catch(() => {});
   }
 
-  if (!sent.sent) logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
+  if (!sent.sent) {
+    logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
+    noteDeliveryFailure(sent.detail);
+  } else {
+    noteDeliverySuccess();
+  }
   logger.info(`otp: issued for ${maskPhone(key)} @ ${tenant.slug} (provider ${sent.provider})`);
 
   return {
@@ -366,7 +410,10 @@ export async function otpStatus() {
 
   // SMS counts as "able to deliver" too.
   const sms = smsReady('login');
-  const deliverable = emailReady || sms.ready;
+  // Configured is not the same as working: a provider account can be blocked
+  // while every setting is still correct. A send that just failed counts here,
+  // so the screen stops offering a code it cannot deliver.
+  const deliverable = (emailReady || sms.ready) && !deliveryOutage().down;
 
   return {
     success: true,

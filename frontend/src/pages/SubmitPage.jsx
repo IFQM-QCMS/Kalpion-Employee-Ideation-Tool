@@ -35,7 +35,12 @@ const SOLUTION_TAGS = [
 ];
 
 // Categories are per-organisation rows now, not a constant compiled into this bundle.
-const FALLBACK_CATEGORIES = ['Safety','Quality','Productivity','Delivery','Sustenance'];
+// Shown only until the organisation's own list loads, so it matches the seed in
+// backend/schema/tenant_schema.sql.
+const FALLBACK_CATEGORIES = [
+  'Safety', 'Quality', 'Productivity', 'Delivery', 'Cost Reduction',
+  'Waste Reduction', 'Innovation', 'Simplification', 'Sustenance', 'Infrastructure',
+];
 
 /*
  * Required-field marker. The asterisk used to be a plain character in the label text, the
@@ -383,6 +388,7 @@ export default function SubmitPage() {
                     data-val={a} onClick={() => toggleImpact(a)}>{translateArea(a, t)}</div>
                 ))}
               </div>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:6 }}>{t('form.impact_areas_hint')}</div>
             </div>
             <div className="form-group">
               <label>{t('form.impact_level')}<InfoDot term="impact_level" /></label>

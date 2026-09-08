@@ -248,11 +248,16 @@ CREATE TABLE IF NOT EXISTS idea_categories (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT IGNORE INTO idea_categories (name, sort_order) VALUES
-  ('Safety',       1),
-  ('Quality',      2),
-  ('Productivity', 3),
-  ('Delivery',     4),
-  ('Sustenance',   5);
+  ('Safety',          1),
+  ('Quality',         2),
+  ('Productivity',    3),
+  ('Delivery',        4),
+  ('Cost Reduction',  5),
+  ('Waste Reduction', 6),
+  ('Innovation',      7),
+  ('Simplification',  8),
+  ('Sustenance',      9),
+  ('Infrastructure', 10);
 
 -- Email queue (was schema_updates.sql only)
 CREATE TABLE IF NOT EXISTS email_queue (
