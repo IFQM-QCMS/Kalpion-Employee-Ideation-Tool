@@ -1,0 +1,129 @@
+# Deploy Kalpion to the IFQM VPS.
+#
+# Runs after the CI workflow succeeds on main, so nothing reaches the server
+# that has not passed the backend invariant suite and a frontend build. Can also
+# be run by hand from the Actions tab to redeploy or to roll forward.
+#
+# The commit deployed is the one CI actually tested (workflow_run.head_sha), not
+# whatever main has moved to since.
+#
+# Everything that touches the server lives in scripts/deploy.sh, which is piped
+# in over SSH. See that file for the guard rails.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to deploy (blank = current main)"
+        required: false
+        default: ""
+
+jobs:
+  deploy:
+    # A finished CI run is not necessarily a passing one, so the conclusion is
+    # checked explicitly. Without this, a red build would still deploy.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main')
+
+    runs-on: ubuntu-latest
+
+    # Lets the repository require a reviewer or restrict who can deploy, under
+    # Settings -> Environments -> production.
+    environment: production
+
+    # One deploy at a time. cancel-in-progress stays false on purpose:
+    # interrupting a release midway through npm ci or a migration is worse than
+    # making the next one queue.
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Work out which commit to deploy
+        id: target
+        run: |
+          if [ -n "${{ inputs.sha }}" ]; then
+            SHA="${{ inputs.sha }}"
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Deploying $SHA"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+
+      - name: Authorise the runner against the VPS
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # The host key is pinned from a secret rather than trusted on first
+          # sight, so a redirected DNS record cannot collect the deploy key.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+          APP_DIR: ${{ vars.APP_DIR || '/opt/ifqm-kalpion' }}
+          KALPION_SERVICE: ${{ vars.KALPION_SERVICE || 'ifqm-kalpion' }}
+          DEPLOY_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          # scripts/deploy.sh is piped in from this checkout and read by
+          # `bash -s`, so the script that runs is the one from the commit being
+          # deployed. Nothing has to be updated on the server beforehand, and
+          # there is no chicken-and-egg on the first run.
+          ssh -i ~/.ssh/deploy_key \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              -o BatchMode=yes \
+              -o ConnectTimeout=15 \
+              -p "$VPS_PORT" \
+              "$VPS_USER@$VPS_HOST" \
+              "DEPLOY_SHA='$DEPLOY_SHA' APP_DIR='$APP_DIR' KALPION_SERVICE='$KALPION_SERVICE' bash -s" \
+              < scripts/deploy.sh
+
+      - name: Confirm the public site answers
+        # Optional. Set the PUBLIC_HEALTH_URL variable to also check the site
+        # through its proxy and TLS, not just the local port. A failure here
+        # means the app is healthy but something in front of it is not.
+        if: ${{ vars.PUBLIC_HEALTH_URL != '' }}
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS --max-time 10 "${{ vars.PUBLIC_HEALTH_URL }}" | grep -q '"status":"ok"'; then
+              echo "public health check passed"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "public health check failed after 10 attempts."
+          echo "The service passed its local health check, so look at nginx, DNS or TLS."
+          exit 1
+
+      - name: Report
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "Deployed ${{ steps.target.outputs.sha }} to ${{ vars.APP_DIR || '/opt/ifqm-kalpion' }}"
+          else
+            echo "Deploy of ${{ steps.target.outputs.sha }} FAILED."
+            echo "If it failed after the restart, deploy.sh rolled the code back."
+            echo "Any migrations that ran are forward-only and remain applied."
+          fi
