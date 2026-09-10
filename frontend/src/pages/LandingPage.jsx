@@ -564,7 +564,7 @@ export default function LandingPage() {
         <div className="glow glow-b" aria-hidden="true" />
         <div className="wrap hero-grid">
           <div className="rv in">
-            <h1>The best ideas in your business are already <span className="em">inside your team</span>.</h1>
+            <h1>The best ideas in your business are already <span className="em">inside your team.</span></h1>
             <p className="lede">
               Your machine operator knows which changeover wastes an hour. Your billing
               clerk knows which step is done twice. IFQM gives them one place to say so -
