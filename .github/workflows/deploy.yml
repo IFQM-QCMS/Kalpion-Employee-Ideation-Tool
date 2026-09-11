@@ -1,1 +1,85 @@
+name: Deploy to Production
 
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout tested code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Create deployment package
+        run: |
+          tar \
+            --exclude='.git' \
+            --exclude='backend/.env' \
+            --exclude='backend/uploads' \
+            --exclude='backend/backups' \
+            --exclude='*.sql' \
+            --exclude='node_modules' \
+            -czf kalpion-deploy.tar.gz .
+
+      - name: Copy deployment package to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOSTINGER_VPS_IP }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          key: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          source: "kalpion-deploy.tar.gz"
+          target: "/tmp"
+
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.HOSTINGER_VPS_IP }}
+          username: ${{ secrets.HOSTINGER_SSH_USER }}
+          port: ${{ secrets.HOSTINGER_SSH_PORT }}
+          key: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+
+            cd /opt/ifqm-kalpion
+
+            echo "Backing up production environment..."
+            cp backend/.env /tmp/kalpion-backend.env
+
+            echo "Updating application files..."
+            tar -xzf /tmp/kalpion-deploy.tar.gz -C /opt/ifqm-kalpion
+
+            echo "Restoring production environment..."
+            cp /tmp/kalpion-backend.env backend/.env
+            rm -f /tmp/kalpion-backend.env
+
+            echo "Building production containers..."
+            docker compose build --pull kalpion-api kalpion-web
+
+            echo "Starting application containers..."
+            docker compose up -d --no-deps kalpion-api kalpion-web
+
+            echo "Checking containers..."
+            docker ps --filter "name=kalpion-api" --filter "name=kalpion-web"
+
+            echo "Checking backend..."
+            docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/',r=>{process.exit(r.statusCode < 500 ? 0 : 1)}).on('error',()=>process.exit(1))"
+
+            echo "Checking website..."
+            wget -q --spider https://kalpion.ifqm.org.in
+
+            echo "Kalpion deployment successful."
+
+            rm -f /tmp/kalpion-deploy.tar.gz
