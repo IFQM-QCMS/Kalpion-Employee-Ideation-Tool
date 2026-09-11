@@ -22,7 +22,7 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Create deployment package
+            - name: Create deployment package
         run: |
           tar \
             --exclude='.git' \
@@ -31,7 +31,8 @@ jobs:
             --exclude='backend/backups' \
             --exclude='*.sql' \
             --exclude='node_modules' \
-            -czf kalpion-deploy.tar.gz .
+            -czf /tmp/kalpion-deploy.tar.gz .
+          mv /tmp/kalpion-deploy.tar.gz .
 
       - name: Copy deployment package to VPS
         uses: appleboy/scp-action@v0.1.7
