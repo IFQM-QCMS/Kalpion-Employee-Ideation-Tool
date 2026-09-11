@@ -76,8 +76,14 @@ jobs:
             docker ps --filter "name=kalpion-api" --filter "name=kalpion-web"
 
             echo "Checking backend..."
-            docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/',r=>{process.exit(r.statusCode < 500 ? 0 : 1)}).on('error',()=>process.exit(1))"
-
+            for i in {1..10}; do
+              if docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/',r=>{process.exit(r.statusCode < 500 ? 0 : 1)}).on('error',()=>process.exit(1))"; then
+                echo "Backend is healthy."
+                break
+              fi
+              echo "Backend not ready yet. Waiting..."
+              sleep 3
+            done
             echo "Checking website..."
             wget -q --spider https://kalpion.ifqm.org.in
 
