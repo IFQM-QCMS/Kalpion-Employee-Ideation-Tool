@@ -11,10 +11,16 @@ services:
     container_name: kalpion-db
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
+      # These are read ONLY when the data volume is empty - MariaDB ignores them
+      # once it has initialised. So an existing deployment keeps working with
+      # the password already inside its volume even if these are unset here, and
+      # a fresh install that leaves them blank is refused by the image itself
+      # rather than coming up unprotected. Deliberately not `:?`, which would
+      # fail a deploy on a running system that does not need them.
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
       MARIADB_DATABASE: ifqm_master
       MARIADB_USER: ifqm_app
-      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD}
     volumes:
       - kalpion-db-data:/var/lib/mysql
       # Kalpion is multi-tenant and creates a database per organisation at
