@@ -99,10 +99,14 @@ jobs:
             echo "Checking backend..."
             for i in {1..10}; do
               # /api/health, not /: the root path 404s, and a 404 counted as
-              # healthy would pass even with every route broken. This asks the
-              # endpoint that reads platform_settings, so a green answer means
-              # the database is reachable too.
-              if docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/api/health',r=>{let b='';r.on('data',c=>b+=c);r.on('end',()=>process.exit(r.statusCode===200&&b.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"; then
+              # healthy would pass even with every route broken.
+              #
+              # x-forwarded-proto is required. FORCE_HTTPS is on in production,
+              # so a plaintext request is answered with a 308 to the public URL
+              # and never reaches the route at all. The header is what the proxy
+              # sends, and app.js honours it, so this asks the same question a
+              # real request does and can read the actual answer.
+              if docker exec kalpion-api node -e "require('http').get({host:'127.0.0.1',port:4000,path:'/api/health',headers:{'x-forwarded-proto':'https'}},r=>{let b='';r.on('data',c=>b+=c);r.on('end',()=>process.exit(r.statusCode===200&&b.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"; then
                 echo "Backend is healthy."
                 healthy=1
                 break
