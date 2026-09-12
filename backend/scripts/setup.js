@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
+import { buildDbSsl } from '../src/config/dbSsl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.resolve(__dirname, '..');
@@ -36,11 +37,7 @@ dotenv.config({ path: envPath });
 const DB = {
   host: process.env.MASTER_DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT, 10) || 3306,
-  ssl: String(process.env.DB_SSL || '').toLowerCase() === 'true'
-    ? ((process.env.DB_SSL_CA || '').trim()
-        ? { ca: process.env.DB_SSL_CA.trim(), rejectUnauthorized: true }
-        : { rejectUnauthorized: false })
-    : undefined,
+  ssl: buildDbSsl(process.env),
   user: process.env.MASTER_DB_USER || 'root',
   password: process.env.MASTER_DB_PASS || '',
   multipleStatements: true, // the.sql files are multi-statement by nature

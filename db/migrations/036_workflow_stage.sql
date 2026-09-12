@@ -1,6 +1,6 @@
 -- 036 Record WHICH STAGE an approval was given at, on the approval itself
 
--- Aiven's default sql_mode includes ANSI_QUOTES, under which "..." is an identifier rather
+-- Some managed MySQL services enable ANSI_QUOTES, under which "..." is an identifier rather
 -- than a string.
 SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
 

@@ -4011,7 +4011,7 @@ test('a dead pooled connection is retried once, and a real error is not', async 
   // and the settings that stop it happening in the first place
   assert.equal(KEEPALIVE_OPTIONS.enableKeepAlive, true);
   assert.ok(KEEPALIVE_OPTIONS.idleTimeout < 600000,
-    'our idle timeout must be well under MySQL wait_timeout (600s on Aiven), so WE '
+    'our idle timeout must be well under MySQL wait_timeout (as low as 600s on some managed services), so WE '
     + 'close idle connections first - a connection we closed is one the pool knows '
     + 'about, and one the server closed is one it does not');
 });

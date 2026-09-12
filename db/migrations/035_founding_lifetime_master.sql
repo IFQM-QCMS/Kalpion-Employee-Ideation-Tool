@@ -1,6 +1,6 @@
 -- 035 The Lifetime plan is what founding members are held on - make it
 
--- Aiven's default sql_mode includes ANSI_QUOTES, under which "..." is an identifier rather
+-- Some managed MySQL services enable ANSI_QUOTES, under which "..." is an identifier rather
 -- than a string.
 SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
 

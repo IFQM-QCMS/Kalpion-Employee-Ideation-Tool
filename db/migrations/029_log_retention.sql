@@ -1,6 +1,6 @@
 -- 029 Access logs are deleted once they pass the retention window
 
--- Portability note Some MySQL deployments (Aiven's default among them) run with
+-- Portability note Some managed MySQL services run with
 -- ANSI_QUOTES, in which "..." is an IDENTIFIER, not a string.
 SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
 

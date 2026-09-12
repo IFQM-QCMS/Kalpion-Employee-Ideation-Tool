@@ -1,6 +1,6 @@
 -- 037 Turn notification email ON - it was never off on purpose
 
--- Aiven's default sql_mode includes ANSI_QUOTES, under which "..." is an identifier rather
+-- Some managed MySQL services enable ANSI_QUOTES, under which "..." is an identifier rather
 -- than a string.
 SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
 

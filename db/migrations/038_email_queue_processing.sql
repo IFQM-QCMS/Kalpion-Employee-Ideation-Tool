@@ -1,6 +1,6 @@
 -- 038 email_queue.status needs the value the code has always written
 
--- Aiven's default sql_mode includes ANSI_QUOTES, under which "..." is an identifier rather
+-- Some managed MySQL services enable ANSI_QUOTES, under which "..." is an identifier rather
 -- than a string.
 SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
 

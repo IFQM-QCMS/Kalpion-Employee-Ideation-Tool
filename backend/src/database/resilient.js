@@ -5,7 +5,7 @@ import logger from '../utils/logger.js';
 export const KEEPALIVE_OPTIONS = {
   enableKeepAlive: true,
   keepAliveInitialDelay: 10000,
-  // Retire our own idle connections long before MySQL's wait_timeout (600s on Aiven) can
+  // Retire our own idle connections long before MySQL's wait_timeout (as low as 600s on some managed services) can
   // close them behind our back.
   idleTimeout: 60000,
 };

@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildDbSsl } from '../src/config/dbSsl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -63,11 +64,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
       host: process.env.MASTER_DB_HOST || 'localhost',
       // Non-3306 port / TLS for managed MySQL - see src/config/index.js.
       port: parseInt(process.env.DB_PORT, 10) || 3306,
-      ssl: String(process.env.DB_SSL || '').toLowerCase() === 'true'
-        ? ((process.env.DB_SSL_CA || '').trim()
-            ? { ca: process.env.DB_SSL_CA.trim(), rejectUnauthorized: true }
-            : { rejectUnauthorized: false })
-        : undefined,
+      ssl: buildDbSsl(process.env),
       user: process.env.MASTER_DB_USER || 'root',
       password: process.env.MASTER_DB_PASS || '',
       multipleStatements: true,

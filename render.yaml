@@ -44,8 +44,9 @@ services:
         sync: false
       - key: APP_DB_PASS
         sync: false
-      # Aiven refuses an unverified connection. Without the CA the failure
-      # looks like a network timeout rather than a TLS problem.
+      # Only for a provider that issues its own private CA. Leave unset on
+      # Azure Database for MySQL, whose certificates chain to a public root
+      # that Node already trusts.
       - key: DB_SSL_CA
         sync: false
 

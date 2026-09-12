@@ -1,6 +1,7 @@
 /** Central configuration loader. */
 import dotenv from 'dotenv';
 import { DLT_TEMPLATES, DLT_SENDER_ID, KALEYRA_SID, resolveTemplate } from './smsTemplates.js';
+import { buildDbSsl } from './dbSsl.js';
 
 /** Collected at load, logged once at boot by smsService. */
 export const smsTemplateWarnings = [];
@@ -62,18 +63,10 @@ const int = (v, fallback) => {
 const INSECURE_JWT_DEFAULT = 'change-this-to-a-long-random-secret-string';
 const MIN_SECRET_LENGTH = 32;
 
-/** TLS settings for every MySQL connection, or undefined for a plaintext one. */
-function readDbSsl() {
-  if (String(process.env.DB_SSL || '').toLowerCase() !== 'true') return undefined;
-  // Accept the PEM either with real newlines (pasting the file into a dashboard field) or
-  // with the two-character sequence \n (single-line pastes,.env files, and any tooling that
-  // flattens multi-line values).
-  const ca = (process.env.DB_SSL_CA || '').replace(/\\n/g, '\n').trim();
-  return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false };
-}
-
 const dbPort = int(process.env.DB_PORT, 3306);
-const dbSsl = readDbSsl();
+// Decided in config/dbSsl.js so the app, the migrator and the setup script
+// cannot disagree about whether a connection is verified.
+const dbSsl = buildDbSsl(process.env);
 
 // How many proxies sit in front of this application.
 function readTrustProxy() {

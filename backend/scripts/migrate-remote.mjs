@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import mysql from 'mysql2/promise';
 import { runMigrations } from './migrate.js';
+import { buildDbSsl } from '../src/config/dbSsl.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,9 +48,7 @@ try {
     port: parseInt(env.DB_PORT, 10) || 3306,
     user: env.MASTER_DB_USER,
     password: env.MASTER_DB_PASS,
-    ssl: String(env.DB_SSL || '').toLowerCase() === 'true'
-      ? (ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: false })
-      : undefined,
+    ssl: buildDbSsl(env, ca),
     multipleStatements: true,
     charset: 'utf8mb4',
   });
