@@ -1,0 +1,56 @@
+services:
+
+  kalpion-db:
+    image: mariadb:10.11
+    container_name: kalpion-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: 37c39eb0dc3d8a041bd24ea22f1b8f0648cabaa71805e9a7
+      MARIADB_DATABASE: ifqm_master
+      MARIADB_USER: ifqm_app
+      MARIADB_PASSWORD: c3f9cd481f4e8e054d33cc59466f2e22525d4971b73aaaef
+    volumes:
+      - kalpion-db-data:/var/lib/mysql
+    networks:
+      - kalpion-internal
+
+  kalpion-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: kalpion-api
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./db:/db:ro
+    depends_on:
+      - kalpion-db
+    networks:
+      - kalpion-internal
+      - ifqm-new-sites
+
+  kalpion-web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_URL: https://kalpion.ifqm.org.in/api
+    container_name: kalpion-web
+    restart: unless-stopped
+    depends_on:
+      - kalpion-api
+    networks:
+      - kalpion-internal
+      - ifqm-new-sites
+
+networks:
+  kalpion-internal:
+    driver: bridge
+
+  ifqm-new-sites:
+    external: true
+
+volumes:
+  kalpion-db-data:
