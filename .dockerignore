@@ -1,0 +1,35 @@
+# Keep the build context small, and keep secrets and user data out of images.
+#
+# backend/.env matters most. The backend image does `COPY backend/ ./`, and on
+# the server the production .env is restored into that directory before
+# `docker compose build` runs - so without this line the JWT signing key, the
+# database password and the mail and SMS credentials are baked into an image
+# layer. The container gets them at runtime from env_file instead, which is
+# where they belong.
+backend/.env
+backend/.env.*
+!backend/.env.example
+.env
+.env.*
+
+# Employee uploads and database dumps: real data, and large.
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/backups/
+
+node_modules
+**/node_modules
+frontend/dist
+
+.git
+.github
+.gitignore
+*.log
+backend/logs/
+
+# Documentation and local tooling, none of which the runtime needs.
+User manuals/
+*.md
+!README.md
+.claude/
+.gstack/

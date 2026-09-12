@@ -1,16 +1,27 @@
 services:
 
+  # MariaDB 10.11, matching the version CI runs the suite against.
+  #
+  # Credentials come from the environment, not from this file: it is committed
+  # to a public repository, so a literal password here is a published password.
+  # Put them in a .env file beside this one (docker compose reads it
+  # automatically) and keep that file out of git.
   kalpion-db:
     image: mariadb:10.11
     container_name: kalpion-db
     restart: unless-stopped
     environment:
-      MARIADB_ROOT_PASSWORD: 37c39eb0dc3d8a041bd24ea22f1b8f0648cabaa71805e9a7
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in .env}
       MARIADB_DATABASE: ifqm_master
       MARIADB_USER: ifqm_app
-      MARIADB_PASSWORD: c3f9cd481f4e8e054d33cc59466f2e22525d4971b73aaaef
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in .env}
     volumes:
       - kalpion-db-data:/var/lib/mysql
+      # Kalpion is multi-tenant and creates a database per organisation at
+      # runtime. MARIADB_USER alone is granted rights on MARIADB_DATABASE only,
+      # so without this the first new organisation fails with "access denied"
+      # when the app tries to CREATE DATABASE. Runs once, on an empty volume.
+      - ./db/docker-init:/docker-entrypoint-initdb.d:ro
     networks:
       - kalpion-internal
 

@@ -29,7 +29,6 @@ jobs:
             --exclude='backend/.env' \
             --exclude='backend/uploads' \
             --exclude='backend/backups' \
-            --exclude='*.sql' \
             --exclude='node_modules' \
             -czf /tmp/kalpion-deploy.tar.gz .
             mv /tmp/kalpion-deploy.tar.gz .
@@ -75,15 +74,51 @@ jobs:
             echo "Checking containers..."
             docker ps --filter "name=kalpion-api" --filter "name=kalpion-web"
 
+            # The database container is deliberately not rebuilt or restarted by
+            # a deploy, but it does have to be running before migrations.
+            echo "Ensuring the database is up..."
+            docker compose up -d kalpion-db
+
+            echo "Waiting for MariaDB to accept connections..."
+            for i in $(seq 1 30); do
+              if docker exec kalpion-db mariadb-admin ping -h 127.0.0.1 --silent >/dev/null 2>&1 \
+                 || docker exec kalpion-db mysqladmin ping -h 127.0.0.1 --silent >/dev/null 2>&1; then
+                echo "Database ready."
+                break
+              fi
+              sleep 2
+            done
+
+            # Migrations are forward-only and tracked in a ledger
+            # (ifqm_master.schema_migrations), so only unapplied files run and
+            # re-running is safe. Without this step the code ships ahead of the
+            # schema and the mismatch only surfaces when a feature misbehaves.
+            echo "Running database migrations..."
+            docker exec kalpion-api npm run migrate
+
             echo "Checking backend..."
             for i in {1..10}; do
-              if docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/',r=>{process.exit(r.statusCode < 500 ? 0 : 1)}).on('error',()=>process.exit(1))"; then
+              # /api/health, not /: the root path 404s, and a 404 counted as
+              # healthy would pass even with every route broken. This asks the
+              # endpoint that reads platform_settings, so a green answer means
+              # the database is reachable too.
+              if docker exec kalpion-api node -e "require('http').get('http://127.0.0.1:4000/api/health',r=>{let b='';r.on('data',c=>b+=c);r.on('end',()=>process.exit(r.statusCode===200&&b.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"; then
                 echo "Backend is healthy."
+                healthy=1
                 break
               fi
               echo "Backend not ready yet. Waiting..."
               sleep 3
             done
+
+            # Without this the loop just ends and the deploy reports success
+            # even when the backend never came up.
+            if [ "${healthy:-0}" != "1" ]; then
+              echo "Backend never became healthy. Recent log:"
+              docker logs --tail 40 kalpion-api || true
+              exit 1
+            fi
+
             echo "Checking website..."
             wget -q --spider https://kalpion.ifqm.org.in
 
