@@ -7,7 +7,12 @@ CREATE TABLE IF NOT EXISTS tenants (
   name          VARCHAR(100) NOT NULL,
   slug          VARCHAR(50)  NOT NULL UNIQUE,
   domain        VARCHAR(255) NOT NULL,
-  db_host       VARCHAR(100) NOT NULL DEFAULT 'localhost',
+  -- Empty means "the same server as the registry": database/tenant.js falls back to
+  -- MASTER_DB_HOST. It used to default to 'localhost', which is only right when the
+  -- database runs on the same machine as the API - in a container it is the API's own
+  -- loopback, so every tenant query failed with "Database connection failed" until the
+  -- row was corrected by hand.
+  db_host       VARCHAR(100) NOT NULL DEFAULT '',
   db_name       VARCHAR(100) NOT NULL,
   db_user       VARCHAR(100) NOT NULL DEFAULT 'root',
   db_pass       VARCHAR(255) NOT NULL DEFAULT '',
@@ -40,9 +45,10 @@ CREATE TABLE IF NOT EXISTS tenants (
   KEY idx_tenants_billing (billing_status, period_end)
 );
 
--- Default IFQM tenant for local development
+-- Default IFQM tenant for local development. db_host is empty on purpose (see the column);
+-- db_user/db_pass are empty because credentials come from the environment, never the row.
 INSERT IGNORE INTO tenants (name, slug, domain, db_host, db_name, db_user, db_pass, status, is_default)
-VALUES ('IFQM', 'ifqm', 'localhost', 'localhost', 'ifqm_ideation', 'root', '', 'active', 1);
+VALUES ('IFQM', 'ifqm', 'localhost', '', 'ifqm_ideation', '', '', 'active', 1);
 
 -- Platform Admins (IFQM vendor staff - NOT tenant users) These are the SaaS platform
 -- operators.
