@@ -112,7 +112,10 @@ frontend, on every push to `main` and every pull request.
 
 ## Database migrations
 
-Migrations are never applied by a deploy. They are always a deliberate step.
+Every production deploy runs the migration runner inside the API container
+(`docker exec kalpion-api npm run migrate`) after the new code is up, so the
+schema can never fall behind the code that expects it. Anywhere else they are a
+deliberate step.
 
 A ledger in `ifqm_master.schema_migrations` records which file has run against
 which schema, so the runner is forward-only and safe to re-run - only unrecorded
@@ -142,11 +145,10 @@ is clear which half of the app they configure and where they belong:
 
 | File | Half | Target |
 |---|---|---|
-| `.env.backend.ifqm` | backend | the IFQM server |
-| `.env.frontend.ifqm` | frontend | the IFQM server, at build time |
-| `.env.backend.render` | backend | Render |
-| `.env.frontend.vercel` | frontend | Vercel, at build time |
+| `.env.backend.vps` | backend | **production** - `https://kalpion.ifqm.org.in`, Docker Compose on the IFQM VPS |
+| `.env.frontend.ifqm` | frontend | production, at build time (also set as a build arg in `docker-compose.yml`) |
 | `backend/.env` | backend | local development |
+| `.env.backend.ifqm`, `.env.backend.render`, `.env.frontend.vercel` | - | the retired Render + Vercel + Aiven hosting; kept only until that data has been carried over |
 
 Every one of them is gitignored. `backend/.env.example` is the committed
 template and documents each variable; it holds no real values.

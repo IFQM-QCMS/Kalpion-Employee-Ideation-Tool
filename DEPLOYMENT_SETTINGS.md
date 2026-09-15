@@ -1,21 +1,61 @@
 # Deployment settings
 
-Values that live in a dashboard or an env file rather than in this repository.
-`render.yaml` declares every backend key with `sync: false` so nothing is
-committed, and every `.env*` is gitignored.
+Values that live in an env file on the server rather than in this repository.
+Every `.env*` is gitignored.
 
-Local companions holding the values to paste (not in git):
+## Production
+
+Production is `https://kalpion.ifqm.org.in`: Docker Compose on the IFQM VPS,
+directory `/opt/ifqm-kalpion`, three containers - `kalpion-web` (nginx, the
+built SPA), `kalpion-api` (Node, port 4000) and `kalpion-db` (MariaDB 10.11,
+named volume `kalpion-db-data`). A shared reverse proxy on the `ifqm-new-sites`
+docker network terminates TLS and routes `/api/*` to the API and everything
+else to the web container. IFQM's server administrator maintains the proxy and
+the host; the repository owns everything inside the three containers.
+
+Deploys are automatic: every push to `main` runs CI, and on success
+`.github/workflows/deploy.yml` copies the tested tree to the server, rebuilds
+the two application images, runs the migration runner in the API container and
+fails the deploy unless `/api/health` answers. The database container is never
+rebuilt or restarted by a deploy.
+
+Two files on the server hold the secrets, and both survive a deploy untouched:
+
+| Server file | Read by | Holds |
+|---|---|---|
+| `/opt/ifqm-kalpion/backend/.env` | the API container (`env_file`) | everything in `backend/.env.example`; in particular `MASTER_DB_PASS` **and** `APP_DB_PASS`, which must be the same password |
+| `/opt/ifqm-kalpion/.env` | `docker compose` | `MARIADB_ROOT_PASSWORD`, `MARIADB_PASSWORD` - read by MariaDB only when its volume is first created |
+
+The two database password keys exist because the registry and the tenant
+schemas may one day live on different servers. Today they do not: `ifqm_app`
+opens both, so a rotation must change both keys, and the API container must be
+**recreated** (`docker compose up -d --force-recreate kalpion-api`) rather than
+restarted, because `env_file` is read only when a container is created. A
+rotation that touches only `MASTER_DB_PASS` leaves the health checks green and
+every organisation screen failing with "Database connection failed".
+
+The reverse proxy needs `client_max_body_size` of at least `MAX_FILE_MB` plus
+headroom (the application allows 10 MB uploads, so 12m); nginx's default of 1 MB
+answers larger uploads with its own HTML 413 before the API sees them.
+
+The local companion for the production env is `.env.backend.vps` at the
+repository root. It is a reference copy: after a password rotation on the
+server it is the server's file that is current, never this one, so it must not
+be copied over the server's file without first carrying the live passwords into
+it.
+
+## Environment files
 
 Each file is named `.env.<half>.<target>`, so it is obvious which half of the
 app it configures and which deployment it belongs to.
 
 | File | Half | Target |
 |---|---|---|
-| `.env.backend.ifqm` | backend | IFQM server, `https://kalpion.ifqm.org.in` |
-| `.env.frontend.ifqm` | frontend | IFQM server, build-time |
-| `.env.backend.render` | backend | Render |
-| `.env.frontend.vercel` | frontend | Vercel, build-time |
+| `.env.backend.vps` | backend | production (see above) |
+| `.env.frontend.ifqm` | frontend | production, build-time; `docker-compose.yml` also passes it as a build arg |
 | `backend/.env` | backend | local development only |
+| `.env.backend.ifqm` | backend | retired: the Aiven-hosted MySQL the Render deployment used; still needed by `scripts/export-remote.mjs` until that data has been carried over |
+| `.env.backend.render`, `.env.frontend.vercel` | - | retired Render + Vercel hosting; `render.yaml` and `vercel.json` are kept for reference only |
 
 `backend/.env.example` is the committed template and holds no real values. The
 backend reads `backend/.env` and nothing else; the files above are copied into

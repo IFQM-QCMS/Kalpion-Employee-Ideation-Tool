@@ -42,6 +42,12 @@ services:
     volumes:
       - ./backend/uploads:/app/uploads
       - ./db:/db:ro
+      # The in-app user guide streams a PDF from "<repo>/User manuals", three
+      # levels above its controller (exportController.userGuide). The image
+      # holds only backend/ at /app, so that resolves to /User manuals - which
+      # exists only if the folder is mounted there. Without it every "User
+      # guide" click in production answered 404 while local development worked.
+      - "./User manuals:/User manuals:ro"
     depends_on:
       - kalpion-db
     networks:
