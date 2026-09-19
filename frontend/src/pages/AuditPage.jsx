@@ -5,16 +5,22 @@ import { usersApi } from '../services/api';
 import { fmtDateTime, statusBadge, translateStatus, formatRole, canViewReports } from '../utils/helpers';
 import Pager, { usePager } from '../components/Pager';
 
+const EMPTY = { action: '', idea: '', actor: '', from: '', to: '' };
+
 export default function AuditPage() {
   const { user }   = useAuth();
   const { t }      = useLang();
   const [rows,    setRows]    = useState([]);
+  const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
+  // What is typed, and what was last asked for - so typing does not fire a request per key.
+  const [draft,   setDraft]   = useState(EMPTY);
+  const [filters, setFilters] = useState(EMPTY);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(filters); }, [filters]);
 
-  async function load() {
+  async function load(f) {
     if (!canViewReports(user?.role)) {
       setError(t('msg.audit_restricted'));
       setLoading(false);
@@ -23,12 +29,20 @@ export default function AuditPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await usersApi.audit();
-      if (res.data.success) setRows(res.data.audit || []);
-      else setError(res.data.error || t('msg.fail_audit'));
+      // Calendar days are the reader's; the server needs the offset to turn them into UTC.
+      const res = await usersApi.audit({ ...f, tz_offset: -new Date().getTimezoneOffset() });
+      if (res.data.success) {
+        setRows(res.data.audit || []);
+        setActions(res.data.actions || []);
+      } else setError(res.data.error || t('msg.fail_audit'));
     } catch { setError(t('msg.fail_audit')); }
     setLoading(false);
   }
+
+  const active = Object.values(filters).some(Boolean);
+  const set = (k) => (e) => setDraft((d) => ({ ...d, [k]: e.target.value }));
+  const apply = (e) => { e?.preventDefault?.(); setFilters({ ...draft }); };
+  const clear = () => { setDraft(EMPTY); setFilters(EMPTY); };
 
   // Twenty to a page: the list endpoints already bound what they return, but rendering every
   // row was the browser's cost, not the server's.
@@ -36,6 +50,41 @@ export default function AuditPage() {
 
   return (
     <div className="card" style={{ overflowX:'auto' }}>
+      {/* Filters: by what happened, to which idea, by whom, and when. */}
+      <form onSubmit={apply} id="audit-filters"
+        style={{ display:'flex', flexWrap:'wrap', gap:8, alignItems:'flex-end', marginBottom:12 }}>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>{t('audit.filter_action')}</label>
+          <select className="form-control" id="audit-f-action" value={draft.action} onChange={set('action')} style={{ width:170 }}>
+            <option value="">{t('audit.filter_all_actions')}</option>
+            {actions.map((a) => <option key={a} value={a}>{translateStatus(a, t)}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>{t('audit.filter_idea')}</label>
+          <input className="form-control" id="audit-f-idea" type="search" value={draft.idea} onChange={set('idea')} style={{ width:200 }} />
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>{t('audit.filter_actor')}</label>
+          <input className="form-control" id="audit-f-actor" type="search" value={draft.actor} onChange={set('actor')} style={{ width:160 }} />
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>{t('audit.filter_from')}</label>
+          <input className="form-control" id="audit-f-from" type="date" value={draft.from} onChange={set('from')} />
+        </div>
+        <div className="form-group" style={{ margin:0 }}>
+          <label style={{ fontSize:11 }}>{t('audit.filter_to')}</label>
+          <input className="form-control" id="audit-f-to" type="date" value={draft.to} onChange={set('to')} />
+        </div>
+        <button type="submit" className="btn btn-primary btn-sm">{t('audit.filter_apply')}</button>
+        {active && <button type="button" className="btn btn-outline btn-sm" onClick={clear}>{t('audit.filter_clear')}</button>}
+        {!loading && !error && (
+          <span style={{ fontSize:11.5, color:'var(--text-muted)', marginLeft:'auto' }}>
+            {t('audit.showing', { n: rows.length })}
+          </span>
+        )}
+      </form>
+
       <table className="table">
         <thead>
           <tr>

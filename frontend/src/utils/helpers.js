@@ -63,6 +63,9 @@ export function statusBadge(status) {
     'Rejected':'badge-rejected',
     'Implemented':'badge-implemented',
     'Draft':'badge-draft',
+    'Returned':'badge-rejected',
+    'Resubmitted':'badge-submitted',
+    'Reopened':'badge-review',
   };
   return map[status] || 'badge-draft';
 }
@@ -101,6 +104,7 @@ export function actionLabel(action) {
   const m = {
     'Submitted':'S','Approved':'A','Rejected':'R','Under Review':'U',
     'Implemented':'I','Escalated':'E','Comment':'C','Draft':'D',
+    'Returned':'B','Resubmitted':'S','Reopened':'O','Reviewed':'V','Commented':'C',
   };
   return m[action] || action?.[0] || '?';
 }

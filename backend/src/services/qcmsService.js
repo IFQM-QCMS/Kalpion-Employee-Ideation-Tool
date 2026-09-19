@@ -1,11 +1,11 @@
 /*
- * QCMS integration - pushes approved ideas from Kalpion into the QCMS (Quality &
+ * OctaQube integration - pushes approved ideas from Kalpion into the OctaQube (Quality &
  * Continuous Improvement Management System) tool for implementation.
  */
 import logger from '../utils/logger.js';
 
-// QCMS's fixed category vocabulary. Our categories are free per-org text, so we map the
-// common ones and fall back to the QCMS default of "Quality".
+// OctaQube's fixed category vocabulary. Our categories are free per-org text, so we map the
+// common ones and fall back to the OctaQube default of "Quality".
 const QCMS_CATEGORIES = ['Quality', 'Cost', 'Delivery', 'Environment', 'Morale', 'Safety'];
 const CATEGORY_MAP = {
   quality: 'Quality', 'quality improvement': 'Quality',
@@ -44,7 +44,7 @@ function toNumber(v) {
   return Number.isFinite(n) && digits !== '' ? n : undefined;
 }
 
-/** Map one idea row (as returned by listApprovedIdeas) to the QCMS request body. */
+/** Map one idea row (as returned by listApprovedIdeas) to the OctaQube request body. */
 export function mapIdeaToQcms(idea) {
   const payload = {
     ideaCode: String(idea.idea_code || ''),
@@ -79,13 +79,13 @@ export function mapIdeaToQcms(idea) {
   return payload;
 }
 
-/** Push a single idea to QCMS. */
+/** Push a single idea to OctaQube. */
 export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 }) {
   const payload = mapIdeaToQcms(idea);
   const url = ideasEndpoint(baseUrl);
 
   if (!apiKey) {
-    return { status: 'failed', httpStatus: 0, message: 'No QCMS API key configured.', payload };
+    return { status: 'failed', httpStatus: 0, message: 'No OctaQube API key configured.', payload };
   }
 
   const controller = new AbortController();
@@ -103,7 +103,7 @@ export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 
     logger.warn(`qcms push network error for ${payload.ideaCode}: ${e.message}`);
     return {
       status: 'failed', httpStatus: 0, payload,
-      message: e.name === 'AbortError' ? 'QCMS did not respond in time.' : `Could not reach QCMS (${e.message}).`,
+      message: e.name === 'AbortError' ? 'OctaQube did not respond in time.' : `Could not reach OctaQube (${e.message}).`,
     };
   }
   clearTimeout(timer);
@@ -116,7 +116,7 @@ export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 
   try { body = JSON.parse(raw); } catch { /* non-JSON */ }
   const bodyMsg = (body && (body.message || body.error)) || '';
 
-  // Some QCMS builds do NOT return the documented 409 when an idea already exists - they
+  // Some OctaQube builds do NOT return the documented 409 when an idea already exists - they
   // leak the underlying unique-constraint error (a Postgres "duplicate key...
   // imported_ideas_idea_code_key... already exists") with a 500.
   const DUP_SIGNAL = /duplicate key|already exists|already imported|uniqueviolation|idea_code.{0,20}key/i;
@@ -131,11 +131,11 @@ export async function pushIdeaToQcms({ baseUrl, apiKey, idea, timeoutMs = 12000 
     return { status: 'failed', httpStatus: 401, payload, message: bodyMsg || 'Invalid or disabled API key.' };
   }
   if (res.status === 429) {
-    return { status: 'failed', httpStatus: 429, payload, message: bodyMsg || 'QCMS rate limit exceeded (100/min). Try again shortly.' };
+    return { status: 'failed', httpStatus: 429, payload, message: bodyMsg || 'OctaQube rate limit exceeded (100/min). Try again shortly.' };
   }
-  // Keep the QCMS message but cap it - a leaked stack trace would otherwise fill the status
+  // Keep the OctaQube message but cap it - a leaked stack trace would otherwise fill the status
   // column.
-  return { status: 'failed', httpStatus: res.status, payload, message: (bodyMsg || `QCMS returned HTTP ${res.status}.`).slice(0, 200) };
+  return { status: 'failed', httpStatus: res.status, payload, message: (bodyMsg || `OctaQube returned HTTP ${res.status}.`).slice(0, 200) };
 }
 
 export default { mapIdeaToQcms, pushIdeaToQcms };

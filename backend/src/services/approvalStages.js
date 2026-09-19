@@ -137,6 +137,26 @@ export function resolveLabels(raw) {
   return out;
 }
 
+/*
+ * Stages the final approver forwarded ONE idea to, parsed from ideas.forward_stages. Only
+ * catalogue stages with a role, never one already in the chain, in the order they were
+ * added.
+ */
+export function parseForwardStages(raw, stages = []) {
+  const have = new Set(stages);
+  const out = [];
+  for (const key of String(raw ?? '').split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (STAGE_CATALOG[key]?.role && !have.has(key) && !out.includes(key)) out.push(key);
+  }
+  return out;
+}
+
+/** The organisation's stages with one idea's forwarded stages appended. */
+export function withForwardStages(stages, raw) {
+  const extra = parseForwardStages(raw, stages);
+  return extra.length ? [...stages, ...extra] : stages;
+}
+
 /** Derive { reviewer_roles, final_roles } from an ordered stage list. */
 export function stagesToChain(stages) {
   const approvers = approverStages(stages);
@@ -154,7 +174,7 @@ export const DEFAULT_CHAIN = stagesToChain(DEFAULT_STAGES);
 
 export default {
   STAGE_CATALOG, STAGE_KEYS, DEFAULT_STAGES, DEFAULT_CHAIN,
-  parseStages, approverStages, stagesToChain,
+  parseStages, approverStages, stagesToChain, parseForwardStages, withForwardStages,
   firstStage, finalStage, nextStage, isFinalStage, stagesForRole, stagePosition,
   seniorityRanks, rankOf,
   resolveLabels,

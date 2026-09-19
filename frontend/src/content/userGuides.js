@@ -402,7 +402,7 @@ const ORG_ADMIN = {
           bullets: [
             { term: 'Go to Review Queue', text: 'to look at what\'s pending - use the **View** button only.' },
             { term: 'Go to All Ideas', text: 'to browse, search, and export every idea in your organisation (Export CSV or Export PDF), or to archive old ideas in bulk (Bulk Archive).' },
-            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (QCMS), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to QC**. Click **Push all to QCMS**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your QCMS API key, and click Save)." },
+            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (OctaQube), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to QC**. Click **Push all to OctaQube**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your OctaQube API key, and click Save)." },
           ],
         },
       ],
@@ -515,7 +515,7 @@ const ORG_ADMIN = {
               ['Add/remove an idea category', 'Admin Panel → Categories'],
               ['Change who can see idea details', 'Admin Panel → System'],
               ['Set our logo/name', 'Admin Panel → System → Organization Branding'],
-              ['Send approved ideas to QCMS', 'Admin Panel → Approved Ideas'],
+              ['Send approved ideas to OctaQube', 'Admin Panel → Approved Ideas'],
               ['See how the organisation is performing', 'Analytics'],
               ['Send the leaderboard to HR for R&R', 'Leaderboard → Send to HR'],
               ['Save the leaderboard as a document', 'Leaderboard → Download PDF'],
@@ -591,7 +591,7 @@ const PLATFORM_ADMIN = {
       blocks: [
         {
           p: 'Click **Organisations** to see every customer on the platform: totals across the top (active, on '
-            + 'hold, total users, ideas submitted/implemented, sent to QCMS, gone quiet, never signed in), then a '
+            + 'hold, total users, ideas submitted/implemented, sent to OctaQube, gone quiet, never signed in), then a '
             + 'searchable, filterable table of every organisation.',
         },
         {
@@ -649,7 +649,7 @@ const PLATFORM_ADMIN = {
         {
           bullets: [
             { term: 'Subscription and billing', text: 'assign or change their plan, set trial length, and record a payment (extends their paid period and lifts a hold if they were suspended for non-payment). Each of these three is its own separate button on purpose, so fixing a typo can\'t accidentally also record a payment.' },
-            { term: 'Usage', text: 'employees, ideas, approvals, implementations, QCMS pushes, storage - counts only.' },
+            { term: 'Usage', text: 'employees, ideas, approvals, implementations, OctaQube pushes, storage - counts only.' },
             { term: 'Organisation Admin Contacts', text: 'your support contacts for this org. Click **Reset Password** next to any admin to issue them a new temporary password immediately (no confirmation) - it\'s shown once, copy it down, and it signs out their existing sessions.' },
             { term: 'Manage Organisation', text: 'rename the org or change its code (this breaks existing login links and signs everyone out - warn them first), and suspend/reactivate.' },
             { term: 'Danger Zone', text: 'deleting an organisation. Type the organisation\'s exact code to confirm, optionally tick "Also permanently delete the database and all of its data," then click **Delete Organisation**.' },

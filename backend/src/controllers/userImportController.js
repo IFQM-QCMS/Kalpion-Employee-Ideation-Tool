@@ -39,6 +39,18 @@ export const start = asyncHandler(async (req, res) => {
   return respond(res, result, 202); // accepted; poll the job for progress
 });
 
+/** POST /api/users/import/update/preview - what a bulk update would change. Writes nothing. */
+export const previewUpdate = asyncHandler(async (req, res) => {
+  const file = requireFile(req);
+  return respond(res, await importService.previewUpdate(req.db, req.user, file.buffer, file.originalname));
+});
+
+/** POST /api/users/import/update - apply a bulk update of existing people. */
+export const applyUpdate = asyncHandler(async (req, res) => {
+  const file = requireFile(req);
+  return respond(res, await importService.applyUpdate(req.db, req.user, file.buffer, file.originalname, req.tenant));
+});
+
 /** GET /api/users/import/:id - progress + errors, for polling. */
 export const job = asyncHandler(async (req, res) =>
   respond(res, await importService.getJob(req.db, req.params.id))
@@ -53,4 +65,4 @@ export const errorsCsv = asyncHandler(async (req, res) => {
   return res.send('﻿' + csv); // BOM so Excel reads UTF-8 correctly
 });
 
-export default { template, preview, start, job, errorsCsv };
+export default { template, preview, start, previewUpdate, applyUpdate, job, errorsCsv };

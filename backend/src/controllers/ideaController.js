@@ -38,6 +38,11 @@ export const reviewAction = asyncHandler(async (req, res) =>
   respond(res, await ideaService.reviewAction(req.db, req.user, req.body || {}))
 );
 
+/** POST /api/ideas/reopen - undo a rejection. */
+export const reopen = asyncHandler(async (req, res) =>
+  respond(res, await ideaService.reopenRejected(req.db, req.user, req.body || {}))
+);
+
 export const dashboard = asyncHandler(async (req, res) =>
   respond(res, await ideaService.dashboard(req.db, req.user))
 );
@@ -85,7 +90,7 @@ export const setPatentability = asyncHandler(async (req, res) =>
 );
 
 export default {
-  list, my, review, get, submit, draft, reviewAction, dashboard,
+  list, my, review, get, submit, draft, reviewAction, reopen, dashboard,
   assignReviewers, reviewerDecision, checkDuplicate, bulkReview, updateRoi, updateImplementation,
   setArchived, setPatentability, setPatentableFlag, bulkArchive,
 };

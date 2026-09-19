@@ -5,7 +5,7 @@ import { useLang } from '../context/LangContext';
 export default function QcBadge({ status }) {
   const { t } = useLang();
 
-  // 'duplicate' means QCMS answered 409: it is already there.
+  // 'duplicate' means OctaQube answered 409: it is already there.
   const inQc = status === 'imported' || status === 'duplicate';
   const failed = status === 'failed';
   if (!inQc && !failed) return null;

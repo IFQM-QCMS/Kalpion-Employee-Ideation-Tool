@@ -30,20 +30,56 @@ const ARROW = '»'; // Noto Sans has no glyph; » is a safe forward indicator.
 // small formatting helpers
 const s = (v) => (v === null || v === undefined ? '' : String(v)).trim();
 
+/*
+ * The zone the PDF's clock times are shown in. Set per request from the browser's zone (the
+ * X-Client-Timezone header) before a document is built; India by default.
+ *
+ * Every connection runs in UTC and returns timestamps as bare strings ("2026-09-15
+ * 04:30:00"). The screen treats those as UTC and shows the viewer's local time; this file
+ * used to hand them to new Date(), which reads a bare string as SERVER-local time and then
+ * printed it unconverted - so on a UTC server the timeline in the PDF ran five and a half
+ * hours behind the same timeline on screen.
+ */
+let displayZone = 'Asia/Kolkata';
+export function setDisplayZone(tz) {
+  const zone = String(tz || '').trim();
+  try {
+    if (zone) {
+      // Rejects anything Intl does not know rather than throwing later, mid-render.
+      new Intl.DateTimeFormat('en-IN', { timeZone: zone });
+      displayZone = zone;
+      return;
+    }
+  } catch { /* fall through */ }
+  displayZone = 'Asia/Kolkata';
+}
+
+/** A server timestamp as a Date, with bare strings read as the UTC they are. */
+function parseServerDate(v) {
+  if (v instanceof Date) return v;
+  const str = s(v);
+  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2}(?:\.\d+)?)$/.exec(str);
+  return new Date(naive ? `${naive[1]}T${naive[2]}Z` : str);
+}
+
 function fmtDate(v) {
   if (!v) return '';
-  const d = new Date(v);
+  const d = parseServerDate(v);
   if (Number.isNaN(d.getTime())) return s(v);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  // A date-only value ("2026-09-15") carries no clock, so no zone shift applies to it.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s(v));
+  return d.toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', timeZone: dateOnly ? 'UTC' : displayZone,
+  });
 }
 
 function fmtDateTimeLocal(v) {
   if (!v) return '';
-  const d = new Date(v);
+  const d = parseServerDate(v);
   if (Number.isNaN(d.getTime())) return s(v);
   return d.toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: true,
+    hour: '2-digit', minute: '2-digit', hour12: true, timeZone: displayZone,
   });
 }
 

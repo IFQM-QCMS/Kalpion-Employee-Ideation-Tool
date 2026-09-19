@@ -261,7 +261,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
             ['Ideas submitted', usage?.ideas_total],
             ['Approved', usage?.ideas_approved],
             ['Implemented', usage?.ideas_implemented],
-            ['Pushed to QCMS', usage?.qcms_pushed],
+            ['Pushed to OctaQube', usage?.qcms_pushed],
             ['Flagged patentable', usage?.patentable_flagged],
             ['Attachments', usage?.attachments],
           ].map(([label, value]) => (
@@ -285,7 +285,7 @@ export default function OrgProfilePanel({ tenantId, registration, usage, roiTota
                   ? 'Never signed in'
                   : `${activity.days_since_login} day(s) ago`)
               : null} />
-            <Row label="Failed QCMS pushes" value={usage?.qcms_failed ? String(usage.qcms_failed) : '0'} />
+            <Row label="Failed OctaQube pushes" value={usage?.qcms_failed ? String(usage.qcms_failed) : '0'} />
           </div>
         </div>
       </Card>

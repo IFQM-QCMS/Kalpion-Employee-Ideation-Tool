@@ -25,7 +25,7 @@ export async function addNotification(db, userId, title, msg, ideaId = null) {
 
 /** Insert a workflow/audit entry. */
 export async function addWorkflow(db, ideaId, actorId, action, comment = null, stage = null) {
-  const allowed = ['Submitted', 'Reviewed', 'Approved', 'Rejected', 'Implemented', 'Commented', 'Reopened'];
+  const allowed = ['Submitted', 'Reviewed', 'Approved', 'Rejected', 'Implemented', 'Commented', 'Reopened', 'Returned', 'Resubmitted'];
   const safeAction = allowed.includes(action) ? action : 'Commented';
   const fullComment = allowed.includes(action) ? comment : `${action}${comment ? `: ${comment}` : ''}`;
   try {

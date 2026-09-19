@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -33,6 +34,12 @@ export default function ReviewQueuePage() {
   // The chain, as this organisation has it configured right now.
   const [chain, setChain] = useState(null);
   const [openDetailId, setOpenDetailId] = useState(null);
+  // /review?idea=<id> - the link a reviewer's email carries.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = Number(params.get('idea')) || 0;
+    if (id) setOpenDetailId(id);
+  }, [params]);
   const [openReviewId,   setOpenReviewId]   = useState(null);
   const [openReviewCode, setOpenReviewCode] = useState('');
   const [openAssignId,   setOpenAssignId]   = useState(null);
@@ -225,6 +232,15 @@ export default function ReviewQueuePage() {
                   <td style={{ whiteSpace:'nowrap' }}>
                     {(() => {
                       const step = chain?.steps?.find(x => x.stage === i.current_stage);
+                      // A stage the organisation's chain does not list: the final approver
+                      // forwarded this idea there. Named from the catalogue, marked as such.
+                      if (!step && i.current_stage && i.forward_stages) {
+                        return (
+                          <span title={t('idea.forwarded_stage')}>
+                            <span className="chip chip-primary" style={{ borderStyle:'dashed' }}>{t(`stage.${i.current_stage}`)}</span>
+                          </span>
+                        );
+                      }
                       if (!step) return <span style={{ color:'var(--subtle)' }}>-</span>;
                       return (
                         <span title={t('review.at_stage', { stage: step.label, n: step.position, total: chain.total })}>
@@ -290,7 +306,11 @@ export default function ReviewQueuePage() {
         <Pager {...pager} noun="ideas" />
       </div>
 
-      {openDetailId && <IdeaDetailModal ideaId={openDetailId} onClose={() => { setOpenDetailId(null); load(); }} />}
+      {openDetailId && <IdeaDetailModal ideaId={openDetailId} onClose={() => {
+        setOpenDetailId(null);
+        if (params.get('idea')) setParams({}, { replace: true });
+        load();
+      }} />}
       {openReviewId && (
         <ReviewActionModal
           ideaId={openReviewId}

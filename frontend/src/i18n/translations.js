@@ -26,6 +26,11 @@ export const STATUS_KEYS = {
   'Draft':'status.draft',
   'Escalated':'status.escalated',
   'Comment':'status.comment',
+  'Returned':'status.returned',
+  'Resubmitted':'status.resubmitted',
+  'Reopened':'status.reopened',
+  'Reviewed':'status.reviewed',
+  'Commented':'status.comment',
 };
 export const IMPACT_KEYS = {
   'Low':'impact.low', 'Medium':'impact.medium',

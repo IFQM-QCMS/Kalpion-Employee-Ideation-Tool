@@ -26,6 +26,9 @@ router.get('/:id', requireAuth, ideas.get);                     // action=get&id
 router.post('/submit', requireAuth, ideas.submit);              // action=submit
 router.post('/draft', requireAuth, ideas.draft);                // action=draft
 router.post('/review-action', requireRole(...REVIEW_DECIDE_ROLES), ideas.reviewAction);        // action=review_action
+// Undo a rejection. Same people as decide, further narrowed in the service to the rejector or
+// an approver at or above the rejecting stage.
+router.post('/reopen', requireRole(...REVIEW_DECIDE_ROLES), ideas.reopen);
 router.post('/assign-reviewers', requireRole(...REVIEW_DECIDE_ROLES), ideas.assignReviewers);  // action=assign_reviewers
 router.post('/reviewer-decision', requireRole(...REVIEW_DECIDE_ROLES), ideas.reviewerDecision); // action=reviewer_decision
 router.post('/bulk-review', requireRole(...REVIEW_DECIDE_ROLES), ideas.bulkReview);            // action=bulk_review

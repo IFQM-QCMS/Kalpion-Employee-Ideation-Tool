@@ -17,12 +17,14 @@ tracked, measurable innovation pipeline.
   no API key.
 - **Route** - ideas escalate one stage at a time up the author's own reporting
   line, or go to a review committee with a configurable approval threshold; SLA
-  timers flag overdue reviews.
+  timers flag overdue reviews. An approver can send an idea back to its author
+  for changes (it returns to that same stage on resubmission), the final approver
+  can forward it to a further role before closing, and a rejection can be undone.
 - **Reward** - points (10 submit / 25 approved / 65 implemented), leaderboards,
   challenges and community voting keep people contributing.
 - **Track** - ROI and implementation tracking, analytics, CSV export, and an
   append-only audit log connect ideas to real outcomes.
-- **Push** - approved ideas can be pushed to the QCMS quality system, with each
+- **Push** - approved ideas can be pushed to the OctaQube quality system (formerly QCMS), with each
   organisation holding its own API key.
 
 Each organisation is an isolated tenant with its own database, branding, users and

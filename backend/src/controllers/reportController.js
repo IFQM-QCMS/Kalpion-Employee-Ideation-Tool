@@ -8,7 +8,7 @@ export const analytics = asyncHandler(async (req, res) =>
 );
 
 export const audit = asyncHandler(async (req, res) =>
-  respond(res, await reportService.audit(req.db))
+  respond(res, await reportService.audit(req.db, req.query || {}))
 );
 
 export default { analytics, audit };

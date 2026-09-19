@@ -160,8 +160,10 @@ export function buildLeaderboardPdf(rows, meta = {}) {
   doc.font('reg');
 
   const cols = resolveWidths();
+  // In the reader's zone, not the server's - the server runs in UTC.
   const generatedAt = new Date().toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    timeZone: meta.timeZone || 'Asia/Kolkata',
   });
   const header = { orgName: meta.orgName, period: meta.period, generatedAt };
 

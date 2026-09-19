@@ -67,6 +67,11 @@ export default function AdminPage() {
   const [openIdeaId,  setOpenIdeaId]  = useState(null);
   const [showUserForm,setShowUserForm]= useState(false);
   const [showImport,  setShowImport]  = useState(false);
+  // 'create' (new accounts) or 'update' (change existing people from the same sheet).
+  const [importMode,  setImportMode]  = useState('create');
+  // The roles as this organisation actually uses them, with counts - the dropdowns are built
+  // from this, not from a list baked into the page.
+  const [roleList,    setRoleList]    = useState([]);
   const [editUser,    setEditUser]    = useState(null);
   const [rescoreMsg,  setRescoreMsg]  = useState('');
   const [settingsMsg, setSettingsMsg] = useState('');
@@ -104,10 +109,12 @@ export default function AdminPage() {
     setLoading(true);
     setUsersError('');
     // These two used to be a single Promise.all inside an empty catch.
-    const [uRes, mRes] = await Promise.allSettled([
+    const [uRes, mRes, rRes] = await Promise.allSettled([
       usersApi.adminList({ q: usersSearch, role: usersRole, status: usersStatus, page: userPage, limit: 25 }),
       usersApi.managers(),
+      usersApi.roles(),
     ]);
+    if (rRes.status === 'fulfilled') setRoleList(rRes.value.data.roles || []);
 
     if (uRes.status === 'fulfilled') {
       setUsers(uRes.value.data.users || []);
@@ -291,7 +298,15 @@ export default function AdminPage() {
             <select className="form-control" style={{ width:190 }} value={usersRole}
               onChange={e => { setUsersRole(e.target.value); setUserPage(1); }} id="admin-user-role">
               <option value="">{t('filter.all_roles')}</option>
-              {HIERARCHY_ROLES.map(r => <option key={r} value={r}>{formatRole(r, t)}</option>)}
+              {/* Every role somebody actually holds, with how many - nothing preloaded and empty. */}
+              {(roleList.length ? roleList.filter(r => r.count > 0).map(r => r.role) : HIERARCHY_ROLES).map(r => {
+                const info = roleList.find(x => x.role === r);
+                return (
+                  <option key={r} value={r}>
+                    {formatRole(r, t)}{info ? ` (${info.count})` : ''}
+                  </option>
+                );
+              })}
             </select>
             <select className="form-control" style={{ width:150 }} value={usersStatus}
               onChange={e => { setUsersStatus(e.target.value); setUserPage(1); }}>
@@ -300,8 +315,11 @@ export default function AdminPage() {
               <option value="inactive">{t('admin.status_inactive')}</option>
             </select>
             <div style={{ display:'flex',gap:8 }}>
-              <button className="btn btn-outline btn-sm" onClick={() => setShowImport(true)}>
+              <button className="btn btn-outline btn-sm" onClick={() => { setImportMode('create'); setShowImport(true); }}>
                 ⬆ {t('imp.button')}
+              </button>
+              <button className="btn btn-outline btn-sm" onClick={() => { setImportMode('update'); setShowImport(true); }}>
+                ✎ {t('admin.bulk_update')}
               </button>
               <button className="btn btn-primary btn-sm" onClick={() => { setEditUser(null); setShowUserForm(true); }}>{t('btn.add_user')}</button>
             </div>
@@ -399,10 +417,10 @@ export default function AdminPage() {
       {/* Idea categories */}
       {tab === 4 && <CategoriesTab t={t} showToast={showToast} />}
 
-      {/* Approved ideas (pushable to QCMS) */}
+      {/* Approved ideas (pushable to OctaQube) */}
       {tab === 6 && <ApprovedIdeasTab t={t} showToast={showToast} />}
 
-      {/* API & Integration (QCMS) */}
+      {/* API & Integration (OctaQube) */}
       {tab === 7 && <IntegrationTab t={t} showToast={showToast} />}
 
       {/* System */}
@@ -544,6 +562,7 @@ export default function AdminPage() {
 
       {showImport && (
         <BulkImportModal
+          mode={importMode}
           onClose={() => setShowImport(false)}
           onImported={() => { setUserPage(1); loadUsers(); }}
         />
@@ -553,6 +572,7 @@ export default function AdminPage() {
         <UserFormModal
           user={editUser}
           managers={managers}
+          roleList={roleList}
           // Which one-per-organisation roles are already held.
           takenRoles={takenRoles}
           currentUserRole={user?.role}
@@ -1295,7 +1315,7 @@ function ReportingNode({ node, depth, t, managers, savingId, currentUserId, onRe
   );
 }
 
-function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserRole, currentUserId, onClose, onSaved, onRefresh, showToast, t }) {
+function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {}, currentUserRole, currentUserId, onClose, onSaved, onRefresh, showToast, t }) {
   const isEdit = !!editUser;
   const [name,    setName]    = useState(editUser?.name||'');
   const [empId,   setEmpId]   = useState(editUser?.employee_id||'');
@@ -1313,12 +1333,16 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
   const [error,   setError]   = useState('');
   const [saving,  setSaving]  = useState(false);
 
-  // Mirrors ROLES_ADMIN_CAN_ASSIGN in backend/src/services/userService.js.
-  const roleOptions = [
-    'trainee','employee','team_lead','project_lead','manager',
-    'department_manager','senior_manager','plant_head','executive',
-    ...(currentUserRole==='super_admin' ? ['admin'] : []),
-  ];
+  // What this admin may assign, from the server (userService.roles) - with the fallback the
+  // page used to carry, for the moment before the list has loaded.
+  const roleOptions = roleList.length
+    ? roleList.filter(r => r.assignable).map(r => r.role)
+    : [
+      'trainee','employee','team_lead','project_lead','manager',
+      'department_manager','senior_manager','plant_head','executive',
+      ...(currentUserRole==='super_admin' ? ['admin'] : []),
+    ];
+  const roleCount = (r) => roleList.find(x => x.role === r)?.count;
 
   async function handleSubmit() {
     setError('');
@@ -1452,6 +1476,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
                   return (
                     <option key={r} value={r} disabled={!!heldBy && !mine}>
                       {formatRole(r, t)}
+                      {roleCount(r) !== undefined ? ` (${roleCount(r) ? t('admin.role_count', { n: roleCount(r) }) : t('admin.role_none')})` : ''}
                       {heldBy && !mine ? ` - ${t('admin.uf_role_taken', { name: heldBy.name })}` : ''}
                     </option>
                   );
@@ -1496,7 +1521,7 @@ function UserFormModal({ user: editUser, managers, takenRoles = {}, currentUserR
   );
 }
 
-// Approved Ideas tab - this tenant's approved ideas, pushable to QCMS
+// Approved Ideas tab - this tenant's approved ideas, pushable to OctaQube
 const QCMS_BADGE = {
   imported:  ['#16a34a', '#dcfce7'],
   duplicate: ['#2563eb', '#dbeafe'],
@@ -1569,7 +1594,7 @@ function ApprovedIdeasTab({ t, showToast }) {
                   <th style={{ padding:'9px 12px' }}>{t('admin.col_title')}</th>
                   <th style={{ padding:'9px 12px' }}>{t('detail.submitted_by')}</th>
                   <th style={{ padding:'9px 12px' }}>{t('admin.uf_dept')}</th>
-                  <th style={{ padding:'9px 12px' }}>QCMS</th>
+                  <th style={{ padding:'9px 12px' }}>OctaQube</th>
                   <th style={{ padding:'9px 12px' }}></th>
                 </tr>
               </thead>
@@ -1598,7 +1623,7 @@ function ApprovedIdeasTab({ t, showToast }) {
   );
 }
 
-// API & Integration tab - paste the QCMS key; push approved ideas
+// API & Integration tab - paste the OctaQube key; push approved ideas
 function IntegrationTab({ t, showToast }) {
   const [config,  setConfig]  = useState(null);
   const [apiKey,  setApiKey]  = useState('');

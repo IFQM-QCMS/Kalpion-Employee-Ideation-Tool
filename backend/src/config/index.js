@@ -202,7 +202,7 @@ const config = {
     geminiApiKey: process.env.GEMINI_API_KEY || '',
   },
 
-  // QCMS integration (approved ideas are pushed to the QCMS tool) Default base URL; a tenant
+  // OctaQube integration (approved ideas are pushed to the OctaQube tool) Default base URL; a tenant
   // may override it in the org admin screen.
   qcms: {
     baseUrl: (process.env.QCMS_BASE_URL || 'http://localhost:5000/api/v1/integrations').replace(/\/+$/, ''),

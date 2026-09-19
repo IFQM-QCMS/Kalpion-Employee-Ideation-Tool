@@ -15,33 +15,41 @@ const TEMP_PASSWORD_ROUNDS = 10;    // see tempPasswordFor() for why not 12
 const STALE_JOB_MINUTES = 30;
 
 // Sheet definition (drives BOTH the template and the parser)
+//
+// `required` is what a NEW account needs. A bulk UPDATE needs only employee_id, and applies
+// whichever other cells are filled in. The header row of the template marks required
+// columns with a trailing " *"; the parser ignores that mark, so a sheet with or without it
+// reads the same.
 export const COLUMNS = [
   { key: 'employee_id', header: 'employee_id', required: true,  max: 20,  width: 16,
-    note: 'Unique ID for the employee. Required. This is the key the import de-duplicates on.' },
+    note: 'Unique ID for the employee. Required. This is the key the import de-duplicates on, and the key a bulk update matches on.' },
   // MOM §13.4 - salutation / first name / last name.
-  { key: 'salutation',  header: 'salutation',  required: false, max: 10,  width: 11,
-    note: 'Optional. Mr / Ms / Mrs / Dr / Prof.' },
+  { key: 'salutation',  header: 'salutation',  required: true,  max: 10,  width: 11,
+    note: 'Required. Mr / Ms / Mrs / Dr / Prof.' },
   { key: 'first_name',  header: 'first_name',  required: true,  max: 60,  width: 18,
     note: 'Required.' },
-  { key: 'last_name',   header: 'last_name',   required: false, max: 60,  width: 18,
-    note: 'Optional, but recommended - it is part of the displayed name.' },
-  // Since migration 025 an account signs in with a username OR an address, so neither is
-  // required on its own - the pair is, and that is checked per row.
-  { key: 'username',    header: 'username',    required: false, max: 50,  width: 18,
-    note: 'Sign-in name, e.g. yashas123. Give this OR an email. Unique across the whole platform.' },
+  { key: 'last_name',   header: 'last_name',   required: true,  max: 60,  width: 18,
+    note: 'Required. Part of the displayed name.' },
+  { key: 'username',    header: 'username',    required: true,  max: 50,  width: 18,
+    note: 'Required. Sign-in name, e.g. yashas123. Unique across the whole platform.' },
   { key: 'email',       header: 'email',       required: false, max: 150, width: 28,
-    note: 'Work email. Give this OR a username. Must be unique.' },
-  { key: 'role',        header: 'role',        required: false, max: 20,  width: 16,
-    note: 'Leave blank for "employee". Pick from the dropdown.' },
+    note: 'Optional. Work email; if given it must be unique, and the temporary password is emailed to it.' },
+  { key: 'role',        header: 'role',        required: true,  max: 20,  width: 16,
+    note: 'Required. Pick from the dropdown.' },
   { key: 'department',  header: 'department',  required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'business_unit', header: 'business_unit', required: false, max: 100, width: 18, note: 'Optional.' },
   { key: 'location',    header: 'location',    required: false, max: 100, width: 16, note: 'Optional.' },
-  // Required, like every other route that creates a user.
   { key: 'phone',       header: 'phone',       required: true,  max: 20,  width: 16,
     note: 'Required. Mobile number - sign-in codes and password resets are sent to it.' },
-  { key: 'manager_employee_id', header: 'manager_employee_id', required: false, max: 20, width: 20,
-    note: "Optional. The employee_id of this person's manager - either an existing employee or another row in this sheet." },
+  { key: 'manager_employee_id', header: 'manager_employee_id', required: true, max: 20, width: 20,
+    note: "Required for everyone except the top of the organisation (plant head, executive, admin). The employee_id of this person's manager - an existing employee or another row in this sheet." },
 ];
+
+// The roles that sit at the top of a reporting tree, and so may have no manager.
+const TOP_ROLES = ['plant_head', 'executive', 'admin', 'super_admin'];
+
+/** The header as the template prints it - required columns carry a star. */
+export const headerLabel = (c) => (c.required ? `${c.header} *` : c.header);
 
 const HEADER_ALIASES = new Map();
 for (const c of COLUMNS) {
@@ -63,7 +71,11 @@ for (const c of COLUMNS) {
 ].forEach(([alias, key]) => HEADER_ALIASES.set(normaliseHeader(alias), key));
 
 function normaliseHeader(s) {
-  return String(s ?? '').toLowerCase().replace(/[\s_\-.]+/g, ' ').trim();
+  return String(s ?? '').toLowerCase()
+    // The template marks required columns "employee_id *"; the help sheet says "(required)".
+    // Neither is part of the name.
+    .replace(/\*/g, ' ').replace(/\((?:required|optional)\)/g, ' ')
+    .replace(/[\s_\-.]+/g, ' ').trim();
 }
 
 
@@ -115,7 +127,7 @@ export async function buildTemplate(actorRole) {
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Employees');
-  ws.columns = COLUMNS.map((c) => ({ header: c.header, key: c.key, width: c.width }));
+  ws.columns = COLUMNS.map((c) => ({ header: headerLabel(c), key: c.key, width: c.width }));
 
   ws.getRow(1).font = { bold: true };
   ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
@@ -178,11 +190,13 @@ export async function buildTemplate(actorRole) {
   h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored - you do not need to delete it before uploading.');
   h('', '');
   h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe - it will not touch anyone who already has an account.');
-  h('Roles', `You may assign: ${roles.join(', ')}. Anything else will be rejected. Leave the cell blank for "employee".`);
+  h('Required columns', 'Headers marked with * are required for a new account. The other columns may be left blank, or left out of the sheet altogether.');
+  h('Roles', `You may assign: ${roles.join(', ')}. Anything else will be rejected.`);
   h('Plant Head', 'One per organisation. The approval chain ends there, so a second one would '
     + 'mean an idea\'s final approval depended on which plant head it happened to reach. A row '
     + 'asking for a role that is already held is rejected with the name of the person who has it.');
-  h('Managers', 'manager_employee_id must be the employee_id of somebody who already exists, or of another row in this same sheet. Circular reporting lines (A reports to B, B reports to A) are rejected.');
+  h('Managers', 'manager_employee_id must be the employee_id of somebody who already exists, or of another row in this same sheet. It may be blank only for the top of the organisation (plant head, executive, admin). Circular reporting lines (A reports to B, B reports to A) are rejected.');
+  h('Bulk update', 'The same sheet updates existing people when uploaded through "Bulk update": rows are matched on employee_id, and only the cells you fill in are changed - a blank cell leaves that detail as it is.');
   h('Limit', `Up to ${MAX_ROWS.toLocaleString()} employees per file.`);
   h('', '');
   h('Columns', '', true);
@@ -209,7 +223,7 @@ function cellToString(v) {
 }
 
 /** Read the sheet into raw {rowNumber, values} objects. */
-async function parseSheet(buffer, filename) {
+async function parseSheet(buffer, filename, { mode = 'create' } = {}) {
   const isCsv = /\.csv$/i.test(filename || '');
   const rows = [];
   let headerMap = null;   // column index -> canonical key
@@ -263,7 +277,9 @@ async function parseSheet(buffer, filename) {
     throw badRequest('Could not find a header row. Use the downloadable template.');
   }
   const found = new Set(headerMap.values());
-  const missing = COLUMNS.filter((c) => c.required && !found.has(c.key)).map((c) => c.header);
+  // A new account needs every required column; an update needs only the key it matches on.
+  const needed = mode === 'update' ? COLUMNS.filter((c) => c.key === 'employee_id') : COLUMNS.filter((c) => c.required);
+  const missing = needed.filter((c) => !found.has(c.key)).map((c) => c.header);
   if (missing.length) {
     throw badRequest(`The sheet is missing required column(s): ${missing.join(', ')}. Use the downloadable template.`);
   }
@@ -342,11 +358,16 @@ export async function validateRows(db, actor, records) {
 
     // required
     if (!employeeId) { reject(rec, 'employee_id is required.'); continue; }
+    if (!salutation) { reject(rec, 'salutation is required (Mr / Ms / Mrs / Dr / Prof).'); continue; }
+    if (!firstName)  { reject(rec, 'first_name is required.'); continue; }
+    if (!lastName)   { reject(rec, 'last_name is required.'); continue; }
     if (!name)       { reject(rec, 'name is required.'); continue; }
-    if (!email && !username) {
-      reject(rec, 'Give a username or an email - one of the two is how this person signs in.');
+    if (!username) {
+      reject(rec, 'username is required - it is how this person signs in.');
       continue;
     }
+    if (!(rec.role || '').trim()) { reject(rec, 'role is required.'); continue; }
+    if (!(rec.phone || '').trim()) { reject(rec, 'phone is required.'); continue; }
     if (username && !isUsername(username)) {
       reject(rec, `"${username}" is not a valid username - 3-30 characters of letters, numbers, dot, underscore or hyphen, including at least one letter.`);
       continue;
@@ -455,7 +476,231 @@ export async function validateRows(db, actor, records) {
   // managers: resolve, then reject cycles
   resolveManagers(valid, byEmpId, reject);
 
+  // Everyone reports to somebody, except the people at the top.
+  for (const r of valid) {
+    if (r.__rejected || r.manager_employee_id || TOP_ROLES.includes(r.role)) continue;
+    r.__rejected = true;
+    reject({ __row: r.__row, employee_id: r.employee_id, email: r.email || '' },
+      'manager_employee_id is required for this role - only a plant head, executive or admin may have no manager.');
+  }
+
   return { valid: valid.filter((r) => !r.__rejected), errors };
+}
+
+/*
+ * Bulk UPDATE. Rows are matched to existing people on employee_id; a filled cell replaces
+ * that detail, a blank cell leaves it alone. The same rules as creating apply to whatever is
+ * filled: roles the admin may assign, one plant head, unique username and email, a manager
+ * who exists and no reporting loops. Nothing here touches passwords.
+ */
+export async function validateUpdateRows(db, actor, records) {
+  const allowedRoles = assignableRoles(actor.role);
+  const [existing] = await db.query(
+    `SELECT id, employee_id, LOWER(email) AS email, LOWER(username) AS username, role, name,
+            manager_id, status
+       FROM users`);
+  const byEmpId = new Map();
+  const byId = new Map();
+  const emailOwner = new Map();
+  const usernameOwner = new Map();
+  for (const u of existing) {
+    if (u.employee_id) byEmpId.set(String(u.employee_id).toLowerCase(), u);
+    byId.set(Number(u.id), u);
+    if (u.email) emailOwner.set(u.email, Number(u.id));
+    if (u.username) usernameOwner.set(u.username, Number(u.id));
+  }
+  const [heldRows] = await db.query(
+    `SELECT id, role, name FROM users WHERE status = 'active' AND role IN (?)`, [SINGLETON_ROLES_LIST]);
+  const singletonHeldBy = new Map(heldRows.map((r) => [r.role, { id: Number(r.id), name: r.name }]));
+
+  const errors = [];
+  const valid = [];
+  const seen = new Map();
+  const reject = (rec, message) => errors.push({
+    row_number: rec.__row,
+    employee_id: (rec.employee_id || '').slice(0, 190),
+    email: (rec.email || '').slice(0, 190),
+    message: message.slice(0, 250),
+  });
+  const cell = (rec, key) => (rec[key] === undefined ? undefined : String(rec[key] || '').trim());
+
+  for (const rec of records) {
+    const employeeId = cell(rec, 'employee_id') || '';
+    if (!employeeId) { reject(rec, 'employee_id is required - it is how the row is matched.'); continue; }
+    const key = employeeId.toLowerCase();
+    const user = byEmpId.get(key);
+    if (!user) { reject(rec, `No employee has the ID "${employeeId}" - a bulk update changes existing people only.`); continue; }
+    if (seen.has(key)) { reject(rec, `Duplicate employee_id "${employeeId}" - already on row ${seen.get(key)}.`); continue; }
+    seen.set(key, rec.__row);
+
+    let tooLong = null;
+    for (const c of COLUMNS) {
+      const v = cell(rec, c.key);
+      if (v && v.length > c.max) { tooLong = `${c.header} is too long (max ${c.max} characters).`; break; }
+    }
+    if (tooLong) { reject(rec, tooLong); continue; }
+
+    const changes = {};
+    const salutation = cell(rec, 'salutation');
+    const firstName = cell(rec, 'first_name');
+    const lastName = cell(rec, 'last_name');
+    if (salutation) changes.salutation = salutation;
+    if (firstName) changes.first_name = firstName;
+    if (lastName) changes.last_name = lastName;
+    if (firstName || lastName) {
+      // The displayed name follows whichever halves were given, keeping the other half.
+      const [curFirst, ...curRest] = String(user.name || '').split(' ');
+      changes.name = [firstName || curFirst, lastName || curRest.join(' ')].filter(Boolean).join(' ').trim();
+    }
+
+    const email = (cell(rec, 'email') || '').toLowerCase();
+    if (email) {
+      if (!EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
+      const owner = emailOwner.get(email);
+      if (owner && owner !== Number(user.id)) { reject(rec, `The email "${email}" belongs to another employee.`); continue; }
+      changes.email = email;
+    }
+    const username = (cell(rec, 'username') || '').toLowerCase();
+    if (username) {
+      if (!isUsername(username)) {
+        reject(rec, `"${username}" is not a valid username - 3-30 characters of letters, numbers, dot, underscore or hyphen, including at least one letter.`);
+        continue;
+      }
+      const owner = usernameOwner.get(username);
+      if (owner && owner !== Number(user.id)) { reject(rec, `The username "${username}" belongs to another employee.`); continue; }
+      changes.username = username;
+    }
+
+    const role = (cell(rec, 'role') || '').toLowerCase();
+    if (role && role !== user.role) {
+      if (!allowedRoles.includes(role)) {
+        reject(rec, `You are not allowed to assign the role "${role}". Allowed: ${allowedRoles.join(', ')}.`);
+        continue;
+      }
+      const held = singletonHeldBy.get(role);
+      if (held && held.id !== Number(user.id)) {
+        reject(rec, `Only one ${role.replace(/_/g, ' ')} is allowed per organisation, and ${held.name} already holds it.`);
+        continue;
+      }
+      if (SINGLETON_ROLES_LIST.includes(role)) singletonHeldBy.set(role, { id: Number(user.id), name: user.name });
+      changes.role = role;
+    }
+
+    for (const k of ['department', 'business_unit', 'location']) {
+      const v = cell(rec, k);
+      if (v) changes[k] = v;
+    }
+    const phone = cell(rec, 'phone');
+    if (phone) {
+      if (phone.replace(/\D/g, '').length < 10) { reject(rec, `"${phone}" is not a valid mobile number.`); continue; }
+      changes.phone = phone;
+    }
+
+    const mgrEmp = cell(rec, 'manager_employee_id');
+    valid.push({ __row: rec.__row, id: Number(user.id), employee_id: employeeId, email: email || user.email || '',
+      changes, manager_employee_id: mgrEmp || null });
+  }
+
+  // Managers: an existing employee, or another row of this sheet; and no loops once applied.
+  const managerIdOf = new Map(existing.map((u) => [Number(u.id), u.manager_id ? Number(u.manager_id) : null]));
+  for (const r of valid) {
+    if (!r.manager_employee_id) continue;
+    const m = byEmpId.get(r.manager_employee_id.toLowerCase());
+    if (!m) {
+      r.__rejected = true;
+      reject({ __row: r.__row, employee_id: r.employee_id, email: r.email },
+        `manager_employee_id "${r.manager_employee_id}" does not match any employee.`);
+      continue;
+    }
+    if (Number(m.id) === r.id) {
+      r.__rejected = true;
+      reject({ __row: r.__row, employee_id: r.employee_id, email: r.email }, 'A person cannot be their own manager.');
+      continue;
+    }
+    r.changes.manager_id = Number(m.id);
+    managerIdOf.set(r.id, Number(m.id));
+  }
+  for (const r of valid) {
+    if (r.__rejected || r.changes.manager_id === undefined) continue;
+    // Walk upward from the new manager; landing back on this person is a loop.
+    let cur = r.changes.manager_id;
+    const hops = new Set();
+    while (cur && !hops.has(cur)) {
+      if (cur === r.id) {
+        r.__rejected = true;
+        reject({ __row: r.__row, employee_id: r.employee_id, email: r.email },
+          `Setting ${r.manager_employee_id} as manager would create a circular reporting line.`);
+        break;
+      }
+      hops.add(cur);
+      cur = managerIdOf.get(cur) ?? null;
+    }
+  }
+
+  return { valid: valid.filter((r) => !r.__rejected), errors };
+}
+
+/** Bulk UPDATE: validate, then apply the changed cells in one transaction. */
+export async function applyUpdate(db, actor, buffer, filename, tenant = null) {
+  const records = await parseSheet(buffer, filename, { mode: 'update' });
+  const { valid, errors } = await validateUpdateRows(db, actor, records);
+  const rows = valid.filter((r) => Object.keys(r.changes).length);
+
+  let updated = 0;
+  if (rows.length) {
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const r of rows) {
+        const cols = Object.keys(r.changes);
+        await conn.execute(
+          `UPDATE users SET ${cols.map((c) => `\`${c}\` = ?`).join(', ')} WHERE id = ?`,
+          [...cols.map((c) => r.changes[c]), r.id]);
+        updated++;
+      }
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback().catch(() => {});
+      throw e;
+    } finally {
+      conn.release();
+    }
+    // The sign-in directory follows the identifiers that changed.
+    if (tenant) {
+      for (const r of rows) {
+        if (r.changes.email === undefined && r.changes.username === undefined && r.changes.phone === undefined) continue;
+        try {
+          const [[u]] = await db.execute('SELECT id, email, phone, username FROM users WHERE id = ?', [r.id]);
+          if (u) await indexUser(tenant, u);
+        } catch { /* the directory self-heals on the next sign-in */ }
+      }
+    }
+  }
+  logger.info(`bulk user update by ${actor?.name || actor?.id}: ${updated} updated, ${errors.length} rejected`);
+  return {
+    success: true,
+    total_rows: records.length,
+    updated,
+    unchanged: valid.length - rows.length,
+    invalid_count: errors.length,
+    errors: errors.slice(0, 200),
+  };
+}
+
+/** Bulk UPDATE preview: what would change, and what would be rejected. Writes nothing. */
+export async function previewUpdate(db, actor, buffer, filename) {
+  const records = await parseSheet(buffer, filename, { mode: 'update' });
+  const { valid, errors } = await validateUpdateRows(db, actor, records);
+  return {
+    success: true,
+    mode: 'update',
+    total_rows: records.length,
+    valid_count: valid.filter((r) => Object.keys(r.changes).length).length,
+    unchanged_count: valid.filter((r) => !Object.keys(r.changes).length).length,
+    invalid_count: errors.length,
+    sample: valid.slice(0, 10).map((r) => ({ row: r.__row, employee_id: r.employee_id, changes: r.changes })),
+    errors: errors.slice(0, 200),
+  };
 }
 
 /*

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
@@ -57,9 +57,13 @@ export default function SubmitPage() {
   const { t }         = useLang();
   const { showToast } = useToast();
   const navigate      = useNavigate();
+  const [params]      = useSearchParams();
 
   const [step,    setStep]    = useState(1);
   const [draftId, setDraftId] = useState(null);
+  // An idea an approver sent back for changes: the form opens on it, and the reviewer's
+  // request stays in view while the author works.
+  const [returned, setReturned] = useState(null);
 
   // Step 1 fields
   const [title,     setTitle]     = useState('');
@@ -136,6 +140,46 @@ export default function SubmitPage() {
   const searchTimers = useRef({});
 
   useEffect(() => { loadChallenges(); loadCategories(); }, []);
+
+  // /submit?edit=<id> opens an existing draft of the signed-in person - the way back in for an
+  // idea that was sent back for improvement.
+  useEffect(() => {
+    const editId = Number(params.get('edit')) || 0;
+    if (!editId) return;
+    let cancelled = false;
+    ideasApi.get(editId).then((res) => {
+      if (cancelled || !res.data?.success) return;
+      const i = res.data.idea;
+      if (!i || Number(i.submitter_id) !== Number(user?.id) || i.status !== 'Draft') {
+        showToast(t('idea.edit_not_draft'), 'danger');
+        return;
+      }
+      setDraftId(i.id);
+      setTitle(i.title || '');
+      setSituation(i.present_situation || '');
+      setSolution(i.proposed_solution || '');
+      setTangible(i.tangible_benefit || '');
+      setIntangible(i.intangible_benefit || '');
+      setImpactAreas(String(i.impact_areas || '').split(',').map((x) => x.trim()).filter(Boolean));
+      setImpactLevel(i.impact_level || 'Medium');
+      setInvestment(i.investment_required ?? '');
+      setFeasibility(i.feasibility || '');
+      setTimeRequired(i.time_required || '');
+      setSolutionTags(String(i.solution_tags || '').split(',').map((x) => x.trim()).filter(Boolean));
+      setImplDuration(i.implementation_duration || '');
+      setImplDate(i.expected_implementation_date ? String(i.expected_implementation_date).slice(0, 10) : '');
+      setBenefits(i.benefits_expected || '');
+      setSupport(i.support_required || '');
+      setCoSuggesters((i.co_suggesters || []).map((c) => ({ id: c.id, label: c.name || c.label || `#${c.id}` })));
+      setPatentable(!!Number(i.patentable_flag));
+      setChallengeId(i.challenge_id ? String(i.challenge_id) : '');
+      setReturned(i.returned_at ? {
+        by: i.returned_by_name || '', stage: i.returned_stage_label || i.returned_stage || '',
+        reason: i.return_reason || '',
+      } : null);
+    }).catch(() => showToast(t('msg.server_error'), 'danger'));
+    return () => { cancelled = true; };
+  }, [params]);
 
   async function loadChallenges() {
     try {
@@ -315,6 +359,21 @@ export default function SubmitPage() {
 
   return (
     <>
+      {/* The reviewer's request, kept in view while the author revises. */}
+      {returned && (
+        <div className="alert alert-warning" id="returned-banner" style={{ marginBottom: 14 }}>
+          <div style={{ fontWeight: 700 }}>
+            {t('idea.returned_banner', { name: returned.by || '-', stage: returned.stage || '-' })}
+          </div>
+          {returned.reason && (
+            <div style={{ marginTop: 4, whiteSpace: 'pre-wrap' }}>
+              <strong>{t('idea.returned_reason')}:</strong> {returned.reason}
+            </div>
+          )}
+          <div style={{ marginTop: 4, fontSize: 12.5 }}>{t('idea.returned_hint', { name: returned.by || t('table.actor') })}</div>
+        </div>
+      )}
+
       {/* Wizard Steps */}
       <div className="wizard-steps">
         {stepLabels.map((label, i) => (

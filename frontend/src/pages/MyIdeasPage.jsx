@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas, fmtDateTime, engagementIndex } from '../utils/helpers';
@@ -38,6 +39,12 @@ export default function MyIdeasPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [openId,  setOpenId]  = useState(null);
+  // /my-ideas?idea=<id> - the link every email about an idea carries.
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const id = Number(params.get('idea')) || 0;
+    if (id) setOpenId(id);
+  }, [params]);
   const pager = usePager(ideas);
 
   useEffect(() => { load(); }, []);
@@ -131,6 +138,10 @@ export default function MyIdeasPage() {
                 </td>
                 <td>
                   <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status, t)}</span>
+                  {/* A draft that came back from a reviewer is not just a draft. */}
+                  {i.returned_at && i.status === 'Draft' && (
+                    <span className="badge badge-rejected" style={{ marginLeft:4 }}>{t('idea.returned_badge')}</span>
+                  )}
                   <QcBadge status={i.qcms_push_status} />
                 </td>
                 <td>
@@ -153,7 +164,11 @@ export default function MyIdeasPage() {
         <Pager {...pager} noun="ideas" />
       </div>
 
-      {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}
+      {openId && <IdeaDetailModal ideaId={openId} onClose={() => {
+        setOpenId(null);
+        if (params.get('idea')) setParams({}, { replace: true });
+        load();
+      }} />}
     </>
   );
 }

@@ -62,6 +62,10 @@ export const deleteUser = asyncHandler(async (req, res) =>
   respond(res, await userService.deleteUser(req.db, req.user, req.params.id ?? req.body?.id, req.tenant))
 );
 
+export const roles = asyncHandler(async (req, res) =>
+  respond(res, await userService.roles(req.db, req.user))
+);
+
 export const managers = asyncHandler(async (req, res) =>
   respond(res, await userService.managers(req.db))
 );
@@ -85,5 +89,5 @@ export const updateProfile = asyncHandler(async (req, res) =>
 );
 
 export default { list, adminUsers, reportingChain,
-  hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, managers, hierarchy, updateProfile,
+  hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, roles, managers, hierarchy, updateProfile,
   requestPhoneChangeCode, confirmPhoneChange };

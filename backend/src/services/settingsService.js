@@ -6,7 +6,7 @@ import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import {
   parseStages, stagesToChain, STAGE_CATALOG, DEFAULT_STAGES, DEFAULT_CHAIN,
   resolveLabels, approverStages, firstStage, finalStage, nextStage, isFinalStage,
-  stagesForRole,
+  stagesForRole, withForwardStages,
 } from './approvalStages.js';
 import { badRequest, ApiError } from '../utils/respond.js';
 import config from '../config/index.js';
@@ -93,6 +93,27 @@ export async function getApprovalConfig(db) {
   };
 }
 
+/*
+ * The chain as it applies to ONE idea: the organisation's stages, plus any the final approver
+ * forwarded this idea to. Everything that walks a specific idea along the chain - approving,
+ * returning, reopening, the queue, the PDF - should ask this rather than getApprovalConfig
+ * alone, or a forwarded idea looks as if it is waiting at a stage that does not exist.
+ */
+export function configForIdea(cfg, idea) {
+  const raw = idea?.forward_stages;
+  if (!raw) return cfg;
+  const stages = withForwardStages(cfg.stages, raw);
+  if (stages.length === cfg.stages.length) return cfg;
+  return {
+    ...cfg,
+    stages,
+    approvers: approverStages(stages),
+    first_stage: firstStage(stages),
+    final_stage: finalStage(stages),
+    forwarded: stages.slice(cfg.stages.length),
+  };
+}
+
 /** The stage after `key` in this tenant's chain, or null when `key` is last. */
 export function advanceStage(cfg, key) {
   return nextStage(cfg.stages, key);
@@ -112,7 +133,7 @@ export function rolePlaysStages(cfg, role) {
 export async function getSettings(db, user) {
   const settings = await getOrgSettings(db);
 
-  // The QCMS API key is a secret managed on its own screen (integrationService, masked
+  // The OctaQube API key is a secret managed on its own screen (integrationService, masked
   // there). It must never travel through the general settings response.
   delete settings.qcms_api_key;
 

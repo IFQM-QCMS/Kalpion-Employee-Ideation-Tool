@@ -159,7 +159,7 @@ export default function PlatformDashPage() {
     ['suspended', t('pa.kpi_suspended'),  counts.suspended, 'var(--danger)',  'var(--danger-light)'],
     ['users',     t('pa.total_users'),    counts.users,     'var(--info)',    'var(--info-light)'],
     ['ideas',     t('pa.ideas_submitted'), counts.ideas,    'var(--warning)', 'var(--warning-light)'],
-    // §12.8 - the drill-down the MOM named: Organisations Ideas Implemented, then §12.5's QCMS
+    // §12.8 - the drill-down the MOM named: Organisations Ideas Implemented, then §12.5's OctaQube
     // figure as the business-value endpoint of that path.
     ['ideas',     t('pa.kpi_implemented'), totals.implemented, 'var(--primary)', 'var(--primary-light)'],
     ['ideas',     t('pa.qcms_pushed'),     totals.qcms_pushed, 'var(--info)',    'var(--info-light)'],

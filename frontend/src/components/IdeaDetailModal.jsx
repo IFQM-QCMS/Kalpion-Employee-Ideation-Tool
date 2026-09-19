@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
@@ -30,6 +31,8 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
   const [error,    setError]    = useState('');
 
   const [showReview,      setShowReview]      = useState(false);
+  const [reopening,       setReopening]       = useState(false);
+  const navigate = useNavigate();
   const [showAssign,      setShowAssign]      = useState(false);
   const [showRvDecision,  setShowRvDecision]  = useState(false);
   const [exporting,       setExporting]       = useState(false);
@@ -137,6 +140,19 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
     setBusyFlag(false);
   }
 
+  // Undo a rejection - offered only when the server says this viewer may (idea.can_reopen).
+  async function handleReopen() {
+    if (!window.confirm(t('review.undo_reject_confirm'))) return;
+    const note = window.prompt(t('review.undo_reject_note'), '') ?? '';
+    setReopening(true);
+    try {
+      const res = await ideasApi.reopen({ idea_id: ideaId, comment: note });
+      if (res.data.success) { showToast(t('review.undo_reject_ok'), 'success'); onClose(); }
+      else showToast(res.data.error || t('msg.server_error'), 'danger');
+    } catch (e) { showToast(e.response?.data?.error || t('msg.server_error'), 'danger'); }
+    setReopening(false);
+  }
+
   async function handleExportPdf() {
     setExporting(true);
     try {
@@ -235,6 +251,31 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       </label>
                     </div>
                   </div>
+
+                  {/* Sent back for changes: what was asked, and the way back in for the author. */}
+                  {idea.returned_at && idea.status === 'Draft' && (
+                    <div className="alert alert-warning" style={{ marginBottom:12, fontSize:12.5 }}>
+                      <div style={{ fontWeight:700 }}>
+                        {t('idea.returned_banner', { name: idea.returned_by_name || '-', stage: idea.returned_stage_label || '-' })}
+                      </div>
+                      {idea.return_reason && (
+                        <div style={{ marginTop:4, whiteSpace:'pre-wrap' }}>
+                          <strong>{t('idea.returned_reason')}:</strong> {idea.return_reason}
+                        </div>
+                      )}
+                      {isSelf && (
+                        <div style={{ marginTop:8 }}>
+                          <button className="btn btn-primary btn-sm"
+                            onClick={() => { onClose(); navigate(`/submit?edit=${idea.id}`); }}>
+                            {t('idea.edit_resubmit')}
+                          </button>
+                          <span style={{ marginLeft:8, color:'var(--text-muted)' }}>
+                            {t('idea.returned_hint', { name: idea.returned_by_name || '-' })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* §13.13 - one line answering "where is this now?", rather than leaving the reader to reconstruct it from the timeline. */}
                   {idea.review_stage && (
@@ -544,6 +585,12 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
             )}
             {canDirectReview && (
               <button className="btn btn-success" onClick={() => setShowReview(true)}>{t('review.decide')}</button>
+            )}
+            {idea?.can_reopen && (
+              <button className="btn btn-outline" style={{ borderColor:'#b45309', color:'#b45309' }}
+                disabled={reopening} onClick={handleReopen}>
+                {reopening ? t('msg.loading') : t('review.undo_reject')}
+              </button>
             )}
           </div>
         </div>

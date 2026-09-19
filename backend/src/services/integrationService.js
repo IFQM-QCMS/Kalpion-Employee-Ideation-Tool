@@ -7,14 +7,14 @@ import logger from '../utils/logger.js';
 
 const KEY_MASK = '••••••••';
 
-/** Validate/clean an admin-typed QCMS base URL. */
+/** Validate/clean an admin-typed OctaQube base URL. */
 function normalizeBaseUrl(raw) {
   const v = String(raw ?? '').trim().replace(/\/+$/, '');
   if (!v) return '';
   let parsed;
-  try { parsed = new URL(v); } catch { throw badRequest('Enter a valid QCMS base URL, e.g. https://api.qcms.com/v1.'); }
+  try { parsed = new URL(v); } catch { throw badRequest('Enter a valid OctaQube base URL, e.g. https://api.qcms.com/v1.'); }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw badRequest('The QCMS base URL must start with http:// or https://.');
+    throw badRequest('The OctaQube base URL must start with http:// or https://.');
   }
   return v;
 }
@@ -68,7 +68,7 @@ export async function saveQcmsConfig(db, body) {
   return getQcmsConfig(db);
 }
 
-// Approved ideas for this tenant (with QCMS push status)
+// Approved ideas for this tenant (with OctaQube push status)
 export async function listApprovedIdeas(db) {
   const [rows] = await db.query(
     `SELECT i.id, i.idea_code, i.title, i.impact_areas, i.impact_level, i.status,
@@ -115,11 +115,11 @@ async function loadApprovedForPush(db, ideaIds) {
   return ideas;
 }
 
-/** Push one or more approved ideas to QCMS. */
+/** Push one or more approved ideas to OctaQube. */
 export async function pushApprovedIdeas(db, ideaIds = null, { onlyPending = false } = {}) {
   const { apiKey, baseUrl, enabled } = await resolvePushContext(db);
-  if (!enabled) throw badRequest('QCMS integration is turned off. Enable it and save your API key first.');
-  if (!apiKey) throw badRequest('No QCMS API key saved. Paste your key in API & Integration first.');
+  if (!enabled) throw badRequest('OctaQube integration is turned off. Enable it and save your API key first.');
+  if (!apiKey) throw badRequest('No OctaQube API key saved. Paste your key in API & Integration first.');
 
   let ideas = await loadApprovedForPush(db, ideaIds);
   if (onlyPending) ideas = ideas.filter((i) => i.qcms_push_status !== 'imported' && i.qcms_push_status !== 'duplicate');

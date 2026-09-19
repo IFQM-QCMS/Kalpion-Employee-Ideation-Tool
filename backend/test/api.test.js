@@ -1641,7 +1641,7 @@ test('an account must have a username or an email, and a username is platform-wi
 
 // Bulk import is the path that matters most for this change: a workforce with no company
 // mailboxes is imported from a sheet, not typed in one at a time.
-test('bulk import accepts a username with no email, and refuses a row with neither', async () => {
+test('bulk import: username, salutation, last name, role, phone and manager are required; email is not', async () => {
   const { validateRows } = await import('../src/services/userImportService.js');
 
   // Stands in for the tenant connection: the function reads the existing user table once,
@@ -1653,8 +1653,8 @@ test('bulk import accepts a username with no email, and refuses a row with neith
   };
   const actor = { role: 'admin' };
   const row = (over) => ({
-    __row: 2, employee_id: 'IMP100', first_name: 'Asha', last_name: 'Rao',
-    year_of_birth: '1994', phone: '+919812345670', role: 'employee', ...over,
+    __row: 2, employee_id: 'IMP100', salutation: 'Ms', first_name: 'Asha', last_name: 'Rao',
+    phone: '+919812345670', role: 'employee', manager_employee_id: 'EXIST1', ...over,
   });
 
   const ok = await validateRows(db, actor, [row({ username: 'asha.rao' })]);
@@ -1662,12 +1662,31 @@ test('bulk import accepts a username with no email, and refuses a row with neith
   assert.equal(ok.valid[0].username, 'asha.rao');
   assert.equal(ok.valid[0].email, null, 'a blank address must import as NULL, not an empty string');
 
+  // Email is optional; username is not.
   const emailOnly = await validateRows(db, actor, [row({ email: 'asha@orga.test' })]);
-  assert.equal(emailOnly.valid.length, 1, 'an email-only row must still be accepted');
+  assert.equal(emailOnly.valid.length, 0, 'a row with an email but no username is refused');
+  assert.match(emailOnly.errors[0].message, /username is required/);
 
-  const neither = await validateRows(db, actor, [row({})]);
-  assert.equal(neither.valid.length, 0, 'a row with no username and no email must be refused');
-  assert.match(neither.errors[0].message, /username or an email/);
+  const both = await validateRows(db, actor, [row({ username: 'asha.rao', email: 'asha@orga.test' })]);
+  assert.equal(both.valid.length, 1, 'a row with both is accepted');
+
+  // Each of the required columns, blank, is named in the refusal.
+  for (const [col, re] of [['salutation', /salutation/], ['last_name', /last_name/], ['role', /role is required/], ['phone', /phone is required/]]) {
+    const r = await validateRows(db, actor, [row({ username: 'asha.rao', [col]: '' })]);
+    assert.equal(r.valid.length, 0, `${col} blank must be refused`);
+    assert.match(r.errors[0].message, re, `and the message names ${col}`);
+  }
+
+  // Everyone reports to somebody - except the top of the organisation.
+  const noMgr = await validateRows(db, actor, [row({ username: 'asha.rao', manager_employee_id: '' })]);
+  assert.equal(noMgr.valid.length, 0, 'an employee with no manager is refused');
+  assert.match(noMgr.errors[0].message, /manager_employee_id is required/);
+  const topNoMgr = await validateRows(db, actor, [row({ username: 'head.one', role: 'plant_head', manager_employee_id: '' })]);
+  assert.equal(topNoMgr.valid.length, 1, `a plant head may have no manager: ${JSON.stringify(topNoMgr.errors)}`);
+
+  // The optional columns may be missing from the row altogether.
+  const noOptional = await validateRows(db, actor, [row({ username: 'asha.rao' })]);
+  assert.equal(noOptional.valid[0].department, null);
 
   const badName = await validateRows(db, actor, [row({ username: '9812345678' })]);
   assert.equal(badName.valid.length, 0,
@@ -2675,11 +2694,17 @@ test('the import template no longer has a birth column', async () => {
   const zip = new ExcelJS.Workbook();
   await zip.xlsx.load(bytes);
   const sheet = zip.worksheets[0];
-  const headers = (sheet.getRow(1).values || []).map((v) => String(v ?? '').toLowerCase());
+  // Required columns carry a trailing " *" in the template; strip it before comparing.
+  const rawHeaders = (sheet.getRow(1).values || []).map((v) => String(v ?? '').toLowerCase());
+  const headers = rawHeaders.map((h) => h.replace(/\s*\*$/, ''));
   assert.ok(!headers.some((h) => /birth|dob/.test(h)),
     `no birth column may remain in the template - got ${headers.join(', ')}`);
   assert.ok(headers.includes('phone'),
     'and phone must still be there, since the password is built from it');
+  assert.ok(rawHeaders.includes('phone *') && rawHeaders.includes('employee_id *'),
+    'required columns are marked with a star');
+  assert.ok(rawHeaders.includes('email'),
+    'and an optional column is not');
 });
 
 // GSTIN verification (MOM 24/08 §2).
@@ -5043,4 +5068,235 @@ test('the sign-up form\'s own payload is enough to submit an application', async
     () => svc.validateApplication({ ...application, enterprise_category: 'enormous' }),
     /micro, small or medium/i,
     'and a value outside the vocabulary is still refused, naming the choices');
+});
+
+// Sept 2026 change requests: send back, forward past the final stage, undo a rejection,
+// audit filters, live role list, bulk update.
+test('an approver can send an idea back; the resubmission returns to that stage, not the start', async () => {
+  // A short chain with a named person at each stage, reporting upward.
+  let res = await api('POST', '/api/settings', {
+    token: AADMIN, body: { approval_stages: 'originator,immediate_manager,plant_head' },
+  });
+  assert.equal(res.data.success, true);
+
+  const mk = async (email, role, phone, extra = {}) => {
+    const created = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: { name: `SB ${role}`, email, password: 'SendBack1234', role,
+        employee_id: email.split('@')[0].toUpperCase(), phone, department: 'Ops', ...extra },
+    });
+    assert.equal(created.data.success, true, `${role}: ${JSON.stringify(created.data)}`);
+    return { id: created.data.user_id || created.data.id, token: (await login(email, 'SendBack1234', 'orga')).token };
+  };
+  // Any existing plant head would block a second one; step it aside for this case.
+  await sql('ifqm_test_a', "UPDATE ifqm_test_a.users SET role = 'executive' WHERE role = 'plant_head'");
+  const head = await mk('sb.head@orga.test', 'plant_head', '+919812346101');
+  const mgr  = await mk('sb.mgr@orga.test', 'manager', '+919812346102', { manager_id: head.id });
+  const emp  = await mk('sb.emp@orga.test', 'employee', '+919812346103', { manager_id: mgr.id });
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: emp.token,
+    body: {
+      title: 'Label the valve manifold',
+      present_situation: 'Unlabelled valves get opened in the wrong order.',
+      proposed_solution: 'Number every valve and post the sequence.',
+    },
+  });
+  assert.equal(submitted.data.success, true, JSON.stringify(submitted.data));
+  const ideaId = submitted.data.idea_id;
+
+  // Manager approves: on to the plant head.
+  res = await api('POST', '/api/ideas/review-action', { token: mgr.token, body: { idea_id: ideaId, decision: 'Approved' } });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.stage, 'plant_head');
+
+  // Send-back needs a reason.
+  res = await api('POST', '/api/ideas/review-action', { token: head.token, body: { idea_id: ideaId, decision: 'Returned' } });
+  assert.equal(res.status, 400, 'a send-back without a note is refused');
+
+  // Plant head sends it back.
+  res = await api('POST', '/api/ideas/review-action', {
+    token: head.token, body: { idea_id: ideaId, decision: 'Returned', comment: 'Add the valve count and a photo.' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.decision, 'Returned');
+
+  let [row] = await sql('ifqm_test_a', `SELECT status, returned_stage, return_reason, current_stage FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.equal(row.status, 'Draft', 'it is the author\'s draft again');
+  assert.equal(row.returned_stage, 'plant_head');
+  assert.match(row.return_reason, /valve count/);
+  assert.equal(row.current_stage, null);
+
+  // The author sees why, and the trail records it.
+  const detail = await api('GET', `/api/ideas/${ideaId}`, { token: emp.token });
+  assert.equal(detail.data.idea.returned_stage_label, 'Plant Head');
+  assert.equal(detail.data.idea.returned_by_name, 'SB plant_head');
+  assert.ok(detail.data.idea.workflow.some((w) => w.action === 'Returned'), 'the timeline shows the send-back');
+
+  // Resubmit: straight back to the plant head, no second helping of points.
+  const [before] = await sql('ifqm_test_a', `SELECT points FROM ifqm_test_a.users WHERE id = ${emp.id}`);
+  res = await api('POST', '/api/ideas/submit', {
+    token: emp.token,
+    body: { id: ideaId, title: 'Label the valve manifold (14 valves)', present_situation: 'Unlabelled valves get opened in the wrong order.', proposed_solution: 'Number all 14 valves; photo attached.' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.points_added, 0, 'a resubmission earns nothing extra');
+  const [after] = await sql('ifqm_test_a', `SELECT points FROM ifqm_test_a.users WHERE id = ${emp.id}`);
+  assert.equal(Number(after.points), Number(before.points));
+  [row] = await sql('ifqm_test_a', `SELECT status, current_stage, current_reviewer_id, returned_at FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.equal(row.current_stage, 'plant_head', 'it re-enters where it was sent back from');
+  assert.equal(Number(row.current_reviewer_id), Number(head.id));
+  assert.equal(row.returned_at, null, 'and is no longer marked as returned');
+  assert.ok(['Submitted', 'Under Review'].includes(row.status));
+
+  // The plant head's queue has it; the manager's does not (that stage already approved).
+  const hq = await api('GET', '/api/ideas/review', { token: head.token });
+  assert.ok(hq.data.ideas.some((i) => i.id === ideaId), 'back in the plant head\'s queue');
+  const mq = await api('GET', '/api/ideas/review', { token: mgr.token });
+  assert.ok(!mq.data.ideas.some((i) => i.id === ideaId), 'not in the manager\'s');
+
+  // Forward past the final stage: the plant head approves AND forwards to the executive.
+  const opts = (await api('GET', `/api/ideas/${ideaId}`, { token: head.token })).data.idea.forward_options;
+  assert.ok(opts.some((o) => o.stage === 'executive'), `executive is offered: ${JSON.stringify(opts)}`);
+  res = await api('POST', '/api/ideas/review-action', {
+    token: head.token, body: { idea_id: ideaId, decision: 'Approved', forward_to: 'executive', comment: 'Needs capex sign-off.' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.decision, 'Escalated');
+  assert.equal(res.data.stage, 'executive');
+  [row] = await sql('ifqm_test_a', `SELECT status, current_stage, forward_stages FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.equal(row.status, 'Under Review', 'forwarded, not closed');
+  assert.equal(row.forward_stages, 'executive');
+
+  // The executive - outside the organisation's chain - sees exactly this forwarded idea.
+  const execTok = (await login(
+    (await sql('ifqm_test_a', "SELECT email FROM ifqm_test_a.users WHERE role = 'executive' AND status='active' LIMIT 1"))[0].email,
+    PASSWORDS.orgaAdmin, 'orga')).token || null;
+  if (execTok) {
+    const eq = await api('GET', '/api/ideas/review', { token: execTok });
+    assert.ok(eq.data.ideas.some((i) => i.id === ideaId), 'the forwarded idea is in the executive\'s queue');
+  }
+  // Forwarding is only offered at the last stage.
+  res = await api('POST', '/api/ideas/review-action', { token: mgr.token, body: { idea_id: ideaId, decision: 'Approved', forward_to: 'executive' } });
+  assert.notEqual(res.data.success, true, 'a mid-chain approver cannot forward');
+
+  await api('POST', '/api/settings', {
+    token: AADMIN, body: { approval_stages: 'originator,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+test('a rejection can be undone by the person who made it, and the idea goes back into review there', async () => {
+  await api('POST', '/api/settings', { token: AADMIN, body: { approval_stages: 'originator,immediate_manager,plant_head' } });
+  const mgrTok = (await login('sb.mgr@orga.test', 'SendBack1234', 'orga')).token;
+  const empTok = (await login('sb.emp@orga.test', 'SendBack1234', 'orga')).token;
+  const [mgrRow] = await sql('ifqm_test_a', "SELECT id FROM ifqm_test_a.users WHERE email = 'sb.mgr@orga.test'");
+
+  const submitted = await api('POST', '/api/ideas/submit', {
+    token: empTok,
+    body: { title: 'Shadow board for the tool crib', present_situation: 'Tools go missing.', proposed_solution: 'Outline every tool on a board.' },
+  });
+  const ideaId = submitted.data.idea_id;
+
+  let res = await api('POST', '/api/ideas/review-action', {
+    token: mgrTok, body: { idea_id: ideaId, decision: 'Rejected', comment: 'Duplicate of the board from last year.' },
+  });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+
+  // The author cannot undo it; the admin cannot either.
+  res = await api('POST', '/api/ideas/reopen', { token: empTok, body: { idea_id: ideaId } });
+  assert.equal(res.status, 403);
+  res = await api('POST', '/api/ideas/reopen', { token: AADMIN, body: { idea_id: ideaId } });
+  assert.equal(res.status, 403);
+
+  // The detail tells the rejector they may.
+  const d = await api('GET', `/api/ideas/${ideaId}`, { token: mgrTok });
+  assert.equal(d.data.idea.can_reopen, true);
+
+  res = await api('POST', '/api/ideas/reopen', { token: mgrTok, body: { idea_id: ideaId, comment: 'It was not a duplicate after all.' } });
+  assert.equal(res.data.success, true, JSON.stringify(res.data));
+  assert.equal(res.data.decision, 'Reopened');
+  assert.equal(res.data.stage, 'immediate_manager');
+
+  const [row] = await sql('ifqm_test_a', `SELECT status, current_stage, current_reviewer_id FROM ifqm_test_a.ideas WHERE id = ${ideaId}`);
+  assert.equal(row.status, 'Under Review');
+  assert.equal(row.current_stage, 'immediate_manager');
+  assert.equal(Number(row.current_reviewer_id), Number(mgrRow.id));
+  const trail = await sql('ifqm_test_a', `SELECT action FROM ifqm_test_a.idea_workflow WHERE idea_id = ${ideaId} ORDER BY id`);
+  assert.deepEqual(trail.map((w) => w.action).slice(-2), ['Rejected', 'Reopened']);
+
+  // Reopening a second time is refused - it is no longer rejected.
+  res = await api('POST', '/api/ideas/reopen', { token: mgrTok, body: { idea_id: ideaId } });
+  assert.equal(res.status, 400);
+
+  await api('POST', '/api/settings', {
+    token: AADMIN, body: { approval_stages: 'originator,immediate_manager,department_manager,plant_head' },
+  });
+});
+
+test('the audit trail filters by action, idea, actor and date', async () => {
+  const all = await api('GET', '/api/reports/audit', { token: AADMIN });
+  assert.equal(all.data.success, true);
+  assert.ok(all.data.audit.length > 0);
+  assert.ok(Array.isArray(all.data.actions) && all.data.actions.includes('Rejected'));
+
+  const rejected = await api('GET', '/api/reports/audit?action=Rejected', { token: AADMIN });
+  assert.ok(rejected.data.audit.length > 0);
+  assert.ok(rejected.data.audit.every((w) => w.action === 'Rejected'));
+
+  const byIdea = await api('GET', '/api/reports/audit?idea=Shadow%20board', { token: AADMIN });
+  assert.ok(byIdea.data.audit.length > 0);
+  assert.ok(byIdea.data.audit.every((w) => /Shadow board/.test(w.idea_title)));
+
+  const byActor = await api('GET', '/api/reports/audit?actor=SB%20manager', { token: AADMIN });
+  assert.ok(byActor.data.audit.length > 0);
+  assert.ok(byActor.data.audit.every((w) => w.actor_name === 'SB manager'));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const inRange = await api('GET', `/api/reports/audit?from=${today}&to=${today}&tz_offset=0`, { token: AADMIN });
+  assert.ok(inRange.data.audit.length > 0, 'today has entries');
+  const none = await api('GET', '/api/reports/audit?from=2000-01-01&to=2000-01-02', { token: AADMIN });
+  assert.equal(none.data.audit.length, 0, 'a range with nothing in it is empty');
+});
+
+test('the role list is built from the people who exist, and says what the admin may assign', async () => {
+  const res = await api('GET', '/api/users/roles', { token: AADMIN });
+  assert.equal(res.data.success, true);
+  const byRole = Object.fromEntries(res.data.roles.map((r) => [r.role, r]));
+  assert.ok(byRole.employee.count > 0, 'employees are counted');
+  assert.equal(byRole.employee.assignable, true);
+  assert.equal(byRole.super_admin.assignable, false, 'an admin cannot hand out super_admin');
+  assert.equal(byRole.plant_head.singleton, true);
+  assert.equal(byRole.admin.assignable, false, 'nor admin');
+  const denied = await api('GET', '/api/users/roles', { token: AUSER });
+  assert.equal(denied.status, 403);
+});
+
+test('bulk update changes only the filled cells of existing people, and never creates anyone', async () => {
+  const { validateUpdateRows } = await import('../src/services/userImportService.js');
+  const existing = await sql('ifqm_test_a',
+    "SELECT id, employee_id, name, department FROM ifqm_test_a.users WHERE email = 'sb.emp@orga.test'");
+  const emp = existing[0];
+  const [mgrRow] = await sql('ifqm_test_a', "SELECT id, employee_id FROM ifqm_test_a.users WHERE email = 'sb.mgr@orga.test'");
+
+  // A real tenant connection is what the service expects; borrow one through the pool used
+  // by the suite's other direct-service tests.
+  const { getTenantPool } = await import('../src/database/tenant.js');
+  const db = getTenantPool({ db_name: 'ifqm_test_a', db_host: config.masterDb.host });
+
+  const r = await validateUpdateRows(db, { role: 'admin' }, [
+    { __row: 2, employee_id: emp.employee_id, department: 'Maintenance', last_name: 'Kumar', phone: '' },
+    { __row: 3, employee_id: 'NOPE-999', department: 'X' },
+    { __row: 4, employee_id: emp.employee_id, department: 'Twice' },
+    { __row: 5, employee_id: mgrRow.employee_id, manager_employee_id: emp.employee_id },
+  ]);
+  assert.equal(r.valid.length, 1, JSON.stringify(r));
+  assert.equal(r.valid[0].changes.department, 'Maintenance');
+  assert.equal(r.valid[0].changes.last_name, 'Kumar');
+  assert.ok(!('phone' in r.valid[0].changes), 'a blank cell changes nothing');
+  assert.match(r.valid[0].changes.name, /Kumar$/, 'the displayed name follows the new last name');
+  assert.equal(r.errors.length, 3);
+  assert.match(r.errors.find((e) => e.row_number === 3).message, /No employee has the ID/);
+  assert.match(r.errors.find((e) => e.row_number === 4).message, /Duplicate employee_id/);
+  assert.match(r.errors.find((e) => e.row_number === 5).message, /circular/i,
+    'the manager reporting to their own report is a loop');
 });

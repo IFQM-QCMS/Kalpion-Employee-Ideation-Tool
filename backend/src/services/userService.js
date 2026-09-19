@@ -486,6 +486,33 @@ export async function deleteUser(db, actor, id, tenant = null) {
 }
 
 /** GET action=managers - eligible managers for dropdowns. */
+/*
+ * The roles as this organisation actually uses them: the whole catalogue in seniority order,
+ * how many active people hold each, and which of them the asking admin may hand out. The
+ * dropdowns on the users screens are built from this rather than from a list baked into the
+ * page, so a role that arrived through a bulk import or a single creation is there the
+ * moment it exists - and roles nobody holds can be shown as such.
+ */
+export async function roles(db, actor) {
+  const [rows] = await db.query(
+    "SELECT role, COUNT(*) AS n FROM users WHERE status = 'active' GROUP BY role");
+  const counts = Object.fromEntries(rows.map((r) => [r.role, Number(r.n)]));
+  const assignable = new Set(assignableRoles(actor?.role));
+  const order = ['super_admin', 'admin', 'executive', 'plant_head', 'senior_manager',
+    'department_manager', 'manager', 'project_lead', 'team_lead', 'employee', 'trainee'];
+  // Anything the database holds that the catalogue above does not name still gets listed.
+  for (const r of Object.keys(counts)) if (!order.includes(r)) order.push(r);
+  return {
+    success: true,
+    roles: order.map((role) => ({
+      role,
+      count: counts[role] || 0,
+      assignable: assignable.has(role),
+      singleton: !!SINGLETON_ROLES[role],
+    })),
+  };
+}
+
 export async function managers(db) {
   const [rows] = await db.query(
     `SELECT id, name, department, role FROM users

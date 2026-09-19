@@ -98,6 +98,15 @@ CREATE TABLE IF NOT EXISTS ideas (
   -- travel the chain.
   current_stage            VARCHAR(40) NULL DEFAULT NULL,
   current_reviewer_id      INT NULL,
+  -- Sent back for improvement (migration 043): who asked, from which stage, and why. The
+  -- resubmission re-enters the chain at returned_stage.
+  returned_at              DATETIME NULL,
+  returned_by              INT NULL,
+  returned_stage           VARCHAR(40) NULL,
+  return_reason            TEXT NULL,
+  -- Stages the final approver forwarded this one idea to, appended to the organisation's
+  -- chain for this idea only (migration 043).
+  forward_stages           VARCHAR(255) NULL,
   review_due_date          DATE NULL,
   is_anonymous             TINYINT(1) NOT NULL DEFAULT 0,
   implementation_owner_id  INT NULL,
@@ -164,7 +173,7 @@ CREATE TABLE IF NOT EXISTS idea_workflow (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   idea_id    INT NOT NULL,
   actor_id   INT NOT NULL,
-  action     ENUM('Submitted','Reviewed','Approved','Rejected','Implemented','Commented','Reopened') NOT NULL,
+  action     ENUM('Submitted','Reviewed','Approved','Rejected','Implemented','Commented','Reopened','Returned','Resubmitted') NOT NULL,
   comment    TEXT,
   -- The approval stage this action was taken AT, recorded rather than derived (migration
   -- 036).

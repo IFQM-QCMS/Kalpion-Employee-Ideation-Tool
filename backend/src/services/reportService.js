@@ -54,7 +54,7 @@ export async function analytics(db) {
   } catch (e) {
     // The columns predate migration 007 on an un-migrated tenant. A missing figure reads as
     // zero rather than blanking the whole dashboard.
-    logger.warn('analytics: QCMS counters unavailable', e.message);
+    logger.warn('analytics: OctaQube counters unavailable', e.message);
   }
 
   return {
@@ -68,7 +68,46 @@ export async function analytics(db) {
 }
 
 // audit (JSON)
-export async function audit(db) {
+/*
+ * The audit trail, narrowed by what the reader is looking for:
+ *   action  one of the workflow actions ('Approved', 'Rejected', 'Returned', ...)
+ *   idea    an idea code or a fragment of a title
+ *   actor   a fragment of the actor's name
+ *   from/to a date range (YYYY-MM-DD), inclusive, in the reader's own zone
+ * Two hundred rows at most, newest first, whatever the filter - the page is for reading,
+ * and the export routes exist for the rest.
+ */
+export async function audit(db, filters = {}) {
+  const where = [];
+  const params = [];
+
+  const action = String(filters.action ?? '').trim();
+  if (action) { where.push('w.action = ?'); params.push(action); }
+
+  const idea = String(filters.idea ?? '').trim();
+  if (idea) {
+    where.push('(i.idea_code LIKE ? OR i.title LIKE ?)');
+    params.push(`%${idea}%`, `%${idea}%`);
+  }
+
+  const actor = String(filters.actor ?? '').trim();
+  if (actor) { where.push('u.name LIKE ?'); params.push(`%${actor}%`); }
+
+  // Dates arrive as the reader's calendar days; the offset turns them into the UTC instants
+  // the table stores. Minutes east of UTC, as the browser reports it (IST = 330).
+  const offsetMin = Number.isFinite(Number(filters.tz_offset)) ? Number(filters.tz_offset) : 330;
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const from = String(filters.from ?? '').trim();
+  const to = String(filters.to ?? '').trim();
+  if (day.test(from)) {
+    where.push('w.created_at >= DATE_SUB(?, INTERVAL ? MINUTE)');
+    params.push(`${from} 00:00:00`, offsetMin);
+  }
+  if (day.test(to)) {
+    where.push('w.created_at < DATE_SUB(DATE_ADD(?, INTERVAL 1 DAY), INTERVAL ? MINUTE)');
+    params.push(`${to} 00:00:00`, offsetMin);
+  }
+
   const [rows] = await db.query(
     `SELECT w.*, u.name AS actor_name, u.role AS actor_role,
             i.idea_code, i.title AS idea_title,
@@ -77,9 +116,15 @@ export async function audit(db) {
      JOIN users u ON u.id = w.actor_id
      JOIN ideas i ON i.id = w.idea_id
      JOIN users s ON s.id = i.submitter_id
-     ORDER BY w.created_at DESC LIMIT 200`
+     ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
+     ORDER BY w.created_at DESC LIMIT 200`,
+    params
   );
-  return { success: true, audit: rows };
+
+  // The actions that actually occur in this organisation's trail, for the filter's dropdown.
+  const [actions] = await db.query(
+    'SELECT DISTINCT action FROM idea_workflow ORDER BY action');
+  return { success: true, audit: rows, actions: actions.map((r) => r.action) };
 }
 
 export default { analytics, audit };

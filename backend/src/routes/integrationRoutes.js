@@ -1,5 +1,5 @@
 /*
- * The QCMS API key and the push action are administrative and secret-bearing, so every
+ * The OctaQube API key and the push action are administrative and secret-bearing, so every
  * route here is limited to the organisation's admins.
  */
 import { Router } from 'express';

@@ -14,10 +14,18 @@ const api = axios.create({
   baseURL: getBaseURL(),
 });
 
+// The browser's own time zone travels with every request, so anything the server renders
+// with a clock in it (the idea PDF's timeline, the leaderboard's stamp) shows the same
+// local time the screen does. The server runs in UTC and could not know otherwise.
+const CLIENT_TZ = (() => {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; }
+})();
+
 // Attach JWT token from localStorage
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('ifqm_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (CLIENT_TZ) config.headers['X-Client-Timezone'] = CLIENT_TZ;
   const org = localStorage.getItem('ifqm_org');
   if (org && !config.params?.org_slug) {
     config.params = { ...config.params, org_slug: org };
@@ -130,6 +138,8 @@ export const ideasApi = {
   saveDraft: (data) => api.post('/ideas/draft', data),
   submit: (data) => api.post('/ideas/submit', data),
   reviewAction: (data) => api.post('/ideas/review-action', data),
+  // Undo a rejection: back into review at the stage it was rejected from.
+  reopen: (data) => api.post('/ideas/reopen', data),
   bulkReview: (data) => api.post('/ideas/bulk-review', data),
   // The person-raised "this might be worth a patent" tick.
   setPatentableFlag: (idea_id, patentable) =>
@@ -180,12 +190,14 @@ export const usersApi = {
   chain: (id) => api.get(`/users/${id}/chain`),
   list: (params) => api.get('/users', { params }),
   analytics: () => api.get('/reports/analytics'),
-  audit: () => api.get('/reports/audit'),
+  audit: (params) => api.get('/reports/audit', { params }),
   hierarchy: () => api.get('/users/hierarchy'),
   // Paginated + server-side search: a tenant can now hold 10,000 employees, so the console
   // can no longer pull the whole table down at once.
   adminList: (params) => api.get('/users/admin', { params }),
   managers: () => api.get('/users/managers'),
+  // The roles as this organisation uses them, with counts - what the role dropdowns show.
+  roles: () => api.get('/users/roles'),
   createUser: (data) => api.post('/users', data),
   updateUser: (data) => api.put(`/users/${data.id}`, data),
   // Hierarchy screen: change only who a user reports to (escalation chain edge).
@@ -216,6 +228,17 @@ export const userImportApi = {
     return api.post('/users/import', fd);
   },
   job: (id) => api.get(`/users/import/${id}`),
+  // Bulk UPDATE of existing people, matched on employee_id; only filled cells change.
+  previewUpdate: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/users/import/update/preview', fd);
+  },
+  applyUpdate: (file) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post('/users/import/update', fd);
+  },
   downloadErrors: async (id) => {
     const res = await api.get(`/users/import/${id}/errors.csv`, { responseType: 'blob' });
     saveBlob(res.data, `import-${id}-errors.csv`);
@@ -240,7 +263,7 @@ export const settingsApi = {
   testEmail: () => api.get('/settings/test-email'),
 };
 
-// QCMS integration (org admin only) Approved ideas are pushed to the QCMS tool.
+// OctaQube integration (org admin only) Approved ideas are pushed to the OctaQube tool.
 export const integrationApi = {
   approvedIdeas: () => api.get('/integrations/approved-ideas'),
   getConfig: () => api.get('/integrations/qcms'),

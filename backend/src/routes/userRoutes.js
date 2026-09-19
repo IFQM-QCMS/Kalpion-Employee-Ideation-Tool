@@ -37,6 +37,10 @@ const ADMIN = requireRole('admin', 'super_admin');
 router.get('/import/template', ADMIN, userImport.template);
 router.post('/import/preview', ADMIN, handleImportFile, userImport.preview);
 router.post('/import', ADMIN, heavyLimiter, handleImportFile, userImport.start);
+// Bulk UPDATE of existing people from the same sheet, matched on employee_id. Declared before
+// '/import/:id' so the word "update" is never read as a job id.
+router.post('/import/update/preview', ADMIN, handleImportFile, userImport.previewUpdate);
+router.post('/import/update', ADMIN, heavyLimiter, handleImportFile, userImport.applyUpdate);
 
 // §13.14 - reporting structure as an editable sheet.
 router.get('/hierarchy/template', ADMIN, users.hierarchyTemplate_download);
@@ -51,6 +55,7 @@ router.get('/admin', requireRole('admin', 'super_admin'), users.adminUsers);    
 // §13.8 - a user's reporting line. Admin-only: it names managers up the tree, which is
 // org-chart data an ordinary employee has no need to enumerate.
 router.get('/:id/chain', requireRole('admin', 'super_admin'), users.reportingChain);
+router.get('/roles', requireRole('admin', 'super_admin'), users.roles);           // the role dropdowns
 router.get('/managers', requireRole('admin', 'super_admin'), users.managers);     // action=managers
 // PHP scoped hierarchy to super_admin (Command Center).
 router.get('/hierarchy', requireRole('admin', 'super_admin'), users.hierarchy);   // action=hierarchy

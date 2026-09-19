@@ -1,8 +1,8 @@
 /** Idea service - Node port of PHP api/ideas.php (idea lifecycle + workflow). */
 import config from '../config/index.js';
 import { computeAIScoreWithReason } from './aiService.js';
-import { getApprovalConfig, advanceStage, rolePlaysStages } from './settingsService.js';
-import { seniorityRanks, rankOf } from './approvalStages.js';
+import { getApprovalConfig, configForIdea, advanceStage, rolePlaysStages } from './settingsService.js';
+import { seniorityRanks, rankOf, STAGE_CATALOG, STAGE_KEYS } from './approvalStages.js';
 import { getOrgSettings, queueEmail } from './mailerService.js';
 import { generateIdeaCode, addNotification, addWorkflow, addPoints } from './coreHelpers.js';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
@@ -17,6 +17,49 @@ const INDIVIDUAL_ROLES = ['trainee', 'employee'];
 // split executive already had.
 const TEAM_ROLES = ['team_lead', 'project_lead', 'manager', 'department_manager', 'senior_manager'];
 const ADMIN_ROLES = ['plant_head', 'executive', 'admin', 'super_admin'];
+
+/*
+ * Where a person opens this idea in the app. Every email about an idea carries it, because a
+ * notice that says "please log in" makes the reader hunt for the thing it is about.
+ */
+export function ideaLink(ideaId, { forReviewer = false } = {}) {
+  const base = String(config.frontendBaseUrl || '').replace(/\/+$/, '');
+  return `${base}/${forReviewer ? 'review' : 'my-ideas'}?idea=${ideaId}`;
+}
+
+/*
+ * Who, right now, could pick this idea up at `stage`: every active holder of the stage's
+ * role other than the author. Used to decide whether forwarding to a stage is worth offering
+ * and to refuse a forward that would only strand the idea.
+ */
+async function holdersOf(db, role, submitterId) {
+  const [rows] = await db.execute(
+    "SELECT id, name, email FROM users WHERE role = ? AND status = 'active' AND id <> ?",
+    [role, submitterId]);
+  return rows;
+}
+
+/*
+ * The catalogue stages the final approver could still forward this idea to: not already in
+ * its chain, and held by somebody who is not the author.
+ */
+async function forwardOptions(db, cfg, idea) {
+  const have = new Set(cfg.stages);
+  const out = [];
+  for (const key of STAGE_KEYS) {
+    const spec = STAGE_CATALOG[key];
+    if (!spec.role || have.has(key)) continue;
+    const people = await holdersOf(db, spec.role, idea.submitter_id);
+    if (!people.length) continue;
+    out.push({
+      stage: key,
+      label: cfg.labels[key] || spec.label,
+      role: spec.role,
+      holders: people.map((u) => ({ id: u.id, name: u.name })),
+    });
+  }
+  return out;
+}
 const PRIVILEGED_ANON = ['manager', 'department_manager', 'senior_manager', 'plant_head', 'executive', 'admin', 'super_admin'];
 
 /** Roles that may read an idea's full proposed solution. */
@@ -424,11 +467,21 @@ export async function review(db, user) {
   const uid = Number(user.id);
   const cfg = await getApprovalConfig(db);
 
-  // Two conditions, and both are needed.
-  const myStages = rolePlaysStages(cfg, user.role);
+  // Two conditions, and both are needed. A role's stages are the ones in the organisation's
+  // chain - plus, for ideas the final approver FORWARDED, the catalogue stage for that role,
+  // because such an idea sits at a stage the chain does not list and its new reviewer still
+  // has to see it. Only forwarded ideas qualify: an idea left at a stage the organisation has
+  // since removed from its chain is not thereby handed to everyone who holds that role.
+  const chainStages = rolePlaysStages(cfg, user.role);
+  const catalogStages = STAGE_KEYS.filter((k) => STAGE_CATALOG[k].role === user.role);
+  const myStages = [...new Set([...chainStages, ...catalogStages])];
 
   if (myStages.length) {
-    const placeholders = myStages.map(() => '?').join(',');
+    const chainIn = chainStages.length ? `i.current_stage IN (${chainStages.map(() => '?').join(',')})` : '0';
+    const fwdIn = catalogStages.length
+      ? `(i.forward_stages IS NOT NULL AND FIND_IN_SET(i.current_stage, i.forward_stages) > 0
+          AND i.current_stage IN (${catalogStages.map(() => '?').join(',')}))`
+      : '0';
     const sql =
       `SELECT DISTINCT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
               ir.decision AS my_reviewer_decision,
@@ -444,11 +497,11 @@ export async function review(db, user) {
        WHERE i.status IN ('Submitted','Under Review')
          AND i.submitter_id <> ?
          AND ((COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
-               AND i.current_stage IN (${placeholders})
+               AND (${chainIn} OR ${fwdIn})
                AND (i.current_reviewer_id = ? OR i.current_reviewer_id IS NULL))
               OR (i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending'))
        ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
-    const [ideas] = await db.execute(sql, [uid, uid, uid, ...myStages, uid]);
+    const [ideas] = await db.execute(sql, [uid, uid, uid, ...chainStages, ...catalogStages, uid]);
     return { success: true, ideas, chain: chainSummary(cfg, user.role) };
   }
 
@@ -521,9 +574,11 @@ export async function get(db, user, id) {
   );
   idea.workflow = wf;
 
-  // This organisation's chain, travelling with the idea.
+  // This organisation's chain, travelling with the idea - extended by any stage the final
+  // approver forwarded this particular idea to.
   try {
-    const cfg = await getApprovalConfig(db);
+    const cfg = configForIdea(await getApprovalConfig(db), idea);
+    const forwarded = new Set(cfg.forwarded || []);
     idea.approval_chain = {
       labels: cfg.labels,
       steps: cfg.approvers.map((a, i) => ({
@@ -531,9 +586,22 @@ export async function get(db, user, id) {
         label: cfg.labels[a.stage] || a.stage,
         role: a.role,
         position: i + 1,
+        forwarded: forwarded.has(a.stage),
       })),
       total: cfg.approvers.length,
     };
+    // What the person deciding at the last stage could do instead of closing.
+    idea.forward_options = ['Submitted', 'Under Review'].includes(idea.status)
+      ? await forwardOptions(db, cfg, idea) : [];
+    // Whether THIS viewer may undo a rejection - the same rule reopenRejected applies.
+    idea.can_reopen = idea.status === 'Rejected'
+      ? await mayReopen(db, cfg, idea, user) : false;
+    // Who sent it back, and from where, in words the author recognises.
+    if (idea.returned_at) {
+      idea.returned_stage_label = cfg.labels[idea.returned_stage] || idea.returned_stage || null;
+      const [rb] = await db.execute('SELECT name FROM users WHERE id = ?', [idea.returned_by]);
+      idea.returned_by_name = rb[0]?.name || null;
+    }
   } catch {
     // A settings read that fails must not take the idea down with it. The PDF falls back to
     // the actor's role, which is worse but is not nothing.
@@ -639,6 +707,16 @@ export async function submitOrDraft(db, user, action, b) {
   const co1 = coIds[0] ?? null;
   const co2 = coIds[1] ?? null;
   const editId = b.id ? Number(b.id) : null;
+  // An idea an approver sent back re-enters the chain where it was sent back from, not at the
+  // beginning - the stages before that one already approved it.
+  let previous = null;
+  if (editId) {
+    const [prevRows] = await db.execute(
+      'SELECT status, returned_at, returned_stage, returned_by, forward_stages FROM ideas WHERE id=? AND submitter_id=?',
+      [editId, user.id]);
+    previous = prevRows[0] || null;
+  }
+  const isResubmission = action === 'submit' && !!previous?.returned_at && previous.status === 'Draft';
   const isAnon = b.is_anonymous ? 1 : 0;
   const challengeId = b.challenge_id ? Number(b.challenge_id) : null;
   const templateType = String(b.template_type ?? '').trim() || null;
@@ -722,9 +800,16 @@ export async function submitOrDraft(db, user, action, b) {
     // wherever that sat in the configured chain.
     const cfg = await getApprovalConfig(db);
 
-    // Enter the chain at the first stage somebody can actually act on.
-    if (cfg.first_stage) {
-      const resolved = await resolveActionableStage(db, cfg, cfg.first_stage.stage, user.id);
+    // Enter the chain at the first stage somebody can actually act on - or, for an idea that
+    // was sent back, at the stage that sent it back.
+    const ideaCfg = previous ? configForIdea(cfg, previous) : cfg;
+    let entry = ideaCfg.first_stage ? ideaCfg.first_stage.stage : null;
+    if (isResubmission && previous.returned_stage
+        && ideaCfg.approvers.some((a) => a.stage === previous.returned_stage)) {
+      entry = previous.returned_stage;
+    }
+    if (entry) {
+      const resolved = await resolveActionableStage(db, ideaCfg, entry, user.id);
       currentStage = resolved.stage;
       currentReviewerId = resolved.assignee ? resolved.assignee.id : null;
       submitStageNote = resolved;
@@ -733,8 +818,7 @@ export async function submitOrDraft(db, user, action, b) {
 
   let wasAlreadySubmitted = false;
   if (editId && action === 'submit') {
-    const [chk] = await db.execute('SELECT status FROM ideas WHERE id=? AND submitter_id=?', [editId, user.id]);
-    const prev = chk[0]?.status;
+    const prev = previous?.status;
     wasAlreadySubmitted = prev !== undefined && prev !== 'Draft';
   }
 
@@ -755,6 +839,8 @@ export async function submitOrDraft(db, user, action, b) {
         current_reviewer_id=COALESCE(current_reviewer_id,?),
         current_stage=COALESCE(current_stage,?),
         ai_score=?,ai_reason=?,
+        returned_at=IF(?, NULL, returned_at), returned_by=IF(?, NULL, returned_by),
+        returned_stage=IF(?, NULL, returned_stage), return_reason=IF(?, NULL, return_reason),
         updated_at=NOW()
        WHERE id=? AND submitter_id=?`,
       [title, sit, sol, impacts, impLvl, tangible, intang,
@@ -764,6 +850,7 @@ export async function submitOrDraft(db, user, action, b) {
         patentableFlag, patentableFlag ? user.id : null,
         status, submittedAt, reviewDueDate, currentReviewerId, currentStage,
         aiScore, aiReason,
+        isResubmission ? 1 : 0, isResubmission ? 1 : 0, isResubmission ? 1 : 0, isResubmission ? 1 : 0,
         editId, user.id]
     );
     ideaId = editId;
@@ -808,7 +895,35 @@ export async function submitOrDraft(db, user, action, b) {
     }
   } catch {}
 
-  if (action === 'submit' && !wasAlreadySubmitted) {
+  if (isResubmission) {
+    // Back to the person who asked for the changes - no fresh points, and a trail entry that
+    // says this is the second time round.
+    const [cr] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
+    const code = cr[0]?.idea_code || `#${ideaId}`;
+    const cfgLabels = (await getApprovalConfig(db)).labels;
+    const stageLabel = cfgLabels[currentStage] || currentStage || 'review';
+    try {
+      await addWorkflow(db, ideaId, user.id, 'Resubmitted',
+        `[Resubmitted after being sent back - now with ${stageLabel}]`, 'originator');
+    } catch {}
+    if (currentReviewerId) {
+      try {
+        await addNotification(db, currentReviewerId, 'Idea resubmitted',
+          `${user.name} has revised idea ${code} - "${title}" - as you asked and sent it back to you.`, ideaId);
+        const [mrows] = await db.execute('SELECT email, name FROM users WHERE id=?', [currentReviewerId]);
+        const rv = mrows[0];
+        if (rv?.email) {
+          await queueEmail(db, rv.email, rv.name,
+            `Idea ${code} has been revised and resubmitted`,
+            `Dear ${rv.name},\n\n${user.name} has revised idea "${title}" (${code}) in response to `
+            + `your request and sent it back for your decision.\n\n`
+            + `Open it here: ${ideaLink(ideaId, { forReviewer: true })}`);
+        }
+      } catch {}
+    }
+  }
+
+  if (action === 'submit' && !wasAlreadySubmitted && !isResubmission) {
     // If entering the chain meant passing stages nobody holds, that goes on the SUBMITTED
     // entry rather than a row of its own.
     let submitNote = null;
@@ -850,7 +965,7 @@ export async function submitOrDraft(db, user, action, b) {
           await queueEmail(db, rv.email, rv.name,
             'New Idea Requires Your Review',
             `Dear ${rv.name},\n\n${user.name} has submitted a new idea for your review.\n\n`
-            + 'Please log in to action it from your review queue.');
+            + `Open it here: ${ideaLink(ideaId, { forReviewer: true })}`);
         }
       } catch {}
     }
@@ -859,7 +974,7 @@ export async function submitOrDraft(db, user, action, b) {
   const [crows] = await db.execute('SELECT idea_code FROM ideas WHERE id=?', [ideaId]);
 
   // Tell the person who submitted it that it arrived.
-  if (action === 'submit' && !wasAlreadySubmitted && user.email) {
+  if (action === 'submit' && !wasAlreadySubmitted && !isResubmission && user.email) {
     try {
       const code = crows[0].idea_code;
       await queueEmail(
@@ -871,6 +986,7 @@ export async function submitOrDraft(db, user, action, b) {
         + `Title: ${title}\n\n`
         + `You can follow its progress under "My Ideas" - the timeline there shows every `
         + `step it passes through, and you will be told when a decision is made.\n\n`
+        + `Open it here: ${ideaLink(ideaId)}\n\n`
         + `Thank you for taking the time to write it up.`
       );
     } catch (e) {
@@ -885,7 +1001,7 @@ export async function submitOrDraft(db, user, action, b) {
     idea_id: ideaId,
     idea_code: crows[0].idea_code,
     ai_score: aiScore,
-    points_added: (action === 'submit' && !wasAlreadySubmitted) ? POINTS.submit : 0,
+    points_added: (action === 'submit' && !wasAlreadySubmitted && !isResubmission) ? POINTS.submit : 0,
   };
 }
 
@@ -910,11 +1026,14 @@ export async function reviewAction(db, user, b) {
   const ideaId = Number(b.idea_id) || 0;
   const decision = b.decision ?? '';
   const comment = String(b.comment ?? '').trim();
+  // "Approve and forward to <stage>" - offered at the last stage instead of closing.
+  const forwardTo = String(b.forward_to ?? '').trim() || null;
 
-  if (!ideaId || !['Approved', 'Rejected', 'Implemented', 'Under Review'].includes(decision)) {
+  if (!ideaId || !['Approved', 'Rejected', 'Implemented', 'Under Review', 'Returned'].includes(decision)) {
     throw badRequest('Invalid request.');
   }
-  return withIdeaDecisionLock(db, ideaId, () => reviewActionLocked(db, user, ideaId, decision, comment));
+  return withIdeaDecisionLock(db, ideaId,
+    () => reviewActionLocked(db, user, ideaId, decision, comment, forwardTo));
 }
 
 /** The first stage from `startStage` onwards that somebody can actually act on. */
@@ -1043,14 +1162,15 @@ async function notifySubmitterProgress(db, idea, step) {
         + `Good news - your idea "${idea.title}" (${idea.idea_code}) has been approved by ${by}.\n\n`
         + `It is now being reviewed by ${withWhom}. That is step ${position} of ${total} `
         + `in your organisation's approval path.\n\n`
-        + 'We will let you know as soon as it moves again.');
+        + 'We will let you know as soon as it moves again.\n\n'
+        + `Open it here: ${ideaLink(idea.id)}`);
     }
   } catch (e) {
     logger.warn(`idea ${idea.idea_code}: could not notify submitter of progress - ${e.message}`);
   }
 }
 
-async function reviewActionLocked(db, user, ideaId, decision, comment) {
+async function reviewActionLocked(db, user, ideaId, decision, comment, forwardTo = null) {
   // Both administrator roles. super_admin was not named here, so the one account that can
   // promote people to admin could also approve ideas.
   if (user.role === 'admin' || user.role === 'super_admin') {
@@ -1064,7 +1184,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     throw forbidden('You cannot review or approve your own idea.');
   }
 
-  const wfAction = ({ Approved: 'Approved', Rejected: 'Rejected', Implemented: 'Implemented' })[decision] || 'Reviewed';
+  const wfAction = ({ Approved: 'Approved', Rejected: 'Rejected', Implemented: 'Implemented', Returned: 'Returned' })[decision] || 'Reviewed';
 
   // Idempotency guard - no duplicate identical workflow entry within 10s
   const [dup] = await db.execute(
@@ -1075,7 +1195,8 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     throw new ApiError(429, 'Duplicate action detected. Please wait a moment before retrying.');
   }
 
-  const cfg = await getApprovalConfig(db);
+  const orgCfg = await getApprovalConfig(db);
+  let cfg = configForIdea(orgCfg, idea);
 
   // Where is this idea, and may this person act on it?
   const stageKey = idea.current_stage || cfg.first_stage?.stage || null;
@@ -1102,8 +1223,16 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     );
   }
 
-  // Only the role the idea is currently waiting on may APPROVE it.
-  if (decision === 'Approved' && !isCommittee) {
+  // Only an idea that is actually in review can be approved a stage or sent back. Without
+  // this a closed idea, whose current_stage is empty, would look as if it were waiting at
+  // the first stage again.
+  if ((decision === 'Approved' || decision === 'Returned')
+      && !['Submitted', 'Under Review'].includes(idea.status)) {
+    throw new ApiError(409, `This idea is ${idea.status.toLowerCase()}; it is not waiting for a decision.`);
+  }
+
+  // Only the role the idea is currently waiting on may APPROVE it - or send it back.
+  if ((decision === 'Approved' || decision === 'Returned') && !isCommittee) {
     if (!stageRole) {
       throw new ApiError(409,
         'This idea is not waiting at any approval stage. Its chain may have changed; '
@@ -1128,8 +1257,65 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
     }
   }
 
-  // Approve: advance one stage, or close.
+  // Send back: the idea goes to the author as a draft that carries the request, and comes
+  // back to this stage when they resubmit. Not a rejection - nothing is closed.
+  if (decision === 'Returned') {
+    if (isCommittee) {
+      throw forbidden('An idea with a review committee is decided by its reviewers; it cannot be sent back from here.');
+    }
+    if (!comment) throw badRequest('Say what needs to change - the author will see this.');
+    await db.execute(
+      `UPDATE ideas
+          SET status = 'Draft', current_stage = NULL, current_reviewer_id = NULL,
+              returned_at = NOW(), returned_by = ?, returned_stage = ?, return_reason = ?,
+              updated_at = NOW()
+        WHERE id = ?`,
+      [user.id, stageKey, comment, ideaId]);
+    await addWorkflow(db, ideaId, user.id, 'Returned', comment, stageKey);
+
+    await addNotification(db, idea.submitter_id, 'Your idea needs changes',
+      `${user.name} (${label(stageKey)}) sent idea ${idea.idea_code} - "${idea.title}" - back to you: ${comment}`,
+      ideaId);
+    const [subRows] = await db.execute('SELECT email, name FROM users WHERE id=?', [idea.submitter_id]);
+    const sub = subRows[0];
+    if (sub?.email) {
+      await queueEmail(db, sub.email, sub.name,
+        `Your idea ${idea.idea_code} needs some changes`,
+        `Dear ${sub.name},\n\n`
+        + `${user.name} (${label(stageKey)}) has looked at your idea "${idea.title}" (${idea.idea_code}) `
+        + `and asked for some changes before it goes further:\n\n${comment}\n\n`
+        + `It is back with you as a draft. Edit it and submit it again - it will go straight `
+        + `back to ${user.name}, not to the start of the approval path.\n\n`
+        + `Open it here: ${ideaLink(ideaId)}`);
+    }
+    return {
+      success: true, decision: 'Returned', stage: stageKey, stage_label: label(stageKey),
+      points_awarded: 0,
+    };
+  }
+
+  // Approve: advance one stage, or close - or, at the last stage, forward to a further role
+  // chosen now, for this idea only.
   if (decision === 'Approved' && !isCommittee) {
+    if (forwardTo) {
+      if (advanceStage(cfg, stageKey) !== null) {
+        throw badRequest('Forwarding is offered at the last stage of the approval path; here the idea simply moves to the next stage.');
+      }
+      const spec = STAGE_CATALOG[forwardTo];
+      if (!spec?.role) throw badRequest('Choose a stage from the list.');
+      if (cfg.stages.includes(forwardTo)) {
+        throw badRequest(`${label(forwardTo)} is already part of this idea's approval path.`);
+      }
+      const people = await holdersOf(db, spec.role, idea.submitter_id);
+      if (!people.length) {
+        throw badRequest(`Nobody in this organisation holds ${label(forwardTo)}, so the idea cannot be forwarded there.`);
+      }
+      const fw = [...(cfg.forwarded || []), forwardTo].join(',');
+      await db.execute('UPDATE ideas SET forward_stages = ? WHERE id = ?', [fw, ideaId]);
+      idea.forward_stages = fw;
+      cfg = configForIdea(orgCfg, idea);
+    }
+
     const next = advanceStage(cfg, stageKey);
 
     if (next) {
@@ -1200,7 +1386,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
         if (assignee.email) {
           await queueEmail(db, assignee.email, assignee.name,
             `Action Required: Idea ${idea.idea_code} awaiting your approval`,
-            `Dear ${assignee.name},\n\nIdea "${idea.title}" (${idea.idea_code}) was approved at the ${label(stageKey)} stage and now needs your approval as ${label(nextStageKey)}.\n\nPlease log in to take action.`);
+            `Dear ${assignee.name},\n\nIdea "${idea.title}" (${idea.idea_code}) was approved at the ${label(stageKey)} stage and now needs your approval as ${label(nextStageKey)}.\n\nOpen it here: ${ideaLink(ideaId, { forReviewer: true })}`);
         }
       }
 
@@ -1286,13 +1472,117 @@ async function reviewActionLocked(db, user, ideaId, decision, comment) {
             + 'in total for submitting it and seeing it through.\n\n'
           : '')
         + (comment ? `Comments from the approver: ${comment}\n\n` : '')
+        + `Open it here: ${ideaLink(ideaId)}\n\n`
         + 'Thank you for taking the trouble to write it up.');
     } else {
-      await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} - ${decision}`, msg);
+      await queueEmail(db, sub.email, sub.name, `Your Idea ${ideaCode} - ${decision}`,
+        `${msg}\n\nOpen it here: ${ideaLink(ideaId)}`);
     }
   }
 
   return { success: true, decision, points_awarded: pts };
+}
+
+/*
+ * May this person undo the rejection of this idea? The person who rejected it can, and so
+ * can anyone whose stage in the chain is at or after the one it was rejected from - they
+ * outrank that decision. Organisation admins cannot, as with every other decision.
+ */
+async function mayReopen(db, cfg, idea, user) {
+  if (idea.status !== 'Rejected') return false;
+  if (user.role === 'admin' || user.role === 'super_admin') return false;
+  const [rows] = await db.execute(
+    `SELECT actor_id, stage FROM idea_workflow
+      WHERE idea_id = ? AND action = 'Rejected' ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [idea.id]);
+  const rej = rows[0];
+  if (!rej) return false;
+  if (Number(rej.actor_id) === Number(user.id)) return true;
+  const mine = cfg.approvers.findIndex((a) => a.role === user.role);
+  if (mine < 0) return false;
+  const from = cfg.approvers.findIndex((a) => a.stage === rej.stage);
+  return from < 0 || mine >= from;
+}
+
+/** Undo a rejection: the idea goes back into review at the stage it was rejected from. */
+export async function reopenRejected(db, user, b) {
+  const ideaId = Number(b.idea_id) || 0;
+  const comment = String(b.comment ?? '').trim();
+  if (!ideaId) throw badRequest('Invalid request.');
+
+  return withIdeaDecisionLock(db, ideaId, async () => {
+    const [irows] = await db.execute('SELECT * FROM ideas WHERE id=?', [ideaId]);
+    const idea = irows[0];
+    if (!idea) throw notFound('Idea not found.');
+    if (idea.status !== 'Rejected') throw badRequest('Only a rejected idea can be reopened.');
+    if (user.role === 'admin' || user.role === 'super_admin') {
+      throw forbidden('Org Admins are strictly prohibited from approving or acting on submitted ideas.');
+    }
+
+    const cfg = configForIdea(await getApprovalConfig(db), idea);
+    if (!(await mayReopen(db, cfg, idea, user))) {
+      throw forbidden('Only the person who rejected this idea, or an approver at or above that stage, can reopen it.');
+    }
+    const label = (k) => cfg.labels[k] || k;
+
+    const [rows] = await db.execute(
+      `SELECT stage FROM idea_workflow
+        WHERE idea_id = ? AND action = 'Rejected' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      [ideaId]);
+    const from = rows[0]?.stage && cfg.approvers.some((a) => a.stage === rows[0].stage)
+      ? rows[0].stage : cfg.first_stage?.stage;
+    if (!from) throw new ApiError(409, 'This organisation has no approval path to reopen the idea into.');
+
+    const resolved = await resolveActionableStage(db, cfg, from, idea.submitter_id);
+    const stage = resolved.stage || from;
+    const assignee = resolved.stranded ? null : resolved.assignee;
+    const position = cfg.approvers.findIndex((a) => a.stage === stage) + 1;
+
+    await db.execute(
+      `UPDATE ideas
+          SET status = 'Under Review', current_stage = ?, current_reviewer_id = ?,
+              escalation_level = ?, updated_at = NOW()
+        WHERE id = ?`,
+      [stage, assignee ? assignee.id : null, position, ideaId]);
+
+    const withWhom = assignee ? `${assignee.name} as ${label(stage)}` : label(stage);
+    await addWorkflow(db, ideaId, user.id, 'Reopened',
+      `${comment ? comment + ' ' : ''}[Rejection reversed - back in review with ${withWhom}]`.trim(),
+      stage);
+
+    await addNotification(db, idea.submitter_id, 'Your idea is back in review',
+      `${user.name} reopened idea ${idea.idea_code} - "${idea.title}". It is now with ${withWhom}.`
+      + (comment ? ` ${comment}` : ''), ideaId);
+    const [subRows] = await db.execute('SELECT email, name FROM users WHERE id=?', [idea.submitter_id]);
+    const sub = subRows[0];
+    if (sub?.email) {
+      await queueEmail(db, sub.email, sub.name,
+        `Your idea ${idea.idea_code} is back in review`,
+        `Dear ${sub.name},\n\n`
+        + `The rejection of your idea "${idea.title}" (${idea.idea_code}) has been reversed by `
+        + `${user.name}. It is back in review with ${withWhom}.\n\n`
+        + (comment ? `${comment}\n\n` : '')
+        + `Open it here: ${ideaLink(ideaId)}`);
+    }
+    if (assignee && Number(assignee.id) !== Number(user.id)) {
+      await addNotification(db, assignee.id, 'Idea Awaiting Your Approval',
+        `Idea ${idea.idea_code} - "${idea.title}" - was reopened by ${user.name} and is now with you as ${label(stage)}.`,
+        ideaId);
+      if (assignee.email) {
+        await queueEmail(db, assignee.email, assignee.name,
+          `Action Required: Idea ${idea.idea_code} awaiting your approval`,
+          `Dear ${assignee.name},\n\nIdea "${idea.title}" (${idea.idea_code}) was reopened by ${user.name} and now needs your decision as ${label(stage)}.\n\nOpen it here: ${ideaLink(ideaId, { forReviewer: true })}`);
+      }
+    }
+    if (resolved.stranded) {
+      await reportChainGap(db, idea,
+        `Idea ${idea.idea_code} was reopened and is waiting for ${label(stage)}, which nobody in this organisation holds.`);
+    }
+    return {
+      success: true, decision: 'Reopened', stage, stage_label: label(stage),
+      escalated_to: assignee ? assignee.name : null,
+    };
+  });
 }
 
 // DASHBOARD
@@ -1649,7 +1939,7 @@ function numberFormat(n, decimals = 2) {
 }
 
 export default {
-  list, my, review, get, submitOrDraft, reviewAction, dashboard,
+  list, my, review, get, submitOrDraft, reviewAction, reopenRejected, dashboard,
   assignReviewers, reviewerDecision, checkDuplicate, bulkReview, updateRoi, updateImplementation,
   repairStrandedIdeas,
 };

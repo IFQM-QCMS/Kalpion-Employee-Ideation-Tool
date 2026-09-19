@@ -81,10 +81,10 @@ export async function tenants() {
       const [[uc]] = await db.query("SELECT COUNT(*) AS c FROM users WHERE role != 'super_admin'");
       const [[ic]] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status != 'Draft'");
       const [[imp]] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Implemented'");
-      // §12.5 - how many of this org's ideas actually reached QCMS.
+      // §12.5 - how many of this org's ideas actually reached OctaQube.
       let qcmsPushed = 0;
       try {
-        // 'imported' or 'duplicate' - the two outcomes that mean the idea is in QCMS.
+        // 'imported' or 'duplicate' - the two outcomes that mean the idea is in OctaQube.
         const [[qp]] = await db.query(
           `SELECT COUNT(*) AS c FROM ideas
             WHERE qcms_pushed_at IS NOT NULL AND qcms_push_status IN ('imported','duplicate')`
@@ -120,7 +120,7 @@ export async function tenants() {
   }
 
   // §12.5 / §12.8 - the business-value roll-up the MOM asked for, as one path: organisations
-  // ideas implemented pushed to QCMS.
+  // ideas implemented pushed to OctaQube.
   const totals = out.reduce((acc, t) => ({
     orgs: acc.orgs + 1,
     ideas: acc.ideas + (t.idea_count || 0),
@@ -192,7 +192,7 @@ async function tenantShell(t) {
     ideas_approved: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Approved'"),
     ideas_implemented: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Implemented'"),
     ideas_rejected: await count("SELECT COUNT(*) AS c FROM ideas WHERE status = 'Rejected'"),
-    // The point at which an idea stops being a suggestion and becomes tracked work in the QCMS
+    // The point at which an idea stops being a suggestion and becomes tracked work in the OctaQube
     // tool - the figure that shows the platform paid for itself.
     qcms_pushed: await count(
       `SELECT COUNT(*) AS c FROM ideas

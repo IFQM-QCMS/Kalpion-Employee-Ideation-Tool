@@ -1,7 +1,7 @@
 /** Export controller - sends raw CSV / HTML (not JSON). */
 import * as exportService from '../services/exportService.js';
 import * as ideaService from '../services/ideaService.js';
-import { buildIdeaPdf, buildIdeaGistPdf } from '../services/ideaPdfService.js';
+import { buildIdeaPdf, buildIdeaGistPdf, setDisplayZone } from '../services/ideaPdfService.js';
 import { buildLeaderboardPdf } from '../services/leaderboardPdfService.js';
 import { sendViaPlatform } from '../services/mailerService.js';
 import { badRequest, ApiError } from '../utils/respond.js';
@@ -36,6 +36,7 @@ export const leaderboardPdf = asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
 
   const doc = buildLeaderboardPdf(data.individuals || [], {
+    timeZone: req.get('x-client-timezone'),
     orgName: req.tenant?.name || req.user?.org_name || '',
     period,
   });
@@ -61,7 +62,7 @@ export const sendLeaderboard = asyncHandler(async (req, res) => {
   // transport cannot wait on a stream it did not create.
   const pdf = await new Promise((resolve, reject) => {
     const chunks = [];
-    const doc = buildLeaderboardPdf(rows, { orgName, period });
+    const doc = buildLeaderboardPdf(rows, { orgName, period, timeZone: req.get('x-client-timezone') });
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
@@ -129,6 +130,8 @@ export const ideaPdf = asyncHandler(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.setHeader('Cache-Control', 'no-cache, no-store');
 
+  // The timeline is printed in the reader's own zone, the same one the screen uses.
+  setDisplayZone(req.get('x-client-timezone'));
   if (inside) buildIdeaPdf(idea, res);
   else buildIdeaGistPdf(idea, res, req.user);
 });
