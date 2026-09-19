@@ -123,8 +123,41 @@ jobs:
               exit 1
             fi
 
+            # Recreating a container gives it a new address on the shared proxy network.
+            # An nginx in front that names the containers in proxy_pass resolves those
+            # names only when its configuration loads, so after a deploy it keeps
+            # sending traffic to the old addresses and answers 502 for everything.
+            # Asking every nginx on that network to reload makes it resolve again. A
+            # proxy that resolves dynamically is unaffected; one that is not nginx is
+            # skipped. Nothing here can fail the deploy - the website check below is
+            # the judge.
+            echo "Refreshing the reverse proxy..."
+            docker network inspect ifqm-new-sites --format '{{range .Containers}}{{println .Name .IPv4Address}}{{end}}' || true
+            for c in $(docker network inspect ifqm-new-sites --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+              case "$c" in kalpion-*) continue;; esac
+              if docker exec "$c" nginx -t >/dev/null 2>&1; then
+                echo "  reloading nginx in $c"
+                docker exec "$c" nginx -s reload || true
+              fi
+            done
+            sleep 3
+
             echo "Checking website..."
-            wget -q --spider https://kalpion.ifqm.org.in
+            for i in {1..10}; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' https://kalpion.ifqm.org.in/api/health || echo 000)
+              if [ "$code" = "200" ]; then
+                echo "Website answers 200."
+                site_ok=1
+                break
+              fi
+              echo "Website answered $code. Waiting..."
+              sleep 5
+            done
+            if [ "${site_ok:-0}" != "1" ]; then
+              echo "The application is up inside its containers, but the public URL does not reach it."
+              echo "That is the reverse proxy: check that it resolves kalpion-api / kalpion-web at their current addresses (above)."
+              exit 1
+            fi
 
             echo "Kalpion deployment successful."
 
