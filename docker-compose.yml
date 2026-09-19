@@ -51,8 +51,16 @@ services:
     depends_on:
       - kalpion-db
     networks:
-      - kalpion-internal
-      - ifqm-new-sites
+      kalpion-internal:
+      # A fixed address on the shared network, because the reverse proxy in front
+      # of this site runs on the host and reaches the containers by IP: it cannot
+      # use Docker's name resolution. Without this, every deploy that recreates
+      # the container hands it whatever address is free next, and the proxy keeps
+      # sending traffic to the old one - the whole site answered 502 until the
+      # addresses happened to line up again. These are the addresses the proxy is
+      # configured with; change both together or not at all.
+      ifqm-new-sites:
+        ipv4_address: 172.20.0.6
 
   kalpion-web:
     build:
@@ -65,8 +73,9 @@ services:
     depends_on:
       - kalpion-api
     networks:
-      - kalpion-internal
-      - ifqm-new-sites
+      kalpion-internal:
+      ifqm-new-sites:
+        ipv4_address: 172.20.0.7
 
 networks:
   kalpion-internal:
