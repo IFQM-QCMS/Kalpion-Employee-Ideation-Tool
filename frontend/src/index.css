@@ -620,7 +620,7 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
 table{width:100%;border-collapse:collapse}
 /* A table inside a card should reach the card's edges — a data grid floating in
    22px of padding looks like it was dropped in by accident. */
-.card:has(> table){padding:0;overflow:hidden}
+.card:has(> table){padding:0;overflow:hidden;overflow-x:auto}
 .card:has(> table) th:first-child,.card:has(> table) td:first-child{padding-left:20px}
 .card:has(> table) th:last-child,.card:has(> table) td:last-child{padding-right:20px}
 /* Identifiers and dates must never wrap mid-token ("IFQM-\n2001"). */
@@ -1319,18 +1319,35 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
 .sa-pane{display:block;animation:fadeInUp var(--t-slow) var(--ease)}
 
 /* ── RESPONSIVE ─────────────────────────────────────────────────────────── */
+/*
+ * Three widths matter:
+ *   ≤1100  a small laptop: two-column grids become one.
+ *   ≤900   a tablet: the sidebar rail collapses to icons.
+ *   ≤768   a phone: the shell is rebuilt (below), and this is the width most of
+ *          the product's users see it at. The JSX switches at the same width -
+ *          see utils/useIsMobile.js - so a phone gets a drawer + bottom tab bar
+ *          in the markup, and these rules only ever style what is rendered.
+ *   ≤640   phone details: tables stack into cards, dialogs become sheets, and
+ *          every control grows to a finger's width.
+ */
 @media (max-width:1100px){
   .grid-2,.grid-3,.form-row{grid-template-columns:1fr}
 }
 @media (max-width:900px){
-  #sidebar{width:68px}
-  #sidebar .nav-item span.label,#sidebar .sidebar-logo span,
-  #sidebar .nav-section,#sidebar .sidebar-user-info{opacity:0;width:0;overflow:hidden}
-  #sidebar .nav-item{justify-content:center;margin:1px 12px;padding:8px}
-  #sidebar .sidebar-logo{padding:16px 8px;justify-content:center;gap:0}
-  #sidebar .sidebar-logo img{height:auto!important;max-height:28px;max-width:100%;padding:3px 5px!important}
+  #sidebar:not(.drawer){width:68px}
+  #sidebar:not(.drawer) .nav-item span.label,#sidebar:not(.drawer) .sidebar-logo span,
+  #sidebar:not(.drawer) .nav-section,#sidebar:not(.drawer) .sidebar-user-info{opacity:0;width:0;overflow:hidden}
+  #sidebar:not(.drawer) .nav-item{justify-content:center;margin:1px 12px;padding:8px}
+  #sidebar:not(.drawer) .sidebar-logo{padding:16px 8px;justify-content:center;gap:0}
+  #sidebar:not(.drawer) .sidebar-logo img{height:auto!important;max-height:28px;max-width:100%;padding:3px 5px!important}
   #content{padding:20px 18px 40px}
   #topbar{padding:0 16px}
+  /* The bar keeps its controls but drops their words; a wrapped title or a
+     two-line role pill at 820px looked broken. */
+  .page-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .topbar-left{min-width:0}
+  .topbar-right{flex-shrink:0}
+  .dm-toggle span,.notif-bell > span,.user-chip .role-badge{display:none}
   .login-left{display:none}
   .login-right{padding:24px}
 }
@@ -1341,10 +1358,197 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
 @media (max-width:900px){
   .guide-toc{display:none}
 }
+
+/* ── PHONE SHELL ────────────────────────────────────────────────────────── */
+.topbar-menu-btn{
+  background:none;border:none;cursor:pointer;
+  font-size:20px;line-height:1;color:var(--text-muted);
+  padding:4px 6px;border-radius:6px;
+  transition:background var(--t-fast) var(--ease);
+}
+.topbar-menu-btn:hover{background:var(--bar-track)}
+
+/* The drawer's own controls: rendered only on a phone (Sidebar.jsx), so no
+   media query is needed to hide them elsewhere. */
+.drawer-tools{
+  flex-shrink:0;padding:12px 16px;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  border-top:1px solid var(--sidebar-border);background:var(--sidebar-bg);
+}
+.drawer-tool{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  font-size:12px;color:var(--sidebar-text);margin-bottom:10px;
+}
+.drawer-tool select.form-control{width:auto;flex:1;max-width:62%;min-height:38px;padding:6px 10px;font-size:13px}
+.drawer-tool-row{display:flex;gap:8px}
+.drawer-tool-row .btn{flex:1;min-height:38px}
+
+.drawer-backdrop{
+  position:fixed;inset:0;z-index:1100;
+  background:rgba(12,14,20,.5);
+  opacity:0;pointer-events:none;
+  transition:opacity var(--t) var(--ease);
+}
+.drawer-backdrop.show{opacity:1;pointer-events:auto}
+
+/* The bottom tab bar: a flex child of #main, so #content scrolls above it and
+   nothing is ever hidden underneath. */
+#mobile-tabbar{
+  display:flex;align-items:stretch;flex-shrink:0;
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  background:var(--surface);border-top:1px solid var(--border);
+  position:relative;z-index:900;
+}
+.mtab{
+  flex:1 1 0;min-width:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:7px 2px 6px;min-height:58px;
+  background:none;border:none;cursor:pointer;font-family:inherit;
+  font-size:10.5px;font-weight:550;letter-spacing:-.01em;color:var(--text-muted);
+  -webkit-tap-highlight-color:transparent;
+  transition:color var(--t-fast) var(--ease);
+}
+.mtab-icon{
+  width:26px;height:26px;display:flex;align-items:center;justify-content:center;
+  border-radius:8px;transition:background var(--t-fast) var(--ease);
+}
+.mtab-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mtab-label{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mtab.active{color:var(--primary)}
+.mtab.active .mtab-icon{background:var(--primary-light)}
+/* Submit is the one thing an employee is here to do, so it is the one raised button. */
+.mtab.primary .mtab-icon{
+  width:44px;height:44px;margin-top:-20px;border-radius:50%;
+  background:var(--primary);color:var(--on-primary);
+  box-shadow:0 4px 12px var(--primary-glow),0 0 0 4px var(--surface);
+}
+.mtab.primary.active .mtab-icon{background:var(--primary-hover)}
+.mtab:focus-visible{outline:2px solid var(--primary);outline-offset:-2px;border-radius:8px}
+
+@media (max-width:768px){
+  /* dvh: the address bar on a phone browser comes and goes, and 100vh does
+     not follow it - the tab bar would sit under the browser chrome. */
+  #app.is-mobile{height:100dvh}
+
+  /* The rail becomes a drawer over the page. */
+  #sidebar.drawer{
+    position:fixed;top:0;bottom:0;left:0;z-index:1200;
+    width:min(300px,86vw);
+    transform:translateX(-100%);
+    transition:transform var(--t-slow) var(--ease);
+    border-right:none;
+    padding-top:env(safe-area-inset-top,0px);
+  }
+  #sidebar.drawer.open{transform:none;box-shadow:var(--shadow-xl)}
+  #sidebar.drawer .nav-item{padding:11px 12px;margin:1px 10px}
+  #sidebar.drawer .nav-item span.label{font-size:14px}
+  #sidebar.drawer .nav-section{padding-top:16px}
+
+  #topbar{
+    height:calc(56px + env(safe-area-inset-top,0px));
+    padding:env(safe-area-inset-top,0px) 10px 0 6px;gap:8px;
+  }
+  .topbar-left{min-width:0;flex:1;gap:6px}
+  .topbar-menu-btn{padding:8px;font-size:22px;min-width:44px;min-height:44px}
+  .page-title{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar-right{gap:6px;flex-shrink:0}
+  .notif-bell{padding:8px 9px;min-height:40px}
+  .notif-bell svg{width:18px;height:18px}
+  .user-chip{padding:3px}
+  .user-chip .avatar{width:32px;height:32px}
+
+  #content{padding:14px 16px 28px;scroll-behavior:auto}
+
+  /* Type: a phone is read at arm's length, not across a desk. */
+  h1{font-size:20px}h2{font-size:17px}h3{font-size:15px}
+  .card{padding:16px;margin-bottom:12px}
+  .card-title{flex-wrap:wrap;gap:8px}
+  .section-header{flex-wrap:wrap;gap:8px;margin-bottom:12px}
+
+  /* KPI tiles: two abreast reads like an app; a single column reads like a list. */
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .kpi-card{padding:14px;gap:10px}
+  .kpi-card:hover{transform:none}
+  .kpi-icon{width:36px;height:36px}
+  .kpi-icon svg{width:18px;height:18px}
+  .kpi-val{font-size:22px}
+  .kpi-label{font-size:11.5px}
+
+  /* Filters: every control full width and stacked, in the order they were written. */
+  .filter-bar{gap:8px;margin-bottom:12px}
+  .filter-bar > *{flex:1 1 100%;min-width:0}
+  .filter-bar input:not([type=checkbox]):not([type=radio]),.filter-bar select,.filter-bar .form-control{width:100%!important;max-width:100%!important}
+  .filter-bar > label{flex-basis:auto;min-height:44px}
+  .filter-bar input[type=checkbox],.filter-bar input[type=radio]{width:20px;height:20px;min-height:0;flex:0 0 auto}
+  .filter-bar .btn{flex:1 1 auto}
+  .filter-bar > div{display:flex;flex-wrap:wrap;gap:8px;margin-left:0!important}
+
+  /* Tabs scroll sideways under a thumb rather than wrapping into three rows. */
+  .tab-bar,.tabs{margin:0 -16px 14px;padding:0 16px;-webkit-overflow-scrolling:touch}
+  .tab{padding:11px 12px;font-size:13.5px}
+
+  .chip-filter{margin:0 -16px 12px;padding:0 16px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .chip-filter::-webkit-scrollbar{display:none}
+  .chip-filter .chip{white-space:nowrap;flex-shrink:0}
+
+  .wizard-steps{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .wizard-steps::-webkit-scrollbar{display:none}
+
+  .grid-2,.grid-3,.form-row{grid-template-columns:1fr;gap:12px}
+  .notification-panel{position:fixed;top:calc(60px + env(safe-area-inset-top,0px));left:12px;right:12px;width:auto;transform:none;max-height:calc(100dvh - 140px)}
+
+  /* Pagination and toolbars written inline as flex rows: let them wrap. */
+  .pager,.toolbar,.btn-row{flex-wrap:wrap}
+
+  /* Two selects share a row; the search box keeps a row of its own. */
+  .filter-bar > select{flex:1 1 40%}
+
+  /* Analytics: the explanatory pill drops under the icon instead of squeezing it;
+     the chart pair stacks. */
+  .kpi-head{flex-wrap:wrap;gap:8px}
+  .kpi-hint{white-space:normal;line-height:1.35}
+  .analytics-bars,.pd-split{grid-template-columns:1fr!important;gap:12px!important}
+
+  /* The submit wizard: five numbered circles across, only the current step named.
+     Five labels across 390px were either clipped or three lines deep. */
+  .wizard-steps{justify-content:space-between;margin-bottom:20px}
+  .wizard-steps::before{left:16px;right:16px}
+  .w-step{flex:0 1 auto;padding:0}
+  .w-step-circle,.w-step .w-num{margin-bottom:6px}
+  .w-step:not(.active) .w-step-label,.w-step:not(.active) .w-lbl{display:none}
+  .wizard-body{min-height:0}
+  .wizard-footer{flex-wrap:wrap}
+  .wizard-footer .btn{flex:1 1 auto}
+
+  /* Sign-in */
+  .login-wrap{min-height:100dvh}
+  .login-right{padding:16px;align-items:flex-start}
+  .login-card{padding:24px 20px;max-width:100%;box-shadow:var(--shadow-sm)}
+}
+
 @media (max-width:640px){
-  .kpi-grid{grid-template-columns:1fr}
-  .modal-overlay{padding:12px}
-  .card{padding:16px}
+  .modal-overlay{padding:0;align-items:flex-end}
+  /*
+   * A dialog on a phone is a sheet from the bottom: the full width, the close
+   * button and title at the top, the actions at the bottom where the thumb is.
+   * It keeps the overlay's scroll fallback - a dialog taller than the screen
+   * still scrolls its body, and the overlay behind it never traps the top.
+   */
+  .modal{
+    width:100%;max-width:100%;margin:auto 0 0;
+    max-height:calc(100dvh - 20px);
+    border-radius:var(--r-xl) var(--r-xl) 0 0;border-bottom:none;
+    animation:sheet-in var(--t-slow) var(--ease);
+  }
+  .modal-header{padding:14px 16px}
+  .modal-body{padding:16px}
+  .modal .tab-bar{padding:0 16px;margin:0}
+  .modal-footer{
+    flex-direction:column-reverse;gap:8px;padding:12px 16px;
+    padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  }
+  .modal-footer .btn{width:100%}
+  .modal-footer > div{display:flex;flex-direction:column;gap:8px;width:100%}
 
   /*
    * 16px is the threshold below which iOS Safari zooms the page on focus and
@@ -1360,23 +1564,81 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
    * people miss, and on this product the people missing it are on a shop floor,
    * often with gloves on.
    */
-  .btn,select,input,textarea,.form-control{min-height:44px}
+  .btn,select,input:not([type=checkbox]):not([type=radio]),textarea,.form-control{min-height:44px}
   .btn-sm{min-height:40px;padding-left:14px;padding-right:14px}
+  .filter-bar input:not([type=checkbox]):not([type=radio]),.filter-bar select{min-height:44px;font-size:16px}
+  .tab{min-height:44px}
+  .vote-btn{min-width:36px;min-height:36px}
 
-  /* Buttons that sat in a row now stack and fill the width, instead of being
-     squeezed to a few unreadable characters each. */
   .form-row{grid-template-columns:1fr}
-  .modal-footer{flex-direction:column-reverse;gap:8px}
-  .modal-footer .btn{width:100%}
 
   /*
-   * Tables scroll sideways in their own container rather than forcing the whole
-   * page to. A page that scrolls horizontally makes every column hard to reach;
-   * a table that does is normal and expected.
+   * ── Tables on a phone ──────────────────────────────────────────────────
+   * A twelve-column grid cannot be read at 390px, and a table that scrolls
+   * sideways hides the column that matters. So a table becomes a stack of
+   * cards, one per row, each value under its column heading. The headings
+   * come from data-label, which utils/responsiveTables.js copies onto every
+   * cell from the <th> above it; it also marks tables with four or more
+   * columns .table-stack. Narrow tables (three columns or fewer) stay tables -
+   * they fit, and a stack would only be longer. A page may force either
+   * behaviour with .table-stack / .table-scroll on the <table>.
    */
-  .table-wrap,.table-responsive{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  table{min-width:560px}
-
-  /* A dialog on a small screen is the screen. */
-  .modal{max-width:100%;width:100%}
+  .table-wrap,.table-responsive,.card:has(> table){overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.table-stack:not(.table-scroll){display:block;min-width:0}
+  table.table-stack:not(.table-scroll) thead{display:none}
+  table.table-stack:not(.table-scroll) tbody{display:block}
+  table.table-stack:not(.table-scroll) tbody tr{
+    display:block;
+    margin:10px 12px;padding:4px 12px;
+    background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+    box-shadow:var(--shadow-xs);
+  }
+  table.table-stack:not(.table-scroll) tbody tr:first-child{margin-top:12px}
+  table.table-stack:not(.table-scroll) tbody tr:hover td{background:transparent}
+  /* Each cell is a two-column grid: the heading down the left, everything the cell
+     holds stacked down the right in source order. The heading spans every row so the
+     left column is never free and a cell with several children (a title, its
+     summary, a badge) stacks them instead of laying them side by side. */
+  table.table-stack:not(.table-scroll) td{
+    display:grid;grid-template-columns:34% minmax(0,1fr);column-gap:12px;row-gap:0;
+    align-items:start;justify-items:start;
+    padding:8px 0!important;
+    border-bottom:1px solid var(--border);
+    text-align:left;white-space:normal;
+    font-size:13.5px;line-height:1.45;
+  }
+  table.table-stack:not(.table-scroll) td::before{
+    content:attr(data-label);
+    grid-column:1;grid-row:1 / span 40;padding-top:2px;
+    font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--subtle);line-height:1.3;
+  }
+  table.table-stack:not(.table-scroll) td > *{min-width:0;max-width:100%}
+  table.table-stack:not(.table-scroll) td > * + *{margin-top:4px}
+  table.table-stack:not(.table-scroll) tr > td:last-child{border-bottom:none}
+  /* An empty cell says nothing; an empty heading (the actions column) needs no label
+     and its buttons sit at the right where every other value does. */
+  table.table-stack:not(.table-scroll) td:empty{display:none}
+  table.table-stack:not(.table-scroll) td[data-label=""]::before,
+  table.table-stack:not(.table-scroll) td:not([data-label])::before{content:none}
+  table.table-stack:not(.table-scroll) td[data-label=""]{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
+  table.table-stack:not(.table-scroll) td:not([data-label]){display:flex;justify-content:center;text-align:center}
+  table.table-stack:not(.table-scroll) td[data-label=""] > * + *,
+  table.table-stack:not(.table-scroll) td:not([data-label]) > * + *{margin-top:0}
+  table.table-stack:not(.table-scroll) td > .cell-clamp{max-width:none!important;white-space:normal}
+  /* The row's actions: one full-width tap target each, at the bottom of the card. */
+  table.table-stack:not(.table-scroll) td[data-label=""] .btn,
+  table.table-stack:not(.table-scroll) td:not([data-label]) .btn{flex:1 1 auto;margin-left:0}
+  /* A ≤3-column table stays a table; a wide one without labels (built outside the
+     shell) at least scrolls in place rather than pushing the page sideways. */
+  table:not(.table-stack){min-width:0}
+  table.table-scroll{min-width:560px}
+  th,td{padding-left:10px;padding-right:10px}
+  .card:has(> table) th:first-child,.card:has(> table) td:first-child{padding-left:14px}
+  .card:has(> table) th:last-child,.card:has(> table) td:last-child{padding-right:14px}
 }
+@media (max-width:380px){
+  .kpi-grid{grid-template-columns:1fr}
+  .mtab-label{font-size:10px}
+}
+@keyframes sheet-in{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}

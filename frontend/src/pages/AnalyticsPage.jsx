@@ -120,9 +120,9 @@ export default function AnalyticsPage() {
           const c = KPI_ACCENTS[i % KPI_ACCENTS.length];
           return (
             <div key={label} className="card" style={{ padding: '16px 18px', borderTop: `4px solid ${c}`, borderRadius: 12, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 125 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div className="kpi-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ background: tint(c), color: c, borderRadius: 10, padding: '8px 10px', display: 'inline-flex', alignItems: 'center' }}>{icon}</div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, background: tint(c), color: c, padding: '3px 10px', borderRadius: 12 }}>
+                <span className="kpi-hint" style={{ fontSize: 10.5, fontWeight: 700, background: tint(c), color: c, padding: '3px 10px', borderRadius: 12 }}>
                   {hint}
                 </span>
               </div>

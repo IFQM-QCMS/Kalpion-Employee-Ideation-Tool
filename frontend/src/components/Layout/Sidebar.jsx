@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useBranding } from '../../context/BrandingContext';
 import { useLang } from '../../context/LangContext';
 import { isPrivileged, canViewReports, isAdmin, isSuperAdmin, isPlatformAdmin, formatRole } from '../../utils/helpers';
+import { SUPPORTED_LANGS, LANG_NAMES } from '../../i18n/translations';
+import { isDarkTheme, toggleTheme } from '../../utils/theme';
 
-const NAV_ICONS = {
+// Shared with the phone's bottom tab bar, so the same destination has the same icon in both.
+export const NAV_ICONS = {
   dashboard: <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>,
   myIdeas: <svg viewBox="0 0 24 24"><path d="M9 21h6M12 3a6 6 0 016 6c0 2.2-1.1 3.8-2.5 5L15 16H9l-.5-2C7 12.8 6 11.2 6 9a6 6 0 016-6z"/></svg>,
   submit: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>,
@@ -26,14 +30,26 @@ const NAV_ICONS = {
   guide: <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="14" y2="11"/></svg>,
 };
 
-export default function Sidebar({ collapsed, onToggle }) {
-  const { user } = useAuth();
+/*
+ * Desktop: a rail that collapses to icons. Phone (`mobile`): an off-canvas drawer that slides
+ * in over the page, always at full width with labels, and closes as soon as somewhere is
+ * chosen. On a phone it also carries the theme, language and sign-out controls, which the
+ * 60px topbar has no room for.
+ */
+export default function Sidebar({ collapsed, onToggle, mobile = false, open = false, onClose }) {
+  const { user, logout } = useAuth();
   const { orgName, logo } = useBranding();
-  const { t }    = useLang();
+  const { t, lang, setLang } = useLang();
   const navigate  = useNavigate();
   const location  = useLocation();
+  const [dark, setDark] = useState(isDarkTheme);
 
   if (!user) return null;
+
+  const go = (path) => {
+    navigate(path);
+    if (mobile) onClose?.();
+  };
 
   const role   = user.role;
   const isPA   = isPlatformAdmin(role);
@@ -52,7 +68,10 @@ export default function Sidebar({ collapsed, onToggle }) {
       <div
         className={`nav-item${active(path) ? ' active' : ''}`}
         data-label={dataLabel || label}
-        onClick={() => navigate(path)}
+        onClick={() => go(path)}
+        role="link"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(path); } }}
       >
         <span className="icon">{icon}</span>
         <span className="label">{label}</span>
@@ -61,9 +80,13 @@ export default function Sidebar({ collapsed, onToggle }) {
   };
 
   return (
-    <div id="sidebar" className={collapsed ? 'collapsed' : ''}>
+    <div
+      id="sidebar"
+      className={`${!mobile && collapsed ? 'collapsed' : ''}${mobile ? ' drawer' : ''}${mobile && open ? ' open' : ''}`}
+      aria-hidden={mobile && !open ? 'true' : undefined}
+    >
       {/* The organisation's own logo and name, not IFQM's - a TVS employee sees TVS here, an L&T employee sees L&T. */}
-      <div className="sidebar-logo" onClick={onToggle} style={{ cursor:'pointer' }} title={orgName}>
+      <div className="sidebar-logo" onClick={mobile ? onClose : onToggle} style={{ cursor:'pointer' }} title={orgName}>
         <img
           src={logo}
           alt={orgName}
@@ -157,6 +180,26 @@ export default function Sidebar({ collapsed, onToggle }) {
           )}
         </div>
       </div>
+
+      {/* Phone only - what the topbar drops at this width. */}
+      {mobile && (
+        <div className="drawer-tools">
+          <label className="drawer-tool">
+            <span>{t('topbar.language')}</span>
+            <select className="form-control" value={lang} onChange={(e) => setLang(e.target.value)}>
+              {SUPPORTED_LANGS.map((l) => <option key={l} value={l}>{LANG_NAMES[l]}</option>)}
+            </select>
+          </label>
+          <div className="drawer-tool-row">
+            <button type="button" className="btn btn-outline" onClick={() => setDark(toggleTheme())}>
+              {dark ? t('topbar.light') : t('topbar.dark')}
+            </button>
+            <button type="button" className="btn btn-outline" onClick={async () => { await logout(); navigate('/login'); }}>
+              {t('topbar.logout')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

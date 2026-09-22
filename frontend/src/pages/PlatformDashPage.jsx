@@ -202,7 +202,7 @@ export default function PlatformDashPage() {
 
       {/* Analytics charts */}
       {!loading && !error && tenants.length > 0 && (
-        <div style={{ display:'grid',gridTemplateColumns:'minmax(280px,360px) 1fr',gap:18,marginTop:18 }}>
+        <div className="pd-split" style={{ display:'grid',gridTemplateColumns:'minmax(280px,360px) 1fr',gap:18,marginTop:18 }}>
           <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
             <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:14 }}>
               <div style={{ fontWeight:750,fontSize:14,color:'var(--heading)' }}>{t('pa.chart_status')}</div>

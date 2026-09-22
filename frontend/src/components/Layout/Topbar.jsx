@@ -6,6 +6,7 @@ import { useNotif } from '../../context/NotifContext';
 import { useToast } from '../../context/ToastContext';
 import { SUPPORTED_LANGS, LANG_LABELS, LANG_NAMES } from '../../i18n/translations';
 import { formatRole, timeAgo } from '../../utils/helpers';
+import { isDarkTheme, toggleTheme } from '../../utils/theme';
 import IdeaDetailModal from '../IdeaDetailModal';
 
 const PAGE_TITLES = {
@@ -42,7 +43,9 @@ function titleFromPath(path) {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
 }
 
-export default function Topbar({ onToggleSidebar }) {
+// `mobile`: the phone layout. Theme, language and sign-out move into the drawer; the bell
+// and the account chip shrink to their icons. See AppShell.
+export default function Topbar({ onToggleSidebar, mobile = false }) {
   const { user, logout }                     = useAuth();
   const { t, lang, setLang }                = useLang();
   const { notifs, unreadCount, total, busy, markAllRead, markOneRead } = useNotif();
@@ -50,7 +53,7 @@ export default function Topbar({ onToggleSidebar }) {
   const navigate  = useNavigate();
   const location  = useLocation();
 
-  const [isDark, setIsDark]         = useState(document.documentElement.getAttribute('data-theme') === 'dark');
+  const [isDark, setIsDark]         = useState(isDarkTheme);
   const [showNotif, setShowNotif]   = useState(false);
   const [showLang, setShowLang]     = useState(false);
   // The idea a notification points at, opened as an overlay from wherever the reader happens
@@ -74,10 +77,7 @@ export default function Topbar({ onToggleSidebar }) {
     : titleFromPath(location.pathname);
 
   function toggleDark() {
-    const next = isDark ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', next);
-    localStorage.setItem('ifqm-theme', next);
-    setIsDark(!isDark);
+    setIsDark(toggleTheme());
   }
 
   async function doLogout() {
@@ -112,22 +112,24 @@ export default function Topbar({ onToggleSidebar }) {
     <div id="topbar">
       <div className="topbar-left">
         <button
-          style={{ background:'none',border:'none',cursor:'pointer',fontSize:20,color:'var(--text-muted)',padding:'4px 6px',borderRadius:6,transition:'background .15s',lineHeight:1 }}
+          type="button"
+          className="topbar-menu-btn"
+          aria-label={t('nav.menu')}
           onClick={onToggleSidebar}
-          onMouseOver={e => e.target.style.background='var(--bar-track)'}
-          onMouseOut={e => e.target.style.background='none'}
         >&#9776;</button>
         <span className="page-title">{pageTitle}</span>
       </div>
 
       <div className="topbar-right">
-        {/* Dark mode toggle */}
+        {/* Dark mode toggle and language picker - in the drawer on a phone. */}
+        {!mobile && (
         <div className="dm-toggle" onClick={toggleDark} title={t('topbar.toggle_dark')}>
           <div className={`dm-track${isDark ? ' on' : ''}`}><div className="dm-thumb"></div></div>
           <span>{isDark ? t('topbar.light') : t('topbar.dark')}</span>
         </div>
+        )}
 
-        {/* Language picker */}
+        {!mobile && (
         <div className={`lang-wrap${showLang ? ' open' : ''}`}>
           <button className="lang-toggle" id="lang-btn" onClick={handleLangToggle}>
             {LANG_LABELS[lang] || 'EN'}
@@ -148,6 +150,7 @@ export default function Topbar({ onToggleSidebar }) {
             </div>
           )}
         </div>
+        )}
 
         {/* Notifications bell. The panel is a child of this wrapper so it opens beneath the bell rather than at the window's right edge - see.notif-wrap in the stylesheet for why that changed. */}
         <div className="notif-wrap">
@@ -161,7 +164,7 @@ export default function Topbar({ onToggleSidebar }) {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
             </svg>
-            <span>{t('topbar.notifications')}</span>
+            {!mobile && <span>{t('topbar.notifications')}</span>}
             {unreadCount > 0 && (
               <div className="notif-badge" style={{ position:'relative',top:'auto',right:'auto',margin:0 }}>
                 {unreadCount}
@@ -228,9 +231,9 @@ export default function Topbar({ onToggleSidebar }) {
         </div>
 
         {/* User chip. MOM §12.10 - a platform admin sees "Superadmin signed in as <name>" rather than a bare name plus a role pill. */}
-        <div className="user-chip" onClick={() => navigate('/profile')}>
+        <div className="user-chip" onClick={() => navigate('/profile')} title={user?.name}>
           <div className="avatar">{user?.avatar_initials || user?.name?.[0] || '?'}</div>
-          {user?.role === 'platform_admin' ? (
+          {mobile ? null : user?.role === 'platform_admin' ? (
             <span>{t('pa.signed_in_as').replace('{name}', user?.name || '')}</span>
           ) : (
             <>
@@ -240,7 +243,7 @@ export default function Topbar({ onToggleSidebar }) {
           )}
         </div>
 
-        <button className="btn btn-outline btn-sm" onClick={doLogout}>{t('topbar.logout')}</button>
+        {!mobile && <button className="btn btn-outline btn-sm" onClick={doLogout}>{t('topbar.logout')}</button>}
       </div>
 
       {/* Opened from a notification, so it works on every page. */}

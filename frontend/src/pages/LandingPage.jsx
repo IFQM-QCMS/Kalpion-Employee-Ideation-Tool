@@ -437,6 +437,14 @@ export default function LandingPage() {
           .ifqm-lp .cta{padding:38px 22px}
           .ifqm-lp .logo small{display:none}
           .ifqm-lp .calc-out{grid-template-columns:1fr}
+          /* One button in the bar; the hero underneath already carries "Start free". */
+          .ifqm-lp .nav-cta{margin-left:auto;gap:6px}
+          .ifqm-lp .nav-cta .b-primary{display:none}
+          /* Three pipeline lanes at 390px were three unreadable slivers. */
+          .ifqm-lp .lanes{grid-template-columns:1fr;gap:8px}
+          .ifqm-lp .lane{min-height:0}
+          /* The hero glows are 700-1100px wide by design; they must never widen the page. */
+          .ifqm-lp .hero,.ifqm-lp{overflow-x:hidden}
         }
 
         /* ── Brand overrides ───────────────────────────────────────────────

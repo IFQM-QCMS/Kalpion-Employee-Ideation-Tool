@@ -142,7 +142,7 @@ export default function SuperAdminPage() {
       {/* Overview */}
       {tab === 0 && (
         <>
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginTop:16 }}>
+        <div className="grid-2" style={{ gap:20,marginTop:16 }}>
           <div className="card">
             <div style={{ fontWeight:700,fontSize:13,marginBottom:12 }}>{t('dash.status_dist')}</div>
             <div className="bar-chart" id="sa-status-dist">

@@ -71,6 +71,8 @@ function Podium({ rows, meId, t }) {
           border-radius:999px;padding:1px 7px;margin-top:4px}
         @media (max-width:640px){
           .lb-podium{flex-direction:column;align-items:stretch;gap:10px}
+          /* Stacked, the podium reads top-down: first, second, third. */
+          .lb-podium .pod{order:var(--rank)}
           .lb-podium .pod{flex-direction:row;gap:12px;max-width:none;align-items:center;
             background:var(--panel-bg);border:1px solid var(--border);border-radius:12px;padding:10px 12px}
           .lb-podium .pod-block{display:none}
@@ -85,7 +87,7 @@ function Podium({ rows, meId, t }) {
         const u = rows[idx];
         const tint = TINT[idx];
         return (
-          <div className="pod" key={u.id}>
+          <div className="pod" key={u.id} style={{ "--rank": idx + 1 }}>
             <div className="crown" aria-hidden="true">{MEDAL[idx]}</div>
             <div className="pod-avatar"
               style={{ background:`linear-gradient(140deg,${tint.from},${tint.to})`,
@@ -369,9 +371,9 @@ export default function LeaderboardPage() {
       {error   && <div className="alert alert-danger">{error}</div>}
 
       {!loading && !error && (
-        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20 }}>
+        <div className="grid-2" style={{ gap:20 }}>
           {/* Individuals */}
-          <div className="card" style={{ gridColumn:'1/3' }}>
+          <div className="card" style={{ gridColumn:'1/-1' }}>
             <div style={{ fontWeight:700,fontSize:13,marginBottom:14,color:'var(--heading)' }}>{t('lb.top_employees')}<InfoDot term="engagement_index" /></div>
 
             {!indivs.length ? (
