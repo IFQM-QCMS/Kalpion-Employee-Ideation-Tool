@@ -402,7 +402,7 @@ const ORG_ADMIN = {
           bullets: [
             { term: 'Go to Review Queue', text: 'to look at what\'s pending - use the **View** button only.' },
             { term: 'Go to All Ideas', text: 'to browse, search, and export every idea in your organisation (Export CSV or Export PDF), or to archive old ideas in bulk (Bulk Archive).' },
-            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (OctaQube), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to QC**. Click **Push all to OctaQube**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your OctaQube API key, and click Save)." },
+            { term: 'Go to Admin Panel → Approved Ideas', text: "to send approved ideas to IFQM's external quality system (OctaQube), if your organisation uses one. Ideas that have gone across are counted on the Analytics page as **Ideas Sent to OctaQube**. Click **Push all to OctaQube**, or push individual ideas with the Push button per row. Set up the connection first under **Admin Panel → API & Integration** (enable it, paste your OctaQube API key, and click Save)." },
           ],
         },
       ],
