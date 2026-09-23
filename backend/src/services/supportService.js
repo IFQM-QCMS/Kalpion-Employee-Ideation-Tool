@@ -100,7 +100,10 @@ function escapeHtml(s) {
  * ticket being recorded. The caller does not await this; the ticket is already saved by the
  * time it runs, and the console shows it whether or not the message got out.
  */
-export function buildTicketNotice({ tenant, user, ticketCode, subject, category, priority, message }) {
+export function buildTicketNotice({
+  kind = 'new', tenant, user, ticketCode, subject, category, priority, message, reopened = false,
+}) {
+  const isReply = kind === 'reply';
   const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, '');
   const line = (label, value) => (value
     ? `<tr><td style="padding:4px 14px 4px 0;color:#667089;white-space:nowrap">${label}</td>`
@@ -115,14 +118,21 @@ export function buildTicketNotice({ tenant, user, ticketCode, subject, category,
   const org = tenant?.name || tenant?.slug || 'an organisation';
 
   const who = [esc(user?.name), user?.role ? `(${esc(formatRole(user.role))})` : ''].filter(Boolean).join(' ');
+  const did = isReply ? 'has replied to a support ticket' : 'has raised a support ticket';
+  // A reply on a ticket IFQM had marked resolved is the one that most needs saying: it means
+  // it was not resolved, and the ticket has just come back into the queue.
+  const standing = isReply && reopened
+    ? 'reopened by this reply - it was marked resolved, and is back in the support queue.'
+    : 'waiting in the support queue.';
+
   const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
-  <p style="margin:0 0 4px"><b>${who}</b> at <b>${esc(org)}</b> has raised a support ticket.</p>
-  <p style="margin:0 0 14px;color:#667089">${esc(ticketCode)} - waiting in the support queue.</p>
+  <p style="margin:0 0 4px"><b>${who}</b> at <b>${esc(org)}</b> ${did}.</p>
+  <p style="margin:0 0 14px;color:#667089">${esc(ticketCode)} - ${standing}</p>
   <table style="border-collapse:collapse;font-size:14px">
     ${line('Subject', subject)}
     ${line('Organisation', tenant?.name)}
     ${line('Organisation code', tenant?.slug)}
-    ${line('Raised by', user?.name)}
+    ${line(isReply ? 'Replied by' : 'Raised by', user?.name)}
     ${line('Role', user?.role ? formatRole(user.role) : '')}
     ${line('Email', user?.email)}
     ${line('Category', category)}
@@ -134,12 +144,19 @@ export function buildTicketNotice({ tenant, user, ticketCode, subject, category,
   <p style="margin:16px 0 0"><a href="${esc(link)}" style="color:#1a5299">Open the support queue</a> to reply.</p>
 </div>`;
 
-  // The subject line names the organisation and what it is about, because these arrive in an
-  // inbox alongside everything else IFQM is sent.
-  return { subject: `[${org}] New support ticket ${ticketCode} - ${subject}`, html };
+  /*
+   * The subject line names the organisation and what it is about, because these arrive in an
+   * inbox alongside everything else IFQM is sent. A reply is prefixed "Re:" and otherwise
+   * worded identically, so a mail client threads it under the ticket it belongs to instead of
+   * starting a second conversation about the same thing.
+   */
+  const head = isReply ? `Re: ${ticketCode}` : `New support ticket ${ticketCode}`;
+  return { subject: `[${org}] ${head} - ${subject}`, html };
 }
 
-export async function notifyPlatformOfTicket({ tenant, user, ticketCode, subject, category, priority, message }) {
+export async function notifyPlatformOfTicket({
+  kind = 'new', tenant, user, ticketCode, subject, category, priority, message, reopened = false,
+}) {
   const { sendViaPlatform } = await import('./mailerService.js');
   const master = masterDb();
 
@@ -159,7 +176,7 @@ export async function notifyPlatformOfTicket({ tenant, user, ticketCode, subject
   }
 
   const { subject: mailSubject, html } = buildTicketNotice({
-    tenant, user, ticketCode, subject, category, priority, message,
+    kind, tenant, user, ticketCode, subject, category, priority, message, reopened,
   });
 
   const results = await Promise.allSettled(
@@ -285,6 +302,23 @@ export async function replyAsTenant(tenant, user, id, body) {
     'UPDATE support_tickets SET status = ?, updated_at = NOW() WHERE id = ?',
     [nextStatus, ticket.id]
   );
+
+  logger.info(`support: ${ticket.ticket_code} replied to by ${user.email} @ ${tenant.slug}`);
+
+  // Same reasoning as createTicket: not awaited, and a failure here never costs the reply.
+  // Somebody waiting on IFQM should not have to wonder whether their answer was seen.
+  notifyPlatformOfTicket({
+    kind: 'reply',
+    tenant,
+    user,
+    ticketCode: ticket.ticket_code,
+    subject: ticket.subject,
+    category: ticket.category,
+    priority: ticket.priority,
+    message,
+    reopened: nextStatus !== ticket.status,
+  }).catch((e) => logger.warn(`support notice: ${ticket.ticket_code} reply failed - ${e.message}`));
+
   return { success: true, status: nextStatus };
 }
 

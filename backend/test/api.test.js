@@ -5672,4 +5672,32 @@ test('a new support ticket notifies the platform admins, and never blocks on the
    * so a mail failure must leave the ticket saved and the request successful, as the
    * assertions above have just shown.
    */
+
+  // ── and the other half of the conversation ───────────────────────────────
+  const reply = buildTicketNotice({
+    kind: 'reply',
+    tenant: { name: 'Org A', slug: 'orga' },
+    user: { name: 'Orga Employee', role: 'employee', email: 'user@orga.test' },
+    ticketCode: 'TKT-00042',
+    subject: 'Cannot open the idea board',
+    message: 'Still happening.',
+  });
+  assert.match(reply.subject, /^\[Org A\] Re: TKT-00042 - Cannot open the idea board$/,
+    'a reply threads under the ticket rather than starting a second conversation about it');
+  assert.match(reply.html, /has replied to a support ticket/);
+  assert.match(reply.html, /Replied by/, 'and says who replied, not who raised it');
+
+  const reopened = buildTicketNotice({
+    kind: 'reply', reopened: true,
+    tenant: { name: 'Org A', slug: 'orga' },
+    user: { name: 'Orga Employee', role: 'employee' },
+    ticketCode: 'TKT-00042', subject: 'Cannot open the idea board', message: 'No.',
+  });
+  assert.match(reopened.html, /reopened by this reply/,
+    'a reply on a resolved ticket is the one that most needs saying - it was not resolved');
+
+  const replied = await api('POST', `/api/support/tickets/${raised.data.ticket_id}/messages`, {
+    token: AUSER, body: { body: 'Still happening this morning.' },
+  });
+  assert.equal(replied.status, 200, JSON.stringify(replied.data));
 });
