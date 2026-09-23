@@ -8,6 +8,10 @@ import { translateStatus, translateImpact, translateArea } from '../utils/helper
 import InfoDot from '../components/InfoDot';
 import { loadOrgSettings, numSetting } from '../utils/orgSettings';
 
+// What uploadService accepts. Kept in step with ALLOWED_EXT there; the server remains the
+// authority, this only saves the author from finding out after the fact.
+const ALLOWED_UPLOAD_EXT = ['pdf','png','jpg','jpeg','gif','xlsx','xls','csv','docx','doc'];
+
 const IMPACT_LEVELS = ['Low','Medium','High','Critical'];
 const FEASIBILITY_LEVELS = ['Low','Medium','High'];
 
@@ -53,7 +57,7 @@ const Req = () => (
 );
 
 export default function SubmitPage() {
-  const { user }      = useAuth();
+  const { user, refreshUser } = useAuth();
   const { t }         = useLang();
   const { showToast } = useToast();
   const navigate      = useNavigate();
@@ -127,6 +131,23 @@ export default function SubmitPage() {
         e.target.value = '';
         setter(null);
         return;
+      }
+      /*
+       * The same courtesy for the type as for the size. The server refuses a disallowed type
+       * anyway, but that happened after the idea had been submitted and the answer was thrown
+       * away, so the author was congratulated on a submission whose attachment had silently
+       * not attached - discoverable only by reopening the idea and finding "No attachments".
+       */
+      if (f) {
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (!ALLOWED_UPLOAD_EXT.includes(ext)) {
+          showToast(t('form.attach_bad_type', {
+            name: f.name, types: ALLOWED_UPLOAD_EXT.join(', '),
+          }), 'danger');
+          e.target.value = '';
+          setter(null);
+          return;
+        }
       }
       setter(f);
     };
@@ -302,10 +323,16 @@ export default function SubmitPage() {
       const res = await ideasApi.submit(body);
       if (res.data.success) {
         // Upload files
-        await uploadFiles(res.data.idea_id);
+        const failedUploads = await uploadFiles(res.data.idea_id);
+        if (failedUploads.length) {
+          showToast(t('form.attach_failed', { names: failedUploads.join(', ') }), 'warning');
+        }
         const msg = t('msg.idea_ok', { code: res.data.idea_code });
         const pts = res.data.points_added > 0 ? ' · ' + t('msg.pts_earned', { n: res.data.points_added }) : '';
         showToast(msg + pts, 'success');
+        // The confirmation says points were earned; the chip beside the name has to agree
+        // without waiting for a reload.
+        if (res.data.points_added > 0) refreshUser?.();
         // Cleanup and navigation sit OUTSIDE the try.
         submitted = true;
       } else {
@@ -320,19 +347,24 @@ export default function SubmitPage() {
     setSubmitting(false);
   }
 
+  /** Returns the names of any files that did not make it, so the caller can say so. */
   async function uploadFiles(ideaId) {
     const uploads = [];
     if (fileSit) uploads.push({ file: fileSit, section: 'situation' });
     if (fileSol) uploads.push({ file: fileSol, section: 'solution' });
     if (fileSup) uploads.push({ file: fileSup, section: 'support' });
     if (fileBen) uploads.push({ file: fileBen, section: 'benefits' });
+    const failed = [];
     for (const { file, section } of uploads) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('idea_id', ideaId);
       fd.append('section', section);
-      try { await uploadApi.upload(fd); } catch {}
+      // A swallowed failure here is how an attachment could vanish between a successful
+      // submission and the idea's own Attachments tab.
+      try { await uploadApi.upload(fd); } catch { failed.push(file.name); }
     }
+    return failed;
   }
 
   function resetForm() {

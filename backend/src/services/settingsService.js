@@ -39,6 +39,19 @@ const SETTINGS_WHITELIST = [
   'employee_visible_sections',
 ];
 
+/*
+ * The settings any signed-in member of the organisation may read, because the product cannot
+ * draw its own screens without them. Everything else - the SMTP host, user and sender, and
+ * whatever is added to the whitelist above in future - is administrative.
+ */
+const PUBLIC_SETTINGS = [
+  'review_sla_days', 'escalation_days', 'anonymous_allowed', 'public_board_enabled',
+  'challenges_enabled', 'approval_stages', 'approval_stage_labels',
+  'solution_visibility', 'prediction_visibility', 'employee_visible_sections',
+  'idea_tags_enabled', 'patentability_enabled',
+  'max_file_mb', 'idea_screen_protection', 'situation_preview_chars', 'content_protection',
+];
+
 /** Clean a submitted label map before it is stored. */
 export function normaliseStageLabels(raw) {
   let input = raw;
@@ -138,7 +151,17 @@ export async function getSettings(db, user) {
   delete settings.qcms_api_key;
 
   if (!isAdmin(user.role)) {
-    delete settings.smtp_pass;
+    /*
+     * An allow-list, not a strip-list. Every screen an ordinary colleague can open needs some
+     * of these - the upload control needs the size ceiling, the idea pages need the
+     * visibility rules, the timeline needs the stage names - but the mail server, its
+     * account name and the rest of the administrative configuration are no business of
+     * theirs. Listing what may leave means a setting added later is private until somebody
+     * decides otherwise, rather than public until somebody notices.
+     */
+    for (const key of Object.keys(settings)) {
+      if (!PUBLIC_SETTINGS.includes(key)) delete settings[key];
+    }
   } else if (settings.smtp_pass) {
     settings.smtp_pass_set = true;
     settings.smtp_pass = SMTP_PASS_MASK;

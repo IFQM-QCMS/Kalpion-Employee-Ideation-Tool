@@ -76,7 +76,13 @@ export default function DashboardPage() {
           </h1>
           <div style={{ fontSize:13,color:'var(--subtle)',marginTop:4 }}>
             {isReviewer && data.pending_reviews > 0
-              ? t('dash.sub_reviewer', { n: data.pending_reviews })
+              /*
+               * An Organisation Admin is barred from approving or rejecting anything, so the
+               * count is real but the sentence was not: it promised a decision the product
+               * then refuses them. The server says whose decision it is.
+               */
+              ? t(data.pending_is_mine === false ? 'dash.sub_admin_pending' : 'dash.sub_reviewer',
+                { n: data.pending_reviews })
               : t('dash.sub_employee')}
           </div>
         </div>

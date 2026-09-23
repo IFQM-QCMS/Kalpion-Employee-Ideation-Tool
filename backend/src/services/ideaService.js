@@ -262,16 +262,51 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
     params.push(timeReq);
   }
 
+  /*
+   * The two legacy co_suggester columns hold only the first two people named; the third
+   * onward live in idea_co_suggesters alone. Scoping on the columns therefore hid an idea
+   * from a co-suggester who happened to be added third.
+   */
+  const COAUTHORED =
+    `(i.submitter_id = ?
+      OR COALESCE(i.co_suggester_1_id,0) = ?
+      OR COALESCE(i.co_suggester_2_id,0) = ?
+      OR EXISTS (SELECT 1 FROM idea_co_suggesters cs WHERE cs.idea_id = i.id AND cs.user_id = ?))`;
+
   if (INDIVIDUAL_ROLES.includes(user.role)) {
-    where.push('(i.submitter_id = ? OR i.co_suggester_1_id = ? OR i.co_suggester_2_id = ?)');
-    params.push(user.id, user.id, user.id);
+    where.push(COAUTHORED);
+    params.push(user.id, user.id, user.id, user.id);
   } else if (TEAM_ROLES.includes(user.role)) {
-    where.push('(i.submitter_id IN (SELECT id FROM users WHERE manager_id = ?) OR i.submitter_id = ?)');
-    params.push(user.id, user.id);
+    /*
+     * A reviewer's own team, their own ideas - and anything they have actually acted on. The
+     * last of those was missing, which is why a manager who had just rejected an idea from
+     * outside their team was told "No rejected ideas" on the very next screen.
+     */
+    where.push(
+      `(i.submitter_id IN (SELECT id FROM users WHERE manager_id = ?)
+        OR i.submitter_id = ?
+        OR EXISTS (SELECT 1 FROM idea_workflow w WHERE w.idea_id = i.id AND w.actor_id = ?)
+        OR EXISTS (SELECT 1 FROM idea_reviewers ir WHERE ir.idea_id = i.id AND ir.reviewer_id = ?))`
+    );
+    params.push(user.id, user.id, user.id, user.id);
   }
 
+  /*
+   * A draft has not been submitted to anybody. It belongs to its author until it is, so it
+   * does not appear in a list built for everybody else - which is also why this page's status
+   * filter never offered "Draft".
+   */
+  where.push("(i.status <> 'Draft' OR i.submitter_id = ?)");
+  params.push(user.id);
+
   if (status) { where.push('i.status = ?'); params.push(status); }
-  if (search) { where.push('(i.title LIKE ? OR i.idea_code LIKE ?)'); const s = `%${search}%`; params.push(s, s); }
+  if (search) {
+    // Submitted By and Department are columns of this very table, so a search that cannot
+    // match them reads as "this person has never submitted anything".
+    where.push('(i.title LIKE ? OR i.idea_code LIKE ? OR u.name LIKE ? OR u.department LIKE ?)');
+    const s = `%${search}%`;
+    params.push(s, s, s, s);
+  }
   if (impact) { where.push('i.impact_level = ?'); params.push(impact); }
 
   const uid = Number(user.id);
@@ -463,69 +498,104 @@ function chainSummary(cfg, role) {
   return { total: steps.length, steps };
 }
 
+/*
+ * Nobody decides on an idea they have a stake in. The submitter was already excluded; a
+ * co-suggester is just as much an author, and was not. Both the co_suggesters table and the
+ * two legacy columns are checked, because an idea written before the table existed carries
+ * its co-suggesters only in the columns.
+ */
+const NOT_A_STAKEHOLDER =
+  `i.submitter_id <> ?
+     AND COALESCE(i.co_suggester_1_id, 0) <> ?
+     AND COALESCE(i.co_suggester_2_id, 0) <> ?
+     AND NOT EXISTS (SELECT 1 FROM idea_co_suggesters cs WHERE cs.idea_id = i.id AND cs.user_id = ?)`;
+
+/*
+ * An archived idea has been set aside by the organisation, and the Archive confirmation says
+ * so in as many words ("leaves the working lists"). A queue is a working list.
+ */
+const REVIEWABLE = `i.status IN ('Submitted','Under Review') AND i.archived_at IS NULL`;
+
+const REVIEW_COLUMNS =
+  `i.*, u.name AS submitter_name, u.department, u.avatar_initials,
+   (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
+   (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
+   (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id) AS reviewer_count,
+   (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='approved') AS approved_count,
+   (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='rejected') AS rejected_count`;
+
 export async function review(db, user) {
   const uid = Number(user.id);
   const cfg = await getApprovalConfig(db);
 
-  // Two conditions, and both are needed. A role's stages are the ones in the organisation's
-  // chain - plus, for ideas the final approver FORWARDED, the catalogue stage for that role,
-  // because such an idea sits at a stage the chain does not list and its new reviewer still
-  // has to see it. Only forwarded ideas qualify: an idea left at a stage the organisation has
-  // since removed from its chain is not thereby handed to everyone who holds that role.
+  // A role's stages are the ones in the organisation's chain - plus, for ideas the final
+  // approver FORWARDED, the catalogue stage for that role, because such an idea sits at a
+  // stage the chain does not list and its new reviewer still has to see it. Only forwarded
+  // ideas qualify: an idea left at a stage the organisation has since removed from its chain
+  // is not thereby handed to everyone who holds that role.
   const chainStages = rolePlaysStages(cfg, user.role);
   const catalogStages = STAGE_KEYS.filter((k) => STAGE_CATALOG[k].role === user.role);
-  const myStages = [...new Set([...chainStages, ...catalogStages])];
 
-  if (myStages.length) {
-    const chainIn = chainStages.length ? `i.current_stage IN (${chainStages.map(() => '?').join(',')})` : '0';
+  /*
+   * Three independent ways an idea can be waiting on this person, assembled in the order they
+   * appear in the statement so the bound parameters line up with them.
+   *
+   * The committee branch is FIRST and deliberately unconditional. Routing to committee takes
+   * an idea off the chain and hands it to named people, so whether their role happens to
+   * appear in this organisation's chain has nothing to do with whether they were asked to
+   * decide. Hanging it off the stage list is what once made a routed idea vanish: it left
+   * the sender's queue, never reached the assignee's, and no one could approve or reject it
+   * again.
+   */
+  const branches = ["(i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending')"];
+  const args = [];
+
+  if (chainStages.length || catalogStages.length) {
+    const chainIn = chainStages.length
+      ? `i.current_stage IN (${chainStages.map(() => '?').join(',')})` : '0';
     const fwdIn = catalogStages.length
       ? `(i.forward_stages IS NOT NULL AND FIND_IN_SET(i.current_stage, i.forward_stages) > 0
           AND i.current_stage IN (${catalogStages.map(() => '?').join(',')}))`
       : '0';
-    const sql =
-      `SELECT DISTINCT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
-              ir.decision AS my_reviewer_decision,
-              (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
-              (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
-              (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id) AS reviewer_count,
-              (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='approved') AS approved_count,
-              (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='rejected') AS rejected_count,
-              (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
-       FROM ideas i
-       JOIN users u ON u.id = i.submitter_id
-       LEFT JOIN idea_reviewers ir ON ir.idea_id = i.id AND ir.reviewer_id = ?
-       WHERE i.status IN ('Submitted','Under Review')
-         AND i.submitter_id <> ?
-         AND ((COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
-               AND (${chainIn} OR ${fwdIn})
-               AND (i.current_reviewer_id = ? OR i.current_reviewer_id IS NULL))
-              OR (i.workflow_type = 'multi_reviewer' AND ir.decision = 'pending'))
-       ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
-    const [ideas] = await db.execute(sql, [uid, uid, uid, ...chainStages, ...catalogStages, uid]);
-    return { success: true, ideas, chain: chainSummary(cfg, user.role) };
+    branches.push(
+      `(COALESCE(i.workflow_type,'hierarchical') = 'hierarchical'
+        AND (${chainIn} OR ${fwdIn})
+        AND (i.current_reviewer_id = ? OR i.current_reviewer_id IS NULL))`
+    );
+    args.push(...chainStages, ...catalogStages, uid);
   }
 
-  // The org-wide queue, for the people whose remit actually is org-wide.
-  const orgWideRoles = [...new Set([...ADMIN_ROLES, ...cfg.final_roles])];
-  if (!orgWideRoles.includes(user.role)) {
-    return { success: true, ideas: [] };
-  }
-
-  const [ideas] = await db.execute(
-    `SELECT DISTINCT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
-            (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
-            (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
-            (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id) AS reviewer_count,
-            (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='approved') AS approved_count,
-            (SELECT COUNT(*) FROM idea_reviewers WHERE idea_id=i.id AND decision='rejected') AS rejected_count,
+  const sql =
+    `SELECT DISTINCT ${REVIEW_COLUMNS},
+            ir.decision AS my_reviewer_decision,
             (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
      FROM ideas i
      JOIN users u ON u.id = i.submitter_id
-     WHERE i.status IN ('Submitted','Under Review')
+     LEFT JOIN idea_reviewers ir ON ir.idea_id = i.id AND ir.reviewer_id = ?
+     WHERE ${REVIEWABLE}
+       AND ${NOT_A_STAKEHOLDER}
+       AND (${branches.join(' OR ')})
+     ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
+
+  const [ideas] = await db.execute(sql, [uid, uid, uid, uid, uid, uid, ...args]);
+
+  // Someone who plays no part in the chain still sees anything routed to them personally; the
+  // org-wide view below is additional, for the people whose remit actually is org-wide.
+  const orgWideRoles = [...new Set([...ADMIN_ROLES, ...cfg.final_roles])];
+  if (chainStages.length || catalogStages.length || !orgWideRoles.includes(user.role)) {
+    return { success: true, ideas, chain: chainSummary(cfg, user.role) };
+  }
+
+  const [all] = await db.execute(
+    `SELECT DISTINCT ${REVIEW_COLUMNS},
+            (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
+     FROM ideas i
+     JOIN users u ON u.id = i.submitter_id
+     WHERE ${REVIEWABLE}
      ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`,
     [uid]
   );
-  return { success: true, ideas };
+  return { success: true, ideas: all };
 }
 
 // GET single
@@ -1007,6 +1077,26 @@ export async function submitOrDraft(db, user, action, b) {
 
 // REVIEW ACTION (approve / reject / implement + escalation)
 /** Serialise everything that decides one idea's fate. */
+/*
+ * Named on the idea as a co-suggester - by the table, or by either of the two legacy columns
+ * an older idea used before the table existed.
+ */
+export async function isNamedCoSuggester(db, ideaId, userId) {
+  const uid = Number(userId) || 0;
+  if (!uid) return false;
+  const [[row] = []] = await db.execute(
+    `SELECT 1 AS hit FROM ideas i
+      WHERE i.id = ?
+        AND (COALESCE(i.co_suggester_1_id,0) = ?
+             OR COALESCE(i.co_suggester_2_id,0) = ?
+             OR EXISTS (SELECT 1 FROM idea_co_suggesters cs
+                         WHERE cs.idea_id = i.id AND cs.user_id = ?))
+      LIMIT 1`,
+    [Number(ideaId) || 0, uid, uid, uid]
+  );
+  return !!row;
+}
+
 async function withIdeaDecisionLock(db, ideaId, fn) {
   const conn = await db.getConnection();
   const lockName = `ifqm_idea_decision_${ideaId}`;
@@ -1182,6 +1272,18 @@ async function reviewActionLocked(db, user, ideaId, decision, comment, forwardTo
 
   if (Number(idea.submitter_id) === Number(user.id)) {
     throw forbidden('You cannot review or approve your own idea.');
+  }
+
+  // A co-suggester is an author of the idea, and the self-review rule above means nothing if
+  // the person who helped write it can approve it at the next stage instead.
+  if (await isNamedCoSuggester(db, ideaId, user.id)) {
+    throw forbidden('You are named as a co-suggester on this idea, so you cannot review it.');
+  }
+
+  // Archiving is supposed to take an idea out of the working lists. If a decision can still
+  // be recorded on it, the organisation can find an idea it had set aside approved anyway.
+  if (idea.archived_at) {
+    throw forbidden('This idea has been archived. Restore it before recording a decision.');
   }
 
   const wfAction = ({ Approved: 'Approved', Rejected: 'Rejected', Implemented: 'Implemented', Returned: 'Returned' })[decision] || 'Reviewed';
@@ -1636,10 +1738,14 @@ export async function dashboard(db, user) {
           args);
         overdueReviews = Number(od[0]?.c || 0);
       } else {
-        const [pr] = await db.query("SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review')");
+        // Org-wide, and an archived idea is not waiting on anybody.
+        const [pr] = await db.query(
+          "SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review') AND archived_at IS NULL");
         pendingReviews = Number(pr[0]?.c || 0);
         const [od] = await db.query(
-          "SELECT COUNT(*) AS c FROM ideas WHERE status IN ('Submitted','Under Review') AND review_due_date IS NOT NULL AND review_due_date < CURDATE()"
+          `SELECT COUNT(*) AS c FROM ideas
+            WHERE status IN ('Submitted','Under Review') AND archived_at IS NULL
+              AND review_due_date IS NOT NULL AND review_due_date < CURDATE()`
         );
         overdueReviews = Number(od[0]?.c || 0);
       }
@@ -1684,6 +1790,12 @@ export async function dashboard(db, user) {
     counts,
     pendingReviews,
     pending_reviews: pendingReviews,
+    /*
+     * Whether that number is this person's to act on. An administrator is barred from
+     * approving or rejecting anything, so telling them N ideas "are waiting on your decision"
+     * promises an action the product will then refuse them.
+     */
+    pending_is_mine: TEAM_ROLES.includes(role),
     overdueReviews,
     overdue_reviews: overdueReviews,
     userPoints,

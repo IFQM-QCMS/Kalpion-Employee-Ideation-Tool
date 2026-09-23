@@ -27,8 +27,22 @@ function stateBadge(o, t) {
   if (b.state === 'exempt') return { label: t('msgb.s_exempt'), cls: 'badge-draft' };
   if (b.blocked) return { label: t('msgb.s_lapsed'), cls: 'badge-rejected' };
   if (b.expiring_soon) return { label: t('msgb.s_expiring', { n: b.days_left }), cls: 'badge-review' };
-  if (b.state === 'trial') return { label: t('msgb.s_trial', { n: b.days_left }), cls: 'badge-submitted' };
-  if (b.state === 'active') return { label: t('msgb.s_paying', { n: b.days_left }), cls: 'badge-approved' };
+  /*
+   * Both of these print a day count, and an organisation with no end date on file has none -
+   * which is how "Trial - null day(s)" came to be shown to an operator. The server already
+   * words that case ("No end date set"); use what it says rather than formatting a blank.
+   */
+  const noDate = b.days_left === null || b.days_left === undefined;
+  if (b.state === 'trial') {
+    // A trial far longer than the configured length is called out, because an operator
+    // looking at "342 day(s)" has no other way to tell a deliberate extension from a
+    // left-over demo value.
+    const label = noDate ? b.label : t('msgb.s_trial', { n: b.days_left });
+    return { label: b.trial_unusual ? `${label} !` : label, cls: 'badge-submitted' };
+  }
+  if (b.state === 'active') {
+    return { label: noDate ? b.label : t('msgb.s_paying', { n: b.days_left }), cls: 'badge-approved' };
+  }
   return { label: b.label, cls: 'badge-draft' };
 }
 

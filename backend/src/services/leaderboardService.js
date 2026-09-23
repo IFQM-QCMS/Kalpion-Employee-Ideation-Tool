@@ -46,7 +46,10 @@ export async function leaderboard(db, period = 'all') {
             u.name AS submitter_name, u.department
      FROM ideas i
      JOIN users u ON u.id = i.submitter_id
-     WHERE i.status != 'Draft' AND i.ai_score > 0 ${dateFilter}
+     -- Archiving an idea takes it out of the working lists, and a rejected idea is not
+     -- something to showcase company-wide; neither belongs in a ranking every employee sees.
+     WHERE i.status NOT IN ('Draft','Rejected') AND i.archived_at IS NULL
+       AND i.ai_score > 0 ${dateFilter}
      ORDER BY i.ai_score DESC
      LIMIT 5`
   );

@@ -70,14 +70,23 @@ export function billingState(tenant, { graceDays = 2 } = {}) {
     };
   }
   if (left > 0) {
+    /*
+     * Paid up to a date in the future IS paying, whatever a stale billing_status says. It
+     * used to return the stored status verbatim, so an organisation left at past_due or
+     * expired after its period was extended showed "Paid - N day(s) left" in the table while
+     * the Paying tile counted only state === 'active' and therefore read 0 - and that
+     * organisation was counted in no tile at all, which is why the tiles never added up to
+     * the number of organisations either.
+     */
+    const state = status === 'trial' ? 'trial' : 'active';
     return {
-      state: status,
+      state,
       days_left: left,
       ends_at: endsAt,
       blocked: false,
       in_grace: false,
       grace_days_left: null,
-      label: status === 'trial' ? `Trial - ${left} day(s) left` : `Paid - ${left} day(s) left`,
+      label: state === 'trial' ? `Trial - ${left} day(s) left` : `Paid - ${left} day(s) left`,
     };
   }
 
@@ -192,6 +201,8 @@ export async function billingOverview({ warnDays } = {}) {
   const summary = {
     organisations: rows.length,
     on_trial: 0, paying: 0, lapsed: 0, exempt: 0, in_grace: 0,
+    // Overdue but still inside the grace window: neither paying nor cut off.
+    other: 0,
     // The one that matters most operationally: nobody has decided what this customer pays, so
     // they are using the platform on nothing at all.
     no_plan: 0,
@@ -214,6 +225,9 @@ export async function billingOverview({ warnDays } = {}) {
     else if (state.state === 'trial') summary.on_trial += 1;
     else if (state.state === 'active') summary.paying += 1;
     else if (state.blocked) summary.lapsed += 1;
+    // Every organisation lands in exactly one bucket, so the tiles can be read as a
+    // breakdown of the total rather than as five numbers that happen to be nearby.
+    else summary.other += 1;
 
     if (state.in_grace) summary.in_grace += 1;
     if (!t.plan_id) summary.no_plan += 1;
@@ -242,6 +256,13 @@ export async function billingOverview({ warnDays } = {}) {
         ...state,
         billing_status: t.billing_status,
         trial_days: t.trial_days,
+        /*
+         * A trial running far longer than the length configured for it. The value is set by
+         * hand and the screen has no way to say whether 342 days was meant or was left over
+         * from a demo, so it is marked rather than left to blend in with the ordinary rows.
+         */
+        trial_unusual: state.state === 'trial'
+          && Number(state.days_left) > Math.max(Number(t.trial_days) || 0, 30),
         trial_ends_at: t.trial_ends_at,
         period_start: t.period_start,
         period_end: t.period_end,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLang } from '../context/LangContext';
 import { ideasApi } from '../services/api';
 import { statusBadge, impactBadge, scoreBadgeClass, translateStatus, translateImpact, translateAreas, fmtDateTime, engagementIndex } from '../utils/helpers';
@@ -41,6 +41,7 @@ export default function MyIdeasPage() {
   const [openId,  setOpenId]  = useState(null);
   // /my-ideas?idea=<id> - the link every email about an idea carries.
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   useEffect(() => {
     const id = Number(params.get('idea')) || 0;
     if (id) setOpenId(id);
@@ -153,9 +154,17 @@ export default function MyIdeasPage() {
                   {i.submitted_at ? fmtDateTime(i.submitted_at) : translateStatus('Draft', t)}
                 </td>
                 <td>
-                  <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); setOpenId(i.id); }}>
-                    {t('btn.view')}
-                  </button>
+                  {/* An unfinished draft's next step is finishing it, not reading it. */}
+                  {i.status === 'Draft' ? (
+                    <button className="btn btn-primary btn-sm"
+                      onClick={e => { e.stopPropagation(); navigate(`/submit?edit=${i.id}`); }}>
+                      {t('idea.continue_draft')}
+                    </button>
+                  ) : (
+                    <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); setOpenId(i.id); }}>
+                      {t('btn.view')}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

@@ -158,6 +158,10 @@ export async function adminUsers(db, { q = '', page = 1, limit = 50, role = '', 
   const [rows] = await db.execute(
     `SELECT u.id, u.employee_id, u.username, u.name, u.department, u.business_unit, u.location,
             u.email, u.role, u.avatar_initials, u.points, u.status, u.manager_id,
+            -- The Edit User form requires a mobile number and could not show the one already
+            -- on file, so an admin reactivating somebody was blocked until they happened to
+            -- know that person's number by heart.
+            u.phone,
             u.must_change_password, u.activated_at,
             m.name AS manager_name
        FROM users u LEFT JOIN users m ON m.id=u.manager_id
@@ -461,26 +465,60 @@ export async function deleteUser(db, actor, id, tenant = null) {
   if (!target) throw notFound('User not found.');
   if (target.role === 'super_admin') throw forbidden('Cannot delete super admin.');
 
-  const [cntRows] = await db.execute(
-    "SELECT COUNT(*) AS c FROM ideas WHERE submitter_id=? AND status!='Draft'",
-    [id]
+  /*
+   * Two kinds of history make an account un-deletable, and only the first was checked.
+   *
+   * An idea must keep its author - that was covered. But idea_workflow.actor_id is RESTRICT
+   * too, so every approval, rejection and comment a reviewer ever recorded also pins their
+   * row: removing the organisation's Plant Head hit the foreign key and surfaced as a bare
+   * "Server error. Please try again." The audit trail is exactly the thing that must not lose
+   * the name attached to a decision, so the answer is the same as for authors - keep the
+   * account, deactivate it - rather than cascading the history away.
+   */
+  const [[history] = []] = await db.execute(
+    `SELECT
+       (SELECT COUNT(*) FROM ideas WHERE submitter_id = ? AND status <> 'Draft') AS submitted,
+       (SELECT COUNT(*) FROM idea_workflow WHERE actor_id = ?) AS acted`,
+    [id, id]
   );
-  if (Number(cntRows[0].c) > 0) {
-    // Offboarding: the account is retained (their ideas must keep an author) but deactivated.
-    // The live session check ends any open session immediately.
+  const submitted = Number(history?.submitted || 0);
+  const acted = Number(history?.acted || 0);
+
+  if (submitted > 0 || acted > 0) {
+    // Offboarding: the account is retained (their ideas and decisions must keep a name) but
+    // deactivated. The live session check ends any open session immediately.
     await db.execute(
       "UPDATE users SET status='inactive', deactivated_at=COALESCE(deactivated_at, NOW()) WHERE id=?",
       [id]
     );
+    const because = submitted > 0 && acted > 0 ? 'has submitted ideas and reviewed others'
+      : submitted > 0 ? 'has submitted ideas'
+        : 'has reviewed or approved ideas';
     return {
       success: true,
       deactivated: true,
-      message: 'User has submitted ideas - account deactivated instead of deleted.',
+      message: `User ${because} - account deactivated instead of deleted.`,
     };
   }
 
   await db.execute('UPDATE users SET manager_id=NULL WHERE manager_id=?', [id]);
-  await db.execute('DELETE FROM users WHERE id=?', [id]);
+  try {
+    await db.execute('DELETE FROM users WHERE id=?', [id]);
+  } catch (e) {
+    // Any other reference we have not thought of degrades to the same safe outcome rather
+    // than to a 500 with no explanation.
+    if (e?.code !== 'ER_ROW_IS_REFERENCED' && e?.code !== 'ER_ROW_IS_REFERENCED_2') throw e;
+    await db.execute(
+      "UPDATE users SET status='inactive', deactivated_at=COALESCE(deactivated_at, NOW()) WHERE id=?",
+      [id]
+    );
+    logger.warn(`users: ${id} still referenced (${e.code}) - deactivated instead of deleted`);
+    return {
+      success: true,
+      deactivated: true,
+      message: 'User has activity recorded against them - account deactivated instead of deleted.',
+    };
+  }
   if (tenant) deindexUser(tenant.id, id).catch(() => {});
   return { success: true, deleted: true };
 }
@@ -647,7 +685,19 @@ export async function requestPhoneChangeCode(db, actor, body, tenant = null) {
 export async function confirmPhoneChange(db, actor, body, tenant = null) {
   const phone = String(body?.phone || '').trim();
   const verification = await import('./verificationService.js');
-  await verification.verifyCode({ identifier: phone, code: body?.code, purpose: 'phone_verify' });
+  try {
+    await verification.verifyCode({ identifier: phone, code: body?.code, purpose: 'phone_verify' });
+  } catch (e) {
+    /*
+     * verifyCode answers a public sign-in screen as well as this one, where 401 is the right
+     * word. Here the caller is already signed in and is being asked "is this the code?" - and
+     * a 401 on a signed-in request means one thing to the browser: the session has gone. That
+     * is how mistyping six digits signed the person out and returned them to the public
+     * homepage.
+     */
+    if (e?.status === 401) throw badRequest(e.message);
+    throw e;
+  }
 
   const previous = String(actor.phone || '').trim();
   await db.execute('UPDATE users SET phone = ? WHERE id = ?', [phone, actor.id]);

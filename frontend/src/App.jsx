@@ -96,6 +96,17 @@ function PublicRoute({ children }) {
   return children;
 }
 
+/*
+ * A screen only some roles may open. The server already refuses the data underneath - every
+ * admin call answered 403 - but the shell still drew itself, and its User List then read
+ * "No users yet", which looks like an empty organisation rather than a door that is shut.
+ */
+function RoleRoute({ allow, children }) {
+  const { user } = useAuth();
+  if (user && !allow.includes(user.role)) return <Navigate to="/dashboard" replace />;
+  return children;
+}
+
 function AppRoutes() {
   return (
     <>
@@ -121,8 +132,8 @@ function AppRoutes() {
       {/* Rewards & Recognition - the leaderboard as a document HR can act on. */}
       <Route path="/rewards"         element={<PrivateRoute><AppShell><RewardsPage /></AppShell></PrivateRoute>} />
       <Route path="/analytics"       element={<PrivateRoute><AppShell><AnalyticsPage /></AppShell></PrivateRoute>} />
-      <Route path="/admin"           element={<PrivateRoute><AppShell><AdminPage /></AppShell></PrivateRoute>} />
-      <Route path="/super-admin"     element={<PrivateRoute><AppShell><SuperAdminPage /></AppShell></PrivateRoute>} />
+      <Route path="/admin"           element={<PrivateRoute><RoleRoute allow={['admin','super_admin']}><AppShell><AdminPage /></AppShell></RoleRoute></PrivateRoute>} />
+      <Route path="/super-admin"     element={<PrivateRoute><RoleRoute allow={['super_admin']}><AppShell><SuperAdminPage /></AppShell></RoleRoute></PrivateRoute>} />
       <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
       <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
       <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />

@@ -977,6 +977,20 @@ function HierarchyTab({ t, showToast, currentUserId }) {
       setWfMsg({ ok:false, text: t('hier.stages_required') });
       return;
     }
+    /*
+     * The chain is read live, so a change lands on ideas that are already part-way through
+     * it: an idea one approval from finished can need another sign-off the moment this is
+     * saved, and its "2/3" becomes "2/4" under the reviewer holding it. That is a defensible
+     * design - freezing each idea's chain at submission would leave a correction unable to
+     * reach the ideas it was made for - but it should not be a surprise, and the message
+     * afterwards was a plain "Approval workflow saved".
+     */
+    let inFlight = 0;
+    try {
+      const d = await ideasApi.dashboard();
+      inFlight = Number(d.data?.pending_reviews || 0);
+    } catch { /* if the count cannot be read, save without the warning rather than blocking */ }
+    if (inFlight > 0 && !confirm(t('hier.confirm_live', { n: inFlight }))) return;
     setWfSaving(true);
     setWfMsg(null);
     try {
@@ -1486,6 +1500,21 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
             <div className="form-group"><label>{t('admin.uf_manager')}</label>
               <select className="form-control" id="uf-manager" value={mgr} onChange={e=>setMgr(e.target.value)}>
                 <option value="">{t('admin.uf_none')}</option>
+                {/*
+                  * The dropdown lists who may be CHOSEN: active people holding a
+                  * manager-level role. Whoever is already set may be neither - they may have
+                  * been deactivated since, or hold a role that is not offered - and the
+                  * select then fell back to its first option and read "- None -", while the
+                  * Hierarchy tab went on showing the real reporting line. Two screens
+                  * disagreeing about the same field is worse than either answer: the one an
+                  * admin happens to open decides what they believe. The current manager is
+                  * therefore always listed, whether or not they are still eligible.
+                  */}
+                {mgr && !managers.some(m => String(m.id) === String(mgr)) && (
+                  <option value={mgr}>
+                    {editUser?.manager_name || `#${mgr}`} ({t('admin.uf_manager_current')})
+                  </option>
+                )}
                 {managers.filter(m=>m.id!==editUser?.id).map(m => <option key={m.id} value={m.id}>{m.name} ({formatRole(m.role, t)})</option>)}
               </select>
               {/* This field used to be documentation. */}

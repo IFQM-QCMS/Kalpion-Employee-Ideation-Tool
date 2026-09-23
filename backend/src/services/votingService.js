@@ -202,7 +202,19 @@ export async function stats(db, user, ideaId) {
 // board (ideas.php - community board listing)
 export async function board(db, user, sort) {
   const uid = num(user.id);
-  const orderBy = ({ recent: 'i.created_at DESC', score: 'i.ai_score DESC' })[sort] || 'upvotes DESC';
+  /*
+   * The board's dropdown sends `newest`; only `recent` was listed here, so the sort fell
+   * through to the vote order and an upvoted idea outranked a genuinely newer one while the
+   * control still read "Newest". Both spellings are accepted rather than one of them being
+   * renamed, so a cached page carrying the old value keeps working.
+   */
+  const ORDERS = {
+    newest: 'i.created_at DESC',
+    recent: 'i.created_at DESC',
+    score: 'i.ai_score DESC',
+    votes: 'upvotes DESC',
+  };
+  const orderBy = ORDERS[String(sort || '')] || ORDERS.votes;
 
   const [ideas] = await db.execute(
     `SELECT i.id, i.idea_code, i.title, i.present_situation, i.proposed_solution,

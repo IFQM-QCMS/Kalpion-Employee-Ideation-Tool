@@ -234,13 +234,23 @@ export async function listPlatformTickets(query = {}) {
     params
   );
 
-  const [[counts]] = await masterDb().query(
+  /*
+   * Counted over exactly what the list is showing. Counting every ticket while the list hid
+   * the four archived ones told an administrator an open ticket was waiting when the table
+   * below held nothing but a closed one. `archived` is the exception and stays a total of
+   * all time, because it is the number attached to the "show archived" switch itself.
+   */
+  const countWhere = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const [[counts]] = await masterDb().execute(
     `SELECT COUNT(*) AS total,
-            SUM(status = 'open') AS open_count,
-            SUM(status = 'in_progress') AS in_progress_count,
-            SUM(priority = 'urgent' AND status NOT IN ('resolved','closed')) AS urgent_count,
-            SUM(archived_at IS NOT NULL) AS archived_count
-       FROM support_tickets`
+            SUM(t.status = 'open') AS open_count,
+            SUM(t.status = 'in_progress') AS in_progress_count,
+            SUM(t.priority = 'urgent' AND t.status NOT IN ('resolved','closed')) AS urgent_count
+       FROM support_tickets t ${countWhere}`,
+    params
+  );
+  const [[archived]] = await masterDb().query(
+    'SELECT COUNT(*) AS c FROM support_tickets WHERE archived_at IS NOT NULL'
   );
 
   return {
@@ -251,7 +261,7 @@ export async function listPlatformTickets(query = {}) {
       open: Number(counts.open_count) || 0,
       in_progress: Number(counts.in_progress_count) || 0,
       urgent: Number(counts.urgent_count) || 0,
-      archived: Number(counts.archived_count) || 0,
+      archived: Number(archived.c) || 0,
     },
   };
 }

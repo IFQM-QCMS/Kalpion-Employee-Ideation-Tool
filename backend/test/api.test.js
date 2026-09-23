@@ -5300,3 +5300,307 @@ test('bulk update changes only the filled cells of existing people, and never cr
   assert.match(r.errors.find((e) => e.row_number === 5).message, /circular/i,
     'the manager reporting to their own report is a loop');
 });
+
+/*
+ * ── IFQM QA defect sheet, Sept 2026 ─────────────────────────────────────────
+ * One case per finding that has a server-side answer. Named by defect id so a failure
+ * points straight back at what was reported.
+ */
+
+test('KAL-002: an organisation code too long for employee_id is still created', async () => {
+  // users.employee_id is VARCHAR(20) and the admin's id is "<CODE>-ADMIN", so any code past
+  // 14 characters overflowed it: ER_DATA_TOO_LONG on a strict server, a silently truncated
+  // (and collidable) id on a lenient one.
+  const slug = 'qa-long-org-code-x';          // 18 characters
+  assert.ok(slug.length > 14, 'the case is only meaningful with a code past the old limit');
+  const created = await api('POST', '/api/platform/tenants', {
+    token: PA,
+    body: {
+      org_name: 'QA Long Code Organisation', slug,
+      admin_name: 'QA Admin', admin_email: 'qa.longcode@orgqa.test',
+      admin_password: 'Passw0rd!2345',
+    },
+  });
+  assert.equal(created.status, 200, JSON.stringify(created.data));
+
+  const [row] = await sql('ifqm_test_master',
+    'SELECT db_name FROM ifqm_test_master.tenants WHERE slug = ?', [slug]);
+  const users = await sql(row.db_name, `SELECT employee_id FROM \`${row.db_name}\`.users`);
+  assert.ok(users.length, 'the organisation admin must exist');
+  assert.ok(users[0].employee_id.length <= 20,
+    `employee_id must fit the column, got "${users[0].employee_id}"`);
+  assert.match(users[0].employee_id, /-ADMIN$/, 'and must still read as the admin account');
+
+  await sql('ifqm_test_master', 'DELETE FROM ifqm_test_master.tenants WHERE slug = ?', [slug]);
+  await sql('ifqm_test_master', `DROP DATABASE IF EXISTS \`${row.db_name}\``);
+});
+
+test('KAL-004/005: every organisation lands in exactly one billing tile', async () => {
+  const r = await api('GET', '/api/platform/billing/overview', { token: PA });
+  assert.equal(r.status, 200);
+  const s = r.data.summary;
+  const bucketed = s.on_trial + s.paying + s.lapsed + s.exempt + s.other;
+  assert.equal(bucketed, s.organisations,
+    `tiles must account for every organisation: ${JSON.stringify(s)}`);
+  for (const o of r.data.organisations) {
+    assert.doesNotMatch(String(o.billing.label), /null/,
+      `${o.name} shows an internal placeholder: ${o.billing.label}`);
+  }
+});
+
+test('KAL-007: the support tiles count what the list is showing', async () => {
+  const visible = await api('GET', '/api/platform/tickets', { token: PA });
+  assert.equal(visible.status, 200);
+  assert.equal(Number(visible.data.counts.total), visible.data.tickets.length,
+    'the default view hides archived tickets, so the tiles must not count them');
+
+  const all = await api('GET', '/api/platform/tickets?archived=all', { token: PA });
+  assert.equal(Number(all.data.counts.total), all.data.tickets.length);
+});
+
+test('KAL-009: an administrator is not told a decision is theirs', async () => {
+  const admin = await api('GET', '/api/ideas/dashboard', { token: AADMIN });
+  assert.equal(admin.data.pending_is_mine, false,
+    'an org admin cannot review anything, so the count is not their decision to make');
+});
+
+test('KAL-014: a plain employee cannot read the mail server out of /api/settings', async () => {
+  const r = await api('GET', '/api/settings', { token: AUSER });
+  assert.equal(r.status, 200, 'the screens they can open still need the public settings');
+  const keys = Object.keys(r.data.settings || {});
+  for (const k of keys) {
+    assert.ok(!k.startsWith('smtp'), `smtp settings must not reach an employee (${k})`);
+  }
+  assert.ok(keys.includes('max_file_mb'), 'the upload control still needs its ceiling');
+  assert.ok(!keys.includes('qcms_api_key'), 'and the integration key never travels here');
+
+  await api('POST', '/api/settings', { token: AADMIN, body: { smtp_host: 'smtp.example.test' } });
+  const forAdmin = await api('GET', '/api/settings', { token: AADMIN });
+  assert.equal(forAdmin.data.settings.smtp_host, 'smtp.example.test',
+    'an admin still administers it');
+  const stillHidden = await api('GET', '/api/settings', { token: AUSER });
+  assert.ok(!('smtp_host' in stillHidden.data.settings),
+    'and a stored value is still not handed to an employee');
+});
+
+test('KAL-015: archived and rejected ideas are out of the leaderboard showcase', async () => {
+  const r = await api('GET', '/api/leaderboard', { token: AUSER });
+  for (const i of r.data.top_ideas || []) {
+    assert.notEqual(i.status, 'Rejected', `${i.idea_code} was rejected`);
+    assert.ok(!i.archived_at, `${i.idea_code} was archived`);
+  }
+});
+
+test('KAL-017: "Sort: Newest" on the board orders by date, not by votes', async () => {
+  const r = await api('GET', '/api/votes/board?sort=newest', { token: AUSER });
+  assert.equal(r.status, 200);
+  const dates = (r.data.ideas || []).map((i) => new Date(i.created_at).getTime());
+  for (let i = 1; i < dates.length; i++) {
+    assert.ok(dates[i - 1] >= dates[i],
+      'the control said newest; the query fell back to the vote order');
+  }
+});
+
+test('KAL-016/020/021: routing, archiving and co-authorship in the review queue', async () => {
+  await api('POST', '/api/settings', {
+    token: AADMIN, body: { approval_stages: 'originator,immediate_manager,plant_head' },
+  });
+  const mk = async (email, role, phone, extra = {}) => {
+    const created = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: { name: `QA ${role}`, email, password: 'QaQueue12345', role,
+        employee_id: email.split('@')[0].toUpperCase().slice(0, 18), phone, department: 'Ops', ...extra },
+    });
+    assert.equal(created.data.success, true, `${role}: ${JSON.stringify(created.data)}`);
+    return { id: created.data.user_id || created.data.id, token: (await login(email, 'QaQueue12345', 'orga')).token };
+  };
+  await sql('ifqm_test_a', "UPDATE ifqm_test_a.users SET role='executive' WHERE role='plant_head'");
+  const head = await mk('q.head@orga.test', 'plant_head', '+919812347101');
+  const mgr = await mk('q.mgr@orga.test', 'manager', '+919812347102', { manager_id: head.id });
+  const emp = await mk('q.emp@orga.test', 'employee', '+919812347103', { manager_id: mgr.id });
+  // Senior enough to be routed to, and outside the organisation's own chain - which is the
+  // case that used to lose the idea entirely.
+  const other = await mk('q.other@orga.test', 'senior_manager', '+919812347104', { manager_id: head.id });
+
+  const body = (title, extra = {}) => ({
+    title, present_situation: 'x'.repeat(40), proposed_solution: 'y'.repeat(40),
+    impact_areas: 'Quality', impact_level: 'Medium', ...extra,
+  });
+
+  // ── KAL-016: the assignee actually receives it ────────────────────────────
+  const routed = await api('POST', '/api/ideas/submit', { token: emp.token, body: body('Route me to committee') });
+  assert.equal(routed.data.success, true);
+  const assigned = await api('POST', '/api/ideas/assign-reviewers', {
+    token: mgr.token, body: { idea_id: routed.data.idea_id, reviewer_ids: [other.id] },
+  });
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.data));
+
+  const theirQueue = await api('GET', '/api/ideas/review', { token: other.token });
+  assert.ok((theirQueue.data.ideas || []).some((i) => i.id === routed.data.idea_id),
+    'an idea routed to a committee must reach the people it was routed to, whether or not '
+    + "their role appears in this organisation's chain");
+
+  const senderQueue = await api('GET', '/api/ideas/review', { token: mgr.token });
+  assert.ok(!(senderQueue.data.ideas || []).some((i) => i.id === routed.data.idea_id),
+    "and must leave the sender's");
+
+  // ── KAL-020: archiving takes it out of the working lists, and out of reach ─
+  const shelved = await api('POST', '/api/ideas/submit', { token: emp.token, body: body('Archive me mid-review') });
+  const before = await api('GET', '/api/ideas/review', { token: mgr.token });
+  assert.ok((before.data.ideas || []).some((i) => i.id === shelved.data.idea_id));
+
+  await api('POST', '/api/ideas/archive', {
+    token: AADMIN, body: { idea_id: shelved.data.idea_id, archived: true },
+  });
+  const after = await api('GET', '/api/ideas/review', { token: mgr.token });
+  assert.ok(!(after.data.ideas || []).some((i) => i.id === shelved.data.idea_id),
+    'an archived idea must leave the review queue');
+
+  const decided = await api('POST', '/api/ideas/review-action', {
+    token: mgr.token, body: { idea_id: shelved.data.idea_id, decision: 'Approved', comment: 'no' },
+  });
+  assert.equal(decided.status, 403,
+    'and must not be approvable - the organisation had already set it aside');
+
+  // ── KAL-021: a co-suggester is an author, not a reviewer ──────────────────
+  const shared = await api('POST', '/api/ideas/submit', {
+    token: emp.token, body: body('The reviewer helped write this', { co_suggester_ids: [mgr.id] }),
+  });
+  const conflicted = await api('GET', '/api/ideas/review', { token: mgr.token });
+  assert.ok(!(conflicted.data.ideas || []).some((i) => i.id === shared.data.idea_id),
+    'the queue must not offer an idea its own co-suggester helped write');
+  const selfApproval = await api('POST', '/api/ideas/review-action', {
+    token: mgr.token, body: { idea_id: shared.data.idea_id, decision: 'Approved', comment: 'mine' },
+  });
+  assert.equal(selfApproval.status, 403, 'nor may the decision be forced through directly');
+});
+
+test('KAL-022: the third co-suggester onward can still find their own idea', async () => {
+  const mk = async (email, phone) => {
+    const created = await api('POST', '/api/users', {
+      token: AADMIN,
+      body: { name: `Co ${email.split('@')[0]}`, email, password: 'CoSuggester12345', role: 'employee',
+        employee_id: email.split('@')[0].toUpperCase().slice(0, 18), phone, department: 'Ops' },
+    });
+    assert.equal(created.data.success, true, JSON.stringify(created.data));
+    return { id: created.data.user_id || created.data.id, token: (await login(email, 'CoSuggester12345', 'orga')).token };
+  };
+  const c1 = await mk('co.one@orga.test', '+919812348001');
+  const c2 = await mk('co.two@orga.test', '+919812348002');
+  const c3 = await mk('co.three@orga.test', '+919812348003');
+
+  const idea = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Three people wrote this', present_situation: 'x'.repeat(40),
+      proposed_solution: 'y'.repeat(40), impact_areas: 'Quality', impact_level: 'Low',
+      co_suggester_ids: [c1.id, c2.id, c3.id],
+    },
+  });
+  assert.equal(idea.data.success, true);
+
+  // The two legacy columns hold only the first two names; the third lives in the table alone,
+  // and scoping on the columns hid the idea from them.
+  for (const [who, c] of [['first', c1], ['second', c2], ['third', c3]]) {
+    const list = await api('GET', '/api/ideas', { token: c.token });
+    assert.ok((list.data.ideas || []).some((i) => i.id === idea.data.idea_id),
+      `the ${who} co-suggester must be able to see the idea they are named on`);
+  }
+});
+
+test('KAL-023: removing someone who reviewed ideas deactivates them, and does not 500', async () => {
+  const [reviewer] = await sql('ifqm_test_a',
+    "SELECT id FROM ifqm_test_a.users WHERE email = 'q.mgr@orga.test'");
+  assert.ok(reviewer, 'the queue case above leaves a manager with decisions behind them');
+
+  const removed = await api('DELETE', `/api/users/${reviewer.id}`, { token: AADMIN });
+  assert.equal(removed.status, 200, JSON.stringify(removed.data));
+  assert.equal(removed.data.deactivated, true,
+    'idea_workflow.actor_id is RESTRICT: the account is kept so the audit trail keeps a name');
+  assert.match(removed.data.message, /review|approv/i, 'and the reason says why');
+
+  const [after] = await sql('ifqm_test_a', 'SELECT status FROM ifqm_test_a.users WHERE id = ?', [reviewer.id]);
+  assert.equal(after.status, 'inactive');
+});
+
+test('KAL-024: the admin user list carries the phone its own Edit form requires', async () => {
+  const r = await api('GET', '/api/users/admin', { token: AADMIN });
+  assert.equal(r.status, 200);
+  const withPhone = (r.data.users || []).find((u) => u.phone);
+  assert.ok(withPhone,
+    'Phone is a required field on Edit User, so it has to come back with the row - without it '
+    + 'the form looks blank and silently refuses to save any other change');
+});
+
+test('KAL-025: a draft belongs to its author until it is submitted', async () => {
+  const draft = await api('POST', '/api/ideas/draft', {
+    token: AUSER,
+    body: { title: 'Not finished yet', present_situation: 'x'.repeat(40),
+      proposed_solution: 'y'.repeat(40), impact_areas: 'Quality', impact_level: 'Low' },
+  });
+  assert.equal(draft.data.success, true);
+
+  const adminList = await api('GET', '/api/ideas', { token: AADMIN });
+  assert.ok(!(adminList.data.ideas || []).some((i) => i.id === draft.data.idea_id),
+    "an unsubmitted draft has been sent to nobody, so it is not in anyone else's list");
+
+  const own = await api('GET', '/api/ideas?status=Draft', { token: AUSER });
+  assert.ok((own.data.ideas || []).some((i) => i.id === draft.data.idea_id),
+    'its author still sees it, and can now filter for it');
+});
+
+test('KAL-027: searching ideas matches the submitter and the department', async () => {
+  const byName = await api('GET', '/api/ideas?search=Orga%20Employee', { token: AADMIN });
+  assert.ok((byName.data.ideas || []).length > 0,
+    'Submitted By is a column of this table; searching a real name must not read as "none"');
+
+  const byDept = await api('GET', '/api/ideas?search=Ops', { token: AADMIN });
+  assert.ok((byDept.data.ideas || []).length > 0, 'and so is Department');
+});
+
+test('KAL-028: a mistyped verification code is not treated as a dead session', async () => {
+  const sent = await api('POST', '/api/users/me/phone/request-code', {
+    token: AUSER, body: { phone: '+919877450001' },
+  });
+  assert.equal(sent.status, 200, JSON.stringify(sent.data));
+
+  const wrong = await api('POST', '/api/users/me/phone/confirm', {
+    token: AUSER, body: { phone: '+919877450001', code: '000000' },
+  });
+  assert.notEqual(wrong.status, 401,
+    'the browser reads a 401 on a signed-in request as "your session has gone" and signs the '
+    + 'person out; a wrong code is a bad request, not an expired session');
+  assert.equal(wrong.status, 400);
+
+  const stillIn = await api('GET', '/api/ideas/dashboard', { token: AUSER });
+  assert.equal(stillIn.status, 200, 'and the session survives the typo');
+});
+
+test('KAL-029: one live code per identifier, and only once a new one has been sent', async () => {
+  const { requestOtp } = await import('../src/services/otpService.js');
+  const identifier = 'user@orga.test';
+
+  await sql('ifqm_test_master',
+    'UPDATE ifqm_test_master.login_otps SET consumed_at = NOW() WHERE identifier = ?', [identifier]);
+
+  const first = await requestOtp({ identifier, purpose: 'login' });
+  assert.equal(first.success, true);
+  const live = await sql('ifqm_test_master',
+    `SELECT id FROM ifqm_test_master.login_otps
+      WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()`, [identifier]);
+  assert.equal(live.length, 1, 'exactly one code is live after the first request');
+
+  // Age the throttle out and ask again. The previous code must be retired only because this
+  // one actually went out - it used to be invalidated before anything was sent, so a failed
+  // resend left the person with a code in their inbox that no longer worked.
+  await sql('ifqm_test_master',
+    'UPDATE ifqm_test_master.login_otps SET created_at = created_at - INTERVAL 10 MINUTE WHERE identifier = ?',
+    [identifier]);
+  await requestOtp({ identifier, purpose: 'login' });
+
+  const afterResend = await sql('ifqm_test_master',
+    `SELECT id FROM ifqm_test_master.login_otps
+      WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()`, [identifier]);
+  assert.equal(afterResend.length, 1, 'and exactly one after a successful resend');
+  assert.notEqual(afterResend[0].id, live[0].id, 'the newer one');
+});

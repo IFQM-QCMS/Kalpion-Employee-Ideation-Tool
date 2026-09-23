@@ -357,7 +357,17 @@ export async function createTenant(body) {
   // The code is normalised, so what an operator types is not always what they get: "My Org
   // Name" becomes "myorgname".
   const dbName = 'ifqm_' + slug.replace(/[^a-z0-9_]/g, '_');
-  const adminEmpId = slug.toUpperCase() + '-ADMIN';
+  /*
+   * users.employee_id is VARCHAR(20). The code may be up to 30 characters, so
+   * "<CODE>-ADMIN" overflowed the column for any code past 14: on a server in strict mode
+   * that is the raw ER_DATA_TOO_LONG the operator saw instead of the organisation being
+   * created, and on a lenient one it silently stored a truncated id that a second long code
+   * could then collide with. The suffix is what makes the id readable, so the code is what
+   * gives way.
+   */
+  const EMP_ID_MAX = 20;
+  const SUFFIX = '-ADMIN';
+  const adminEmpId = slug.slice(0, EMP_ID_MAX - SUFFIX.length).toUpperCase() + SUFFIX;
 
   let conn;
   try {

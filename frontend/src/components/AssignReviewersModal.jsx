@@ -2,6 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { ideasApi, usersApi } from '../services/api';
+import { formatRole } from '../utils/helpers';
+
+// The roles STAGE_CATALOG knows about: the only ones that can hold a stage, and so the only
+// ones an idea can be routed to. Anyone else is refused by assignReviewers.
+const ROUTABLE_ROLES = [
+  'team_lead', 'manager', 'project_lead', 'department_manager',
+  'senior_manager', 'plant_head', 'executive',
+];
 
 export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
   const { t }         = useLang();
@@ -19,7 +27,16 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
     timerRef.current = setTimeout(async () => {
       try {
         const res = await usersApi.list({ q });
-        setResults((res.data.users||[]).filter(u => !selected.some(s=>s.id===u.id)));
+        /*
+         * Only people the server will actually accept. It refuses anybody who holds no role
+         * in the approval path, and anybody below the router's own level - but the search
+         * listed every employee by name, department and id, with no mention of their role, so
+         * the first thing a reviewer learned about an ineligible choice was an error after
+         * pressing Assign. The role is shown for the same reason.
+         */
+        setResults((res.data.users||[])
+          .filter(u => ROUTABLE_ROLES.includes(u.role))
+          .filter(u => !selected.some(s=>s.id===u.id)));
       } catch {}
     }, 300);
   }
@@ -67,7 +84,7 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
                 <div className="user-search-results" style={{ display:'block' }}>
                   {results.map(u => (
                     <div key={u.id} className="uitem" onClick={() => addReviewer(u)}>
-                      {u.name} · {u.employee_id} · {u.department||'-'}
+                      {u.name} · {formatRole(u.role, t)} · {u.department||'-'}
                     </div>
                   ))}
                 </div>

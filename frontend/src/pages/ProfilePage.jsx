@@ -68,10 +68,10 @@ function PhoneChange({ current, onChanged, t }) {
         </>
       ) : (
         <>
-          <input className="form-control" inputMode="numeric" maxLength={8} value={code} autoFocus
+          <input className="form-control" inputMode="numeric" maxLength={6} value={code} autoFocus
             autoComplete="one-time-code" placeholder={t('login.otp_code_ph')}
             style={{ letterSpacing: 3, fontWeight: 700 }}
-            onChange={(e) => setCode(e.target.value.replace(/D/g, ''))} />
+            onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, ''))} />
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary btn-sm" disabled={busy || code.length < 4} onClick={confirm}>
               {busy ? t('msg.loading') : t('profile.phone_confirm')}

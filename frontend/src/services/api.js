@@ -62,14 +62,23 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// A 401 now means the session is genuinely gone: expired, or revoked server-side because
-// the account was deactivated, its role changed, or its password was reset.
+/*
+ * A 401 means the session is genuinely gone: expired, or revoked server-side because the
+ * account was deactivated, its role changed, or its password was reset. The server says which
+ * by sending `expired: true`, and that flag is now required.
+ *
+ * Without it, ANY 401 signed the person out - including "that is not the right code" from a
+ * verification step. Mistyping the confirmation code while changing your own phone number
+ * threw away the session and dropped the user on the public homepage, which is a startling
+ * answer to a typo. The endpoint list below stays as a second guard for the sign-in screens.
+ */
 api.interceptors.response.use(
   (res) => res,
   (err) => {
     // A 401 means "your session went away" ONLY if there was a session.
     const hadSession = !!localStorage.getItem('ifqm_token');
-    if (err.response?.status === 401 && hadSession && !isPublicEndpoint(err.config?.url)) {
+    const sessionGone = err.response?.status === 401 && err.response?.data?.expired === true;
+    if (sessionGone && hadSession && !isPublicEndpoint(err.config?.url)) {
       localStorage.removeItem('ifqm_token');
       localStorage.removeItem('ifqm_org');
       if (!window.location.pathname.startsWith('/login') && window.location.pathname !== '/') {

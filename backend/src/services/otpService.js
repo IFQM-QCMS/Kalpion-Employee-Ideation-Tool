@@ -187,11 +187,15 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
   const code = generateCode(p.otp_length);
   const ttl = num(p.otp_ttl_seconds, 300);
 
-  // One live code per identifier: expire anything outstanding first.
-  await master.execute(
-    'UPDATE login_otps SET expires_at = NOW() WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW()',
-    [key]
-  );
+  /*
+   * The outstanding code is NOT expired here any more.
+   *
+   * It used to be invalidated the moment a new one was generated, before anything was sent.
+   * When delivery then failed - and the endpoint reported success either way - the person was
+   * left holding a code in their inbox that no longer worked and no new email to replace it
+   * with: "Resend" answered 200, started its cooldown, and quietly took away the only code
+   * they had. The old code now stays usable until the new one has actually gone out.
+   */
   // `channel` records how the code actually travelled, which is not the same question as
   // what the identifier looks like - somebody who typed a number can still be sent an email
   // when the gateway is down.
@@ -267,9 +271,24 @@ export async function requestOtp({ identifier, purpose = 'login', meta = {} } = 
   if (!sent.sent) {
     logger.error(`otp: delivery failed via ${sent.provider}: ${sent.detail || ''}`);
     noteDeliveryFailure(sent.detail);
-  } else {
-    noteDeliverySuccess();
+    // Nothing reached the person, so the code just written is useless. Drop it, leave
+    // whatever they already had alone, and say so - a success message with no message behind
+    // it is what made this feature impossible to get out of.
+    if (inserted?.insertId) {
+      await master.execute('DELETE FROM login_otps WHERE id = ?', [inserted.insertId]).catch(() => {});
+    }
+    throw new ApiError(503,
+      'The code could not be sent just now. Please sign in with your password, or try again shortly.');
   }
+  noteDeliverySuccess();
+
+  // Only now is there a newer code worth having, so anything outstanding can go.
+  await master.execute(
+    `UPDATE login_otps SET expires_at = NOW()
+      WHERE identifier = ? AND consumed_at IS NULL AND expires_at > NOW() AND id <> ?`,
+    [key, inserted?.insertId || 0]
+  ).catch(() => {});
+
   logger.info(`otp: issued for ${maskPhone(key)} @ ${tenant.slug} (provider ${sent.provider})`);
 
   return {

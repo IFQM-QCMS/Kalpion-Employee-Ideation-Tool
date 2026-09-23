@@ -241,7 +241,11 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
 
                   {/* Date and time of submission, shown to everybody. */}
                   <div className="form-row" style={{ marginBottom:12,alignItems:'center' }}>
-                    <div><strong>{t('detail.submitted_at')}:</strong> {fmtDateTime(idea.submitted_at || idea.created_at)}</div>
+                    {/* A draft was never submitted, so it cannot have been "submitted on". */}
+                    <div>
+                      <strong>{idea.status === 'Draft' ? t('detail.created_at') : t('detail.submitted_at')}:</strong>{' '}
+                      {fmtDateTime(idea.submitted_at || idea.created_at)}
+                    </div>
                     <div>
                       <label style={{ display:'inline-flex',alignItems:'center',gap:8,cursor: canFlagPatentable ? 'pointer' : 'default' }}>
                         <input type="checkbox" checked={!!patentable} disabled={!canFlagPatentable || busyFlag}
@@ -251,6 +255,23 @@ export default function IdeaDetailModal({ ideaId, onClose }) {
                       </label>
                     </div>
                   </div>
+
+                  {/*
+                    * A draft that was never sent back is still unfinished work, and until now
+                    * it had no way on: this view offered Archive, Close and Export and
+                    * nothing else, and Submit Idea opened a blank form that made no mention
+                    * of it. The data was saved and then unreachable.
+                    */}
+                  {isSelf && idea.status === 'Draft' && !idea.returned_at && (
+                    <div className="alert alert-info" style={{ marginBottom:12, fontSize:12.5,
+                      display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+                      <span style={{ flex:1, minWidth:180 }}>{t('idea.draft_unfinished')}</span>
+                      <button className="btn btn-primary btn-sm"
+                        onClick={() => { onClose(); navigate(`/submit?edit=${idea.id}`); }}>
+                        {t('idea.continue_draft')}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Sent back for changes: what was asked, and the way back in for the author. */}
                   {idea.returned_at && idea.status === 'Draft' && (

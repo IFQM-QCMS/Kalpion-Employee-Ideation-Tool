@@ -133,7 +133,11 @@ export default function AllIdeasPage() {
           value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth:260 }} />
         <select className="form-control" value={status} onChange={e => setStatus(e.target.value)} style={{ width:160 }}>
           <option value="">{t('filter.all_statuses')}</option>
-          {['Submitted','Under Review','Approved','Rejected','Implemented'].map(s => (
+          {/*
+            * Draft is listed because the list can contain one: your own. Somebody else's
+            * draft has never been submitted to anybody and is no longer shown here at all.
+            */}
+          {['Draft','Submitted','Under Review','Approved','Rejected','Implemented'].map(s => (
             <option key={s} value={s}>{translateStatus(s, t)}</option>
           ))}
         </select>
