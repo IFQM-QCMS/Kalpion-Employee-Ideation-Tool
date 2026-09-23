@@ -5604,3 +5604,72 @@ test('KAL-029: one live code per identifier, and only once a new one has been se
   assert.equal(afterResend.length, 1, 'and exactly one after a successful resend');
   assert.notEqual(afterResend[0].id, live[0].id, 'the newer one');
 });
+
+/*
+ * A ticket raised by a tenant tells IFQM, by email, who raised it, which organisation they
+ * are in and what it is about.
+ */
+test('a new support ticket notifies the platform admins, and never blocks on the mail', async () => {
+  const { buildTicketNotice, notifyPlatformOfTicket } = await import('../src/services/supportService.js');
+
+  // ── what the message says ────────────────────────────────────────────────
+  const notice = buildTicketNotice({
+    tenant: { name: 'Org A', slug: 'orga' },
+    user: { name: 'Orga Employee', role: 'department_manager', email: 'user@orga.test' },
+    ticketCode: 'TKT-00042',
+    subject: 'Cannot open the idea board',
+    category: 'bug',
+    priority: 'high',
+    message: 'The board is blank on my phone.',
+  });
+  assert.match(notice.subject, /Org A/, 'the organisation is in the subject line');
+  assert.match(notice.subject, /TKT-00042/, 'and so is the ticket');
+  assert.match(notice.subject, /Cannot open the idea board/, "and the ticket's own subject");
+  assert.match(notice.html, /Orga Employee/, 'the body names who raised it');
+  assert.match(notice.html, /Department Manager/, 'as a job title, not a column value');
+  assert.match(notice.html, /Org A/, 'and which organisation they are in');
+  assert.match(notice.html, /Cannot open the idea board/);
+  assert.match(notice.html, /The board is blank on my phone/, 'with what they actually wrote');
+
+  // A subject carrying markup must not arrive as markup.
+  const hostile = buildTicketNotice({
+    tenant: { name: 'Org A', slug: 'orga' },
+    user: { name: 'Orga Employee', role: 'employee' },
+    ticketCode: 'TKT-00043',
+    subject: '<script>alert(1)</script>',
+    message: 'x',
+  });
+  assert.ok(!hostile.html.includes('<script>'), 'a ticket subject is text, not markup');
+
+  // ── and that raising one actually sends it ───────────────────────────────
+  const before = await sql('ifqm_test_master',
+    'SELECT COUNT(*) AS c FROM ifqm_test_master.support_tickets');
+  const raised = await api('POST', '/api/support/tickets', {
+    token: AUSER,
+    body: { subject: 'Board is blank on my phone', body: 'Since this morning.', category: 'bug', priority: 'high' },
+  });
+  assert.equal(raised.status, 200, JSON.stringify(raised.data));
+  const after = await sql('ifqm_test_master',
+    'SELECT COUNT(*) AS c FROM ifqm_test_master.support_tickets');
+  assert.equal(Number(after[0].c), Number(before[0].c) + 1, 'the ticket is recorded either way');
+
+  const admins = await sql('ifqm_test_master', 'SELECT COUNT(*) AS c FROM ifqm_test_master.platform_admins');
+  const result = await notifyPlatformOfTicket({
+    tenant: { name: 'Org A', slug: 'orga' },
+    user: { name: 'Orga Employee', role: 'employee', email: 'user@orga.test' },
+    ticketCode: raised.data.ticket_code,
+    subject: 'Board is blank on my phone',
+    category: 'bug',
+    priority: 'high',
+    message: 'Since this morning.',
+  });
+  assert.equal(result.recipients, Number(admins[0].c),
+    'every platform admin with an address is a recipient');
+
+  /*
+   * The suite runs with no mail transport configured, so nothing is delivered here - which is
+   * the case that matters most. A support ticket is often raised BECAUSE something is broken,
+   * so a mail failure must leave the ticket saved and the request successful, as the
+   * assertions above have just shown.
+   */
+});

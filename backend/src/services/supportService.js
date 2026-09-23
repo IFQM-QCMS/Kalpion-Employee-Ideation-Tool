@@ -4,6 +4,7 @@ import { getTenantPool } from '../database/tenant.js';
 import { getOrgSettings, sendSmtpEmail } from './mailerService.js';
 import { badRequest, forbidden, notFound } from '../utils/respond.js';
 import logger from '../utils/logger.js';
+import config from '../config/index.js';
 
 const CATEGORIES = ['bug', 'question', 'access', 'feature', 'other'];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
@@ -19,6 +20,13 @@ const TICKET_STATUSES = ['open', 'in_progress', 'waiting', 'resolved', 'closed']
 const TENANT_SETTABLE = ['closed'];
 
 const isTenantAdmin = (role) => role === 'admin' || role === 'super_admin';
+
+/** "department_manager" is a column value; "Department Manager" is what a person reads. */
+function formatRole(role) {
+  return String(role ?? '').split('_').filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
 const MAX_SUBJECT = 200;
 const MAX_BODY = 8000;
 
@@ -84,6 +92,91 @@ function escapeHtml(s) {
 // Tenant side
 
 /** POST /api/support/tickets */
+/*
+ * Tell IFQM that somebody has raised a ticket.
+ *
+ * Fire-and-forget on purpose. A support ticket is often raised BECAUSE something is broken,
+ * and mail is one of the things that can be broken - so a failure here must never stop the
+ * ticket being recorded. The caller does not await this; the ticket is already saved by the
+ * time it runs, and the console shows it whether or not the message got out.
+ */
+export function buildTicketNotice({ tenant, user, ticketCode, subject, category, priority, message }) {
+  const esc = (v) => String(v == null ? '' : v).replace(/[<>&]/g, '');
+  const line = (label, value) => (value
+    ? `<tr><td style="padding:4px 14px 4px 0;color:#667089;white-space:nowrap">${label}</td>`
+      + `<td style="padding:4px 0;color:#111"><b>${esc(value)}</b></td></tr>`
+    : '');
+
+  // The message the person actually wrote, kept short enough to read on a phone. The whole
+  // thread is one click away in the console.
+  const extract = String(message ?? '').trim();
+  const preview = extract.length > 600 ? `${extract.slice(0, 600)}...` : extract;
+  const link = `${String(config.frontendBaseUrl || '').replace(/\/+$/, '')}/platform/tickets`;
+  const org = tenant?.name || tenant?.slug || 'an organisation';
+
+  const who = [esc(user?.name), user?.role ? `(${esc(formatRole(user.role))})` : ''].filter(Boolean).join(' ');
+  const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:15px;line-height:1.6;color:#111">
+  <p style="margin:0 0 4px"><b>${who}</b> at <b>${esc(org)}</b> has raised a support ticket.</p>
+  <p style="margin:0 0 14px;color:#667089">${esc(ticketCode)} - waiting in the support queue.</p>
+  <table style="border-collapse:collapse;font-size:14px">
+    ${line('Subject', subject)}
+    ${line('Organisation', tenant?.name)}
+    ${line('Organisation code', tenant?.slug)}
+    ${line('Raised by', user?.name)}
+    ${line('Role', user?.role ? formatRole(user.role) : '')}
+    ${line('Email', user?.email)}
+    ${line('Category', category)}
+    ${line('Priority', priority)}
+  </table>
+  ${preview ? `<p style="margin:16px 0 4px;color:#667089">What they wrote:</p>
+  <blockquote style="margin:0;padding:10px 14px;border-left:3px solid #d3d7de;background:#f6f7f9;
+    white-space:pre-wrap;font-size:14px">${esc(preview)}</blockquote>` : ''}
+  <p style="margin:16px 0 0"><a href="${esc(link)}" style="color:#1a5299">Open the support queue</a> to reply.</p>
+</div>`;
+
+  // The subject line names the organisation and what it is about, because these arrive in an
+  // inbox alongside everything else IFQM is sent.
+  return { subject: `[${org}] New support ticket ${ticketCode} - ${subject}`, html };
+}
+
+export async function notifyPlatformOfTicket({ tenant, user, ticketCode, subject, category, priority, message }) {
+  const { sendViaPlatform } = await import('./mailerService.js');
+  const master = masterDb();
+
+  const recipients = new Map();
+  try {
+    const [admins] = await master.query('SELECT name, email FROM platform_admins');
+    for (const a of admins) {
+      if (a.email) recipients.set(String(a.email).toLowerCase(), a.name || 'IFQM');
+    }
+  } catch (e) {
+    logger.warn('support notice: could not read platform admins', e.message);
+  }
+
+  if (!recipients.size) {
+    logger.warn(`support notice: ${ticketCode} has no platform recipient configured`);
+    return { recipients: 0, sent: 0 };
+  }
+
+  const { subject: mailSubject, html } = buildTicketNotice({
+    tenant, user, ticketCode, subject, category, priority, message,
+  });
+
+  const results = await Promise.allSettled(
+    [...recipients].map(([email, name]) => sendViaPlatform(email, name, mailSubject, html))
+  );
+  const sent = results.filter((r) => r.status === 'fulfilled' && r.value && r.value.success !== false).length;
+  const failed = results.filter((r) => r.status === 'rejected');
+
+  if (!sent) {
+    logger.error(`support notice: ${ticketCode} reached none of ${recipients.size} platform admin(s)`
+      + (failed[0] ? `: ${failed[0].reason?.message || failed[0].reason}` : ''));
+  } else {
+    logger.info(`support notice: ${ticketCode} sent to ${sent}/${recipients.size} platform admin(s)`);
+  }
+  return { recipients: recipients.size, sent };
+}
+
 export async function createTicket(tenant, user, body) {
   const subject = cleanText(body?.subject, MAX_SUBJECT, 'Subject');
   const message = cleanText(body?.body, MAX_BODY, 'Message');
@@ -109,6 +202,12 @@ export async function createTicket(tenant, user, body) {
   );
 
   logger.info(`support: ${code} raised by ${user.email} @ ${tenant.slug}`);
+
+  // Not awaited: see notifyPlatformOfTicket. The ticket is saved; the notice is best effort.
+  notifyPlatformOfTicket({
+    tenant, user, ticketCode: code, subject, category, priority, message,
+  }).catch((e) => logger.warn(`support notice: ${code} failed - ${e.message}`));
+
   return { success: true, ticket_id: res.insertId, ticket_code: code };
 }
 
@@ -461,4 +560,5 @@ export async function createPlatformTicket(admin, body) {
 export default {
   createTicket, listTenantTickets, getTenantTicket, replyAsTenant, updateTenantTicket,
   listPlatformTickets, getPlatformTicket, replyAsPlatform, updatePlatformTicket, createPlatformTicket,
+  notifyPlatformOfTicket, buildTicketNotice,
 };
