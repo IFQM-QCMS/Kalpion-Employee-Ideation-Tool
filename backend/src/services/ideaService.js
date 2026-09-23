@@ -190,6 +190,41 @@ function applySectionVisibility(idea, allowed) {
   return idea;
 }
 
+/*
+ * Apply the organisation's reading rules to one idea, for one viewer.
+ *
+ * The author, a co-suggester and the reviewer judging it are INSIDE the idea and read it
+ * whole - that is what the settings screen promises in as many words. Everybody else is a
+ * colleague, and sees the sections the organisation has opened plus the fields that are
+ * always public (title, code, status, department, impact, score), because those are what
+ * make an idea findable and what the leaderboard counts.
+ *
+ * Every screen that lists or opens an idea goes through here, so a change on the settings
+ * screen reaches all of them at once instead of each one deciding for itself.
+ */
+export function applyReadingRules(user, idea, settings, { detail = false } = {}) {
+  const mode = visibilityMode(settings);
+  const previewChars = parseInt(settings.situation_preview_chars, 10) || 180;
+
+  idea.viewer_inside = isInsideIdea(user, idea);
+  redactSolution(user, idea, mode, previewChars);
+  redactPrediction(user, idea, predictionMode(settings));
+
+  if (!idea.viewer_inside) {
+    applySectionVisibility(idea, employeeSections(settings));
+  } else {
+    idea.hidden_sections = [];
+  }
+
+  // A browse list never carries full text, for anybody - they get it from the detail
+  // endpoint, which is where entitlement is decided per idea.
+  if (!detail) {
+    idea.proposed_solution = null;
+    idea.present_situation = null;
+  }
+  return idea;
+}
+
 /** Is this person inside this idea? */
 export function isInsideIdea(user, idea) {
   const uid = Number(user?.id);
@@ -267,29 +302,23 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
    * onward live in idea_co_suggesters alone. Scoping on the columns therefore hid an idea
    * from a co-suggester who happened to be added third.
    */
-  const COAUTHORED =
-    `(i.submitter_id = ?
-      OR COALESCE(i.co_suggester_1_id,0) = ?
-      OR COALESCE(i.co_suggester_2_id,0) = ?
-      OR EXISTS (SELECT 1 FROM idea_co_suggesters cs WHERE cs.idea_id = i.id AND cs.user_id = ?))`;
-
-  if (INDIVIDUAL_ROLES.includes(user.role)) {
-    where.push(COAUTHORED);
-    params.push(user.id, user.id, user.id, user.id);
-  } else if (TEAM_ROLES.includes(user.role)) {
-    /*
-     * A reviewer's own team, their own ideas - and anything they have actually acted on. The
-     * last of those was missing, which is why a manager who had just rejected an idea from
-     * outside their team was told "No rejected ideas" on the very next screen.
-     */
-    where.push(
-      `(i.submitter_id IN (SELECT id FROM users WHERE manager_id = ?)
-        OR i.submitter_id = ?
-        OR EXISTS (SELECT 1 FROM idea_workflow w WHERE w.idea_id = i.id AND w.actor_id = ?)
-        OR EXISTS (SELECT 1 FROM idea_reviewers ir WHERE ir.idea_id = i.id AND ir.reviewer_id = ?))`
-    );
-    params.push(user.id, user.id, user.id, user.id);
-  }
+  /*
+   * No role is scoped to a subset of the rows any more.
+   *
+   * This list used to show a trainee or an employee only their own and co-authored ideas, and
+   * a team role only their team's - so "All Ideas" was never all ideas, the settings that
+   * govern what a colleague may read on SOMEBODY ELSE'S idea had nothing on the page to act
+   * on, and a manager who had just rejected an idea from outside their team was told "No
+   * rejected ideas".
+   *
+   * Which rows appear is not where confidentiality is decided; WHAT each row says is, and
+   * applyReadingRules below decides it per viewer per idea. The public Idea Board already
+   * showed every employee every idea under exactly these rules, so this shows nothing that
+   * was not already readable - it makes the two screens agree.
+   *
+   * Two exclusions remain, above and below this: an archived idea, and somebody else's
+   * unsubmitted draft.
+   */
 
   /*
    * A draft has not been submitted to anybody. It belongs to its author until it is, so it
@@ -328,30 +357,15 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
 
   const canSeeAnon = PRIVILEGED_ANON.includes(user.role);
   const settings = await getOrgSettings(db);
-  const mode = visibilityMode(settings);
-  const predMode = predictionMode(settings);
-  const previewChars = parseInt(settings.situation_preview_chars, 10) || 180;
-  const listSections = employeeSections(settings);
   for (const idea of ideas) {
     if (!canSeeAnon && idea.is_anonymous) {
       idea.submitter_name = 'Anonymous';
       idea.avatar_initials = '?';
       idea.department = '-';
     }
-    // The browse list never carries a full solution over the wire, even for people entitled to
-    // read one - they get it from the detail endpoint.
-    idea.viewer_inside = isInsideIdea(user, idea);
-    redactSolution(user, idea, mode, previewChars);
-    // The browse list shows a one-line gist. If the organisation does not let ordinary
-    // colleagues read even that, the column has to be empty for them.
-    if (idea.solution_redacted && !listSections.includes('solution')) {
-      idea.solution_summary = null;
-      idea.solution_hidden_by_policy = true;
-    }
-    redactPrediction(user, idea, predMode);
-    // Neither full text ever travels with a browse list, for anybody.
-    idea.proposed_solution = null;
-    idea.present_situation = null;
+    applyReadingRules(user, idea, settings);
+    // The column has to be empty rather than teasing, when the gist itself is not open.
+    if (idea.solution_summary === null) idea.solution_hidden_by_policy = true;
   }
   return { success: true, ideas };
 }
@@ -595,6 +609,13 @@ export async function review(db, user) {
      ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`,
     [uid]
   );
+  /*
+   * This branch is the org-wide view, so it carries ideas this person is NOT the reviewer of.
+   * A reviewer reads what they are judging in full - applyReadingRules grants that through
+   * isInsideIdea - and everything else is read as a colleague reads it.
+   */
+  const orgSettings = await getOrgSettings(db);
+  for (const idea of all) applyReadingRules(user, idea, orgSettings);
   return { success: true, ideas: all };
 }
 
@@ -709,9 +730,16 @@ export async function get(db, user, id) {
     idea.hidden_sections = [];
   } else {
     redactSolution(user, idea, mode, detailPreview);
-    // Somebody who could not be given the full text is by definition outside this idea, so the
-    // organisation's section rules apply to them.
-    if (idea.solution_redacted) {
+    /*
+     * The section rules apply to everyone OUTSIDE the idea - the author, a co-suggester and
+     * the reviewer judging it read it whole, nobody else does.
+     *
+     * This used to key off whether the solution had just been redacted, which quietly tied
+     * the two settings together: with "Who can read the full solution" set to Everyone,
+     * nothing was ever redacted, so the whole "What colleagues can read" list stopped being
+     * applied and every section was open no matter which boxes were ticked.
+     */
+    if (!isInsideIdea(user, idea)) {
       applySectionVisibility(idea, employeeSections(detailSettings));
     } else {
       idea.hidden_sections = [];

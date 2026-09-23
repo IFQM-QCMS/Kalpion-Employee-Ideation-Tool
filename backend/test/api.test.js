@@ -5701,3 +5701,71 @@ test('a new support ticket notifies the platform admins, and never blocks on the
   });
   assert.equal(replied.status, 200, JSON.stringify(replied.data));
 });
+
+/*
+ * The organisation's reading rules decide WHAT each person reads of an idea, on every screen
+ * that shows one. Which rows appear is not where confidentiality lives.
+ */
+test('the reading rules govern every list, for every role, on every tenant', async () => {
+  const sections = (v) => api('POST', '/api/settings', {
+    token: AADMIN, body: { employee_visible_sections: v, solution_visibility: 'authors_reviewers' },
+  });
+
+  const idea = await api('POST', '/api/ideas/submit', {
+    token: AADMIN,
+    body: {
+      title: 'Visibility rules subject', present_situation: 'P'.repeat(60),
+      proposed_solution: 'S'.repeat(60), impact_areas: 'Quality', impact_level: 'Medium',
+      tangible_benefit: 'Two hours a week', investment_required: '25000', feasibility: 'High',
+    },
+  });
+  assert.equal(idea.data.success, true);
+
+  // An employee is neither author, co-suggester nor reviewer of it.
+  const rowFor = async (token) => {
+    const r = await api('GET', '/api/ideas', { token });
+    return (r.data.ideas || []).find((i) => i.id === idea.data.idea_id);
+  };
+
+  await sections('solution,benefits');
+  let row = await rowFor(AUSER);
+  assert.ok(row, 'a colleague sees the idea at all - "All Ideas" is the whole organisation, and '
+    + 'the settings that govern reading somebody else\'s idea need one on the page to act on');
+  assert.equal(row.viewer_inside, false);
+  assert.ok(row.solution_summary, 'the proposal is ticked, so its gist is readable');
+  assert.ok(row.tangible_benefit, 'and so are the benefits');
+  assert.equal(row.investment_required, null, 'the business case is not ticked');
+  assert.equal(row.present_situation, null, 'and no list carries full text, for anybody');
+
+  await sections('solution');
+  row = await rowFor(AUSER);
+  assert.ok(row.solution_summary, 'still ticked');
+  assert.equal(row.tangible_benefit, null, 'unticking benefits takes them off the list too');
+
+  await sections('');
+  row = await rowFor(AUSER);
+  assert.equal(row.solution_summary, null, 'nothing ticked leaves only what is always public');
+  assert.ok(row.idea_code && row.title && row.status,
+    'which is the title, code and status - what makes an idea findable');
+
+  // The author is inside their own idea and reads it whole whatever the boxes say.
+  const mine = await rowFor(AADMIN);
+  assert.equal(mine.viewer_inside, true);
+  assert.ok(mine.solution_summary, 'an author always reads their own idea');
+
+  /*
+   * "Who can read the full solution = Everyone" used to switch the whole section list off,
+   * because the sections were applied only when the solution had just been redacted.
+   */
+  await api('POST', '/api/settings', {
+    token: AADMIN, body: { employee_visible_sections: 'solution', solution_visibility: 'everyone' },
+  });
+  const detail = await api('GET', `/api/ideas/${idea.data.idea_id}`, { token: AUSER });
+  assert.ok((detail.data.idea.hidden_sections || []).includes('business_case'),
+    'an open solution does not open every other section with it');
+  assert.equal(detail.data.idea.investment_required, null);
+
+  await api('POST', '/api/settings', {
+    token: AADMIN, body: { employee_visible_sections: 'solution', solution_visibility: 'authors_reviewers' },
+  });
+});
