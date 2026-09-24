@@ -124,14 +124,10 @@ CREATE TABLE IF NOT EXISTS ideas (
   qcms_push_message        VARCHAR(255) NULL DEFAULT NULL,
   status                   ENUM('Draft','Submitted','Under Review','Approved','Rejected','Implemented') DEFAULT 'Draft',
   submitter_id             INT NOT NULL,
-  co_suggester_1_id       INT NULL,
-  co_suggester_2_id       INT NULL,
   submitted_at             DATETIME NULL,
   created_at               DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  FOREIGN KEY (submitter_id)      REFERENCES users(id),
-  FOREIGN KEY (co_suggester_1_id) REFERENCES users(id) ON DELETE SET NULL,
-  FOREIGN KEY (co_suggester_2_id) REFERENCES users(id) ON DELETE SET NULL
+  FOREIGN KEY (submitter_id)      REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS idea_reviewers (

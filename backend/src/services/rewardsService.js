@@ -174,12 +174,13 @@ export async function rewardsDetail(db, opts = {}) {
     `SELECT i.*, u.name AS submitter_name, u.employee_id AS submitter_employee_id,
             u.department AS submitter_department, u.business_unit AS submitter_business_unit,
             u.email AS submitter_email,
-            c1.name AS co1_name, c2.name AS co2_name,
+            -- Everyone who raised it jointly, not just the two the old columns could hold.
+            (SELECT GROUP_CONCAT(u2.name SEPARATOR ', ')
+               FROM idea_co_suggesters cs JOIN users u2 ON u2.id = cs.user_id
+              WHERE cs.idea_id = i.id) AS co_names,
             ch.title AS challenge_title
        FROM ideas i
        JOIN users u ON u.id = i.submitter_id
-       LEFT JOIN users c1 ON c1.id = i.co_suggester_1_id
-       LEFT JOIN users c2 ON c2.id = i.co_suggester_2_id
        LEFT JOIN challenges ch ON ch.id = i.challenge_id
       WHERE i.status <> 'Draft'
         AND i.submitted_at >= ? AND i.submitted_at < ?

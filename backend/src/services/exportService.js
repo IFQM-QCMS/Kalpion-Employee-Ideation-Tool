@@ -7,8 +7,12 @@ const TEAM_ROLES = ['team_lead', 'project_lead', 'manager', 'department_manager'
 // Role-based visibility clause (mirrors ideas.php list / export.php).
 function buildVisibilityClause(user, params) {
   if (INDIVIDUAL_ROLES.includes(user.role)) {
-    params.push(user.id, user.id, user.id);
-    return '(i.submitter_id = ? OR i.co_suggester_1_id = ? OR i.co_suggester_2_id = ?)';
+    // Through idea_co_suggesters, not the two columns it replaced: those held only the first
+    // two names, so a third co-suggester could not export an idea they had helped write.
+    params.push(user.id, user.id);
+    return `(i.submitter_id = ?
+             OR EXISTS (SELECT 1 FROM idea_co_suggesters cs
+                         WHERE cs.idea_id = i.id AND cs.user_id = ?))`;
   }
   if (TEAM_ROLES.includes(user.role)) {
     params.push(user.id, user.id);

@@ -174,8 +174,6 @@ function applySectionVisibility(idea, allowed) {
       case 'co_suggesters':
         idea.co_suggesters = [];
         idea.co_suggesters_display = '';
-        idea.co1_name = null;
-        idea.co2_name = null;
         break;
       case 'timeline':
         idea.workflow = [];
@@ -231,12 +229,14 @@ export function isInsideIdea(user, idea) {
   if (!uid) return false;
   if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
   if (Number(idea.submitter_id) === uid) return true;
-  if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
   if (Number(idea.current_reviewer_id) === uid) return true;
-  // Populated by get(); absent on list rows, where the four checks above are what the list
-  // query can answer.
-  if ((idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid)) return true;
+  /*
+   * co_suggesters is the record of who raised the idea jointly. Every query that feeds this
+   * function carries it, because the two columns that used to answer the question held only
+   * the first two names and quietly lost everybody after them.
+   */
   if ((idea.co_suggesters || []).some((c) => Number(c.id) === uid)) return true;
+  if ((idea.reviewers || []).some((r) => Number(r.reviewer_id) === uid)) return true;
   return false;
 }
 
@@ -249,7 +249,7 @@ export function canReadSolution(user, idea, mode = 'authors_reviewers') {
   if (mode === 'everyone') return true;
   if (PRIVILEGED_SOLUTION.includes(user.role)) return true;
   if (mode === 'managers_only') return false;
-  if (Number(idea.co_suggester_1_id) === uid || Number(idea.co_suggester_2_id) === uid) return true;
+  if ((idea.co_suggesters || []).some((c) => Number(c.id) === uid)) return true;
   if (Number(idea.current_reviewer_id) === uid) return true;
   return false;
 }
@@ -342,14 +342,12 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
   const paramsList = [uid, ...params];
   const sql =
     `SELECT i.*, u.name AS submitter_name, u.department, u.avatar_initials,
-            c1.name AS co1_name, c2.name AS co2_name,
             (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
             (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
             (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
      FROM ideas i
      JOIN users u ON u.id = i.submitter_id
-     LEFT JOIN users c1 ON c1.id = i.co_suggester_1_id
-     LEFT JOIN users c2 ON c2.id = i.co_suggester_2_id` +
+` +
     (where.length ? ' WHERE ' + where.join(' AND ') : '') +
     ' ORDER BY i.updated_at DESC LIMIT 100';
 
@@ -374,16 +372,15 @@ export async function list(db, user, { status, search, impact, archived, tag, ti
 export async function my(db, user) {
   const uid = Number(user.id);
   const [ideas] = await db.execute(
-    `SELECT i.*, c1.name AS co1_name, c2.name AS co2_name,
+    `SELECT i.*,
             (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
             (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
             (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
      FROM ideas i
-     LEFT JOIN users c1 ON c1.id = i.co_suggester_1_id
-     LEFT JOIN users c2 ON c2.id = i.co_suggester_2_id
-     WHERE i.submitter_id = ? OR i.co_suggester_1_id = ? OR i.co_suggester_2_id = ?
+     WHERE i.submitter_id = ?
+        OR EXISTS (SELECT 1 FROM idea_co_suggesters cs WHERE cs.idea_id = i.id AND cs.user_id = ?)
      ORDER BY i.updated_at DESC`,
-    [uid, uid, uid, uid]
+    [uid, uid, uid]
   );
   return { success: true, ideas };
 }
@@ -520,8 +517,6 @@ function chainSummary(cfg, role) {
  */
 const NOT_A_STAKEHOLDER =
   `i.submitter_id <> ?
-     AND COALESCE(i.co_suggester_1_id, 0) <> ?
-     AND COALESCE(i.co_suggester_2_id, 0) <> ?
      AND NOT EXISTS (SELECT 1 FROM idea_co_suggesters cs WHERE cs.idea_id = i.id AND cs.user_id = ?)`;
 
 /*
@@ -591,7 +586,7 @@ export async function review(db, user) {
        AND (${branches.join(' OR ')})
      ORDER BY i.review_due_date ASC, i.ai_score DESC, i.submitted_at ASC`;
 
-  const [ideas] = await db.execute(sql, [uid, uid, uid, uid, uid, uid, ...args]);
+  const [ideas] = await db.execute(sql, [uid, uid, uid, uid, ...args]);
 
   // Someone who plays no part in the chain still sees anything routed to them personally; the
   // org-wide view below is additional, for the people whose remit actually is org-wide.
@@ -627,15 +622,13 @@ export async function get(db, user, id) {
   const [rows] = await db.execute(
     `SELECT i.*, u.name AS submitter_name, u.department, u.business_unit,
             u.avatar_initials, u.email AS submitter_email,
-            c1.name AS co1_name, c2.name AS co2_name,
             m.name AS manager_name,
             (SELECT COUNT(*) FROM idea_votes WHERE idea_id=i.id) AS vote_count,
             (SELECT ROUND(AVG(rating),1) FROM idea_votes WHERE idea_id=i.id) AS avg_rating,
             (SELECT vote_type FROM idea_community_votes WHERE idea_id=i.id AND user_id=?) AS user_community_vote
      FROM ideas i
      JOIN  users u  ON u.id  = i.submitter_id
-     LEFT JOIN users c1 ON c1.id = i.co_suggester_1_id
-     LEFT JOIN users c2 ON c2.id = i.co_suggester_2_id
+
      LEFT JOIN users m  ON m.id  = u.manager_id
      WHERE i.id = ?`,
     [uid, id]
@@ -781,8 +774,6 @@ export async function get(db, user, id) {
     ));
     idea.co_suggesters = [];
     idea.co_suggesters_display = '';
-    idea.co1_name = null;
-    idea.co2_name = null;
   }
 
   return { success: true, idea };
@@ -802,8 +793,6 @@ export async function submitOrDraft(db, user, action, b) {
     ? b.co_suggester_ids
     : [b.co_suggester_1_id, b.co_suggester_2_id];
   const coIds = [...new Set(rawCoIds.map((v) => Number(v)).filter((n) => n && n !== Number(user.id)))];
-  const co1 = coIds[0] ?? null;
-  const co2 = coIds[1] ?? null;
   const editId = b.id ? Number(b.id) : null;
   // An idea an approver sent back re-enters the chain where it was sent back from, not at the
   // beginning - the stages before that one already approved it.
@@ -865,7 +854,7 @@ export async function submitOrDraft(db, user, action, b) {
       title, present_situation: sit, proposed_solution: sol,
       impact_areas: impacts, impact_level: impLvl,
       tangible_benefit: tangible, intangible_benefit: intang,
-      co_suggester_1_id: co1, co_suggester_2_id: co2,
+      co_suggester_count: coIds.length,
     });
   } catch {
     ai = { score: 50, reason: 'Evaluated by system.' };
@@ -928,7 +917,6 @@ export async function submitOrDraft(db, user, action, b) {
         impact_areas=?,impact_level=?,tangible_benefit=?,intangible_benefit=?,
         investment_required=?,feasibility=?,implementation_duration=?,
         expected_implementation_date=?,benefits_expected=?,support_required=?,
-        co_suggester_1_id=?,co_suggester_2_id=?,
         is_anonymous=?,challenge_id=?,template_type=?,
         time_required=?,solution_tags=?,
         patentable_flag=?,patentable_flagged_by=?,
@@ -943,7 +931,7 @@ export async function submitOrDraft(db, user, action, b) {
        WHERE id=? AND submitter_id=?`,
       [title, sit, sol, impacts, impLvl, tangible, intang,
         investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
-        co1, co2, isAnon, challengeId, templateType,
+        isAnon, challengeId, templateType,
         timeRequired, solutionTags,
         patentableFlag, patentableFlag ? user.id : null,
         status, submittedAt, reviewDueDate, currentReviewerId, currentStage,
@@ -963,14 +951,14 @@ export async function submitOrDraft(db, user, action, b) {
               impact_areas,impact_level,tangible_benefit,intangible_benefit,
               investment_required,feasibility,implementation_duration,
               expected_implementation_date,benefits_expected,support_required,
-              co_suggester_1_id,co_suggester_2_id,is_anonymous,challenge_id,template_type,
+              is_anonymous,challenge_id,template_type,
               time_required,solution_tags,patentable_flag,patentable_flagged_by,
               status,submitter_id,submitted_at,review_due_date,current_reviewer_id,current_stage,
               ai_score,ai_reason)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           [code, title, sit, sol, impacts, impLvl, tangible, intang,
             investment, feasibility, implDuration, expectedDate, benefitsExpected, supportRequired,
-            co1, co2, isAnon, challengeId, templateType,
+            isAnon, challengeId, templateType,
             timeRequired, solutionTags,
             patentableFlag, patentableFlag ? user.id : null,
             status, user.id, submittedAt, reviewDueDate, currentReviewerId, currentStage,
@@ -1113,14 +1101,8 @@ export async function isNamedCoSuggester(db, ideaId, userId) {
   const uid = Number(userId) || 0;
   if (!uid) return false;
   const [[row] = []] = await db.execute(
-    `SELECT 1 AS hit FROM ideas i
-      WHERE i.id = ?
-        AND (COALESCE(i.co_suggester_1_id,0) = ?
-             OR COALESCE(i.co_suggester_2_id,0) = ?
-             OR EXISTS (SELECT 1 FROM idea_co_suggesters cs
-                         WHERE cs.idea_id = i.id AND cs.user_id = ?))
-      LIMIT 1`,
-    [Number(ideaId) || 0, uid, uid, uid]
+    'SELECT 1 AS hit FROM idea_co_suggesters WHERE idea_id = ? AND user_id = ? LIMIT 1',
+    [Number(ideaId) || 0, uid]
   );
   return !!row;
 }

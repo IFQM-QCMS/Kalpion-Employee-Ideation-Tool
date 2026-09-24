@@ -16,14 +16,11 @@ async function canReadThread(db, user, ideaId) {
 
   const uid = Number(user.id);
   const [[idea] = []] = await db.execute(
-    'SELECT submitter_id, current_reviewer_id, co_suggester_1_id, co_suggester_2_id FROM ideas WHERE id = ?',
+    'SELECT submitter_id, current_reviewer_id FROM ideas WHERE id = ?',
     [ideaId]
   );
   if (!idea) return true;   // a missing idea is the caller's problem, not ours
-  if ([idea.submitter_id, idea.current_reviewer_id,
-       idea.co_suggester_1_id, idea.co_suggester_2_id].some((x) => Number(x) === uid)) {
-    return true;
-  }
+  if ([idea.submitter_id, idea.current_reviewer_id].some((x) => Number(x) === uid)) return true;
   const [[cos] = []] = await db.execute(
     'SELECT 1 AS yes FROM idea_co_suggesters WHERE idea_id = ? AND user_id = ? LIMIT 1', [ideaId, uid]
   );

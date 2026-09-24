@@ -527,8 +527,8 @@ export function buildIdeaPdf(idea, res) {
     s(idea.intangible_benefit) && `Intangible benefit: ${s(idea.intangible_benefit)}`,
     s(idea.benefits_expected) && `Benefits expected: ${s(idea.benefits_expected)}`,
     s(idea.support_required) && `Support required: ${s(idea.support_required)}`,
-    (s(idea.co_suggesters_display) || [s(idea.co1_name), s(idea.co2_name)].filter(Boolean).join(', ')) &&
-      `Co-suggesters: ${s(idea.co_suggesters_display) || [s(idea.co1_name), s(idea.co2_name)].filter(Boolean).join(', ')}`,
+    s(idea.co_suggesters_display) &&
+      `Co-suggesters: ${s(idea.co_suggesters_display)}`,
   ].filter(Boolean).join('\n');
   y = notesBox(doc, y, 104, notes);
 

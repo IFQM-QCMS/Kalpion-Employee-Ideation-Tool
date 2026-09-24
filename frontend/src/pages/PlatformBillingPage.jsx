@@ -161,14 +161,34 @@ export default function PlatformBillingPage() {
 
       {/* Summary */}
       <div className="card" style={{ marginBottom: 16 }}>
+        {/*
+          * Two groups, and the screen has to say which is which.
+          *
+          * The first row is every state an organisation can be in, and they are mutually
+          * exclusive, so they add up to the total. Exempt and In grace used to be missing
+          * from it: the server counted them but nothing displayed them, so the visible
+          * numbers could not be reconciled with the organisation count however correct they
+          * were - which is what kept this reading as a billing page that cannot be trusted.
+          *
+          * The second row is not a breakdown. Expiring soon and No plan set cut across the
+          * states above - an organisation on trial with no plan is counted in both - so they
+          * are separated and labelled rather than sitting in a row that invites addition.
+          */}
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 4 }}>
-          <Stat label={t('msgb.st_orgs')} value={s.organisations} />
+          <Stat label={t('msgb.st_orgs')} value={s.organisations} hint={t('msgb.st_breakdown')} />
           <Stat label={t('msgb.st_paying')} value={s.paying} />
           <Stat label={t('msgb.st_trial')} value={s.on_trial} />
+          <Stat label={t('msgb.st_lapsed')} value={s.lapsed} tone={s.lapsed ? 'bad' : undefined} />
+          <Stat label={t('msgb.s_exempt')} value={s.exempt} />
+          <Stat label={t('msgb.st_grace')} value={s.other || 0}
+            tone={s.other ? 'warn' : undefined} hint={t('msgb.st_grace_hint')} />
+        </div>
+        <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0 12px' }} />
+        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 4 }}>
           <Stat label={t('msgb.st_expiring')} value={s.expiring_soon}
             tone={s.expiring_soon ? 'warn' : undefined} hint={t('msgb.st_expiring_hint', { n: s.warn_days })} />
-          <Stat label={t('msgb.st_lapsed')} value={s.lapsed} tone={s.lapsed ? 'bad' : undefined} />
-          <Stat label={t('msgb.st_no_plan')} value={s.no_plan} tone={s.no_plan ? 'bad' : undefined} />
+          <Stat label={t('msgb.st_no_plan')} value={s.no_plan} tone={s.no_plan ? 'bad' : undefined}
+            hint={t('msgb.st_crosscut')} />
           <Stat label={t('msgb.st_recurring')} value={money(s.recurring_paise / 100)}
             hint={t('msgb.st_recurring_hint')} />
           <Stat label={t('msgb.st_pipeline')} value={money(s.trial_pipeline_paise / 100)}

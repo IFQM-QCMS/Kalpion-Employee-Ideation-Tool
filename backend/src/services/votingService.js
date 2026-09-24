@@ -219,7 +219,10 @@ export async function board(db, user, sort) {
   const [ideas] = await db.execute(
     `SELECT i.id, i.idea_code, i.title, i.present_situation, i.proposed_solution,
             i.impact_level, i.status, i.created_at, i.is_anonymous, i.ai_score,
-            i.submitter_id, i.co_suggester_1_id, i.co_suggester_2_id, i.current_reviewer_id,
+            i.submitter_id, i.current_reviewer_id,
+            -- Everyone named on the idea, so the board can tell an author from a colleague
+            -- without reading the two columns that only ever held the first two of them.
+            (SELECT GROUP_CONCAT(cs.user_id) FROM idea_co_suggesters cs WHERE cs.idea_id = i.id) AS co_ids,
             -- Whether an approved idea has actually reached the QC tool. This
             -- list names its columns rather than using i.*, so the board would
             -- otherwise be the one screen where the "In QC" mark never appeared.
@@ -251,6 +254,10 @@ export async function board(db, user, sort) {
 
     // The board is a LIST, and the same rule applies to it as to All Ideas (MOM §11.4, §13.1):
     // a browse view never carries the full proposal over the wire, for anybody.
+    // co_ids arrives as a comma-separated list from the query above; isInsideIdea reads the
+    // same shape the detail view uses, so it is turned into that here.
+    idea.co_suggesters = String(idea.co_ids || '').split(',').filter(Boolean).map((id) => ({ id: Number(id) }));
+    delete idea.co_ids;
     idea.viewer_inside = isInsideIdea(user, idea);
     idea.solution_summary = summariseSolution(idea.proposed_solution);
     idea.situation_summary = previewText(idea.present_situation, previewChars);
