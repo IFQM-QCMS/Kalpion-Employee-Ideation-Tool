@@ -39,8 +39,20 @@ function stamp() {
 export async function ideasCsv(db, user, { status, search, impact } = {}) {
   const params = [];
   const where = [`(${buildVisibilityClause(user, params)})`];
+  /*
+   * An archived idea has left the working lists, and an export is a working list. It was
+   * excluded from All Ideas, the board, the review queue and the leaderboard, and carried
+   * out of the building by this one.
+   */
+  where.push('i.archived_at IS NULL');
   if (status) { where.push('i.status = ?'); params.push(status); }
-  if (search) { where.push('(i.title LIKE ? OR i.idea_code LIKE ?)'); const s = `%${search}%`; params.push(s, s); }
+  if (search) {
+    // The same fields the list searches, so exporting "what is on screen" exports what was
+    // on screen.
+    where.push('(i.title LIKE ? OR i.idea_code LIKE ? OR u.name LIKE ? OR u.department LIKE ?)');
+    const s = `%${search}%`;
+    params.push(s, s, s, s);
+  }
   if (impact) { where.push('i.impact_level = ?'); params.push(impact); }
 
   const sql =

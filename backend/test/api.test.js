@@ -5769,3 +5769,87 @@ test('the reading rules govern every list, for every role, on every tenant', asy
     token: AADMIN, body: { employee_visible_sections: 'solution', solution_visibility: 'authors_reviewers' },
   });
 });
+
+/*
+ * ── Bug-hunt findings, Sept 2026 ────────────────────────────────────────────
+ * Three defects found by going through the product process by process, each of
+ * them the same shape: a rule enforced in one place and not in its neighbour.
+ */
+
+test('HUNT-01: the day settings are bounded on the organisation screen too', async () => {
+  /*
+   * review_sla_days and escalation_days drive the review due date and the escalation point.
+   * The platform's own defaults screen has always bounded them to 1-365; the organisation
+   * screen accepted anything, so one organisation could store 0 - or 99999, which quietly
+   * means no idea is ever overdue.
+   */
+  const store = async (k, v) => {
+    await api('POST', '/api/settings', { token: AADMIN, body: { [k]: v } });
+    return (await api('GET', '/api/settings', { token: AADMIN })).data.settings[k];
+  };
+  assert.equal(await store('review_sla_days', '0'), '1', 'zero days is not a service level');
+  assert.equal(await store('review_sla_days', '99999'), '365');
+  assert.equal(await store('escalation_days', '-3'), '1');
+  assert.equal(await store('escalation_days', 'abc'), '1');
+  await api('POST', '/api/settings', { token: AADMIN, body: { review_sla_days: '7', escalation_days: '14' } });
+});
+
+test('HUNT-02: an idea cannot claim a challenge that does not exist', async () => {
+  // There is no foreign key behind ideas.challenge_id, so an id belonging to no challenge
+  // used to be stored as written: the idea claimed a challenge it was not part of, and every
+  // count that joins the two silently dropped it.
+  const r = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Names a challenge that is not there', present_situation: 'x'.repeat(50),
+      proposed_solution: 'y'.repeat(50), impact_areas: 'Quality', impact_level: 'Low',
+      challenge_id: 999999,
+    },
+  });
+  assert.ok(r.status >= 400, `expected a refusal, got ${r.status}`);
+  assert.match(String(r.data.error || ''), /challenge/i);
+
+  const real = await api('POST', '/api/challenges', {
+    token: AADMIN, body: { title: 'A real challenge', description: 'Something to answer.' },
+  });
+  const okIdea = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'Answers a real challenge', present_situation: 'x'.repeat(50),
+      proposed_solution: 'y'.repeat(50), impact_areas: 'Quality', impact_level: 'Low',
+      challenge_id: real.data.id,
+    },
+  });
+  assert.equal(okIdea.status, 200, 'a real challenge is still accepted');
+});
+
+test('HUNT-03: the CSV export is a working list, and obeys the same rules as one', async () => {
+  const idea = await api('POST', '/api/ideas/submit', {
+    token: AUSER,
+    body: {
+      title: 'EXPORTMARKER archived idea', present_situation: 'x'.repeat(50),
+      proposed_solution: 'y'.repeat(50), impact_areas: 'Quality', impact_level: 'Low',
+    },
+  });
+  assert.equal(idea.data.success, true);
+
+  const before = await api('GET', '/api/export/ideas', { token: AADMIN });
+  assert.match(String(before.text), /EXPORTMARKER/, 'an active idea is exported');
+
+  await api('POST', '/api/ideas/archive', {
+    token: AADMIN, body: { idea_id: idea.data.idea_id, archived: true },
+  });
+  const after = await api('GET', '/api/export/ideas', { token: AADMIN });
+  assert.doesNotMatch(String(after.text), /EXPORTMARKER/,
+    'an archived idea has left the working lists, and an export is one - it used to be the '
+    + 'one route by which it still left the building');
+
+  // The export's search matches what the list's search matches, so "export what is on
+  // screen" exports what was on screen.
+  const byName = await api('GET', '/api/export/ideas?search=Orga%20Employee', { token: AADMIN });
+  assert.ok(String(byName.text).split('\n').length > 1, 'searching a submitter name finds their ideas');
+
+  await api('POST', '/api/ideas/archive', {
+    token: AADMIN, body: { idea_id: idea.data.idea_id, archived: false },
+  });
+});

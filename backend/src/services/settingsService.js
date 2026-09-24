@@ -205,6 +205,16 @@ export async function updateSettings(db, body) {
       const ceiling = await platformFileCeilingMb();
       value = String(Math.max(1, Math.min(ceiling, parseInt(value, 10) || 10)));
     }
+    /*
+     * Day counts that drive real behaviour: the review due date and the escalation point.
+     * The platform's own defaults screen has always bounded these to 1-365
+     * (platformSettingsService), but the organisation screen accepted anything - so one
+     * organisation could store 0, or 99999, which quietly means no idea is ever overdue.
+     * The same bound, in both places.
+     */
+    if (key === 'review_sla_days' || key === 'escalation_days') {
+      value = String(Math.max(1, Math.min(365, parseInt(value, 10) || 1)));
+    }
     if (key === 'situation_preview_chars') {
       value = String(Math.max(60, Math.min(600, parseInt(value, 10) || 180)));
     }

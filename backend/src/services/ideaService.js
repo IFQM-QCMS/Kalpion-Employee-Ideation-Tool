@@ -805,7 +805,19 @@ export async function submitOrDraft(db, user, action, b) {
   }
   const isResubmission = action === 'submit' && !!previous?.returned_at && previous.status === 'Draft';
   const isAnon = b.is_anonymous ? 1 : 0;
-  const challengeId = b.challenge_id ? Number(b.challenge_id) : null;
+  /*
+   * An idea may name the challenge it answers. There is no foreign key behind the column, so
+   * an id that belongs to no challenge used to be stored as written: the idea then claimed a
+   * challenge it was not part of, and every count that joins the two silently dropped it.
+   * Resolved against the real list, and refused if it names nothing.
+   */
+  let challengeId = b.challenge_id ? Number(b.challenge_id) : null;
+  if (challengeId) {
+    const [[ch] = []] = await db.execute('SELECT id FROM challenges WHERE id = ? LIMIT 1', [challengeId]);
+    if (!ch) throw badRequest('That challenge no longer exists. Pick one from the list, or leave it blank.');
+  } else {
+    challengeId = null;
+  }
   const templateType = String(b.template_type ?? '').trim() || null;
 
   // MOM §14.5 / §14.6. Both validated against a fixed list rather than stored as typed: an
