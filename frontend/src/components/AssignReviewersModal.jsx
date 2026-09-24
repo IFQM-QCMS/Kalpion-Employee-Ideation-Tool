@@ -28,20 +28,24 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
       try {
         const res = await usersApi.list({ q });
         /*
-         * Only people the server will actually accept. It refuses anybody who holds no role
-         * in the approval path, and anybody below the router's own level - but the search
-         * listed every employee by name, department and id, with no mention of their role, so
-         * the first thing a reviewer learned about an ineligible choice was an error after
-         * pressing Assign. The role is shown for the same reason.
+         * Everybody who matched, each marked with whether they can actually be routed to.
+         *
+         * The server refuses anyone holding no role in the approval path, so the search used
+         * to end in an error after Assign was pressed. Filtering those people out silently
+         * turned out to be worse: searching a real colleague's name produced an empty box
+         * with nothing to explain it, and the feature looked broken. They are listed and
+         * shown as unavailable instead, with the reason.
          */
         setResults((res.data.users||[])
-          .filter(u => ROUTABLE_ROLES.includes(u.role))
-          .filter(u => !selected.some(s=>s.id===u.id)));
+          .filter(u => !selected.some(s=>s.id===u.id))
+          .map(u => ({ ...u, routable: ROUTABLE_ROLES.includes(u.role) })));
       } catch {}
     }, 300);
   }
 
   function addReviewer(u) {
+    // An idea can only be routed to somebody who holds a role in the approval path.
+    if (!u.routable) { showToast(t('ar.not_routable', { name: u.name }), 'warning'); return; }
     setSelected(prev => [...prev, u]);
     setResults([]);
     setQuery('');
@@ -80,11 +84,27 @@ export default function AssignReviewersModal({ ideaId, ideaCode, onClose }) {
             <div className="pos-rel">
               <input className="form-control" value={query} onChange={e => handleSearch(e.target.value)}
                 placeholder={t('form.co_search_ph')} />
+              {query.length >= 2 && results.length === 0 && (
+                <div className="user-search-results" style={{ display:'block' }}>
+                  <div className="uitem" style={{ cursor:'default', color:'var(--subtle)' }}>
+                    {t('ar.no_match')}
+                  </div>
+                </div>
+              )}
               {results.length > 0 && (
                 <div className="user-search-results" style={{ display:'block' }}>
                   {results.map(u => (
-                    <div key={u.id} className="uitem" onClick={() => addReviewer(u)}>
+                    <div key={u.id}
+                      className="uitem"
+                      onClick={() => addReviewer(u)}
+                      style={u.routable ? undefined : { opacity:.55, cursor:'not-allowed' }}
+                      title={u.routable ? undefined : t('ar.not_routable', { name: u.name })}>
                       {u.name} · {formatRole(u.role, t)} · {u.department||'-'}
+                      {!u.routable && (
+                        <span style={{ marginLeft:8, fontSize:11, fontWeight:600, color:'var(--warning)' }}>
+                          {t('ar.unavailable')}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
