@@ -418,19 +418,21 @@ function maskDestination(value) {
 // silently.
 const RESET_CODE_PURPOSES = new Set(['password_reset', 'registration_phone']);
 
-export async function requestPasswordResetCode({ identifier, meta = {}, purpose = 'password_reset' } = {}) {
-  if (!RESET_CODE_PURPOSES.has(purpose)) throw badRequest(`Unknown purpose "${purpose}".`);
-  const generic = {
-    success: true,
-    message: 'If that is registered with us, a code has been sent to it.',
-  };
+/*
+ * A username does not identify a channel a code can travel over, so a code requested by
+ * username is filed under the account's own phone (or email) instead - see "Where the code
+ * actually goes" below. Both requesting AND verifying a code resolve through this same
+ * function, so whichever form somebody types at either step, both land on the identical
+ * `login_otps` row. Getting this out of sync is exactly how a code sent by username used to
+ * come back "No verification code found" for a person reading out the very code they were
+ * just sent, the moment they verified with the same username rather than a phone number.
+ */
+async function resolveResetTarget(identifier) {
   const { key, idType } = verification.classify(identifier);
-  if (!key) throw badRequest('Enter your username, registered email address or mobile number.');
+  if (!key) return null;
 
-  // Same anti-enumeration rule as forgotPassword: an unknown identifier gets the identical
-  // answer, so this cannot be used to test who has an account.
   const tenant = await resolveTenantByLogin(key);
-  if (!tenant) return generic;
+  if (!tenant) return null;
 
   let user = null;
   try {
@@ -449,21 +451,38 @@ export async function requestPasswordResetCode({ identifier, meta = {}, purpose 
   } catch (e) {
     logger.warn('auth: reset-code lookup failed', e.message);
   }
-  if (!user) return generic;
+  if (!user) return null;
 
-  // Where the code actually goes.
+  // Where the code actually goes / was filed under, regardless of what was typed to get here.
   let destination = key;
   if (idType === 'username') {
     const phone = String(user.phone || '').trim();
     const email = String(user.email || '').trim().toLowerCase();
     destination = phone || email;
     if (!destination) {
-      // No address and no number: nothing can be sent. Answered generically so this cannot be
-      // used to discover which accounts are unreachable.
       logger.warn(`auth: reset by username "${key}" has no email or phone on the account`);
-      return generic;
+      return null;
     }
   }
+
+  return { tenant, user, destination };
+}
+
+export async function requestPasswordResetCode({ identifier, meta = {}, purpose = 'password_reset' } = {}) {
+  if (!RESET_CODE_PURPOSES.has(purpose)) throw badRequest(`Unknown purpose "${purpose}".`);
+  const generic = {
+    success: true,
+    message: 'If that is registered with us, a code has been sent to it.',
+  };
+  if (!verification.classify(identifier).key) {
+    throw badRequest('Enter your username, registered email address or mobile number.');
+  }
+
+  // Same anti-enumeration rule as forgotPassword: an unknown identifier gets the identical
+  // answer, so this cannot be used to test who has an account.
+  const target = await resolveResetTarget(identifier);
+  if (!target) return generic;
+  const { tenant, user, destination } = target;
 
   await verification.sendCode({
     identifier: destination,
@@ -481,7 +500,14 @@ export async function requestPasswordResetCode({ identifier, meta = {}, purpose 
 /** Exchange a correct code for a reset token. */
 export async function verifyPasswordResetCode({ identifier, code, purpose = 'password_reset' } = {}) {
   if (!RESET_CODE_PURPOSES.has(purpose)) throw badRequest(`Unknown purpose "${purpose}".`);
-  const { row } = await verification.verifyCode({ identifier, code, purpose });
+  // Resolve the same way the code was requested, so a username lands on the phone/email it
+  // was actually filed under rather than being looked up under the username itself. Falls
+  // back to the raw identifier when resolution fails - that still answers "no code found"
+  // rather than leaking whether the identifier is known.
+  const target = await resolveResetTarget(identifier);
+  const { row } = await verification.verifyCode({
+    identifier: target ? target.destination : identifier, code, purpose,
+  });
   if (!row?.tenant_slug || !row?.user_id) {
     throw badRequest('That code cannot be used to reset a password. Ask for a new one.');
   }

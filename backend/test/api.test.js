@@ -2265,6 +2265,41 @@ test('a code sent to a username holder resets the password end to end', async ()
   assert.equal(signedIn.status, 200, 'the new password must work with the username');
 });
 
+// A username does not identify a channel, so a code requested by username is filed under the
+// account's own phone instead of the username itself. Verifying MUST resolve the same way, or
+// whoever typed a username to ask for a code and then typed that same username back gets "No
+// verification code found" despite holding the exact code that was sent.
+test('a code requested by username is also verifiable by that same username', async () => {
+  const auth = await import('../src/services/authService.js');
+
+  await sql('ifqm_test_master',
+    "DELETE FROM ifqm_test_master.login_otps WHERE purpose IN ('password_reset','registration_phone')");
+
+  const asked = await auth.requestPasswordResetCode({ identifier: 'yashas123', purpose: 'registration_phone' });
+  assert.equal(asked.success, true);
+
+  const [row] = await sql('ifqm_test_master',
+    `SELECT id FROM ifqm_test_master.login_otps
+      WHERE purpose = 'registration_phone' ORDER BY id DESC LIMIT 1`);
+  assert.ok(row, 'the code must have been written');
+
+  const bcrypt = (await import('bcryptjs')).default;
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.login_otps SET code_hash = ?, attempts = 0,
+            expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?`,
+    [await bcrypt.hash('246810', 4), row.id]);
+
+  // The realistic path: whoever typed the username to REQUEST the code types that exact same
+  // username again to VERIFY it - they were never told which phone number it actually went to.
+  const verified = await auth.verifyPasswordResetCode({
+    identifier: 'yashas123', code: '246810', purpose: 'registration_phone',
+  });
+  assert.equal(verified.success, true,
+    'a code requested by username must be verifiable by that same username, not only by the '
+    + `phone it was filed under - got ${JSON.stringify(verified)}`);
+  assert.ok(verified.token);
+});
+
 // The emailed reset link, which is the path a customer actually hits.
 test('a reset token is still valid by the database clock that judges it', async () => {
   await sql('ifqm_test_a', 'DELETE FROM ifqm_test_a.password_reset_tokens');
