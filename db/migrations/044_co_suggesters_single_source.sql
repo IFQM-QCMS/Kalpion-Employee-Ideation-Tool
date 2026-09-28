@@ -15,17 +15,33 @@ SET SESSION sql_mode = REPLACE(@@SESSION.sql_mode, 'ANSI_QUOTES', '');
  * then the columns go, so that no future query can read a half-answer from them.
  */
 
+-- Whether there is anything left to copy or drop at all - a tenant provisioned after this
+-- migration first shipped already has the current schema, with no co_suggester_1_id/2_id
+-- column to read. Computed once, up front, and reused below: a bare INSERT...SELECT or
+-- ALTER TABLE naming a column that is not there fails outright, since unlike other guards in
+-- this file, a plain query cannot be skipped at runtime without dynamic SQL.
+SET @has1 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+                 AND COLUMN_NAME = 'co_suggester_1_id');
+SET @has2 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+                 AND COLUMN_NAME = 'co_suggester_2_id');
+
 -- Copy across anything the columns know that the table does not. INSERT IGNORE leans on the
 -- unique key, so re-running this changes nothing.
-INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id)
-SELECT i.id, i.co_suggester_1_id FROM ideas i
- WHERE i.co_suggester_1_id IS NOT NULL
-   AND EXISTS (SELECT 1 FROM users u WHERE u.id = i.co_suggester_1_id);
+SET @sql := IF(@has1 = 0, 'SELECT 1',
+  CONCAT('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) ',
+         'SELECT i.id, i.co_suggester_1_id FROM ideas i ',
+         'WHERE i.co_suggester_1_id IS NOT NULL ',
+         'AND EXISTS (SELECT 1 FROM users u WHERE u.id = i.co_suggester_1_id)'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id)
-SELECT i.id, i.co_suggester_2_id FROM ideas i
- WHERE i.co_suggester_2_id IS NOT NULL
-   AND EXISTS (SELECT 1 FROM users u WHERE u.id = i.co_suggester_2_id);
+SET @sql := IF(@has2 = 0, 'SELECT 1',
+  CONCAT('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) ',
+         'SELECT i.id, i.co_suggester_2_id FROM ideas i ',
+         'WHERE i.co_suggester_2_id IS NOT NULL ',
+         'AND EXISTS (SELECT 1 FROM users u WHERE u.id = i.co_suggester_2_id)'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 -- Now drop them. Guarded so the migration is safe to re-run, and the foreign keys that name
 -- the columns have to go first.
@@ -43,14 +59,8 @@ SET @fk2 := (SELECT CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE
 SET @sql := IF(@fk2 IS NULL, 'SELECT 1', CONCAT('ALTER TABLE ideas DROP FOREIGN KEY `', @fk2, '`'));
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @has1 := (SELECT COUNT(*) FROM information_schema.COLUMNS
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
-                 AND COLUMN_NAME = 'co_suggester_1_id');
 SET @sql := IF(@has1 = 0, 'SELECT 1', 'ALTER TABLE ideas DROP COLUMN co_suggester_1_id');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @has2 := (SELECT COUNT(*) FROM information_schema.COLUMNS
-               WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
-                 AND COLUMN_NAME = 'co_suggester_2_id');
 SET @sql := IF(@has2 = 0, 'SELECT 1', 'ALTER TABLE ideas DROP COLUMN co_suggester_2_id');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
