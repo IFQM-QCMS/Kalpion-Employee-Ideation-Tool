@@ -2585,8 +2585,9 @@ test('a role outside the configured approval chain cannot approve, and sees an e
 
 // Onboarding without a date of birth.
 
-test('an employee with no email gets the name+phone password, and no DOB is asked for', async () => {
+test('an employee with no email gets an unguessable password, and no DOB is asked for', async () => {
   const empId = `NODOB${Date.now() % 100000}`;
+  const uname = `yashas${Date.now() % 100000}`;
   const res = await api('POST', '/api/users', {
     token: AADMIN,
     body: {
@@ -2594,7 +2595,7 @@ test('an employee with no email gets the name+phone password, and no DOB is aske
       // The username deliberately does NOT match the name.
       name: 'Kumar Rao',
       employee_id: empId,
-      username: `yashas${Date.now() % 100000}`,
+      username: uname,
       phone: '7975495881',
       role: 'employee',
       // Deliberately no date_of_birth. It used to be mandatory here.
@@ -2603,10 +2604,10 @@ test('an employee with no email gets the name+phone password, and no DOB is aske
 
   assert.equal(res.data.success, true,
     `creating a user without a date of birth must work - ${JSON.stringify(res.data)}`);
-
-  // First 4 LETTERS of the name + last 4 digits of the phone.
-  assert.equal(res.data.temp_password, 'kuma5881',
-    'the derived password is name(4 letters) + phone(last 4) - "Kumar Rao" gives kuma');
+  assert.equal(res.data.first_login, 'otp',
+    'a no-email account must be flagged for OTP activation, not handed a password');
+  assert.equal(res.data.temp_password, undefined,
+    'no password of any kind may be reported back for a no-email account');
 
   const [u] = await sql('ifqm_test_a',
     `SELECT username, must_change_password, date_of_birth, year_of_birth
@@ -2617,33 +2618,13 @@ test('an employee with no email gets the name+phone password, and no DOB is aske
   assert.equal(u.date_of_birth, null, 'no date of birth was stored');
   assert.equal(u.year_of_birth, null, 'and no birth year either');
 
-  // It must actually BE the password, not merely a string in the response. The account has a
-  // username and no address, so it signs in the way it can.
+  // The old derivable formula (first 4 letters of the name + last 4 phone digits) must no
+  // longer be a valid password for this account.
   const login = await api('POST', '/api/auth/login', {
-    body: { email: u.username, password: 'kuma5881', org_slug: 'orga' },
+    body: { email: uname, password: 'kuma5881', org_slug: 'orga' },
   });
-  assert.equal(login.data.success, true,
-    `the derived password must actually sign in - ${JSON.stringify(login.data)}`);
-});
-
-test('a country code does not change the derived password', async () => {
-  // The last four digits are taken from the END precisely so that +91, a leading zero, and
-  // spaces all land on the same four.
-  const empId = `CC${Date.now() % 100000}`;
-  const res = await api('POST', '/api/users', {
-    token: AADMIN,
-    body: {
-      action: 'create_user',
-      name: 'Kumar Rao',
-      employee_id: empId,
-      username: `yashas${(Date.now() + 1) % 100000}`,
-      phone: '+91 79754 95881',
-      role: 'employee',
-    },
-  });
-  assert.equal(res.data.success, true, JSON.stringify(res.data));
-  assert.equal(res.data.temp_password, 'kuma5881',
-    'formatting of the number must not change the password');
+  assert.equal(login.status, 401,
+    'the old letters+digits formula must not still be a valid password');
 });
 
 test('an employee WITH an email is mailed a password instead of being handed one', async () => {
@@ -2700,7 +2681,7 @@ test('the import template no longer has a birth column', async () => {
   assert.ok(!headers.some((h) => /birth|dob/.test(h)),
     `no birth column may remain in the template - got ${headers.join(', ')}`);
   assert.ok(headers.includes('phone'),
-    'and phone must still be there, since the password is built from it');
+    'and phone must still be there - a no-email account activates by SMS code sent to it');
   assert.ok(rawHeaders.includes('phone *') && rawHeaders.includes('employee_id *'),
     'required columns are marked with a star');
   assert.ok(rawHeaders.includes('email'),
