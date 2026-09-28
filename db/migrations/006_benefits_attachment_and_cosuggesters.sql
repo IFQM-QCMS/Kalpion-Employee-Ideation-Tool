@@ -22,8 +22,23 @@ CREATE TABLE IF NOT EXISTS idea_co_suggesters (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Back-fill the junction from the two legacy columns for existing ideas.
-INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id)
-  SELECT id, co_suggester_1_id FROM ideas WHERE co_suggester_1_id IS NOT NULL;
-INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id)
-  SELECT id, co_suggester_2_id FROM ideas WHERE co_suggester_2_id IS NOT NULL;
+-- Back-fill the junction from the two legacy columns for existing ideas. Guarded: a tenant
+-- provisioned after migration 044 already has the current schema, with no
+-- co_suggester_1_id/2_id column to read - a bare INSERT...SELECT naming a column that is not
+-- there fails outright, since unlike a DDL statement, a query cannot be skipped at runtime
+-- without dynamic SQL.
+SET @has_cs1 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+                     AND COLUMN_NAME = 'co_suggester_1_id');
+SET @sql := IF(@has_cs1 = 0, 'SELECT 1',
+  CONCAT('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) ',
+         'SELECT id, co_suggester_1_id FROM ideas WHERE co_suggester_1_id IS NOT NULL'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @has_cs2 := (SELECT COUNT(*) FROM information_schema.COLUMNS
+                   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ideas'
+                     AND COLUMN_NAME = 'co_suggester_2_id');
+SET @sql := IF(@has_cs2 = 0, 'SELECT 1',
+  CONCAT('INSERT IGNORE INTO idea_co_suggesters (idea_id, user_id) ',
+         'SELECT id, co_suggester_2_id FROM ideas WHERE co_suggester_2_id IS NOT NULL'));
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
