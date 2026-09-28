@@ -727,7 +727,6 @@ export default {
   'form.impl_time':'लागू करने में लगने वाला समय',
   'form.impl_duration':'अवधि',
   'form.impl_duration_ph':'उदा. लगभग 6 सप्ताह',
-  'form.impl_date':'या लक्ष्य तिथि',
   'form.benefits':'अपेक्षित लाभ',
   'form.benefits_ph':'क्या सुधरेगा और कितना?',
   'form.support':'आवश्यक सहयोग',

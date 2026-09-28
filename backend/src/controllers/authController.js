@@ -86,11 +86,13 @@ export const forgotPassword = asyncHandler(async (req, res) => {
 
 /*
  * The other way to start a reset: a code to the registered address or mobile, for somebody
- * who cannot reach the mailbox the link would go to.
+ * who cannot reach the mailbox the link would go to. Also doubles as the first-time sign-in
+ * for a no-email employee (purpose 'registration_phone') - see requestPasswordResetCode.
  */
 export const requestResetCode = asyncHandler(async (req, res) =>
   respond(res, await authService.requestPasswordResetCode({
     identifier: req.body?.identifier, meta: { ip: req.ip },
+    ...(req.body?.purpose ? { purpose: req.body.purpose } : {}),
   }))
 );
 
@@ -98,6 +100,7 @@ export const requestResetCode = asyncHandler(async (req, res) =>
 export const verifyResetCode = asyncHandler(async (req, res) =>
   respond(res, await authService.verifyPasswordResetCode({
     identifier: req.body?.identifier, code: req.body?.code,
+    ...(req.body?.purpose ? { purpose: req.body.purpose } : {}),
   }))
 );
 

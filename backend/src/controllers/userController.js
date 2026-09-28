@@ -1,6 +1,7 @@
 /** User controller - HTTP layer over userService. */
 import * as userService from '../services/userService.js';
 import * as hierarchyTemplate from '../services/hierarchyTemplateService.js';
+import * as authService from '../services/authService.js';
 import { respond, badRequest } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
@@ -88,6 +89,14 @@ export const updateProfile = asyncHandler(async (req, res) =>
   respond(res, await userService.updateProfile(req.db, req.user, req.body || {}))
 );
 
+// Manual escape hatch for a no-email employee whose SMS OTP cannot reach them - see
+// authService.issueActivationLink.
+export const issueActivationLink = asyncHandler(async (req, res) =>
+  respond(res, await authService.issueActivationLink({
+    db: req.db, tenant: req.tenant, actor: req.user, userId: req.params.id,
+  }))
+);
+
 export default { list, adminUsers, reportingChain,
   hierarchyTemplate_download, hierarchyTemplate_preview, hierarchyTemplate_apply, createUser, updateUser, updateManager, deleteUser, roles, managers, hierarchy, updateProfile,
-  requestPhoneChangeCode, confirmPhoneChange };
+  requestPhoneChangeCode, confirmPhoneChange, issueActivationLink };

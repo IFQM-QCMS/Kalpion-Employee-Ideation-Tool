@@ -727,7 +727,6 @@ export default {
   'form.impl_time':'ಅನುಷ್ಠಾನಕ್ಕೆ ಬೇಕಾದ ಸಮಯ',
   'form.impl_duration':'ಅವಧಿ',
   'form.impl_duration_ph':'ಉದಾ. ಸುಮಾರು 6 ವಾರ',
-  'form.impl_date':'ಅಥವಾ ಗುರಿ ದಿನಾಂಕ',
   'form.benefits':'ನಿರೀಕ್ಷಿತ ಪ್ರಯೋಜನಗಳು',
   'form.benefits_ph':'ಏನು ಸುಧಾರಿಸುತ್ತದೆ, ಎಷ್ಟು?',
   'form.support':'ಅಗತ್ಯವಿರುವ ಬೆಂಬಲ',

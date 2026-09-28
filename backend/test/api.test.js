@@ -4429,55 +4429,110 @@ test('the email queue accepts every status the sender writes, strictly', async (
     "DELETE FROM ifqm_test_a.email_queue WHERE to_email = 'enum@orga.test'");
 });
 
-// The first-time password for somebody with no mailbox.
-test('a user with no email gets a password built from their name and number', async () => {
-  const { tempPasswordFor } = await import('../src/services/userImportService.js');
-
-  assert.equal(tempPasswordFor(null, '7975495881', 'Yashas', 'E1'), 'yash5881',
-    'the example everybody is given');
-
-  // The username is ignored when a name is present - that is the whole change.
-  assert.equal(tempPasswordFor('ykumar', '+91 79754 95881', 'Yashas Kumar', 'E2'), 'yash5881',
-    'derived from the NAME even when a quite different username exists');
-
-  // The last four digits, taken from the end, so the country code cannot move them. +91
-  // 79754 95881, 07975495881 and 7975495881 are the same phone and must give the same
-  // password - a leading zero or a +91 changes the front of the string and never the back.
-  for (const p of ['+91 79754 95881', '07975495881', '7975495881', '+917975495881']) {
-    assert.equal(tempPasswordFor(null, p, 'Yashas', 'E3'), 'yash5881',
-      `every way of writing the same number must agree - ${p} did not`);
-  }
-
-  // LETTERS, so anything else is skipped rather than counted.
-  assert.equal(tempPasswordFor('rkumar', '9876543210', 'R. Kumar', 'E4'), 'rkum3210',
-    'r, k, u, m - the dot and the space are not letters');
-  assert.equal(tempPasswordFor(null, '9876543210', 'Mary-Anne', 'E5'), 'mary3210');
-
-  // A short name is padded rather than producing a 6-character password, which would be a
-  // different shape from every other one and look like a bug.
-  assert.equal(tempPasswordFor(null, '9998887777', 'Li', 'E6'), 'lixx7777');
-
-  // A name in a script with no Latin letters leaves nothing to slice.
-  assert.equal(tempPasswordFor('namaste1', '9998887777', 'नमस्ते', 'E7'), 'nama7777');
-  const a = tempPasswordFor('', '9998887777', 'नमस्ते', 'EMP01');
-  const b = tempPasswordFor('', '9998887777', 'नमस्ते', 'EMP02');
-  assert.notEqual(a, b,
-    'two people with no Latin letters and no username must still differ - a '
-    + 'shared fallback would hand one of them the other one\'s account');
-
-  // And end to end: the account really is created with it.
+// The first-time password for somebody with no mailbox: no longer a password at all.
+test('a user with no email gets an unguessable password and activates by OTP instead', async () => {
   const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
   const created = await api('POST', '/api/users', {
     token: aTok,
-    body: { name: 'Yashas Derived', username: 'yderived', employee_id: 'PWDERIV',
-      phone: '+919812348001', role: 'employee', department: 'Ops' },
+    body: { name: 'Yashas Otp', username: 'yotpfirst', employee_id: 'PWOTP1',
+      phone: '+919812348002', role: 'employee', department: 'Ops' },
+  });
+  assert.equal(created.data.success, true, JSON.stringify(created.data));
+  assert.equal(created.data.first_login, 'otp',
+    'a no-email row must be flagged for OTP activation, not handed a password');
+  assert.equal(created.data.temp_password, undefined,
+    'no password of any kind may be reported back for a no-email account');
+
+  // The old derivable formula (first 4 letters of the name + last 4 phone digits) must no
+  // longer work - the whole point is that nobody, including this admin, can log this
+  // account in with a guessed password.
+  const guessed = await login('yotpfirst', 'yash8002', 'orga');
+  assert.equal(guessed.status, 401, 'the old letters+digits formula must not still be a valid password');
+
+  // The real way in: identifier -> OTP -> reset token -> new password. Same pipeline as
+  // "forgot password", purpose 'registration_phone'.
+  await sql('ifqm_test_master',
+    "DELETE FROM ifqm_test_master.login_otps WHERE purpose = 'registration_phone'");
+
+  const auth = await import('../src/services/authService.js');
+  const asked = await auth.requestPasswordResetCode({ identifier: 'yotpfirst', purpose: 'registration_phone' });
+  assert.equal(asked.success, true);
+
+  const [row] = await sql('ifqm_test_master',
+    `SELECT id, identifier, user_id FROM ifqm_test_master.login_otps
+      WHERE purpose = 'registration_phone' ORDER BY id DESC LIMIT 1`);
+  assert.ok(row && row.user_id, 'the code must be bound to the account');
+
+  // Codes are bcrypt-hashed on purpose, so the test cannot read one back.
+  const bcrypt = (await import('bcryptjs')).default;
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.login_otps SET code_hash = ?, attempts = 0,
+            expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?`,
+    [await bcrypt.hash('424242', 4), row.id]);
+
+  const verified = await auth.verifyPasswordResetCode({
+    identifier: row.identifier, code: '424242', purpose: 'registration_phone',
+  });
+  assert.equal(verified.success, true, 'a correct code must be accepted');
+  assert.ok(verified.token, 'and must hand back the same kind of token the emailed link carries');
+
+  const reset = await api('POST', '/api/auth/reset-password', {
+    body: { token: verified.token, org_slug: verified.org_slug, password: 'BrandNewOtpPass1' },
+  });
+  assert.equal(reset.data.success, true,
+    `the token must set a new password - server said: ${JSON.stringify(reset.data)}`);
+
+  // Setting the password this way must count as a real activation, not just a swapped
+  // secret, or the account stays flagged as never-onboarded forever.
+  const [after] = await sql('ifqm_test_a',
+    "SELECT must_change_password, activated_at IS NOT NULL AS activated FROM ifqm_test_a.users WHERE username = 'yotpfirst'");
+  assert.equal(Number(after.must_change_password), 0, 'the forced-change flag must be cleared');
+  assert.equal(Number(after.activated), 1, 'activated_at must be stamped');
+
+  // And the whole point: the person can now get in, with the password THEY chose, no forced
+  // change interstitial.
+  const signedIn = await login('yotpfirst', 'BrandNewOtpPass1', 'orga');
+  assert.ok(signedIn.token, 'the chosen password must sign the account in - got '
+    + JSON.stringify(signedIn));
+  assert.equal(signedIn.user?.must_change_password, false);
+});
+
+// The general one-time-code SIGN-IN (otpService.verifyOtp, purpose 'login') mints a session
+// with no password check at all - fine for anyone who already has a real password to fall
+// back on, but a no-email account that has never activated has no password anyone knows, not
+// even after one is issued. Landing on the forced-change screen with no current password to
+// give would be a dead end, so this door must stay shut for that account until it activates.
+test('a never-activated no-email account cannot slip in through the general OTP sign-in', async () => {
+  const aTok = (await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga')).token;
+  const created = await api('POST', '/api/users', {
+    token: aTok,
+    body: { name: 'Yashas Otp Guard', username: 'yotpguard', employee_id: 'PWOTP2',
+      phone: '+919812348003', role: 'employee', department: 'Ops' },
   });
   assert.equal(created.data.success, true, JSON.stringify(created.data));
 
-  const signedIn = await login('yderived', 'yash8001', 'orga');
-  assert.ok(signedIn.token,
-    'the derived password must actually sign the account in - got '
-    + JSON.stringify(signedIn));
+  const { requestOtp, verifyOtp } = await import('../src/services/otpService.js');
+  await sql('ifqm_test_master', "DELETE FROM ifqm_test_master.login_otps WHERE identifier LIKE '%9812348003'");
+
+  const asked = await requestOtp({ identifier: '+919812348003', purpose: 'login' });
+  assert.equal(asked.success, true);
+
+  const [row] = await sql('ifqm_test_master',
+    `SELECT id, identifier FROM ifqm_test_master.login_otps
+      WHERE identifier LIKE '%9812348003' ORDER BY id DESC LIMIT 1`);
+  assert.ok(row, 'the code must have been written');
+
+  const bcrypt = (await import('bcryptjs')).default;
+  await sql('ifqm_test_master',
+    `UPDATE ifqm_test_master.login_otps SET code_hash = ?, attempts = 0,
+            expires_at = DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id = ?`,
+    [await bcrypt.hash('135790', 4), row.id]);
+
+  await assert.rejects(
+    () => verifyOtp({ identifier: row.identifier, code: '135790' }),
+    /activated/i,
+    'a never-activated no-email account must not be handed a session this way, even with a correct code'
+  );
 });
 
 // Rewards & Recognition.

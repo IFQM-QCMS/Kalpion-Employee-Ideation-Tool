@@ -5,7 +5,7 @@
 import bcrypt from 'bcryptjs';
 import { badRequest, forbidden, notFound, ApiError } from '../utils/respond.js';
 import { assertPasswordStrength } from './authService.js';
-import { tempPasswordFor, randomTempPassword } from './userImportService.js';
+import { randomTempPassword } from './userImportService.js';
 import {
   indexUser, deindexUser, isUsername, claimUsername, usernameAvailable, releaseUsername,
 } from './directoryService.js';
@@ -288,11 +288,12 @@ export async function createUser(db, actor, body, tenant = null) {
 
   // Three cases, and the same three the bulk import uses - deliberately, so an employee's
   // experience does not depend on which screen an administrator happened to add them from.
+  // The no-email case is unguessable and never shown to anyone, including this admin - that
+  // employee verifies their phone/username by OTP on first sign-in instead (see
+  // authService's password-reset-by-code flow).
   const usingExplicit = !!explicitPassword;
   const willEmail = !usingExplicit && !!email;
-  const tempPassword = usingExplicit ? explicitPassword
-    : willEmail ? randomTempPassword()
-      : tempPasswordFor(username, phone, name, employeeId);
+  const tempPassword = usingExplicit ? explicitPassword : randomTempPassword();
   if (usingExplicit) assertPasswordStrength(explicitPassword);
   const hash = await bcrypt.hash(tempPassword, usingExplicit ? 12 : willEmail ? 12 : 10);
 
@@ -337,7 +338,7 @@ export async function createUser(db, actor, body, tenant = null) {
       ? (emailed
         ? { password_emailed: true, emailed_to: email }
         : { password_emailed: false, temp_password: tempPassword, email_failed: true })
-      : usingExplicit ? {} : { temp_password: tempPassword }),
+      : usingExplicit ? {} : { first_login: 'otp' }),
   };
 }
 

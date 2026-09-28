@@ -504,7 +504,6 @@ export default {
   'form.impl_time':'നടപ്പാക്കാൻ വേണ്ട സമയം',
   'form.impl_duration':'കാലയളവ്',
   'form.impl_duration_ph':'ഉദാ. ഏകദേശം 6 ആഴ്ച',
-  'form.impl_date':'അല്ലെങ്കിൽ ലക്ഷ്യ തീയതി',
   'form.benefits':'പ്രതീക്ഷിക്കുന്ന നേട്ടങ്ങൾ',
   'form.benefits_ph':'എന്ത് മെച്ചപ്പെടും, എത്ര?',
   'form.support':'ആവശ്യമായ പിന്തുണ',

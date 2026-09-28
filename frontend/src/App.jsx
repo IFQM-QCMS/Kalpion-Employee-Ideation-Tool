@@ -54,8 +54,11 @@ function PrivateRoute({ children }) {
   // screen rather than back at the pitch.
   if (!user) return <Navigate to="/login" replace />;
 
-  // A bulk-imported employee signs in with a temporary password derived from their name and
-  // birth year - guessable by any colleague.
+  // A bulk-imported employee with an email address starts on a temporary password that was
+  // emailed to them and must be changed before anything else is reachable. A no-email
+  // employee never reaches this screen with must_change_password still set - they activate
+  // through "First time signing in?" instead, which clears it as part of setting their
+  // first real password (see authService.resetPassword).
   if (user.must_change_password && location.pathname !== '/support') {
     return <ForcePasswordChangePage />;
   }

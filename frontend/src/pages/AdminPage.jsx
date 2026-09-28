@@ -360,7 +360,7 @@ export default function AdminPage() {
                           borderColor:u.status==='inactive'?'var(--danger-dim)':'var(--success-dim)' }}>
                           {t(u.status==='inactive' ? 'admin.inactive' : 'admin.active')}
                         </span>
-                        {/* Imported and never signed in: their password is still the derived one, i.e. guessable. */}
+                        {/* Imported and never signed in yet - a no-email account has no password at all until then. */}
                         {!!u.must_change_password && (
                           <div style={{ marginTop:3 }}>
                             <span title={t('imp.pending_hint')} style={{ fontSize:10,padding:'1px 8px',borderRadius:99,
@@ -1346,6 +1346,24 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
   const [status,  setStatus]  = useState(editUser?.status||'active');
   const [error,   setError]   = useState('');
   const [saving,  setSaving]  = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+
+  // A no-email employee who has never signed in yet has no password anyone knows - if the
+  // SMS OTP cannot reach them, this is the only other way in.
+  const showGenLink = isEdit && !editUser.email && !editUser.activated_at;
+
+  async function handleGenerateLink() {
+    setLinkBusy(true);
+    setError('');
+    try {
+      const res = await usersApi.issueActivationLink(editUser.id);
+      if (res.data?.success && res.data.url) setIssued({ kind: 'link', url: res.data.url });
+      else setError(res.data?.error || t('admin.user_save_failed'));
+    } catch (err) {
+      setError(err.response?.data?.error || t('msg.server_error'));
+    }
+    setLinkBusy(false);
+  }
 
   // What this admin may assign, from the server (userService.roles) - with the fallback the
   // page used to carry, for the moment before the list has loaded.
@@ -1379,7 +1397,7 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
         const panel = isEdit ? null
           : d.password_emailed ? { kind:'emailed', to: d.emailed_to }
             : d.email_failed ? { kind:'email_failed', to: email, password: d.temp_password }
-              : d.temp_password ? { kind:'derived', password: d.temp_password }
+              : d.first_login === 'otp' ? { kind:'otp_first_login' }
                 : null;
 
         if (panel) {
@@ -1416,6 +1434,32 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
                 <div className="alert alert-danger" style={{ fontSize:13 }}>
                   {t('admin.uf_pw_email_failed', { email: issued.to })}
                 </div>
+              )}
+              {issued.kind === 'otp_first_login' && (
+                <div className="alert alert-success" style={{ fontSize:13 }}>
+                  {t('admin.uf_otp_first_login')}
+                </div>
+              )}
+              {issued.kind === 'link' && (
+                <>
+                  <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:6 }}>
+                    {t('admin.uf_link_label')}
+                  </div>
+                  <div style={{ display:'flex',alignItems:'center',gap:10,flexWrap:'wrap' }}>
+                    <code style={{ fontSize:13,fontWeight:600,
+                      background:'var(--surface-2)',border:'1px solid var(--border)',
+                      borderRadius:8,padding:'10px 16px',userSelect:'all',wordBreak:'break-all' }}>
+                      {issued.url}
+                    </code>
+                    <button className="btn btn-outline btn-sm"
+                      onClick={() => { navigator.clipboard?.writeText(issued.url); showToast(t('admin.uf_link_copied'), 'success'); }}>
+                      {t('btn.copy')}
+                    </button>
+                  </div>
+                  <div className="alert alert-warning" style={{ fontSize:12,marginTop:14 }}>
+                    {t('admin.uf_pw_once')}
+                  </div>
+                </>
               )}
               {issued.password && (
                 <>
@@ -1534,6 +1578,17 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
                 <option value="active">{t('admin.active')}</option>
                 <option value="inactive">{t('admin.inactive')}</option>
               </select>
+            </div>
+          )}
+          {showGenLink && (
+            <div className="form-group">
+              <button type="button" className="btn btn-outline btn-sm" disabled={linkBusy}
+                onClick={handleGenerateLink}>
+                {linkBusy ? t('msg.loading') : t('admin.uf_gen_link')}
+              </button>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
+                {t('admin.uf_gen_link_hint')}
+              </div>
             </div>
           )}
         </div>

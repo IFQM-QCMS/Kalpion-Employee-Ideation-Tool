@@ -11,7 +11,7 @@ import {
 } from './directoryService.js';
 import { getOrgSettings, sendSmtpEmail, maskEmail } from './mailerService.js';
 import { maskPhone } from './smsService.js';
-import { badRequest, unauthorized, tooMany, ApiError } from '../utils/respond.js';
+import { badRequest, notFound, unauthorized, tooMany, ApiError } from '../utils/respond.js';
 import * as verification from './verificationService.js';
 import { assertNotInMaintenance } from './maintenanceService.js';
 import logger from '../utils/logger.js';
@@ -358,6 +358,44 @@ export async function forgotPassword({ email, orgSlug, host }) {
   return generic;
 }
 
+/*
+ * Manual escape hatch for a no-email employee whose SMS OTP cannot reach them (bad number,
+ * carrier outage, tenant SMS not configured). Reuses the same reset-token mechanism as
+ * forgotPassword(), but there is nowhere to email it to, so the URL is handed straight back to
+ * the admin to deliver in person - the same "shown to you, because you pass it on yourself"
+ * pattern the import already uses for other admin-visible secrets.
+ */
+export async function issueActivationLink({ db, tenant, actor, userId }) {
+  const id = Number(userId) || 0;
+  if (!id) throw badRequest('Missing user id.');
+
+  const [[user] = []] = await db.execute(
+    "SELECT id, name, email, activated_at FROM users WHERE id = ? AND status = 'active' LIMIT 1",
+    [id]
+  );
+  if (!user) throw notFound('User not found.');
+  if (user.email) {
+    throw badRequest('This employee has an email address - they can use "Forgot password" themselves.');
+  }
+  if (user.activated_at) {
+    throw badRequest('This employee has already signed in and set their own password.');
+  }
+
+  await db.execute('DELETE FROM password_reset_tokens WHERE user_id = ?', [user.id]);
+  const { token, selector, verifierHash } = await makeResetToken();
+  await db.execute(
+    `INSERT INTO password_reset_tokens (user_id, selector, token_hash, expires_at)
+          VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 HOUR))`,
+    [user.id, selector, verifierHash]
+  );
+
+  const base = config.frontendBaseUrl.replace(/\/+$/, '');
+  const url = `${base}/reset-password?token=${encodeURIComponent(token)}&org=${encodeURIComponent(tenant.slug)}`;
+
+  logger.info(`auth: activation link issued for user ${user.id} @ ${tenant.slug} by ${actor?.name || actor?.id || 'unknown'}`);
+  return { success: true, url, expires_in: 3600 };
+}
+
 /** Reset password given a valid, unexpired token. */
 // The emailed link still works and is unchanged.
 /** Enough of an address or number to recognise, not enough to learn. */
@@ -373,7 +411,15 @@ function maskDestination(value) {
   return digits.length > 4 ? `••••••${digits.slice(-4)}` : v;
 }
 
-export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
+// 'registration_phone' is the first-time sign-in for a no-email employee - better-fitting,
+// already carrier-approved SMS wording than 'password_reset' for someone who never had a
+// password to reset. Anything else is rejected rather than silently falling back, since the
+// purpose picks which SMS template gets used and a DLT gateway drops unapproved wording
+// silently.
+const RESET_CODE_PURPOSES = new Set(['password_reset', 'registration_phone']);
+
+export async function requestPasswordResetCode({ identifier, meta = {}, purpose = 'password_reset' } = {}) {
+  if (!RESET_CODE_PURPOSES.has(purpose)) throw badRequest(`Unknown purpose "${purpose}".`);
   const generic = {
     success: true,
     message: 'If that is registered with us, a code has been sent to it.',
@@ -421,7 +467,7 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
 
   await verification.sendCode({
     identifier: destination,
-    purpose: 'password_reset',
+    purpose,
     name: user.name,
     tenantSlug: tenant.slug,
     userId: user.id,
@@ -433,8 +479,9 @@ export async function requestPasswordResetCode({ identifier, meta = {} } = {}) {
 }
 
 /** Exchange a correct code for a reset token. */
-export async function verifyPasswordResetCode({ identifier, code } = {}) {
-  const { row } = await verification.verifyCode({ identifier, code, purpose: 'password_reset' });
+export async function verifyPasswordResetCode({ identifier, code, purpose = 'password_reset' } = {}) {
+  if (!RESET_CODE_PURPOSES.has(purpose)) throw badRequest(`Unknown purpose "${purpose}".`);
+  const { row } = await verification.verifyCode({ identifier, code, purpose });
   if (!row?.tenant_slug || !row?.user_id) {
     throw badRequest('That code cannot be used to reset a password. Ask for a new one.');
   }
@@ -486,9 +533,15 @@ export async function resetPassword({ token, password, orgSlug, host }) {
   const hash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
   // Stamping password_changed_at is what actually kills the old sessions: the auth
-  // middleware rejects any JWT issued before this moment.
+  // middleware rejects any JWT issued before this moment. must_change_password and
+  // activated_at are cleared/stamped the same way changePassword() does, so a reset is a
+  // complete activation for somebody who had never signed in before - not just a password
+  // swap that leaves them still flagged as never-onboarded.
   await db.execute(
-    'UPDATE users SET password_hash = ?, password_changed_at = NOW() WHERE id = ?',
+    `UPDATE users
+        SET password_hash = ?, password_changed_at = NOW(), must_change_password = 0,
+            activated_at = COALESCE(activated_at, NOW())
+      WHERE id = ?`,
     [hash, matched.user_id]
   );
   // Burn every outstanding reset token for this user, not just the one used.
@@ -635,5 +688,5 @@ function escapeHtml(s) {
 
 export default {
   login, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
-  requestPasswordResetCode, verifyPasswordResetCode,
+  requestPasswordResetCode, verifyPasswordResetCode, issueActivationLink,
 };

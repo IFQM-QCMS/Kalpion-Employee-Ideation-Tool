@@ -504,7 +504,6 @@ export default {
   'form.impl_time':'अंमलबजावणीसाठी लागणारा वेळ',
   'form.impl_duration':'कालावधी',
   'form.impl_duration_ph':'उदा. सुमारे 6 आठवडे',
-  'form.impl_date':'किंवा लक्ष्य तारीख',
   'form.benefits':'अपेक्षित फायदे',
   'form.benefits_ph':'काय सुधारेल आणि किती?',
   'form.support':'आवश्यक सहकार्य',

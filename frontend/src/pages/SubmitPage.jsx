@@ -88,7 +88,6 @@ export default function SubmitPage() {
   const [timeRequired, setTimeRequired] = useState('');
   const [solutionTags, setSolutionTags] = useState([]);
   const [implDuration, setImplDuration] = useState('');
-  const [implDate,     setImplDate]     = useState('');
   const [benefits,     setBenefits]     = useState('');
   const [support,      setSupport]      = useState('');
 
@@ -188,7 +187,6 @@ export default function SubmitPage() {
       setTimeRequired(i.time_required || '');
       setSolutionTags(String(i.solution_tags || '').split(',').map((x) => x.trim()).filter(Boolean));
       setImplDuration(i.implementation_duration || '');
-      setImplDate(i.expected_implementation_date ? String(i.expected_implementation_date).slice(0, 10) : '');
       setBenefits(i.benefits_expected || '');
       setSupport(i.support_required || '');
       setCoSuggesters((i.co_suggesters || []).map((c) => ({ id: c.id, label: c.name || c.label || `#${c.id}` })));
@@ -290,7 +288,6 @@ export default function SubmitPage() {
       implementation_duration:      implDuration,
       time_required:                timeRequired,
       solution_tags:                solutionTags,
-      expected_implementation_date: implDate,
       benefits_expected:            benefits,
       support_required:             support,
       // Full co-suggester list (backend also mirrors the first two into the legacy columns for
@@ -370,7 +367,7 @@ export default function SubmitPage() {
   function resetForm() {
     setTitle(''); setSituation(''); setSolution(''); setTangible(''); setIntangible('');
     setImpactAreas([]); setImpactLevel('Medium'); setFileSit(null); setFileSol(null); setFileSup(null); setFileBen(null);
-    setInvestment(''); setFeasibility(''); setImplDuration(''); setImplDate('');
+    setInvestment(''); setFeasibility(''); setImplDuration('');
     setBenefits(''); setSupport('');
     setCoSuggesters([]); setCoQuery(''); setCoResults([]);
     // `setAnonymous(false)` used to be here, and the setter no longer exists - anonymity was
@@ -565,23 +562,11 @@ export default function SubmitPage() {
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:6 }}>{t('form.solution_tags_hint')}</div>
             </div>
 
-            {/* "date or duration" - either answer is valid, so both are offered and neither is required. */}
             <div className="form-group">
               <label>{t('form.impl_time')}</label>
-              <div className="form-row" style={{ marginTop:4 }}>
-                <div className="form-group" style={{ marginBottom:0 }}>
-                  <input className="form-control" value={implDuration} maxLength={120}
-                    onChange={e => setImplDuration(e.target.value)}
-                    placeholder={t('form.impl_duration_ph')} aria-label={t('form.impl_duration')} />
-                </div>
-                <div className="form-group" style={{ marginBottom:0 }}>
-                  <input className="form-control" type="date" value={implDate}
-                    onChange={e => setImplDate(e.target.value)} aria-label={t('form.impl_date')} />
-                </div>
-              </div>
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
-                {t('form.impl_duration')} · {t('form.impl_date')}
-              </div>
+              <input className="form-control" value={implDuration} maxLength={120}
+                onChange={e => setImplDuration(e.target.value)}
+                placeholder={t('form.impl_duration_ph')} aria-label={t('form.impl_duration')} />
             </div>
 
             <div className="form-group">
@@ -700,7 +685,7 @@ export default function SubmitPage() {
               [t('form.feasibility'), feasibility ? translateImpact(feasibility, t) : ''],
               [t('form.time_required'), timeRequired ? t(TIME_REQUIRED.find(([v]) => v === timeRequired)?.[1] || '') : ''],
               [t('form.solution_tags'), solutionTags.map(v => t(SOLUTION_TAGS.find(([k]) => k === v)?.[1] || v)).join(', ')],
-              [t('form.impl_time'), [implDuration, implDate].filter(Boolean).join(' · ')],
+              [t('form.impl_time'), implDuration],
               [t('form.benefits'), benefits],
               [t('form.support'), support],
             ].filter(([, v]) => v).map(([label, v]) => (

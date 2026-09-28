@@ -164,6 +164,9 @@ export default function LoginPage() {
   }, []);
 
   const [forgotOpen, setForgotOpen] = useState(false);
+  // Same modal and endpoints as "forgot password" - a no-email employee never had one to
+  // reset, so this only changes the copy and which SMS purpose (template) is requested.
+  const [firstLogin, setFirstLogin] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotErr, setForgotErr] = useState('');
@@ -270,7 +273,17 @@ export default function LoginPage() {
     e?.preventDefault();
     setForgotErr('');
     setForgotDone(false);
+    setFirstLogin(false);
     // Seed it with whatever was already typed above, whatever kind of identifier that is.
+    setForgotEmail(email.trim());
+    setForgotOpen(true);
+  }
+
+  function handleFirstLogin(e) {
+    e?.preventDefault();
+    setForgotErr('');
+    setForgotDone(false);
+    setFirstLogin(true);
     setForgotEmail(email.trim());
     setForgotOpen(true);
   }
@@ -284,7 +297,8 @@ export default function LoginPage() {
     setForgotErr('');
     setCodeBusy(true);
     try {
-      const res = await authApi.resetCodeVerify(forgotEmail.trim(), code);
+      const res = await authApi.resetCodeVerify(forgotEmail.trim(), code,
+        firstLogin ? 'registration_phone' : undefined);
       if (res.data?.success && res.data.token) {
         const q = new URLSearchParams({ token: res.data.token });
         if (res.data.org_slug) q.set('org', res.data.org_slug);
@@ -300,10 +314,12 @@ export default function LoginPage() {
 
   async function submitForgot(e) {
     e?.preventDefault();
-    // Two ways to earn a reset, chosen by what was typed.
+    // Two ways to earn a reset, chosen by what was typed. A first-time, no-email employee has
+    // no address to send a link to, so that route is never offered here regardless of what
+    // was typed.
     const id = forgotEmail.trim();
     if (!id) { setForgotErr(t('login.forgot_invalid')); return; }
-    const isEmailAddr = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
+    const isEmailAddr = !firstLogin && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
 
     setForgotErr('');
     setForgotBusy(true);
@@ -313,7 +329,7 @@ export default function LoginPage() {
         if (res.data?.success) { setForgotVia('link'); setForgotDone(true); }
         else setForgotErr(res.data?.error || t('login.request_failed'));
       } else {
-        const res = await authApi.resetCodeRequest(id);
+        const res = await authApi.resetCodeRequest(id, firstLogin ? 'registration_phone' : undefined);
         if (res.data?.success) {
           // The server masks where it went.
           setForgotSentTo(res.data.sent_to || '');
@@ -530,8 +546,9 @@ export default function LoginPage() {
               {showPassword ? <EyeOffIcon /> : <EyeIcon />}
             </button>
           </div>
-          <div className="row">
+          <div className="row" style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
             <a className="link" onClick={handleForgotPassword}>{t('login.forgot')}</a>
+            <a className="link" onClick={handleFirstLogin}>{t('login.first_login')}</a>
           </div>
           <button type="submit" className="go" disabled={loading}>
             {loading ? t('login.signing_in') : t('login.btn')}
@@ -566,15 +583,15 @@ export default function LoginPage() {
           onKeyDown={(ev) => { if (ev.key === 'Escape' && !forgotBusy) setForgotOpen(false); }}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="forgot-title"
             onClick={(ev) => ev.stopPropagation()}>
-            <h2 id="forgot-title">{t('login.forgot')}</h2>
+            <h2 id="forgot-title">{firstLogin ? t('login.first_login') : t('login.forgot')}</h2>
 
             {forgotDone ? (
               <>
                 <div className="ok">
                   {forgotVia === 'code'
                     ? (forgotSentTo
-                      ? t('login.reset_code_sent_to', { where: forgotSentTo })
-                      : t('login.reset_code_sent'))
+                      ? t(firstLogin ? 'login.first_login_code_sent_to' : 'login.reset_code_sent_to', { where: forgotSentTo })
+                      : t(firstLogin ? 'login.first_login_code_sent' : 'login.reset_code_sent'))
                     : t('login.reset_sent')}
                 </div>
 
@@ -612,7 +629,7 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <p>{t('login.forgot_body')}</p>
+                <p>{t(firstLogin ? 'login.first_login_body' : 'login.forgot_body')}</p>
                 <form onSubmit={submitForgot}>
                   <div className="fld">
                     <span className="ic"><MailIcon /></span>
@@ -631,7 +648,8 @@ export default function LoginPage() {
                       {t('btn.cancel')}
                     </button>
                     <button type="submit" className="go" disabled={forgotBusy}>
-                      {forgotBusy ? t('login.forgot_sending') : t('login.forgot_send')}
+                      {forgotBusy ? t('login.forgot_sending')
+                        : t(firstLogin ? 'login.first_login_send' : 'login.forgot_send')}
                     </button>
                   </div>
                 </form>

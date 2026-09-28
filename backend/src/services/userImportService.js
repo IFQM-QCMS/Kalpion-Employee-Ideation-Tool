@@ -11,7 +11,7 @@ import { isUsername, claimUsername, indexUser } from './directoryService.js';
 // Limits
 export const MAX_ROWS = 20000;      // hard ceiling per upload
 const INSERT_CHUNK = 500;           // rows per multi-row INSERT
-const TEMP_PASSWORD_ROUNDS = 10;    // see tempPasswordFor() for why not 12
+const TEMP_PASSWORD_ROUNDS = 10;    // a bulk-import batch may be thousands of rows; 12 is for a single sign-in
 const STALE_JOB_MINUTES = 30;
 
 // Sheet definition (drives BOTH the template and the parser)
@@ -79,33 +79,6 @@ function normaliseHeader(s) {
 }
 
 
-
-/** First 4 letters of the NAME + the last 4 digits of the phone number. */
-export function tempPasswordFor(username, phone, name, employeeId) {
-  // Letters only for the name, because "the first four LETTERS of your name" is what the
-  // employee is told, and that is a sentence somebody can follow with no reference material.
-  const letters = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z]/g, '').toLowerCase();
-  // The fallbacks keep digits, because a username or an employee id may be mostly numeric
-  // and dropping those would collapse different people onto the same password.
-  const alnum = (v) => String(v ?? '').normalize('NFKD').replace(/[^A-Za-z0-9]/g, '').toLowerCase();
-
-  let base = letters(name).slice(0, 4);
-  if (!base) base = alnum(username).slice(0, 4);
-  if (!base) {
-    // A name in a non-Latin script with no username leaves nothing to slice, so the employee
-    // id is the last thing that can keep this per-person.
-    base = alnum(employeeId).slice(-4);
-  }
-  if (!base) base = 'user';
-
-  // The LAST four digits, after stripping everything that is not a digit, so +91 79754 95881
-  // and 07975495881 and 7975495881 all land on the same four.
-  const digits = String(phone ?? '').replace(/\D/g, '');
-  const tail = digits.slice(-4);
-  const suffix = tail.length === 4 ? tail : tail.padStart(4, '0');
-
-  return `${base.padEnd(4, 'x')}${suffix}`;
-}
 
 /** A password nobody can derive, for accounts we can actually deliver one to. */
 export function randomTempPassword() {
@@ -182,12 +155,10 @@ export async function buildTemplate(actorRole) {
   h('', '');
   h('How it works', 'Fill in one row per employee on the "Employees" sheet, then upload this file in Admin → User List → Bulk Import. Delete the grey example row before uploading (or leave it - EMP001 will simply be reported as invalid if the data is not real).');
   h('', '');
-  h('First-time password', 'It depends on whether the row has an email address, and you do not have to do anything either way.');
+  h('First-time sign-in', 'It depends on whether the row has an email address, and you do not have to do anything either way.');
   h('  With an email', 'A random password is generated and emailed to them directly. You never see it and do not need to pass anything on. Tell them to check their inbox.');
-  h('  Without an email', 'The password is the first 4 LETTERS of their name, lowercased, followed by the LAST 4 DIGITS of their phone number. Example: "Yashas" on 7975495881 → yash5881. Anything that is not a letter is skipped, so "R. Kumar" gives rkum. This one is shown to you after the import, because you have to pass it on yourself.');
-  h('Either way', 'They MUST change it the first time they sign in - until they do, they cannot use any other part of the app.');
-  h('Important', 'A password built from a name and a phone number can be worked out by any colleague who knows both. Ask those employees to sign in and change it promptly, and treat the account as not-yet-secure until they have.');
-  h('Date of birth', 'No longer collected. It was only ever used to build the first-login password, and the phone number does that job now. If your sheet still has a date-of-birth column it will simply be ignored - you do not need to delete it before uploading.');
+  h('  Without an email', 'No password is generated or shown to anyone - not even you. The first time they sign in, they enter their phone number or username on the login screen\'s "First time signing in?" option, receive a one-time code by SMS, and choose their own password from there.');
+  h('Important', 'If their phone cannot receive the SMS, an admin can generate a one-time sign-in link for that employee from the user list instead.');
   h('', '');
   h('Duplicates', 'Rows whose employee_id or email already exists are SKIPPED, never overwritten. Re-uploading the same file is therefore safe - it will not touch anyone who already has an account.');
   h('Required columns', 'Headers marked with * are required for a new account. The other columns may be left blank, or left out of the sheet altogether.');
@@ -383,12 +354,12 @@ export async function validateRows(db, actor, records) {
 
     if (email && !EMAIL_RE.test(email)) { reject(rec, `"${email}" is not a valid email address.`); continue; }
 
-    // It used to be recomputed from the row in three separate places (preview, insert, and the
-    // result report).
-    const phoneDigits = (rec.phone || '').replace(/\D/g, '');
+    // Unguessable either way: a row without an email cannot be sent one, so those employees
+    // verify their phone/username by OTP on first sign-in instead (see authService's
+    // password-reset-by-code flow) - nobody, including the importing admin, ever knows this
+    // value.
     const hasEmail = !!email;
-    const tempPassword = hasEmail ? randomTempPassword()
-      : tempPasswordFor(username, phoneDigits, name, employeeId);
+    const tempPassword = randomTempPassword();
 
     // role: the RBAC gate
     const role = (rec.role || '').trim().toLowerCase() || 'employee';
@@ -463,7 +434,7 @@ export async function validateRows(db, actor, records) {
       first_name: firstName,
       last_name: lastName || null,
       temp_password: tempPassword,
-      temp_password_derived: !hasEmail,
+      no_email: !hasEmail,
       role,
       department:    (rec.department || '').trim() || null,
       business_unit: (rec.business_unit || '').trim() || null,
@@ -880,8 +851,10 @@ export async function preview(db, actor, buffer, filename) {
     // Enough to show a table without shipping 20k rows to the browser.
     sample: valid.slice(0, 10).map((r) => ({
       employee_id: r.employee_id, name: r.name, email: r.email, role: r.role,
-      temp_password: r.temp_password_derived ? r.temp_password : null,
-      password_emailed: !r.temp_password_derived,
+      // Never the password itself - a no-email row's password is unguessable and undisclosed
+      // on purpose; that employee verifies their phone/username by OTP on first sign-in instead.
+      password_emailed: !r.no_email,
+      first_login: r.no_email ? 'otp' : null,
     })),
     errors: errors.slice(0, 200),
   };
@@ -959,7 +932,7 @@ async function runJob(db, jobId, valid, tenant = null) {
   // Everybody in `valid` with an address was given a random password that is deliberately
   // not reported back to the admin, because it goes to the person it belongs to instead.
   await onPhase?.('emailing');
-  const emailedRows = valid.filter((r) => r.email && !r.temp_password_derived);
+  const emailedRows = valid.filter((r) => r.email && !r.no_email);
   let emailedOk = 0;
   if (emailedRows.length) {
     const { sendTemporaryPassword } = await import('./mailerService.js');
@@ -1084,5 +1057,5 @@ export async function errorsCsv(db, jobId) {
 
 export default {
   COLUMNS, MAX_ROWS, buildTemplate, preview, startImport, getJob, errorsCsv,
-  tempPasswordFor, validateRows,
+  validateRows,
 };

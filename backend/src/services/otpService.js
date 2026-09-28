@@ -374,6 +374,18 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
   );
   if (!user) throw unauthorized('That account is no longer active.');
 
+  // A no-email account that has never activated has no password anyone knows - not even
+  // this one, once issued. Signing it in here would hand back a must_change_password
+  // session that the change-password screen then cannot get out of, since that screen
+  // requires the CURRENT password to set a new one. Sending them to "First time signing
+  // in?" instead ends at a real chosen password with no current password required.
+  if (!user.email && !user.activated_at) {
+    throw unauthorized(
+      'This account has not been activated yet. Use "First time signing in?" on the sign-in '
+      + 'screen to verify your phone number and choose a password.'
+    );
+  }
+
   const session = {
     id: user.id,
     employee_id: user.employee_id,

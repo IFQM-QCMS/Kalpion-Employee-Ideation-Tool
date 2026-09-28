@@ -134,8 +134,10 @@ export const authApi = {
   // Reset by code - for somebody who cannot reach the mailbox a link would go to.
   // `identifier` is an email address or a mobile number; the server works out which and
   // sends by the matching channel.
-  resetCodeRequest: (identifier) => api.post('/auth/password-reset/request-code', { identifier }),
-  resetCodeVerify: (identifier, code) => api.post('/auth/password-reset/verify-code', { identifier, code }),
+  // purpose defaults to 'password_reset' server-side; the first-time sign-in flow for a
+  // no-email employee passes 'registration_phone' instead (see LoginPage).
+  resetCodeRequest: (identifier, purpose) => api.post('/auth/password-reset/request-code', { identifier, purpose }),
+  resetCodeVerify: (identifier, code, purpose) => api.post('/auth/password-reset/verify-code', { identifier, code, purpose }),
 };
 
 // Ideas
@@ -212,6 +214,8 @@ export const usersApi = {
   // Hierarchy screen: change only who a user reports to (escalation chain edge).
   updateManager: (id, managerId) => api.put(`/users/${id}/manager`, { manager_id: managerId }),
   deleteUser: (id) => api.delete(`/users/${id}`),
+  // Manual escape hatch for a no-email employee whose first-sign-in SMS OTP cannot reach them.
+  issueActivationLink: (id) => api.post(`/users/${id}/activation-link`),
   profile: () => api.get('/users/profile'),
   // Saves only the descriptive fields; the server ignores anything else it is sent, so role,
   // points and reporting line cannot be set from here.

@@ -504,7 +504,6 @@ export default {
   'form.impl_time':'అమలుకు అవసరమైన సమయం',
   'form.impl_duration':'వ్యవధి',
   'form.impl_duration_ph':'ఉదా. సుమారు 6 వారాలు',
-  'form.impl_date':'లేదా లక్ష్య తేదీ',
   'form.benefits':'ఆశించిన ప్రయోజనాలు',
   'form.benefits_ph':'ఏమి మెరుగవుతుంది, ఎంత?',
   'form.support':'అవసరమైన మద్దతు',

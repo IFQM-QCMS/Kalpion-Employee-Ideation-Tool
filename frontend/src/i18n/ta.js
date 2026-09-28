@@ -504,7 +504,6 @@ export default {
   'form.impl_time':'செயல்படுத்த தேவையான நேரம்',
   'form.impl_duration':'கால அளவு',
   'form.impl_duration_ph':'எ.கா. சுமார் 6 வாரங்கள்',
-  'form.impl_date':'அல்லது இலக்கு தேதி',
   'form.benefits':'எதிர்பார்க்கும் நன்மைகள்',
   'form.benefits_ph':'என்ன மேம்படும், எவ்வளவு?',
   'form.support':'தேவையான ஆதரவு',

@@ -55,6 +55,8 @@ router.get('/admin', requireRole('admin', 'super_admin'), users.adminUsers);    
 // §13.8 - a user's reporting line. Admin-only: it names managers up the tree, which is
 // org-chart data an ordinary employee has no need to enumerate.
 router.get('/:id/chain', requireRole('admin', 'super_admin'), users.reportingChain);
+// Manual escape hatch for a no-email employee whose first-sign-in OTP cannot reach them.
+router.post('/:id/activation-link', ADMIN, users.issueActivationLink);
 router.get('/roles', requireRole('admin', 'super_admin'), users.roles);           // the role dropdowns
 router.get('/managers', requireRole('admin', 'super_admin'), users.managers);     // action=managers
 // PHP scoped hierarchy to super_admin (Command Center).
