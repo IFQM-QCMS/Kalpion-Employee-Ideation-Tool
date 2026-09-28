@@ -801,7 +801,7 @@ export default function LandingPage() {
 
       <footer>
         <div className="wrap foot">
-          <span>© {new Date().getFullYear()} Kalpion</span>
+          <span>© {new Date().getFullYear()} Kalpion - IFQM</span>
           <span style={{ display: 'flex', gap: 18 }}>
             <Link to="/login">Sign in</Link>
             <Link to="/signup">Get started</Link>
