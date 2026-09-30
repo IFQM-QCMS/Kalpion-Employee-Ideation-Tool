@@ -159,12 +159,17 @@ export default function Topbar({ onToggleSidebar, mobile = false }) {
             className="notif-bell"
             onClick={() => setShowNotif(v => !v)}
             title={t('topbar.notifications')}
-            style={{ display:'flex',alignItems:'center',gap:6 }}
+            role="button"
+            tabIndex={0}
+            aria-label={t('topbar.notifications')}
+            aria-haspopup="true"
+            aria-expanded={showNotif}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowNotif(v => !v); } }}
+            style={{ display:'flex',alignItems:'center',justifyContent:'center' }}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/>
             </svg>
-            {!mobile && <span>{t('topbar.notifications')}</span>}
             {unreadCount > 0 && (
               <div className="notif-badge" style={{ position:'relative',top:'auto',right:'auto',margin:0 }}>
                 {unreadCount}

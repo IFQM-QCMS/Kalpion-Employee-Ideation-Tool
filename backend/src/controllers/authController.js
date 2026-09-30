@@ -3,7 +3,7 @@ import * as authService from '../services/authService.js';
 import * as otpService from '../services/otpService.js';
 import { maintenanceStatus } from '../services/maintenanceService.js';
 import * as platformVerify from '../services/platformVerifyService.js';
-import { respond } from '../utils/respond.js';
+import { respond, badRequest } from '../utils/respond.js';
 import asyncHandler from '../utils/asyncHandler.js';
 
 const hostOf = (req) => req.headers['x-forwarded-host'] || req.headers.host || 'localhost';
@@ -168,7 +168,38 @@ export const changePassword = asyncHandler(async (req, res) => {
   return respond(res, result);
 });
 
+/*
+ * POST /api/auth/change-password/otp/request and .../confirm - the self-service alternative
+ * to changePassword above, for any signed-in organisation user: prove you hold your own
+ * registered phone instead of already knowing your current password. Platform administrator
+ * sessions have no organisation (req.db is never set for them - see middleware/auth.js) and
+ * already have their own account-verification screen, so they are refused here rather than
+ * left to hit a missing database connection.
+ */
+function assertOrgUser(req) {
+  if (req.isPlatformAdmin) {
+    throw badRequest('Platform administrator accounts do not use this. Use your account verification screen instead.');
+  }
+}
+
+export const requestChangePasswordOtp = asyncHandler(async (req, res) => {
+  assertOrgUser(req);
+  const result = await authService.requestPasswordChangeOtp(req.db, req.user);
+  return respond(res, { success: true, ...result });
+});
+
+export const confirmChangePasswordOtp = asyncHandler(async (req, res) => {
+  assertOrgUser(req);
+  const result = await authService.confirmPasswordChangeOtp(req.db, req.user, {
+    code: req.body?.code,
+    newPassword: req.body?.new_password,
+    orgSlug: req.auth?.org_slug,
+  });
+  return respond(res, result);
+});
+
 export default {
   me, login, logout, forgotPassword, resetPassword, checkResetToken, changePassword,
   requestResetCode, verifyResetCode, maintenance, identify, passwordPolicy,
+  requestChangePasswordOtp, confirmChangePasswordOtp,
 };

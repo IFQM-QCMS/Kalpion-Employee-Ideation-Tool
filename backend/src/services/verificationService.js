@@ -32,6 +32,14 @@ export const PURPOSES = {
     subject: (code) => `${code} is your Kalpion verification code`,
     lead: 'Use this code to confirm your mobile number:',
   },
+  // A signed-in user changing their own password from My Profile - any role, any
+  // organisation. SMS only: the phone is the proof, so there is no "any channel" fallback
+  // to an inbox that would weaken it back to something a shared mailbox could pass.
+  change_password: {
+    channel: 'sms',
+    subject: (code) => `${code} is your Kalpion password-change verification code`,
+    lead: 'Use this code to confirm it is you changing your Kalpion password:',
+  },
 
   // A new IFQM staff account proving it holds both the address and the number.
   platform_admin_email: {

@@ -133,6 +133,11 @@ export const authApi = {
   // Signed-in change; also the way out of the forced change a bulk-imported employee faces
   // on first login.
   changePassword: (data) => api.post('/auth/change-password', data),
+  // The self-service alternative: any signed-in user, any role, any organisation, may change
+  // their own password by proving they hold their own registered phone (SMS OTP) rather than
+  // already knowing their current password.
+  requestChangePasswordOtp: () => api.post('/auth/change-password/otp/request'),
+  confirmChangePasswordOtp: (data) => api.post('/auth/change-password/otp/confirm', data),
   // MOM §4.1 / §4.2 - sign in with a one-time code sent by SMS.
   otpStatus: () => api.get('/auth/otp/status'),
   otpRequest: (identifier, purpose = 'login') => api.post('/auth/otp/request', { identifier, purpose }),

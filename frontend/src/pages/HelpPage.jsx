@@ -13,7 +13,7 @@ const RESPONSE_PROMISE = {
   lines: [
     ['Any support ticket', 'Within 1 working day'],
     ['Anything marked urgent', 'Within 4 working hours'],
-    ['Support hours', 'Monday to Saturday, 9am - 6pm IST'],
+    ['Support hours', 'Monday to Friday, 9am - 6pm IST'],
   ],
   note: 'Raise a ticket from the Support page and we can already see which organisation is asking, '
       + 'so you do not have to explain that first. If your organisation’s access has paused over '

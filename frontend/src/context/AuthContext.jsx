@@ -95,6 +95,23 @@ export function AuthProvider({ children }) {
     return { success: false, error: res.data?.error || 'Could not change password.' };
   }, []);
 
+  /*
+   * The self-service alternative: change your own password by proving you hold your own
+   * registered phone (an SMS code) instead of already knowing your current password. Same
+   * token/session handling as changePassword() above - the server stamps a fresh
+   * password_changed_at, which invalidates the token this very request was made with, so
+   * without adopting the new one the user would be logged out by securing their own account.
+   */
+  const confirmPasswordChangeOtp = useCallback(async ({ code, new_password }) => {
+    const res = await authApi.confirmChangePasswordOtp({ code, new_password });
+    if (res.data?.success && res.data.token) {
+      localStorage.setItem('ifqm_token', res.data.token);
+      setUser(res.data.user || ((u) => ({ ...u, must_change_password: false })));
+      return { success: true };
+    }
+    return { success: false, error: res.data?.error || 'Could not change password.' };
+  }, []);
+
   const refreshUser = useCallback(async () => {
     try {
       const res = await authApi.me();
@@ -103,7 +120,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, adoptSession, logout, changePassword, refreshUser, setUser }}>
+    <AuthContext.Provider value={{ user, loading, login, adoptSession, logout, changePassword, confirmPasswordChangeOtp, refreshUser, setUser }}>
       {children}
     </AuthContext.Provider>
   );

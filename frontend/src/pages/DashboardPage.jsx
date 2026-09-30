@@ -171,17 +171,17 @@ export default function DashboardPage() {
       </div>
 
       {/* Status Distribution Bar Chart */}
-      {/* auto-fit rather than 1fr 1fr: on a narrow screen the two panels stack instead of being squeezed into unreadable halves. */}
+      {/* auto-fit rather than 1fr 1fr: on a narrow screen the two panels stack instead of being squeezed into unreadable halves. Both cards share a fixed height - Recent Activity's own list scrolls internally instead of stretching the panel to fit however many entries there are. */}
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(320px,1fr))',
-        gap:20,marginTop:20 }}>
-        <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        gap:20,marginTop:20,alignItems:'stretch' }}>
+        <div className="card" style={{ boxShadow: 'var(--shadow-sm)', display:'flex', flexDirection:'column', maxHeight:420 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flex:'0 0 auto' }}>
             <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.status_dist')}</div>
             <span style={{ fontSize: 11, color: 'var(--subtle)', fontWeight: 600 }}>
               {t('dash.total_n', { n: data.total || 0 })}
             </span>
           </div>
-          <div className="bar-chart" id="dash-status-chart">
+          <div className="bar-chart" id="dash-status-chart" style={{ flex:'1 1 auto', minHeight:0, overflowY:'auto' }}>
             {Object.entries(counts).map(([s, c]) => (
               <div className="bar-row" key={s} style={{ marginBottom: 10 }}>
                 <span className="bar-label" style={{ fontWeight: 600 }}>{translateStatus(s, t)}</span>
@@ -194,15 +194,15 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Recent Activity Timeline */}
-        <div className="card" style={{ boxShadow: 'var(--shadow-sm)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        {/* Recent Activity Timeline - capped to the same height as Status Distribution; the list scrolls within its own card rather than pushing the page down. */}
+        <div className="card" style={{ boxShadow: 'var(--shadow-sm)', display:'flex', flexDirection:'column', maxHeight:420 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flex:'0 0 auto' }}>
             <div style={{ fontWeight: 750, fontSize: 14, color: 'var(--heading)' }}>{t('dash.recent_activity')}</div>
             <span style={{ fontSize: 11, color: 'var(--primary)', fontWeight: 700 }}>
               {t('dash.recent_tag')}
             </span>
           </div>
-          <div id="dash-activity">
+          <div id="dash-activity" style={{ flex:'1 1 auto', minHeight:0, overflowY:'auto' }}>
             {!data.recent?.length
               ? <div className="empty-state">{t('msg.no_ideas')}</div>
               : data.recent.map((r, i) => (

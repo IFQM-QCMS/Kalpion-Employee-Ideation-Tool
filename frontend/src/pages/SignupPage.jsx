@@ -94,6 +94,18 @@ export default function SignupPage() {
     if (error) setError('');
   };
 
+  // A GSTIN carries its PAN in the middle of it (characters 3-12) - once there is a complete
+  // one to read, there is nothing left for the person to type into the PAN field themselves.
+  const [panAutoFilled, setPanAutoFilled] = useState(false);
+  function handleGstinChange(e) {
+    const v = e.target.value;
+    const upper = v.trim().toUpperCase();
+    const inside = upper.length === 15 ? panFromGstin(upper) : '';
+    setForm((f) => (inside ? { ...f, gstin: v, pan: inside } : { ...f, gstin: v }));
+    if (inside) setPanAutoFilled(true);
+    if (error) setError('');
+  }
+
   async function handleSendEmailOtp(e) {
     e?.preventDefault();
     const email = form.contact_email.trim();
@@ -698,13 +710,19 @@ export default function SignupPage() {
                     <div className="grid">
                       <div>
                         <label htmlFor="gstin">GSTIN <span className="req">*</span><InfoDot term="gstin" /></label>
-                        <input id="gstin" value={form.gstin} onChange={set('gstin')}
+                        <input id="gstin" value={form.gstin} onChange={handleGstinChange}
                           placeholder="15 characters, e.g. 29ABCDE1234F1Z5" />
                       </div>
                       <div>
                         <label htmlFor="pan">Business PAN <span className="req">*</span></label>
-                        <input id="pan" value={form.pan} onChange={set('pan')}
+                        <input id="pan" value={form.pan}
+                          onChange={(e) => { setPanAutoFilled(false); set('pan')(e); }}
                           placeholder="10 characters, e.g. ABCDE1234F" />
+                        {panAutoFilled && (
+                          <div style={{ fontSize:11.5,color:'var(--subtle)',marginTop:4 }}>
+                            Filled in from your GSTIN - edit it if it does not match your PAN card.
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label htmlFor="entity_type">Entity type <span className="req">*</span></label>

@@ -144,14 +144,6 @@ export default function ResetPasswordPage() {
         .reset-card .btn-go:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .reset-card .err { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
         .reset-card .ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.55; }
-        .reset-card .rules { display: flex; flex-direction: column; gap: 5px; margin: -4px 0 0; }
-        .reset-card .rule { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); }
-        .reset-card .rule.ok { color: var(--success); }
-        .reset-card .rule .dot {
-          width: 15px; height: 15px; flex: none; border-radius: 50%; display: flex; align-items: center;
-          justify-content: center; border: 1.5px solid var(--border); color: transparent;
-        }
-        .reset-card .rule.ok .dot { border-color: var(--success); background: var(--success-light); color: var(--success); }
       `}</style>
 
       <div className="reset-card">
@@ -219,13 +211,13 @@ export default function ResetPasswordPage() {
                   submitting - length. The blocklist / repeated-character rules are the
                   server's own call and surface as a normal form error if either is tripped,
                   rather than being duplicated (and risking drifting out of sync) here. */}
-              <div className="rules" id="pw-rules" aria-live="polite">
-                <div className={`rule${lengthOk ? ' ok' : ''}`}>
-                  <span className="dot" aria-hidden="true"><CheckIcon /></span>
+              <div className="pw-rules" id="pw-rules" aria-live="polite">
+                <div className={`pw-rule${lengthOk ? ' ok' : ''}`}>
+                  <span className="pw-dot" aria-hidden="true"><CheckIcon /></span>
                   At least {minLen} characters
                 </div>
-                <div className={`rule${matchOk ? ' ok' : ''}`}>
-                  <span className="dot" aria-hidden="true"><CheckIcon /></span>
+                <div className={`pw-rule${matchOk ? ' ok' : ''}`}>
+                  <span className="pw-dot" aria-hidden="true"><CheckIcon /></span>
                   Passwords match
                 </div>
               </div>

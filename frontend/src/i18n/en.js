@@ -1713,6 +1713,17 @@ export default {
   'profile.phone_code_sent':'Code sent to the new number.',
   'profile.phone_changed':'Your mobile number has been updated.',
   'profile.phone_code_to':'Code sent to {phone}',
+
+  // Self-service password change, verified by a code to the phone already on the account -
+  // every role, every organisation, no need to already know the current password.
+  'profile.change_password':'Change password',
+  'profile.pw_otp_hint':'We will send a one-time code to the mobile number on your account. Enter it along with your new password to confirm it is you.',
+  'profile.pw_send_code':'Send verification code',
+  'profile.pw_code_to':'Code sent to {phone}',
+  'profile.pw_submit':'Update password',
+  'profile.pw_changed':'Your password has been updated.',
+  'profile.pw_rule_len':'At least {n} characters',
+  'profile.pw_rule_match':'Passwords match',
   'pa.top_orgs_volume':'Top Organizations by Volume',
   'pa.wl_title':'Personal email exceptions',
   'pa.wl_sub':'Applications must come from a company email address. Add an exception here for a business that genuinely has no domain of its own.',

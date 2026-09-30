@@ -695,6 +695,73 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
   return { success: true, message: 'Password updated.', token, user: session };
 }
 
+/*
+ * The self-service alternative to changePassword(): any signed-in user, any role, any
+ * organisation, may change their own password by proving they hold their own registered
+ * phone instead of already knowing their current password. The phone is always the one on
+ * the account's own row - never one the caller supplies - so this can never be used to send
+ * a code to somebody else's number.
+ */
+export async function requestPasswordChangeOtp(db, user) {
+  const [[row] = []] = await db.execute(
+    "SELECT phone FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
+  );
+  const phone = String(row?.phone || '').trim();
+  if (!phone) {
+    throw badRequest('Your account has no mobile number on file. Ask your organisation admin to add one.');
+  }
+
+  const sent = await verification.sendCode({
+    identifier: phone, purpose: 'change_password', name: user.name,
+    tenantSlug: user.org_slug, userId: user.id,
+  });
+  return { ...sent, masked_phone: maskPhone(phone) };
+}
+
+/** Accept the code from requestPasswordChangeOtp and set the new password in one step. */
+export async function confirmPasswordChangeOtp(db, user, { code, newPassword, orgSlug } = {}) {
+  code = String(code || '').trim();
+  newPassword = String(newPassword ?? '');
+  if (!code) throw badRequest('Enter the verification code that was sent to you.');
+  assertPasswordStrength(newPassword, { label: 'New password' });
+
+  const [[row] = []] = await db.execute(
+    "SELECT id, phone, password_hash FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
+  );
+  if (!row) throw unauthorized('Your account is no longer active.');
+  const phone = String(row.phone || '').trim();
+  if (!phone) throw badRequest('Your account has no mobile number on file.');
+
+  // The code itself is the proof of identity here - there is no current password to check
+  // first, which is the entire point of this path.
+  await verification.verifyCode({ identifier: phone, code, purpose: 'change_password' });
+
+  if (await bcrypt.compare(newPassword, row.password_hash)) {
+    throw badRequest('The new password must be different from your current one.');
+  }
+
+  const hash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await db.execute(
+    `UPDATE users
+        SET password_hash = ?, password_changed_at = NOW(), must_change_password = 0,
+            activated_at = COALESCE(activated_at, NOW())
+      WHERE id = ?`,
+    [hash, row.id]
+  );
+
+  const [after] = await db.execute(
+    'SELECT UNIX_TIMESTAMP(password_changed_at) AS pwd_ts FROM users WHERE id = ?', [row.id]
+  );
+  const pwdTs = Number(after[0]?.pwd_ts) || 0;
+
+  logger.info(`auth: password changed via phone verification for user ${row.id}`);
+
+  const session = { ...user, must_change_password: false };
+  const token = signToken({ user: session, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
+
+  return { success: true, message: 'Password updated.', token, user: session };
+}
+
 // Reset-token helpers
 const BCRYPT_ROUNDS = 12; // ~250ms; was 10
 
@@ -763,4 +830,5 @@ export default {
   login, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
   requestPasswordResetCode, verifyPasswordResetCode, issueActivationLink,
   identifyAccount, passwordPolicy,
+  requestPasswordChangeOtp, confirmPasswordChangeOtp,
 };

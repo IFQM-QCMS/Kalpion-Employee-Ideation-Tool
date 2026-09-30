@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
-import { usersApi } from '../services/api';
+import { usersApi, authApi } from '../services/api';
 import { formatRole } from '../utils/helpers';
+import OtpInput from '../components/OtpInput';
+
+const CheckIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 6 9 17l-5-5"/>
+  </svg>
+);
 
 // Changing your own mobile number, verified by a code sent to the NEW number.
 function PhoneChange({ current, onChanged, t }) {
@@ -81,6 +89,142 @@ function PhoneChange({ current, onChanged, t }) {
           <span className="hint">{t('profile.phone_code_to', { phone: phone.trim() })}</span>
         </>
       )}
+    </div>
+  );
+}
+
+/*
+ * Changing your own password by proving you hold your own registered phone (an SMS code)
+ * instead of already knowing your current one - the same door for every role, in every
+ * organisation. Mirrors PhoneChange's start/verify shape above.
+ */
+function PasswordChange({ t }) {
+  const { confirmPasswordChangeOtp } = useAuth();
+  const { showToast } = useToast();
+  const [open, setOpen]     = useState(false);   // has a code actually been sent yet
+  const [sending, setSending] = useState(false);
+  const [busy, setBusy]     = useState(false);
+  const [error, setError]   = useState('');
+  const [maskedPhone, setMaskedPhone] = useState('');
+  const [code, setCode]     = useState('');
+  const [otpLen, setOtpLen] = useState(6);
+  const [newPw, setNewPw]   = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [minLen, setMinLen] = useState(12);
+  const [resendIn, setResendIn] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([authApi.passwordPolicy(), authApi.otpStatus()]).then(([pol, otp]) => {
+      if (cancelled) return;
+      if (pol.data?.min_length) setMinLen(Number(pol.data.min_length));
+      if (otp.data?.length) setOtpLen(Number(otp.data.length));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (resendIn <= 0) return undefined;
+    const id = setInterval(() => setResendIn((v) => Math.max(0, v - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendIn]);
+
+  const lengthOk = newPw.length >= minLen;
+  const matchOk  = confirmPw.length > 0 && newPw === confirmPw;
+
+  function reset() {
+    setOpen(false); setCode(''); setNewPw(''); setConfirmPw('');
+    setShowPw(false); setError(''); setMaskedPhone(''); setResendIn(0);
+  }
+
+  async function sendCode() {
+    setError(''); setSending(true);
+    try {
+      const res = await authApi.requestChangePasswordOtp();
+      setMaskedPhone(res.data?.masked_phone || '');
+      setResendIn(60);
+      setOpen(true);
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setSending(false);
+  }
+
+  async function submit(e) {
+    e?.preventDefault();
+    if (!lengthOk || !matchOk) return;
+    setError(''); setBusy(true);
+    const res = await confirmPasswordChangeOtp({ code, new_password: newPw })
+      .catch((err) => ({ success: false, error: err?.response?.data?.error || t('msg.network_error') }));
+    setBusy(false);
+    if (res.success) { showToast(t('profile.pw_changed'), 'success'); reset(); }
+    else setError(res.error || t('msg.server_error'));
+  }
+
+  if (!open) {
+    return (
+      <>
+        <p className="hint" style={{ marginBottom: 10 }}>{t('profile.pw_otp_hint')}</p>
+        {error && <div className="alert alert-danger" style={{ marginBottom: 10 }}>{error}</div>}
+        <button className="btn btn-primary btn-sm" disabled={sending} onClick={sendCode}>
+          {sending ? t('msg.loading') : t('profile.pw_send_code')}
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: 12, maxWidth: 360 }}>
+      {error && <div className="alert alert-danger">{error}</div>}
+
+      <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
+          {maskedPhone && <span className="hint">{t('profile.pw_code_to', { phone: maskedPhone })}</span>}
+
+          <OtpInput value={code} onChange={setCode} length={otpLen} disabled={busy}
+            error={!!error} label={t('login.otp_code_ph')} />
+
+          <input className="form-control" type={showPw ? 'text' : 'password'} value={newPw}
+            onChange={(e) => setNewPw(e.target.value)} placeholder={t('pw.new')}
+            autoComplete="new-password" aria-describedby="pw-change-rules" />
+
+          <div className="pw-rules" id="pw-change-rules" aria-live="polite">
+            <div className={`pw-rule${lengthOk ? ' ok' : ''}`}>
+              <span className="pw-dot" aria-hidden="true"><CheckIcon /></span>
+              {t('profile.pw_rule_len', { n: minLen })}
+            </div>
+            <div className={`pw-rule${matchOk ? ' ok' : ''}`}>
+              <span className="pw-dot" aria-hidden="true"><CheckIcon /></span>
+              {t('profile.pw_rule_match')}
+            </div>
+          </div>
+
+          <input className="form-control" type={showPw ? 'text' : 'password'} value={confirmPw}
+            onChange={(e) => setConfirmPw(e.target.value)} placeholder={t('pw.confirm')}
+            autoComplete="new-password" />
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} />
+            {t('login.show_pw')}
+          </label>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button type="submit" className="btn btn-primary btn-sm"
+              disabled={busy || code.length < otpLen || !lengthOk || !matchOk}>
+              {busy ? t('msg.loading') : t('profile.pw_submit')}
+            </button>
+            <button type="button" className="btn btn-outline btn-sm" disabled={busy} onClick={reset}>
+              {t('btn.cancel')}
+            </button>
+            {resendIn > 0
+              ? <span style={{ fontSize: 11.5, color: 'var(--subtle)' }}>
+                  {t('login.otp_resend_in').replace('{s}', resendIn)}
+                </span>
+              : <button type="button" className="link" style={{ fontSize: 11.5 }} disabled={sending} onClick={sendCode}>
+                  {t('login.otp_resend')}
+                </button>}
+          </div>
+        </form>
     </div>
   );
 }
@@ -201,6 +345,14 @@ export default function ProfilePage() {
           <Detail label={t('profile.reports_to')} value={user.manager_name} note={t('profile.managed_note')} />
           <Detail label={t('profile.role_lbl')} value={formatRole(user.role, t)} note={t('profile.managed_note')} />
         </div>
+      </div>
+
+      {/* Every role, every organisation - the same self-service door, proved by phone. */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--heading)', marginBottom: 14 }}>
+          {t('profile.change_password')}
+        </div>
+        <PasswordChange t={t} />
       </div>
     </div>
   );

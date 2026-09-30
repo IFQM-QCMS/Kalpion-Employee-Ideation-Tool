@@ -38,6 +38,12 @@ router.get('/check-reset-token', auth.checkResetToken);
 // Signed-in change. Reachable even while must_change_password is set - it is on the
 // allowlist in the auth middleware, and is the only way out of that state.
 router.post('/change-password', requireAuth, auth.changePassword);
+// The self-service alternative: any signed-in organisation user may change their own
+// password by proving they hold their own registered phone (SMS OTP) instead of already
+// knowing their current one. Also reachable while must_change_password is set - the
+// allowlist matches on the '/change-password' prefix, which covers these sub-paths too.
+router.post('/change-password/otp/request', requireAuth, authLimiter, auth.requestChangePasswordOtp);
+router.post('/change-password/otp/confirm', requireAuth, authLimiter, auth.confirmChangePasswordOtp);
 
 // requireAuth, so the password has already been proved - without it these would send a
 // code to any address somebody cared to name, and would answer whether an account exists.

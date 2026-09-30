@@ -412,9 +412,9 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
 
 .notif-bell{
   position:relative;cursor:pointer;
-  display:flex;align-items:center;gap:6px;
-  font-size:12.5px;font-weight:550;color:var(--text-muted);
-  padding:6px 11px;border-radius:var(--r-md);
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-muted);
+  width:38px;height:38px;border-radius:var(--r-md);
   border:1px solid var(--border);background:var(--surface);
   transition:background var(--t-fast) var(--ease),border-color var(--t-fast) var(--ease),color var(--t-fast) var(--ease);
 }
@@ -754,6 +754,20 @@ td{overflow-wrap:anywhere;word-break:break-word}
   overflow-wrap:anywhere;word-break:break-word;
   transition:border-color var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease);
 }
+/* A text-styled action, whether it is an <a> or a <button> (so a click handler doesn't
+   need a real href to look right) - referenced from several pages that had none of this
+   backing the class before. */
+.link{
+  color:var(--primary);text-decoration:none;cursor:pointer;
+  background:none;border:none;padding:0;font:inherit;
+}
+.link:hover{text-decoration:underline}
+.link:disabled{opacity:.6;cursor:default;text-decoration:none}
+
+/* Small muted helper text under a field or action - referenced from several pages that had
+   none of this backing the class before. */
+.hint{display:block;font-size:11.5px;color:var(--subtle);line-height:1.5}
+
 .form-control::placeholder{color:var(--subtle);opacity:.75}
 .form-control:hover{border-color:var(--border-strong)}
 .form-control:focus{
@@ -761,6 +775,36 @@ td{overflow-wrap:anywhere;word-break:break-word}
   border-color:var(--primary);
   box-shadow:0 0 0 3px var(--primary-dim);
 }
+
+/* ── One-time-code boxes (components/OtpInput) ─────────────────────────────
+   Global, not scoped to any one screen: the component is shared by the sign-in
+   activation flow, the profile password-change flow, and anywhere else a code
+   needs entering. */
+.ifqm-otp-boxes{display:flex;gap:9px;justify-content:center;margin:2px 0}
+.ifqm-otp-box{
+  width:44px;height:52px;text-align:center;font-size:20px;font-weight:700;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);
+  outline:none;transition:border-color .16s,box-shadow .16s;
+}
+.ifqm-otp-box:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-dim)}
+.ifqm-otp-box.is-error{border-color:var(--danger)}
+.ifqm-otp-box:disabled{opacity:.6}
+@media (max-width:380px){
+  .ifqm-otp-box{width:38px;height:46px;font-size:18px}
+  .ifqm-otp-boxes{gap:7px}
+}
+
+/* ── Live password-requirements checklist ──────────────────────────────────
+   Shared by the create/reset-password screen and the profile password-change
+   flow: a tick that fills in as each rule is met, rather than a static list. */
+.pw-rules{display:flex;flex-direction:column;gap:5px;margin:-4px 0 0}
+.pw-rule{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-muted)}
+.pw-rule.ok{color:var(--success)}
+.pw-rule .pw-dot{
+  width:15px;height:15px;flex:none;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;border:1.5px solid var(--border);color:transparent;
+}
+.pw-rule.ok .pw-dot{border-color:var(--success);background:var(--success-light);color:var(--success)}
 /*
  * Every <select>, not only the ones carrying .form-control.
  *
@@ -1347,7 +1391,7 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
   .page-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .topbar-left{min-width:0}
   .topbar-right{flex-shrink:0}
-  .dm-toggle span,.notif-bell > span,.user-chip .role-badge{display:none}
+  .dm-toggle span,.user-chip .role-badge{display:none}
   .login-left{display:none}
   .login-right{padding:24px}
 }
@@ -1452,7 +1496,7 @@ tr[data-status="Draft"]        > td:first-child{border-left-color:var(--border-s
   .topbar-menu-btn{padding:8px;font-size:22px;min-width:44px;min-height:44px}
   .page-title{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .topbar-right{gap:6px;flex-shrink:0}
-  .notif-bell{padding:8px 9px;min-height:40px}
+  .notif-bell{width:40px;height:40px}
   .notif-bell svg{width:18px;height:18px}
   .user-chip{padding:3px}
   .user-chip .avatar{width:32px;height:32px}

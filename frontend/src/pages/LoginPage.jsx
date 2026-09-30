@@ -568,20 +568,6 @@ export default function LoginPage() {
         }
         .ifqm-particles .phone-chip svg{flex:none;color:var(--text-muted)}
 
-        .ifqm-particles .ifqm-otp-boxes{display:flex;gap:9px;justify-content:center;margin:2px 0}
-        .ifqm-particles .ifqm-otp-box{
-          width:44px;height:52px;text-align:center;font-size:20px;font-weight:700;
-          background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);
-          outline:none;transition:border-color .16s,box-shadow .16s;
-        }
-        .ifqm-particles .ifqm-otp-box:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-dim)}
-        .ifqm-particles .ifqm-otp-box.is-error{border-color:var(--danger)}
-        .ifqm-particles .ifqm-otp-box:disabled{opacity:.6}
-        @media (max-width:380px){
-          .ifqm-particles .ifqm-otp-box{width:38px;height:46px;font-size:18px}
-          .ifqm-particles .ifqm-otp-boxes{gap:7px}
-        }
-
         /* ── Maintenance notice ─────────────────────────────────────────
            Warning colours rather than danger: the platform is not broken and
            the reader has done nothing wrong - it is deliberately closed. */

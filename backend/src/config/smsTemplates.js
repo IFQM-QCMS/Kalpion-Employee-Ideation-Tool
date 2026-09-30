@@ -53,6 +53,17 @@ export const DLT_TEMPLATES = {
     label: 'Platform Admin Verification OTP',
     pendingReason: 'Not yet submitted to Jio DLT; sending on the registration template.',
   },
+
+  // 7. Self-service password change (My Profile) - a signed-in user proving their own phone
+  // instead of their current password.
+  change_password: {
+    id: '',
+    text: 'Dear Customer, use OTP {#var#} to change your password on IFQM Ideation. Do not share this OTP with anyone.',
+    registered: false,
+    fallback: 'login',
+    label: 'Password Change OTP',
+    pendingReason: 'Not yet submitted to Jio DLT; sending on the sign-in template.',
+  },
 };
 
 /** What would actually be sent for a purpose, today. */

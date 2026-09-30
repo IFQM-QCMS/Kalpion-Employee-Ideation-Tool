@@ -15,6 +15,7 @@ function smsTemplatePairs() {
     registration_phone: ['SMS_TEMPLATE_ACTIVATION', 'SMS_TEXT_ACTIVATION'],
     phone_verify: ['SMS_TEMPLATE_ACTIVATION', 'SMS_TEXT_ACTIVATION'],
     phone_changed: ['SMS_TEMPLATE_PHONE_CHANGED', 'SMS_TEXT_PHONE_CHANGED'],
+    change_password: ['SMS_TEMPLATE_CHANGE_PW', 'SMS_TEXT_CHANGE_PW'],
   };
 
   const templates = {};
