@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { useToast } from '../context/ToastContext';
 import { authApi } from '../services/api';
+import OtpInput from '../components/OtpInput';
 
 // Minimal "particles" auth page (adapted from appvibed01/minimal-auth).
 
@@ -149,6 +150,34 @@ export default function LoginPage() {
   const canvasRef = useRef(null);
   useParticles(canvasRef);
 
+  // The smart sign-in flow: the identifier is looked up once, and the server says what to do
+  // with it next, rather than the person having to know whether they are a returning user, a
+  // first-timer, or an admin-created account with no password yet.
+  //   identify          - "phone or email" + Continue (the front door)
+  //   password          - account exists and already has a password
+  //   not_found         - the identifier matched no account
+  //   activate_confirm  - account exists, has no password yet: show the phone, offer a code
+  //   activate_otp      - verifying the code that was just sent
+  const [stage, setStage] = useState('identify');
+  const [checking, setChecking] = useState(false);
+  const identifyRef = useRef(null);
+
+  // Case C / the "Activate your account" link both end up here - same phone-verification
+  // code (purpose 'registration_phone') the app has always used for a no-email first sign-in,
+  // just reached without anyone having to find a link for it first.
+  const [maskedPhone, setMaskedPhone] = useState('');
+  const [actSending, setActSending] = useState(false);
+  const [actCode, setActCode] = useState('');
+  const [actVerifying, setActVerifying] = useState(false);
+  const [actResendIn, setActResendIn] = useState(0);
+  const [actSentTo, setActSentTo] = useState('');
+
+  useEffect(() => {
+    if (actResendIn <= 0) return undefined;
+    const id = setInterval(() => setActResendIn((v) => Math.max(0, v - 1)), 1000);
+    return () => clearInterval(id);
+  }, [actResendIn]);
+
   // Forgot-password, as a dialog rather than window.prompt().
   // Maintenance mode.
   const [maint, setMaint] = useState(null);
@@ -164,9 +193,6 @@ export default function LoginPage() {
   }, []);
 
   const [forgotOpen, setForgotOpen] = useState(false);
-  // Same modal and endpoints as "forgot password" - a no-email employee never had one to
-  // reset, so this only changes the copy and which SMS purpose (template) is requested.
-  const [firstLogin, setFirstLogin] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotErr, setForgotErr] = useState('');
@@ -180,8 +206,11 @@ export default function LoginPage() {
   const [forgotCode, setForgotCode] = useState('');
   const [codeBusy, setCodeBusy] = useState(false);
 
-  // MOM §4.1 / §4.2 - sign in with a one-time code.
+  // MOM §4.1 / §4.2 - sign in with a one-time code. Unrelated to the activation code above:
+  // this is a passwordless *alternative* for an account that already works, not a way to set
+  // one up. otp_length is shared platform policy, so it doubles as the box count below.
   const [otpAvailable, setOtpAvailable] = useState(false);
+  const [otpLen, setOtpLen] = useState(6);
   const [mode, setMode]         = useState('password');   // 'password' | 'otp'
   const [otpStage, setOtpStage] = useState('request');     // 'request' | 'verify'
   const [otpPhone, setOtpPhone] = useState('');
@@ -191,7 +220,10 @@ export default function LoginPage() {
 
   useEffect(() => {
     authApi.otpStatus()
-      .then((r) => setOtpAvailable(!!r.data?.enabled && r.data?.provider !== 'unconfigured'))
+      .then((r) => {
+        setOtpAvailable(!!r.data?.enabled && r.data?.provider !== 'unconfigured');
+        setOtpLen(Number(r.data?.length) || 6);
+      })
       .catch(() => setOtpAvailable(false));
   }, []);
 
@@ -249,6 +281,51 @@ export default function LoginPage() {
     );
   }, []);
 
+  /*
+   * The one door both "Continue" and "Activate your account" walk through. Neither button
+   * duplicates the other's logic - they call this, the server decides what happens next, and
+   * the identifier never has to be typed twice.
+   */
+  async function handleIdentify(e) {
+    e?.preventDefault();
+    const id = email.trim();
+    if (!id) {
+      setError(t('login.identify_required'));
+      identifyRef.current?.focus();
+      return;
+    }
+    setError('');
+    setChecking(true);
+    try {
+      const res = await authApi.identify(id);
+      const next = res.data?.next_step;
+      if (next === 'PASSWORD_REQUIRED') {
+        setPassword('');
+        setStage('password');
+      } else if (next === 'PHONE_VERIFICATION_REQUIRED') {
+        setMaskedPhone(res.data?.masked_phone || '');
+        setActSentTo('');
+        setStage('activate_confirm');
+      } else if (next === 'ACCESS_REQUEST_REQUIRED') {
+        setStage('not_found');
+      } else {
+        setError(t('msg.server_error'));
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setChecking(false);
+  }
+
+  function backToIdentify() {
+    setStage('identify');
+    setError('');
+    setPassword('');
+    setActCode('');
+    setActSentTo('');
+    setMaskedPhone('');
+  }
+
   async function handleLogin(e) {
     e.preventDefault();
     setError('');
@@ -269,21 +346,53 @@ export default function LoginPage() {
     setLoading(false);
   }
 
+  async function handleSendActivationCode(e) {
+    e?.preventDefault();
+    setError('');
+    setActSending(true);
+    try {
+      const res = await authApi.resetCodeRequest(email.trim(), 'registration_phone');
+      if (res.data?.success) {
+        setActSentTo(res.data.sent_to || '');
+        setActCode('');
+        setActResendIn(60);
+        setStage('activate_otp');
+      } else {
+        setError(res.data?.error || t('login.request_failed'));
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+      if (err?.response?.data?.retry_after) setActResendIn(Number(err.response.data.retry_after));
+    }
+    setActSending(false);
+  }
+
+  async function handleVerifyActivationCode(e) {
+    e?.preventDefault();
+    const code = actCode.trim();
+    if (code.length < otpLen) return;
+    setError('');
+    setActVerifying(true);
+    try {
+      const res = await authApi.resetCodeVerify(email.trim(), code, 'registration_phone');
+      if (res.data?.success && res.data.token) {
+        const q = new URLSearchParams({ token: res.data.token, activation: '1' });
+        if (res.data.org_slug) q.set('org', res.data.org_slug);
+        navigate(`/reset-password?${q.toString()}`);
+      } else {
+        setError(res.data?.error || t('login.request_failed'));
+      }
+    } catch (err) {
+      setError(err?.response?.data?.error || t('msg.network_error'));
+    }
+    setActVerifying(false);
+  }
+
   function handleForgotPassword(e) {
     e?.preventDefault();
     setForgotErr('');
     setForgotDone(false);
-    setFirstLogin(false);
     // Seed it with whatever was already typed above, whatever kind of identifier that is.
-    setForgotEmail(email.trim());
-    setForgotOpen(true);
-  }
-
-  function handleFirstLogin(e) {
-    e?.preventDefault();
-    setForgotErr('');
-    setForgotDone(false);
-    setFirstLogin(true);
     setForgotEmail(email.trim());
     setForgotOpen(true);
   }
@@ -297,8 +406,7 @@ export default function LoginPage() {
     setForgotErr('');
     setCodeBusy(true);
     try {
-      const res = await authApi.resetCodeVerify(forgotEmail.trim(), code,
-        firstLogin ? 'registration_phone' : undefined);
+      const res = await authApi.resetCodeVerify(forgotEmail.trim(), code);
       if (res.data?.success && res.data.token) {
         const q = new URLSearchParams({ token: res.data.token });
         if (res.data.org_slug) q.set('org', res.data.org_slug);
@@ -314,12 +422,9 @@ export default function LoginPage() {
 
   async function submitForgot(e) {
     e?.preventDefault();
-    // Two ways to earn a reset, chosen by what was typed. A first-time, no-email employee has
-    // no address to send a link to, so that route is never offered here regardless of what
-    // was typed.
     const id = forgotEmail.trim();
     if (!id) { setForgotErr(t('login.forgot_invalid')); return; }
-    const isEmailAddr = !firstLogin && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
+    const isEmailAddr = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(id);
 
     setForgotErr('');
     setForgotBusy(true);
@@ -329,7 +434,7 @@ export default function LoginPage() {
         if (res.data?.success) { setForgotVia('link'); setForgotDone(true); }
         else setForgotErr(res.data?.error || t('login.request_failed'));
       } else {
-        const res = await authApi.resetCodeRequest(id, firstLogin ? 'registration_phone' : undefined);
+        const res = await authApi.resetCodeRequest(id);
         if (res.data?.success) {
           // The server masks where it went.
           setForgotSentTo(res.data.sent_to || '');
@@ -342,6 +447,22 @@ export default function LoginPage() {
     }
     setForgotBusy(false);
   }
+
+  const HEADINGS = {
+    identify: t('login.identify_heading'),
+    password: t('login.password_heading'),
+    not_found: t('login.not_found_heading'),
+    activate_confirm: t('login.activate_heading'),
+    activate_otp: t('login.verify_phone_heading'),
+  };
+  const SUBS = {
+    identify: t('login.identify_sub'),
+    password: '',
+    not_found: '',
+    activate_confirm: '',
+    activate_otp: t('login.verify_phone_sub'),
+  };
+  const activationPhone = maskedPhone || actSentTo;
 
   return (
     <div className="ifqm-particles">
@@ -372,10 +493,14 @@ export default function LoginPage() {
         .ifqm-particles .brand .wm{font-size:20px;font-weight:800;letter-spacing:-.02em;color:var(--heading)}
         .ifqm-particles .brand .wm small{display:block;font-size:11.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted)}
 
-        .ifqm-particles h1{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--heading);margin:6px 0 2px}
-        .ifqm-particles .sub{font-size:14px;color:var(--text-muted);line-height:1.5}
+        .ifqm-particles h1{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--heading);margin:6px 0 2px;
+          animation:ip-fade .22s ease-out both}
+        .ifqm-particles .sub{font-size:14px;color:var(--text-muted);line-height:1.5;margin:0}
+        @keyframes ip-fade{from{opacity:0}to{opacity:1}}
 
         .ifqm-particles form{display:flex;flex-direction:column;gap:12px;margin-top:2px}
+        .ifqm-particles .stage{display:flex;flex-direction:column;gap:12px;margin-top:2px;
+          animation:ip-fade .18s ease-out both}
         .ifqm-particles .fld{position:relative}
         .ifqm-particles .fld .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;color:var(--text-muted)}
         .ifqm-particles .fld input{
@@ -392,14 +517,18 @@ export default function LoginPage() {
         .ifqm-particles .go{
           width:100%;margin-top:4px;padding:13px;border:none;border-radius:12px;cursor:pointer;
           background:var(--primary);color:var(--on-primary,#fff);font-size:14px;font-weight:700;letter-spacing:.02em;
-          transition:filter .16s,transform .16s,box-shadow .16s;
+          transition:filter .16s,transform .16s,box-shadow .16s;text-decoration:none;
+          display:inline-flex;align-items:center;justify-content:center;
         }
         .ifqm-particles .go:hover{filter:brightness(1.05);transform:translateY(-1px);box-shadow:0 10px 24px -6px var(--primary-glow)}
         .ifqm-particles .go:disabled{opacity:.65;cursor:default;transform:none;box-shadow:none}
+        .ifqm-particles .go:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
         .ifqm-particles .row{display:flex;justify-content:flex-end;margin-top:-2px}
-        .ifqm-particles .link{font-size:12.5px;color:var(--primary);text-decoration:none;cursor:pointer}
+        .ifqm-particles .link{font-size:12.5px;color:var(--primary);text-decoration:none;cursor:pointer;
+          background:none;border:none;padding:0;font-family:inherit}
         .ifqm-particles .link:hover{text-decoration:underline}
+        .ifqm-particles .link:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
         .ifqm-particles .note{background:var(--info-light);color:var(--info);border:1px solid var(--info);
           border-radius:10px;padding:9px 13px;font-size:12.5px;line-height:1.5}
         .ifqm-particles .switcher{display:flex;align-items:center;gap:10px;margin-top:2px}
@@ -411,6 +540,33 @@ export default function LoginPage() {
           border-radius:10px;padding:9px 13px;font-size:12.5px}
         .ifqm-particles .alt-cta{margin-top:2px;font-size:12.5px;color:var(--text-muted);text-align:center}
         .ifqm-particles .foot{margin-top:12px;font-size:11px;color:var(--subtle)}
+        .ifqm-particles .foot.hint{margin-top:2px;text-align:center;font-size:11.5px}
+
+        .ifqm-particles .id-row{
+          display:flex;align-items:center;justify-content:space-between;gap:10px;
+          font-size:13px;color:var(--text-muted);
+        }
+        .ifqm-particles .id-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--heading)}
+        .ifqm-particles .phone-chip{
+          display:flex;align-items:center;gap:10px;background:var(--panel-bg,var(--surface));
+          border:1px solid var(--border);border-radius:12px;padding:12px 14px;
+          font-size:14.5px;font-weight:700;color:var(--heading);letter-spacing:.02em;
+        }
+        .ifqm-particles .phone-chip svg{flex:none;color:var(--text-muted)}
+
+        .ifqm-particles .ifqm-otp-boxes{display:flex;gap:9px;justify-content:center;margin:2px 0}
+        .ifqm-particles .ifqm-otp-box{
+          width:44px;height:52px;text-align:center;font-size:20px;font-weight:700;
+          background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);
+          outline:none;transition:border-color .16s,box-shadow .16s;
+        }
+        .ifqm-particles .ifqm-otp-box:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-dim)}
+        .ifqm-particles .ifqm-otp-box.is-error{border-color:var(--danger)}
+        .ifqm-particles .ifqm-otp-box:disabled{opacity:.6}
+        @media (max-width:380px){
+          .ifqm-particles .ifqm-otp-box{width:38px;height:46px;font-size:18px}
+          .ifqm-particles .ifqm-otp-boxes{gap:7px}
+        }
 
         /* ── Maintenance notice ─────────────────────────────────────────
            Warning colours rather than danger: the platform is not broken and
@@ -473,8 +629,10 @@ export default function LoginPage() {
         </Link>
 
         <div>
-          <h1>{t('login.btn')}</h1>
-          <p className="sub">{t('login.subtitle')}</p>
+          <h1 key={mode === 'otp' ? 'otp' : stage}>{mode === 'otp' ? t('login.btn') : HEADINGS[stage]}</h1>
+          {(mode === 'otp' ? t('login.subtitle') : SUBS[stage]) && (
+            <p className="sub">{mode === 'otp' ? t('login.subtitle') : SUBS[stage]}</p>
+          )}
         </div>
 
         {maint !== null && (
@@ -487,8 +645,8 @@ export default function LoginPage() {
           </div>
         )}
 
-        {error && <div className="err">{error}</div>}
-        {mode === 'otp' && otpNote && <div className="note">{otpNote}</div>}
+        {error && <div className="err" role="alert">{error}</div>}
+        {mode === 'otp' && otpNote && <div className="note" role="status">{otpNote}</div>}
 
         {mode === 'otp' ? (
           otpStage === 'request' ? (
@@ -517,47 +675,131 @@ export default function LoginPage() {
                 {loading ? t('login.signing_in') : t('login.otp_verify')}
               </button>
               <div className="row" style={{ justifyContent:'space-between' }}>
-                <a className="link" onClick={() => { setOtpStage('request'); setOtpCode(''); setOtpNote(''); }}>
+                <button type="button" className="link" onClick={() => { setOtpStage('request'); setOtpCode(''); setOtpNote(''); }}>
                   {t('login.otp_change_number')}
-                </a>
+                </button>
                 {resendIn > 0
                   ? <span style={{ fontSize:12.5,color:'var(--subtle)' }}>
                       {t('login.otp_resend_in').replace('{s}', resendIn)}
                     </span>
-                  : <a className="link" onClick={sendCode}>{t('login.otp_resend')}</a>}
+                  : <button type="button" className="link" onClick={sendCode}>{t('login.otp_resend')}</button>}
               </div>
             </form>
           )
         ) : (
-        <form onSubmit={handleLogin}>
-          <div className="fld">
-            <span className="ic"><MailIcon /></span>
-            <input type="text" value={email} onChange={e => setEmail(e.target.value)}
-              placeholder={t('login.id_short')} autoComplete="username" required />
-          </div>
-          <div className="fld">
-            <span className="ic"><LockIcon /></span>
-            <input type={showPassword ? 'text' : 'password'} value={password}
-              onChange={e => setPassword(e.target.value)} placeholder={t('login.password_ph')}
-              autoComplete="current-password" required />
-            <button type="button" className="eye"
-              aria-label={showPassword ? t('login.hide_pw') : t('login.show_pw')}
-              onClick={() => setShowPassword(v => !v)}>
-              {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-            </button>
-          </div>
-          <div className="row" style={{ display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8 }}>
-            <a className="link" onClick={handleForgotPassword}>{t('login.forgot')}</a>
-            <a className="link" onClick={handleFirstLogin}>{t('login.first_login')}</a>
-          </div>
-          <button type="submit" className="go" disabled={loading}>
-            {loading ? t('login.signing_in') : t('login.btn')}
-          </button>
-        </form>
+          <>
+            {/* Step 1: who is this - the one field the entire flow starts from. */}
+            {stage === 'identify' && (
+              <form className="stage" onSubmit={handleIdentify}>
+                <div className="fld">
+                  <span className="ic"><MailIcon /></span>
+                  <input ref={identifyRef} type="text" value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder={t('login.id_short')} autoComplete="username" autoFocus
+                    aria-label={t('login.id_short')} />
+                </div>
+                <button type="submit" className="go" disabled={checking}>
+                  {checking ? t('login.checking') : t('login.continue')}
+                </button>
+              </form>
+            )}
+
+            {/* Case B: the account has a password already. */}
+            {stage === 'password' && (
+              <form className="stage" onSubmit={handleLogin}>
+                <div className="id-row">
+                  <span title={email}>{email}</span>
+                  <button type="button" className="link" onClick={backToIdentify}>
+                    {t('login.change_identifier')}
+                  </button>
+                </div>
+                <div className="fld">
+                  <span className="ic"><LockIcon /></span>
+                  <input type={showPassword ? 'text' : 'password'} value={password}
+                    onChange={e => setPassword(e.target.value)} placeholder={t('login.password_ph')}
+                    autoComplete="current-password" required autoFocus
+                    aria-label={t('login.password')} />
+                  <button type="button" className="eye"
+                    aria-label={showPassword ? t('login.hide_pw') : t('login.show_pw')}
+                    onClick={() => setShowPassword(v => !v)}>
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
+                <div className="row">
+                  <button type="button" className="link" onClick={handleForgotPassword}>{t('login.forgot')}</button>
+                </div>
+                <button type="submit" className="go" disabled={loading}>
+                  {loading ? t('login.signing_in') : t('login.btn')}
+                </button>
+              </form>
+            )}
+
+            {/* Case A: nothing matched this identifier. No hint beyond that. */}
+            {stage === 'not_found' && (
+              <div className="stage">
+                <p className="sub">{t('login.not_found_body')}</p>
+                <Link to="/signup" className="go">{t('login.request_access')}</Link>
+                <div className="row" style={{ justifyContent:'center' }}>
+                  <button type="button" className="link" onClick={backToIdentify}>{t('login.try_again')}</button>
+                </div>
+              </div>
+            )}
+
+            {/* Case C, step 1: the account exists but has never had a password. */}
+            {stage === 'activate_confirm' && (
+              <div className="stage">
+                <p className="sub">{t('login.activate_body1')}</p>
+                <p className="sub">{t('login.activate_body2')}</p>
+                {activationPhone && (
+                  <div className="phone-chip">
+                    <PhoneIcon />
+                    <span>{activationPhone}</span>
+                  </div>
+                )}
+                <button type="button" className="go" onClick={handleSendActivationCode} disabled={actSending}>
+                  {actSending ? t('login.activate_sending') : t('login.activate_send')}
+                </button>
+                <div className="row" style={{ justifyContent:'center' }}>
+                  <button type="button" className="link" onClick={backToIdentify}>
+                    {t('login.change_identifier')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Case C, step 2: the code just sent. */}
+            {stage === 'activate_otp' && (
+              <form className="stage" onSubmit={handleVerifyActivationCode}>
+                {activationPhone && <p className="sub" style={{ fontWeight:700, color:'var(--heading)' }}>{activationPhone}</p>}
+                <div aria-live="polite">
+                  <OtpInput value={actCode} onChange={setActCode} length={otpLen}
+                    disabled={actVerifying} error={!!error} label={t('login.verify_phone_heading')} />
+                </div>
+                <button type="submit" className="go" disabled={actVerifying || actCode.length < otpLen}>
+                  {actVerifying ? t('login.activate_verifying') : t('login.activate_verify')}
+                </button>
+                <div className="row" style={{ justifyContent:'space-between' }}>
+                  <button type="button" className="link"
+                    onClick={() => { setStage('activate_confirm'); setActCode(''); setError(''); }}>
+                    {t('login.activate_change_number')}
+                  </button>
+                  {actResendIn > 0
+                    ? <span style={{ fontSize:12.5,color:'var(--subtle)' }}>
+                        {t('login.otp_resend_in').replace('{s}', actResendIn)}
+                      </span>
+                    : <button type="button" className="link" onClick={handleSendActivationCode}>
+                        {t('login.activate_resend')}
+                      </button>}
+                </div>
+              </form>
+            )}
+          </>
         )}
 
-        {/* Only offered when the platform actually has a working SMS provider - a route where no code ever arrives is worse than no route. */}
-        {otpAvailable && (
+        {/* Only offered when the platform actually has a working SMS provider - a route where
+            no code ever arrives is worse than no route. Passwordless sign-in, not activation:
+            makes sense only while choosing how to sign in, not mid-activation. */}
+        {otpAvailable && (stage === 'identify' || stage === 'password') && (
           <div className="switcher">
             <span />
             <button type="button" className="link" onClick={() => {
@@ -570,9 +812,23 @@ export default function LoginPage() {
           </div>
         )}
 
-        <p className="alt-cta">
-          {t('login.new_here')} <Link className="link" to="/signup">{t('login.request_access')}</Link>
-        </p>
+        {/* Two doors to the same activation flow: this one, or the system noticing on its own
+            once "Continue" is clicked above. */}
+        {mode === 'password' && stage === 'identify' && (
+          <div style={{ textAlign:'center' }}>
+            <p className="alt-cta" style={{ marginBottom:2 }}>{t('login.no_password_yet')}</p>
+            <button type="button" className="link" disabled={checking} onClick={handleIdentify}>
+              {t('login.activate_cta')}
+            </button>
+            <p className="foot hint">{t('login.activate_hint')}</p>
+          </div>
+        )}
+
+        {mode === 'password' && (stage === 'identify' || stage === 'password') && (
+          <p className="alt-cta">
+            {t('login.new_here')} <Link className="link" to="/signup">{t('login.request_access')}</Link>
+          </p>
+        )}
 
         <p className="foot">{t('login.powered_by')}</p>
       </div>
@@ -583,15 +839,15 @@ export default function LoginPage() {
           onKeyDown={(ev) => { if (ev.key === 'Escape' && !forgotBusy) setForgotOpen(false); }}>
           <div className="modal" role="dialog" aria-modal="true" aria-labelledby="forgot-title"
             onClick={(ev) => ev.stopPropagation()}>
-            <h2 id="forgot-title">{firstLogin ? t('login.first_login') : t('login.forgot')}</h2>
+            <h2 id="forgot-title">{t('login.forgot')}</h2>
 
             {forgotDone ? (
               <>
                 <div className="ok">
                   {forgotVia === 'code'
                     ? (forgotSentTo
-                      ? t(firstLogin ? 'login.first_login_code_sent_to' : 'login.reset_code_sent_to', { where: forgotSentTo })
-                      : t(firstLogin ? 'login.first_login_code_sent' : 'login.reset_code_sent'))
+                      ? t('login.reset_code_sent_to', { where: forgotSentTo })
+                      : t('login.reset_code_sent'))
                     : t('login.reset_sent')}
                 </div>
 
@@ -608,7 +864,7 @@ export default function LoginPage() {
                         aria-label={t('login.otp_code_ph')}
                       />
                     </div>
-                    {forgotErr && <div className="err">{forgotErr}</div>}
+                    {forgotErr && <div className="err" role="alert">{forgotErr}</div>}
                     <div className="acts" style={{ marginTop: 16 }}>
                       <button type="button" className="ghost" disabled={codeBusy}
                         onClick={() => setForgotOpen(false)}>
@@ -629,7 +885,7 @@ export default function LoginPage() {
               </>
             ) : (
               <>
-                <p>{t(firstLogin ? 'login.first_login_body' : 'login.forgot_body')}</p>
+                <p>{t('login.forgot_body')}</p>
                 <form onSubmit={submitForgot}>
                   <div className="fld">
                     <span className="ic"><MailIcon /></span>
@@ -641,15 +897,14 @@ export default function LoginPage() {
                       aria-label={t('login.identifier')}
                     />
                   </div>
-                  {forgotErr && <div className="err">{forgotErr}</div>}
+                  {forgotErr && <div className="err" role="alert">{forgotErr}</div>}
                   <div className="acts">
                     <button type="button" className="ghost" disabled={forgotBusy}
                       onClick={() => setForgotOpen(false)}>
                       {t('btn.cancel')}
                     </button>
                     <button type="submit" className="go" disabled={forgotBusy}>
-                      {forgotBusy ? t('login.forgot_sending')
-                        : t(firstLogin ? 'login.first_login_send' : 'login.forgot_send')}
+                      {forgotBusy ? t('login.forgot_sending') : t('login.forgot_send')}
                     </button>
                   </div>
                 </form>

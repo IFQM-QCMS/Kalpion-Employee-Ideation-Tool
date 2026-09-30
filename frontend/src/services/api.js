@@ -124,6 +124,12 @@ export const authApi = {
   // Public. Asked by the sign-in screen before anyone has a session, so it can explain why
   // sign-in is refused instead of showing a bare error.
   maintenance: () => api.get('/auth/maintenance'),
+  // The sign-in screen's first step: given whatever was typed, where should this person go
+  // next - straight to a password, to phone verification, or to "request access".
+  identify: (identifier) => api.post('/auth/identify', { identifier }),
+  // The real password rule this deployment enforces, so the create-password screen can show
+  // it instead of guessing.
+  passwordPolicy: () => api.get('/auth/password-policy'),
   // Signed-in change; also the way out of the forced change a bulk-imported employee faces
   // on first login.
   changePassword: (data) => api.post('/auth/change-password', data),

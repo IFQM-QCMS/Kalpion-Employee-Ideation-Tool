@@ -439,11 +439,11 @@ async function resolveResetTarget(identifier) {
     const db = getTenantPool(tenant);
     let sql;
     if (idType === 'email') {
-      sql = "SELECT id, name, email, phone FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1";
+      sql = "SELECT id, name, email, phone, activated_at FROM users WHERE LOWER(email) = ? AND status = 'active' LIMIT 1";
     } else if (idType === 'username') {
-      sql = "SELECT id, name, email, phone FROM users WHERE LOWER(username) = ? AND status = 'active' LIMIT 1";
+      sql = "SELECT id, name, email, phone, activated_at FROM users WHERE LOWER(username) = ? AND status = 'active' LIMIT 1";
     } else {
-      sql = "SELECT id, name, email, phone FROM users WHERE status = 'active' "
+      sql = "SELECT id, name, email, phone, activated_at FROM users WHERE status = 'active' "
         + "AND REPLACE(REPLACE(REPLACE(phone,' ',''),'-',''),'+','') LIKE ?";
     }
     const [[u] = []] = await db.execute(sql, [idType === 'phone' ? `%${key}` : key]);
@@ -466,6 +466,53 @@ async function resolveResetTarget(identifier) {
   }
 
   return { tenant, user, destination };
+}
+
+/*
+ * The sign-in screen's first question: given whatever the person typed, where should they
+ * land next? Unlike every other lookup in this file, the answer necessarily says whether the
+ * identifier belongs to an account at all - that is the one thing a "just tell me what to do"
+ * entry screen cannot work without. Kept as narrow as the rest of this file lets it be: three
+ * named states and, for the one that needs it, a masked phone number - never a role, an
+ * organisation name, or anything else about the account. Rate-limited on every attempt (see
+ * identifyLimiter), not only failures, because unlike a login attempt a lookup that resolves
+ * to a real account is not a "failure" to exempt from the budget.
+ */
+export async function identifyAccount({ identifier } = {}) {
+  const raw = String(identifier || '').trim();
+  if (!raw) throw badRequest('Enter your username, email address or mobile number.');
+
+  // Platform-admin staff accounts are email + password from the day they are created - there
+  // is no phone-only onboarding path for them, so there is nothing to detect here beyond
+  // "yes, sign in with a password".
+  if (isEmail(raw)) {
+    try {
+      const [rows] = await masterDb().execute(
+        'SELECT id FROM platform_admins WHERE email = ? LIMIT 1', [raw.toLowerCase()]
+      );
+      if (rows[0]) return { next_step: 'PASSWORD_REQUIRED' };
+    } catch (e) {
+      logger.warn('identify: platform_admins lookup failed', e.message);
+    }
+  }
+
+  const target = await resolveResetTarget(raw);
+  if (!target) return { next_step: 'ACCESS_REQUEST_REQUIRED' };
+
+  const { user } = target;
+  // The one signal that actually distinguishes a phone-only, never-activated account: no
+  // email to have received a temporary password by, and never having set one of its own.
+  // (Mirrors the same check otpService.verifyOtp uses to refuse passwordless login to these
+  // same accounts.)
+  if (!user.email && !user.activated_at) {
+    return { next_step: 'PHONE_VERIFICATION_REQUIRED', masked_phone: maskPhone(user.phone) };
+  }
+  return { next_step: 'PASSWORD_REQUIRED' };
+}
+
+/** The real password rule this deployment enforces, for the sign-in screen to display. */
+export function passwordPolicy() {
+  return { min_length: config.minPasswordLength };
 }
 
 export async function requestPasswordResetCode({ identifier, meta = {}, purpose = 'password_reset' } = {}) {
@@ -715,4 +762,5 @@ function escapeHtml(s) {
 export default {
   login, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
   requestPasswordResetCode, verifyPasswordResetCode, issueActivationLink,
+  identifyAccount, passwordPolicy,
 };

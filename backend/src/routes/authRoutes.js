@@ -5,7 +5,7 @@
 import { Router } from 'express';
 import * as auth from '../controllers/authController.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
-import { authLimiter } from '../middleware/rateLimiter.js';
+import { authLimiter, identifyLimiter } from '../middleware/rateLimiter.js';
 
 const router = Router();
 
@@ -13,6 +13,12 @@ router.get('/me', optionalAuth, auth.me);
 // Public on purpose: the sign-in screen has to be able to say why nobody can sign in, and
 // it asks this before anyone has a session.
 router.get('/maintenance', auth.maintenance);
+// The sign-in screen's first step: given an identifier, where should this person go next.
+// identifyLimiter, not authLimiter - see its own comment for why.
+router.post('/identify', identifyLimiter, auth.identify);
+// The real password rule this deployment enforces, so the sign-in/activation screens can
+// show it rather than guess. No account-specific data in it, so the global limiter is enough.
+router.get('/password-policy', auth.passwordPolicy);
 router.post('/login', authLimiter, auth.login);
 // §4.1 / §4.2 - sign in with a one-time code. Rate limited on the same footing as password
 // login: both are unauthenticated ways to reach an account.

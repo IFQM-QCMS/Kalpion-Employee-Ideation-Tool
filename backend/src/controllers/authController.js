@@ -18,6 +18,21 @@ export const me = asyncHandler(async (req, res) => {
   return respond(res, { success: true, authenticated: true, user: req.user });
 });
 
+/*
+ * POST /api/auth/identify - the sign-in screen's "does this exist, and does it need a
+ * password set up" question, asked before anyone has typed a password. See
+ * authService.identifyAccount for what it does and does not reveal.
+ */
+export const identify = asyncHandler(async (req, res) => {
+  const result = await authService.identifyAccount({ identifier: req.body?.identifier });
+  return respond(res, { success: true, ...result });
+});
+
+/** GET /api/auth/password-policy - the real rule, for the sign-in/activation screens to show. */
+export const passwordPolicy = asyncHandler(async (_req, res) => {
+  return respond(res, { success: true, ...authService.passwordPolicy() });
+});
+
 /** POST /api/auth/login */
 export const login = asyncHandler(async (req, res) => {
   const { email, password, org_slug } = req.body || {};
@@ -155,5 +170,5 @@ export const changePassword = asyncHandler(async (req, res) => {
 
 export default {
   me, login, logout, forgotPassword, resetPassword, checkResetToken, changePassword,
-  requestResetCode, verifyResetCode, maintenance,
+  requestResetCode, verifyResetCode, maintenance, identify, passwordPolicy,
 };

@@ -15,14 +15,24 @@ const EMPLOYEE = {
         {
           steps: [
             'Type your **Username**, **Email**, or **Phone number** - any one of the three works.',
-            'Type your **Password**.',
-            'Click **Sign In**.',
+            'Click **Continue**.',
           ],
         },
         {
-          p: 'First time signing in? Your admin gave you a temporary password - either emailed to you, '
-            + 'or handed to you directly if your account has no email address. After you sign in with it, '
-            + "you'll immediately be asked to **Choose a new password**:",
+          p: 'The screen then works out what you need next, automatically - you never have to '
+            + 'figure this out yourself:',
+        },
+        {
+          bullets: [
+            { term: 'You already have a password', text: 'you\'ll be asked to enter it. Click **Sign In**.' },
+            { term: "Your admin emailed you a temporary password", text: "enter it as your password and click **Sign In**. You'll immediately be asked to choose a new one - see below." },
+            { term: 'Your account has no email address', text: "there is nothing to sign in with yet. You'll be taken straight to phone verification instead - see \"Activating an account created with only a phone number\" below." },
+            { term: "Kalpion doesn't recognise what you typed", text: 'you\'ll see **Request access** so support can look into it.' },
+          ],
+        },
+        {
+          p: "If your admin emailed you a temporary password, after you sign in with it you'll immediately "
+            + 'be asked to **Choose a new password**:',
         },
         {
           steps: [
@@ -33,6 +43,15 @@ const EMPLOYEE = {
           ],
         },
         { p: 'You cannot use any other part of the app until this is done.' },
+        {
+          p: 'Activating an account created with only a phone number: if your admin created your account '
+            + 'with a mobile number and no email address, there is no temporary password to sign in with. '
+            + 'Just type your phone number on the Sign In screen and click **Continue** - Kalpion recognises '
+            + 'that your account needs to be activated and takes you straight to phone verification. '
+            + '(You can also click **Activate your account** on the Sign In screen directly.) '
+            + "You'll receive a 6-digit code by SMS - enter it, then choose your own password. "
+            + 'From then on, sign in normally with your phone number and that password.',
+        },
         {
           p: 'Forgot your password? Click **Forgot your password?** on the Sign In screen, enter your '
             + 'registered email, and click **Send reset link**. Check your email for a link - it works for one hour.',

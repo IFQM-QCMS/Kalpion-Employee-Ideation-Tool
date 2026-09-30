@@ -22,7 +22,16 @@ const EyeOffIcon = () => (
     <line x1="1" y1="1" x2="23" y2="23"/>
   </svg>
 );
+const CheckIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 6 9 17l-5-5"/>
+  </svg>
+);
 
+// Also where the phone-verification activation flow (LoginPage) finishes: it hands off a
+// server-issued reset token here exactly the same way an emailed link does, distinguished
+// only by ?activation=1 so the copy can say "create" instead of "reset".
 export default function ResetPasswordPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -30,31 +39,46 @@ export default function ResetPasswordPage() {
 
   const token = params.get('token') || params.get('reset_token') || '';
   const orgSlug = params.get('org') || params.get('org_slug') || '';
+  const isActivation = params.get('activation') === '1';
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  // The real rule this deployment enforces (config.minPasswordLength), not a guessed number -
+  // the deployment default is 12, and this page used to say 8.
+  const [minLen, setMinLen] = useState(12);
+  useEffect(() => {
+    let cancelled = false;
+    authApi.passwordPolicy()
+      .then((r) => { if (!cancelled && r.data?.min_length) setMinLen(Number(r.data.min_length)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!token) {
-      setError('Invalid or expired password reset link. Please request a new link.');
+      setError('Invalid or expired reset link. Please request a new one.');
     }
   }, [token]);
+
+  const lengthOk = password.length >= minLen;
+  const matchOk = confirmPassword.length > 0 && password === confirmPassword;
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!token) {
-      setError('Missing reset token. Please request a new password reset link.');
+      setError('Missing reset token. Please request a new one.');
       return;
     }
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long.');
+    if (!lengthOk) {
+      setError(`Password must be at least ${minLen} characters long.`);
       return;
     }
-    if (password !== confirmPassword) {
+    if (!matchOk) {
       setError('Passwords do not match. Please retype your password.');
       return;
     }
@@ -62,25 +86,22 @@ export default function ResetPasswordPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await authApi.resetPassword({
-        token,
-        password,
-        org_slug: orgSlug,
-      });
+      const res = await authApi.resetPassword({ token, password, org_slug: orgSlug });
 
       if (res.data?.success) {
-        setSuccess('Your password has been updated successfully! Redirecting to login...');
-        showToast('Password updated successfully. Please sign in with your new password.', 'success');
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+        setSuccess(true);
       } else {
-        setError(res.data?.error || 'Failed to reset password. Link may have expired.');
+        setError(res.data?.error || 'That did not work. The link or code may have expired.');
       }
     } catch (err) {
       setError(err?.response?.data?.error || 'Server error. Please try again.');
     }
     setLoading(false);
+  }
+
+  function continueToLogin() {
+    showToast('Password updated successfully. Please sign in with your new password.', 'success');
+    navigate('/login');
   }
 
   return (
@@ -116,12 +137,21 @@ export default function ResetPasswordPage() {
         .reset-card .btn-go {
           width: 100%; padding: 12px; border: none; border-radius: 10px; cursor: pointer;
           background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
-          transition: filter .16s;
+          transition: filter .16s; text-decoration: none; display: inline-flex; align-items: center; justify-content: center;
         }
         .reset-card .btn-go:hover { filter: brightness(1.08); }
         .reset-card .btn-go:disabled { opacity: 0.6; cursor: not-allowed; }
+        .reset-card .btn-go:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .reset-card .err { background: var(--danger-light); color: var(--danger); border: 1px solid var(--danger); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
-        .reset-card .ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); border-radius: 8px; padding: 10px 14px; font-size: 13px; }
+        .reset-card .ok { background: var(--success-light); color: var(--success); border: 1px solid var(--success); border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.55; }
+        .reset-card .rules { display: flex; flex-direction: column; gap: 5px; margin: -4px 0 0; }
+        .reset-card .rule { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--text-muted); }
+        .reset-card .rule.ok { color: var(--success); }
+        .reset-card .rule .dot {
+          width: 15px; height: 15px; flex: none; border-radius: 50%; display: flex; align-items: center;
+          justify-content: center; border: 1.5px solid var(--border); color: transparent;
+        }
+        .reset-card .rule.ok .dot { border-color: var(--success); background: var(--success-light); color: var(--success); }
       `}</style>
 
       <div className="reset-card">
@@ -130,60 +160,102 @@ export default function ResetPasswordPage() {
           <span>Kalpion</span>
         </Link>
 
-        <div>
-          <h1>Reset Password</h1>
-          <p className="sub">Enter your new password for your Kalpion account.</p>
-        </div>
-
-        {error && <div className="err">{error}</div>}
-        {success && <div className="ok">{success}</div>}
-
-        {!success && (
-          <form onSubmit={handleSubmit}>
-            <div className="fld">
-              <span className="ic"><LockIcon /></span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="New Password (min 8 chars)"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoFocus
-              />
-              <button
-                type="button"
-                className="eye"
-                onClick={() => setShowPassword(v => !v)}
-                aria-label="Toggle password visibility"
-              >
-                {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-              </button>
+        {success ? (
+          <>
+            <div>
+              <h1>{isActivation ? 'Your account is ready' : 'Password updated'}</h1>
+              <p className="sub">
+                {isActivation
+                  ? 'Your Kalpion account has been successfully activated.'
+                  : 'Your password has been updated successfully.'}
+              </p>
             </div>
-
-            <div className="fld">
-              <span className="ic"><LockIcon /></span>
-              <input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Confirm New Password"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                required
-                minLength={8}
-              />
+            <div className="ok" role="status">
+              {isActivation
+                ? 'You can now sign in using your phone number and password.'
+                : 'Please sign in with your new password.'}
             </div>
-
-            <button type="submit" className="btn-go" disabled={loading || !token}>
-              {loading ? 'Updating Password...' : 'Reset Password'}
+            <button type="button" className="btn-go" onClick={continueToLogin}>
+              Continue to Kalpion
             </button>
-          </form>
-        )}
+          </>
+        ) : (
+          <>
+            <div>
+              <h1>{isActivation ? 'Create your password' : 'Reset Password'}</h1>
+              <p className="sub">
+                {isActivation
+                  ? 'Your phone number has been verified. Choose a password for your account.'
+                  : 'Enter your new password for your Kalpion account.'}
+              </p>
+            </div>
 
-        <div style={{ textAlign: 'center', marginTop: 6, fontSize: 13 }}>
-          <Link to="/login" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>
-            ← Back to Sign In
-          </Link>
-        </div>
+            {error && <div className="err" role="alert">{error}</div>}
+
+            <form onSubmit={handleSubmit}>
+              <div className="fld">
+                <span className="ic"><LockIcon /></span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={isActivation ? 'New password' : `New password (min ${minLen} chars)`}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  autoFocus
+                  aria-label="New password"
+                  aria-describedby="pw-rules"
+                />
+                <button
+                  type="button"
+                  className="eye"
+                  onClick={() => setShowPassword(v => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                </button>
+              </div>
+
+              {/* Real-time feedback on the one rule that is meaningfully checkable before
+                  submitting - length. The blocklist / repeated-character rules are the
+                  server's own call and surface as a normal form error if either is tripped,
+                  rather than being duplicated (and risking drifting out of sync) here. */}
+              <div className="rules" id="pw-rules" aria-live="polite">
+                <div className={`rule${lengthOk ? ' ok' : ''}`}>
+                  <span className="dot" aria-hidden="true"><CheckIcon /></span>
+                  At least {minLen} characters
+                </div>
+                <div className={`rule${matchOk ? ' ok' : ''}`}>
+                  <span className="dot" aria-hidden="true"><CheckIcon /></span>
+                  Passwords match
+                </div>
+              </div>
+
+              <div className="fld">
+                <span className="ic"><LockIcon /></span>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                  aria-label="Confirm new password"
+                />
+              </div>
+
+              <button type="submit" className="btn-go" disabled={loading || !token || !lengthOk || !matchOk}>
+                {loading
+                  ? (isActivation ? 'Creating...' : 'Updating...')
+                  : (isActivation ? 'Create password' : 'Reset Password')}
+              </button>
+            </form>
+
+            <div style={{ textAlign: 'center', marginTop: 6, fontSize: 13 }}>
+              <Link to="/login" style={{ color: 'var(--primary)', textDecoration: 'none', fontWeight: 600 }}>
+                ← Back to Sign In
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
