@@ -56,6 +56,7 @@ export default function Topbar({ onToggleSidebar, mobile = false }) {
   const [isDark, setIsDark]         = useState(isDarkTheme);
   const [showNotif, setShowNotif]   = useState(false);
   const [showLang, setShowLang]     = useState(false);
+  const [showUserCard, setShowUserCard] = useState(false);
   // The idea a notification points at, opened as an overlay from wherever the reader happens
   // to be.
   const [notifIdeaId, setNotifIdeaId] = useState(null);
@@ -235,16 +236,59 @@ export default function Topbar({ onToggleSidebar, mobile = false }) {
           )}
         </div>
 
-        {/* User chip. MOM §12.10 - a platform admin sees "Superadmin signed in as <name>" rather than a bare name plus a role pill. */}
-        <div className="user-chip" onClick={() => navigate('/profile')} title={user?.name}>
-          <div className="avatar">{user?.avatar_initials || user?.name?.[0] || '?'}</div>
-          {mobile ? null : user?.role === 'platform_admin' ? (
-            <span>{t('pa.signed_in_as').replace('{name}', user?.name || '')}</span>
-          ) : (
-            <>
-              <span>{user?.name}</span>
-              <span className="role-badge">{formatRole(user?.role, t)}</span>
-            </>
+        {/* User chip. MOM §12.10 - a platform admin sees "Superadmin signed in as <name>" rather than a bare name plus a role pill. Hovering (or, for a keyboard user, focusing it) previews who is signed in without leaving the page to open the profile. */}
+        <div className="user-chip-wrap"
+          onMouseEnter={() => setShowUserCard(true)}
+          onMouseLeave={() => setShowUserCard(false)}>
+          <div className="user-chip" onClick={() => navigate('/profile')} title={user?.name}
+            tabIndex={0} role="button" aria-haspopup="true" aria-expanded={showUserCard}
+            onFocus={() => setShowUserCard(true)}
+            onBlur={(e) => { if (!e.currentTarget.parentElement.contains(e.relatedTarget)) setShowUserCard(false); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate('/profile'); } }}>
+            <div className="avatar">{user?.avatar_initials || user?.name?.[0] || '?'}</div>
+            {mobile ? null : user?.role === 'platform_admin' ? (
+              <span>{t('pa.signed_in_as').replace('{name}', user?.name || '')}</span>
+            ) : (
+              <>
+                <span>{user?.name}</span>
+                <span className="role-badge">{formatRole(user?.role, t)}</span>
+              </>
+            )}
+          </div>
+
+          {showUserCard && user && (
+            <div className="user-hover-card" role="tooltip">
+              <div className="uhc-head">
+                <div className="avatar" style={{ width:38,height:38,fontSize:14 }}>
+                  {user.avatar_initials || user.name?.[0] || '?'}
+                </div>
+                <div style={{ minWidth:0 }}>
+                  <div className="uhc-name">{user.name}</div>
+                  <span className="role-badge">{formatRole(user.role, t)}</span>
+                </div>
+              </div>
+              {user.employee_id && (
+                <div className="uhc-row"><span className="uhc-label">{t('table.emp_id')}</span><span className="uhc-value">{user.employee_id}</span></div>
+              )}
+              {user.department && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.dept')}</span><span className="uhc-value">{user.department}</span></div>
+              )}
+              {user.business_unit && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.bu')}</span><span className="uhc-value">{user.business_unit}</span></div>
+              )}
+              {user.location && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.loc')}</span><span className="uhc-value">{user.location}</span></div>
+              )}
+              {user.manager_name && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.reports_to')}</span><span className="uhc-value">{user.manager_name}</span></div>
+              )}
+              {user.email && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.email_lbl')}</span><span className="uhc-value">{user.email}</span></div>
+              )}
+              {user.phone && (
+                <div className="uhc-row"><span className="uhc-label">{t('profile.phone')}</span><span className="uhc-value">{user.phone}</span></div>
+              )}
+            </div>
           )}
         </div>
 

@@ -178,80 +178,80 @@ export default function AllIdeasPage() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
-      <div className="card" style={{ overflowX:'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('table.code')}</th>
-              <th>{t('table.title')}</th>
-              <th>{t('table.solution_gist')}</th>
-              <th>{t('table.patentable')}<InfoDot term="patentable" /></th>
-              <th>{t('table.submitter')}</th>
-              <th>{t('table.dept')}</th>
-              <th>{t('table.impact')}</th>
-              <th>{t('table.score')}<InfoDot term="community_score" /></th>
-              <th>{t('table.votes')}</th>
-              <th>{t('table.status')}</th>
-              <th>{t('table.date')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="all-ideas-tbody">
-            {loading && (
-              <tr><td colSpan="12" className="text-center"><div className="spinner"></div></td></tr>
-            )}
-            {!loading && !ideas.length && (
-              <tr><td colSpan="12" className="text-center">{t('msg.no_ideas')}</td></tr>
-            )}
-            {pager.slice.map(i => {
-              const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
-              const cScore  = communityScore(i.ai_score, i.upvotes||0, i.downvotes||0);
-              return (
-                <tr key={i.id} data-status={i.status}>
-                  <td><strong>{i.idea_code}</strong></td>
-                  <td title={i.title}>
-                    <div className="cell-clamp" style={{ maxWidth:280 }}>{i.title}</div>
-                  </td>
-                  {/* One line only. The full proposal is deliberately not sent to this screen - see redactSolution() in ideaService. */}
-                  <td style={{ color:'var(--text-muted)',fontSize:12.5 }}>
-                    {i.solution_summary
-                      ? <div className="cell-clamp" style={{ maxWidth:260 }}
-                             title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
-                          {i.solution_summary}
-                          {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">Protected</span>}
-                        </div>
-                      : <span style={{ color:'var(--subtle)' }}>-</span>}
-                  </td>
-                  <td className="text-center">
-                    {i.patentable_flag
-                      ? <span className="chip chip-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
-                      : <span style={{ color:'var(--subtle)' }}>-</span>}
-                  </td>
-                  <td>{i.submitter_name}</td>
-                  <td>{i.department||'-'}</td>
-                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'-'}</span></td>
-                  <td>
-                    {i.ai_score > 0
-                      ? <span id={`cscore-${i.id}`} className={scoreBadgeClass(cScore)}
-                          title={`AI Score: ${i.ai_score}/100 · Community adjustment: ${cScore-i.ai_score>=0?'+':''}${cScore-i.ai_score}`}>
-                          {cScore}/100
-                        </span>
-                      : <span className="score-none score-badge">-</span>
-                    }
-                  </td>
-                  <td>
-                    {i.status !== 'Draft'
-                      ? <VoteWidget ideaId={i.id} isSelf={isSelf}
-                          upvotes={i.upvotes||0} downvotes={i.downvotes||0}
-                          userVote={i.user_community_vote||null} onVote={castVote} />
-                      : <span style={{ fontSize:11,color:'var(--subtle)' }}>-</span>
-                    }
-                  </td>
-                  <td><span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span><QcBadge status={i.qcms_push_status} /></td>
-                  <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.submitted_at)}</td>
-                  <td>
+      {loading && <div className="card text-center"><div className="spinner"></div></div>}
+      {!loading && !ideas.length && <div className="card text-center">{t('msg.no_ideas')}</div>}
+
+      {!loading && !!ideas.length && (
+        <div className="idea-list">
+          {pager.slice.map(i => {
+            const isSelf  = parseInt(i.submitter_id) === parseInt(user?.id);
+            const cScore  = communityScore(i.ai_score, i.upvotes||0, i.downvotes||0);
+            const canOpen = i.viewer_inside !== false;
+            return (
+              <div key={i.id} className={canOpen ? 'idea-card is-clickable' : 'idea-card'}
+                data-status={i.status} onClick={canOpen ? () => setOpenId(i.id) : undefined}>
+                <div className="idea-card-top">
+                  <div className="idea-card-id">
+                    <div className="idea-card-code">{i.idea_code}</div>
+                    <div className="idea-card-title">{i.title}</div>
+                    {/* One line only. The full proposal is deliberately not sent to this screen - see redactSolution() in ideaService. */}
+                    {i.solution_summary && (
+                      <div className="idea-card-sub">
+                        {i.solution_summary}
+                        {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true" title={t('idea.solution_hidden_hint')}>Protected</span>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="idea-card-badges">
+                    <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
+                    <QcBadge status={i.qcms_push_status} />
+                    {i.patentable_flag && (
+                      <span className="chip chip-info" title={t('idea.patentable_hint')}>{t('idea.patentable_short')}</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="idea-card-meta">
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.submitter')}</span>
+                    <span className="idea-card-meta-value">{i.submitter_name}</span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.dept')}</span>
+                    <span className="idea-card-meta-value">{i.department||'-'}</span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.impact')}</span>
+                    <span className="idea-card-meta-value">
+                      <span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level,t)||'-'}</span>
+                    </span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.score')}<InfoDot term="community_score" /></span>
+                    <span className="idea-card-meta-value">
+                      {i.ai_score > 0
+                        ? <span id={`cscore-${i.id}`} className={scoreBadgeClass(cScore)}
+                            title={`AI Score: ${i.ai_score}/100 · Community adjustment: ${cScore-i.ai_score>=0?'+':''}${cScore-i.ai_score}`}>
+                            {cScore}/100
+                          </span>
+                        : <span className="score-none score-badge">-</span>}
+                    </span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.date')}</span>
+                    <span className="idea-card-meta-value">{fmtDateTime(i.submitted_at)}</span>
+                  </div>
+                </div>
+
+                <div className="idea-card-actions" onClick={(e) => e.stopPropagation()}>
+                  {i.status !== 'Draft' && (
+                    <VoteWidget ideaId={i.id} isSelf={isSelf}
+                      upvotes={i.upvotes||0} downvotes={i.downvotes||0}
+                      userVote={i.user_community_vote||null} onVote={castVote} />
+                  )}
+                  <div style={{ marginLeft:'auto' }}>
                     {/* Outside the idea? No full view is offered - the overlay would be a title and a row of locked notices. */}
-                    {i.viewer_inside === false ? (
+                    {!canOpen ? (
                       <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
                         onClick={() => downloadGist(i)}>
                         {t('btn.summary')}
@@ -261,14 +261,14 @@ export default function AllIdeasPage() {
                         {t('btn.view')}
                       </button>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <Pager {...pager} noun="ideas" />
-      </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <Pager {...pager} noun="ideas" />
+        </div>
+      )}
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); loadIdeas(); }} />}
     </ScreenGuard>

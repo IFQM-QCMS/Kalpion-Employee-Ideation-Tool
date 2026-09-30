@@ -1847,6 +1847,8 @@ export default {
   'audit.filter_apply':'Filter',
   'audit.filter_clear':'Clear',
   'audit.showing':'{n} entries (newest first, up to 200)',
+  'audit.show_entries':'Show {n} entry(ies)',
+  'audit.hide_entries':'Hide entries',
 
   // Roles dropdown from live data
   'admin.role_count':'{n} people',

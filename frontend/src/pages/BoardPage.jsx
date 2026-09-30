@@ -112,88 +112,95 @@ export default function BoardPage() {
 
       {error && <div className="alert alert-danger">{error}</div>}
 
+      {loading && <div className="card text-center"><div className="spinner"></div></div>}
+      {!loading && !error && !ideas.length && <div className="card text-center">{t('board.empty')}</div>}
+
       {/* The board ranks ideas against each other - that is what the sort control at the top is for. */}
-      <div className="card" style={{ overflowX:'auto' }}>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>{t('table.title')}</th>
-              <th>{t('table.submitter')}</th>
-              <th>{t('table.dept')}</th>
-              <th>{t('table.impact')}</th>
-              <th>{t('table.score')}</th>
-              <th>{t('table.votes')}</th>
-              <th>{t('table.net')}</th>
-              <th>{t('table.status')}</th>
-              <th>{t('audit.when')}</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="board-list">
-            {loading && <tr><td colSpan="10" className="text-center"><div className="spinner"></div></td></tr>}
-            {!loading && !error && !ideas.length && (
-              <tr><td colSpan="10" className="text-center">{t('board.empty')}</td></tr>
-            )}
-            {pager.slice.map(i => {
-              const upvotes   = parseInt(i.upvotes)||0;
-              const downvotes = parseInt(i.downvotes)||0;
-              const isSelf    = parseInt(i.submitter_id) === parseInt(user?.id);
-              const net       = upvotes - downvotes;
-              return (
-                <tr key={i.id} id={`board-card-${i.id}`} data-status={i.status}>
-                  <td title={i.title}>
-                    <div style={{ fontWeight:600,color:'var(--heading)' }}>
-                      <div className="cell-clamp" style={{ maxWidth:300 }}>{i.title}</div>
-                    </div>
+      {!loading && !error && !!ideas.length && (
+        <div className="idea-list">
+          {pager.slice.map(i => {
+            const upvotes   = parseInt(i.upvotes)||0;
+            const downvotes = parseInt(i.downvotes)||0;
+            const isSelf    = parseInt(i.submitter_id) === parseInt(user?.id);
+            const net       = upvotes - downvotes;
+            const canOpen   = i.viewer_inside !== false;
+            return (
+              <div key={i.id} id={`board-card-${i.id}`} className={canOpen ? 'idea-card is-clickable' : 'idea-card'}
+                data-status={i.status} onClick={canOpen ? () => setOpenId(i.id) : undefined}>
+                <div className="idea-card-top">
+                  <div className="idea-card-id">
+                    <div className="idea-card-title">{i.title}</div>
                     {/* Summaries, not the full text. */}
-                    <div className="cell-clamp" style={{ maxWidth:300,fontSize:12.5,color:'var(--text-muted)',marginTop:2 }}
-                         title={i.situation_summary || i.present_situation || ''}>
-                      {i.situation_summary || i.present_situation}
-                    </div>
+                    {(i.situation_summary || i.present_situation) && (
+                      <div className="idea-card-sub">{i.situation_summary || i.present_situation}</div>
+                    )}
                     {i.solution_summary && (
-                      <div className="cell-clamp" style={{ maxWidth:300,fontSize:12,color:'var(--subtle)',marginTop:2 }}
-                           title={i.solution_redacted ? t('idea.solution_hidden_hint') : i.solution_summary}>
+                      <div className="idea-card-sub" style={{ color:'var(--subtle)' }}>
                         {i.solution_summary}
-                        {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true">Protected</span>}
+                        {i.solution_redacted && <span style={{ marginLeft:5,opacity:.65 }} aria-hidden="true" title={t('idea.solution_hidden_hint')}>Protected</span>}
                       </div>
                     )}
-                  </td>
-                  <td>{i.submitter_name}</td>
-                  <td>{i.department||'-'}</td>
-                  <td><span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'-'}</span></td>
-                  <td>
-                    {i.ai_score > 0
-                      ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
-                      : <span className="score-none score-badge">-</span>}
-                  </td>
-                  <td>
-                    <VoteWidget ideaId={i.id} isSelf={isSelf}
-                      upvotes={upvotes} downvotes={downvotes}
-                      userVote={i.user_vote} onVote={castVote} />
-                  </td>
-                  {/* The number the sort is actually ordering by, given a column of its own so the ranking can be checked at a glance. */}
-                  <td style={{ fontWeight:700,color:'var(--heading)' }}>{net}</td>
-                  <td>
+                  </div>
+                  <div className="idea-card-badges">
                     <span className={`badge ${statusBadge(i.status)}`}>{translateStatus(i.status,t)}</span>
                     <QcBadge status={i.qcms_push_status} />
-                  </td>
-                  <td style={{ whiteSpace:'nowrap' }}>{fmtDateTime(i.created_at)}</td>
-                  <td>
+                  </div>
+                </div>
+
+                <div className="idea-card-meta">
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.submitter')}</span>
+                    <span className="idea-card-meta-value">{i.submitter_name}</span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.dept')}</span>
+                    <span className="idea-card-meta-value">{i.department||'-'}</span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.impact')}</span>
+                    <span className="idea-card-meta-value">
+                      <span className={`badge ${impactBadge(i.impact_level)}`}>{translateImpact(i.impact_level, t)||'-'}</span>
+                    </span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.score')}</span>
+                    <span className="idea-card-meta-value">
+                      {i.ai_score > 0
+                        ? <span className={scoreBadgeClass(i.ai_score)}>{i.ai_score}/100</span>
+                        : <span className="score-none score-badge">-</span>}
+                    </span>
+                  </div>
+                  {/* The number the sort is actually ordering by, given its own slot so the ranking can be checked at a glance. */}
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('table.net')}</span>
+                    <span className="idea-card-meta-value" style={{ fontWeight:700 }}>{net}</span>
+                  </div>
+                  <div className="idea-card-meta-item">
+                    <span className="idea-card-meta-label">{t('audit.when')}</span>
+                    <span className="idea-card-meta-value">{fmtDateTime(i.created_at)}</span>
+                  </div>
+                </div>
+
+                <div className="idea-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <VoteWidget ideaId={i.id} isSelf={isSelf}
+                    upvotes={upvotes} downvotes={downvotes}
+                    userVote={i.user_vote} onVote={castVote} />
+                  <div style={{ marginLeft:'auto' }}>
                     {/* Somebody outside the idea is offered the summary, never a full view. */}
-                    {i.viewer_inside === false ? (
+                    {!canOpen ? (
                       <button className="btn btn-outline btn-sm" title={t('idea.summary_only_hint')}
                         onClick={() => downloadGist(i)}>{t('btn.summary')}</button>
                     ) : (
                       <button className="btn btn-outline btn-sm" onClick={() => setOpenId(i.id)}>{t('btn.view')}</button>
                     )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <Pager {...pager} noun="ideas" />
-      </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <Pager {...pager} noun="ideas" />
+        </div>
+      )}
 
       {openId && <IdeaDetailModal ideaId={openId} onClose={() => { setOpenId(null); load(); }} />}
     </ScreenGuard>

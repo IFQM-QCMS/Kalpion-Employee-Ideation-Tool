@@ -451,6 +451,28 @@ h1,h2,h3,h4{color:var(--heading);font-weight:650;letter-spacing:-.02em;line-heig
   border:1px solid var(--border);
 }
 
+/* ── User hover card ────────────────────────────────────────────────────────
+   Hovering (or focusing, for a keyboard user) the account chip in the topbar
+   shows who is signed in without having to open the profile page first. */
+.user-chip-wrap{position:relative;display:flex}
+.user-hover-card{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:70;width:260px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
+  box-shadow:0 14px 34px -10px rgba(12,14,20,.28);padding:16px;
+  animation:user-card-in .13s ease-out;
+}
+@keyframes user-card-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.user-hover-card .uhc-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.user-hover-card .uhc-name{font-size:14px;font-weight:700;color:var(--heading);overflow-wrap:anywhere}
+.user-hover-card .uhc-row{
+  display:flex;justify-content:space-between;gap:12px;
+  font-size:12px;padding:6px 0;border-top:1px solid var(--border);
+}
+.user-hover-card .uhc-row:first-of-type{border-top:none}
+.user-hover-card .uhc-label{color:var(--subtle);font-weight:600;flex:none}
+.user-hover-card .uhc-value{color:var(--text);text-align:right;overflow-wrap:anywhere;min-width:0}
+@media (max-width:640px){.user-hover-card{display:none}}
+
 /* Theme toggle */
 .dm-toggle{
   display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;
@@ -656,6 +678,45 @@ td{overflow-wrap:anywhere;word-break:break-word}
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
+}
+
+/* ── IDEA CARDS ─────────────────────────────────────────────────────────────
+   Replaces the wide, many-column tables on the idea-facing screens (My Ideas,
+   Review Queue, All Ideas, Rejected Ideas, Idea Board). Those tables needed
+   horizontal scrolling to read at all on anything but a wide monitor - hard
+   going for a shop-floor audience that may not be comfortable scrolling a
+   data grid sideways in the first place. One idea, one block, everything
+   about it stacked and wrapped rather than squeezed into a row. Status stays
+   in a fixed top-right slot regardless of title length - the earlier
+   card attempt on My Ideas put status inline after the title, so its
+   position drifted with every row and made the column impossible to scan;
+   this pins it in its own flex item instead of letting it flow with the
+   text. */
+.idea-list{display:flex;flex-direction:column;gap:12px;margin-top:4px}
+.idea-card{
+  border:1px solid var(--border);border-radius:var(--r-lg);padding:16px 18px;
+  background:var(--surface);box-shadow:var(--shadow-xs);
+  transition:border-color var(--t-fast) var(--ease);
+}
+.idea-card.is-clickable{cursor:pointer}
+.idea-card.is-clickable:hover{border-color:var(--border-strong)}
+.idea-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.idea-card-id{min-width:0;flex:1}
+.idea-card-code{font-size:11px;font-weight:700;color:var(--subtle);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.idea-card-title{font-size:14.5px;font-weight:650;color:var(--heading);line-height:1.4;overflow-wrap:anywhere}
+.idea-card-badges{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.idea-card-sub{margin-top:5px;font-size:12.5px;color:var(--text-muted);line-height:1.5;overflow-wrap:anywhere}
+.idea-card-meta{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:13px}
+.idea-card-meta-item{display:flex;flex-direction:column;gap:2px;min-width:60px}
+.idea-card-meta-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--subtle)}
+.idea-card-meta-value{font-size:12.5px;font-weight:600;color:var(--text)}
+.idea-card-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center}
+.idea-card-actions.align-end{justify-content:flex-end}
+.idea-card-check{flex:none;width:20px;display:flex;align-items:flex-start;padding-top:1px}
+@media (max-width:520px){
+  .idea-card{padding:14px}
+  .idea-card-top{flex-direction:column;gap:8px}
+  .idea-card-badges{flex-direction:row;align-items:center}
 }
 
 /* ── BADGES ─────────────────────────────────────────────────────────────── */
