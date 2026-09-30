@@ -109,7 +109,7 @@ export default {
 
   // The smart sign-in flow: one identifier field decides everything else - whether to ask
   // for a password, send a phone-verification code, or offer to request access.
-  'login.identify_heading':'Welcome to Kalpion',
+  'login.identify_heading':'Welcome back',
   'login.identify_sub':'Sign in to your account',
   'login.identify_required':'Enter your username, email address or mobile number.',
   'login.continue':'Continue',
