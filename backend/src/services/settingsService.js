@@ -37,6 +37,9 @@ const SETTINGS_WHITELIST = [
   'max_file_mb', 'idea_screen_protection', 'situation_preview_chars',
   // Which parts of somebody else's idea an ordinary colleague may read.
   'employee_visible_sections',
+  // Whether the Business Case and Co-Suggesters steps appear in this organisation's
+  // submission wizard at all.
+  'business_case_enabled', 'co_suggesters_enabled',
 ];
 
 /*
@@ -50,6 +53,7 @@ const PUBLIC_SETTINGS = [
   'solution_visibility', 'prediction_visibility', 'employee_visible_sections',
   'idea_tags_enabled', 'patentability_enabled',
   'max_file_mb', 'idea_screen_protection', 'situation_preview_chars', 'content_protection',
+  'business_case_enabled', 'co_suggesters_enabled',
 ];
 
 /** Clean a submitted label map before it is stored. */

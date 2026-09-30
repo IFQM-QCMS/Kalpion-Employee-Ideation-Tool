@@ -183,7 +183,8 @@ export default function AdminPage() {
     // Tick boxes, not a form field - and an empty list is a real answer meaning "title only",
     // so it is sent as an empty string rather than skipped.
     data.employee_visible_sections = empSections.join(',');
-    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection','idea_screen_protection'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
+    ['anonymous_allowed','public_board_enabled','challenges_enabled','email_enabled','content_protection','idea_screen_protection',
+      'business_case_enabled','co_suggesters_enabled'].forEach(k => { data[k] = fd.get(k)==='1'?'1':'0'; });
     setSettingsMsg('');
     try {
       const res = await settingsApi.update(data);
@@ -523,6 +524,21 @@ export default function AdminPage() {
                 {t('admin.content_protection')}<InfoDot term="content_protection" />
               </label>
               <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.cp_hint')}</div>
+            </div>
+
+            {/* Both off by default - the wizard runs four steps until switched on here, adding
+                that step for every user in this organisation, going forward. */}
+            <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.wizard_heading')}<InfoDot term="wizard_steps" /></div>
+            <div className="form-row">
+              {[['business_case_enabled','admin.flag_business_case','wizard_business_case'],
+                ['co_suggesters_enabled','admin.flag_co_suggesters','wizard_co_suggesters']].map(([k,labelKey,infoTerm]) => (
+                <div key={k} className="form-group">
+                  <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer' }}>
+                    <input type="checkbox" name={k} value="1" defaultChecked={settings[k] === '1'} style={{ accentColor:'var(--primary)' }} />
+                    {t(labelKey)}<InfoDot term={infoTerm} />
+                  </label>
+                </div>
+              ))}
             </div>
 
             <div style={{ fontSize:13,fontWeight:600,color:'var(--heading)',margin:'16px 0 12px' }}>{t('admin.flags_heading')}<InfoDot term="feature_flags" /></div>

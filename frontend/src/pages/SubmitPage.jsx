@@ -110,13 +110,33 @@ export default function SubmitPage() {
   // The attachment ceiling belongs to the organisation, so the note under the file box has
   // to come from their settings rather than from a fixed string.
   const [maxFileMb, setMaxFileMb] = useState(10);
+  // Each organisation may opt into the Business Case and Co-Suggesters steps for itself -
+  // both off by default, so the wizard runs four steps until an admin switches either one on.
+  const [bcEnabled, setBcEnabled] = useState(false);
+  const [coEnabled, setCoEnabled] = useState(false);
   useEffect(() => {
     let cancelled = false;
     loadOrgSettings().then((cfg) => {
-      if (!cancelled) setMaxFileMb(numSetting(cfg, 'max_file_mb', 10));
+      if (cancelled) return;
+      setMaxFileMb(numSetting(cfg, 'max_file_mb', 10));
+      setBcEnabled(cfg.business_case_enabled === '1');
+      setCoEnabled(cfg.co_suggesters_enabled === '1');
     });
     return () => { cancelled = true; };
   }, []);
+
+  // The wizard's own steps, in order - shrinking when this organisation has switched one off.
+  // Situation and Solution never move: they are always the first two.
+  const steps = [
+    'situation', 'solution',
+    ...(bcEnabled ? ['business_case'] : []),
+    'attachments',
+    ...(coEnabled ? ['co_suggesters'] : []),
+    'review',
+  ];
+  // A step disabled mid-wizard (the settings load resolving late, or an admin switching it off
+  // in another tab) must not strand the wizard on a page position that no longer exists.
+  useEffect(() => { setStep((s) => Math.min(s, steps.length)); /* eslint-disable-next-line */ }, [steps.length]);
 
   // Refuse an oversized file here, where the person can still pick another one, rather than
   // letting them finish the form and fail on upload.
@@ -377,14 +397,15 @@ export default function SubmitPage() {
     setDraftId(null); setStep(1); setError(''); setDupWarning([]);
   }
 
-  // The business case is a step of its own, third, straight after the solution - the
-  // questions it asks (what will this cost, how long, what support) only make sense once the
-  // solution has been described, and they belong before the optional attachment/co-suggester
-  // steps rather than buried under them.
-  const stepLabels = [
-    t('wizard.step1'), t('wizard.step2'), t('wizard.business'),
-    t('wizard.step3'), t('wizard.step4'), t('wizard.step5'),
-  ];
+  // The business case is a step of its own, straight after the solution - the questions it
+  // asks (what will this cost, how long, what support) only make sense once the solution has
+  // been described. Labelled by key, not position, since an organisation may have switched
+  // either optional step off.
+  const STEP_LABEL_KEYS = {
+    situation: 'wizard.step1', solution: 'wizard.step2', business_case: 'wizard.business',
+    attachments: 'wizard.step3', co_suggesters: 'wizard.step4', review: 'wizard.step5',
+  };
+  const stepLabels = steps.map((k) => t(STEP_LABEL_KEYS[k]));
 
   return (
     <>
@@ -487,8 +508,8 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 3: Business Case */}
-        {step === 3 && (
+        {/* Business Case - only when this organisation still asks for it */}
+        {steps[step-1] === 'business_case' && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div style={{ marginBottom:4,fontSize:13,fontWeight:600,color:'var(--heading)' }}>{t('form.bc_heading')}</div>
             <div style={{ marginBottom:16,fontSize:12,color:'var(--subtle)' }}>{t('form.bc_hint')}</div>
@@ -595,8 +616,8 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 4: Attachments */}
-        {step === 4 && (
+        {/* Attachments */}
+        {steps[step-1] === 'attachments' && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
               <label>{t('form.attach_situation')}</label>
@@ -614,8 +635,9 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 5: Co-Suggesters - add as many colleagues as you like */}
-        {step === 5 && (
+        {/* Co-Suggesters - add as many colleagues as you like, only when this organisation
+            still asks for it */}
+        {steps[step-1] === 'co_suggesters' && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div className="form-group">
               <label>{t('form.co_suggesters')}<InfoDot term="co_suggesters" /></label>
@@ -651,8 +673,8 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {/* Step 5: Review & Submit */}
-        {step === 6 && (
+        {/* Review & Submit */}
+        {steps[step-1] === 'review' && (
           <div style={{ animation:'fadeInUp .25s cubic-bezier(.4,0,.2,1)' }}>
             <div style={{ marginBottom:16,fontSize:13,fontWeight:600,color:'var(--heading)' }}>{t('form.review_heading')}</div>
 
@@ -743,18 +765,18 @@ export default function SubmitPage() {
         )}
 
         {/* Navigation */}
-        {step < 6 && (
+        {step < steps.length && (
           <div id="wizard-nav" style={{ display:'flex',justifyContent:'space-between',marginTop:24 }}>
             <button className="btn btn-outline" style={{ visibility:step>1?'visible':'hidden' }} onClick={() => goStep(step-1)}>
               ← {t('btn.back')}
             </button>
             <button className="btn btn-primary" onClick={() => goStep(step+1)}>
-              {step === 5 ? t('btn.review') : t('btn.next')} →
+              {step === steps.length - 1 ? t('btn.review') : t('btn.next')} →
             </button>
           </div>
         )}
 
-        {step === 6 && (
+        {step === steps.length && (
           <div style={{ marginTop:12 }}>
             <button className="btn btn-outline btn-sm" onClick={() => goStep(step-1)}>← {t('btn.back')}</button>
           </div>

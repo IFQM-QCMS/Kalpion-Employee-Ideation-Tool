@@ -321,6 +321,11 @@ INSERT IGNORE INTO org_settings (key_name, value) VALUES
   ('solution_visibility',       'authors_reviewers'),
   ('idea_tags_enabled',         '1'),
   ('patentability_enabled',     '1'),
+  -- Whether the Business Case and Co-Suggesters steps appear in this organisation's
+  -- submission wizard. Off by default - the wizard runs four steps unless an admin opts
+  -- either one back in.
+  ('business_case_enabled',     '0'),
+  ('co_suggesters_enabled',     '0'),
   -- §14.10: voting is open to all; this governs the AI's written reasoning only.
   ('prediction_visibility',     'seniors'),
   -- §7.2: deterrents against casually copying idea text. Off by default.
