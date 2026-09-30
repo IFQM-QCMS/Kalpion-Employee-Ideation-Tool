@@ -482,16 +482,30 @@ export default function LoginPage() {
         .ifqm-particles .glow-b{top:-14%;left:38%;width:260px;height:1300px;transform:translateX(-50%) rotate(-42deg);
           background:radial-gradient(50% 50% at 50% 50%,rgba(168,85,247,.08),transparent 80%)}
 
-        .ifqm-particles .auth-col{position:relative;z-index:1;width:100%;max-width:384px;
-          display:flex;flex-direction:column;gap:18px;
+        .ifqm-particles .auth-col{position:relative;z-index:1;width:100%;max-width:440px;
+          display:flex;flex-direction:column;gap:18px;text-align:center;
           animation:ip-in .6s cubic-bezier(.16,.84,.44,1) both}
         @keyframes ip-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-        .ifqm-particles .brand{display:flex;align-items:center;gap:12px;text-decoration:none}
+        .ifqm-particles .brand{display:flex;align-items:center;justify-content:center;gap:14px;text-decoration:none}
         .ifqm-particles .brand img{height:52px;background:#fff;border-radius:12px;padding:7px 12px;
-          object-fit:contain;box-shadow:0 8px 26px rgba(79,70,229,.20)}
-        .ifqm-particles .brand .wm{font-size:20px;font-weight:800;letter-spacing:-.02em;color:var(--heading)}
-        .ifqm-particles .brand .wm small{display:block;font-size:11.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted)}
+          object-fit:contain;box-shadow:0 8px 26px rgba(79,70,229,.20);flex:none}
+        /*
+         * "Kalpion" gets the same creative treatment as the landing page's own wordmark
+         * (Sora, weight 700, tight tracking - see LandingPage.jsx) rather than a second,
+         * unrelated typeface: one brand mark, used consistently. Sized to stand level with
+         * the 52px logo plate beside it instead of reading as a caption under it.
+         */
+        .ifqm-particles .brand .wm{
+          font-family:'Sora','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+          font-size:42px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--heading);
+        }
+        .ifqm-particles .brand .wm small{display:block;font-size:11.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted);font-family:'Inter',system-ui,sans-serif}
+        @media (max-width:420px){
+          .ifqm-particles .brand{gap:10px}
+          .ifqm-particles .brand img{height:40px}
+          .ifqm-particles .brand .wm{font-size:30px}
+        }
 
         .ifqm-particles h1{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--heading);margin:6px 0 2px;
           animation:ip-fade .22s ease-out both}
@@ -505,7 +519,7 @@ export default function LoginPage() {
         .ifqm-particles .fld .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);display:flex;color:var(--text-muted)}
         .ifqm-particles .fld input{
           width:100%;background:var(--surface);border:1px solid var(--border);border-radius:12px;
-          padding:13px 44px;font-size:14px;color:var(--text);outline:none;
+          padding:13px 44px;font-size:14px;color:var(--text);outline:none;text-align:left;
           transition:border-color .16s,box-shadow .16s;
         }
         .ifqm-particles .fld input::placeholder{color:var(--subtle)}
@@ -524,7 +538,7 @@ export default function LoginPage() {
         .ifqm-particles .go:disabled{opacity:.65;cursor:default;transform:none;box-shadow:none}
         .ifqm-particles .go:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
-        .ifqm-particles .row{display:flex;justify-content:flex-end;margin-top:-2px}
+        .ifqm-particles .row{display:flex;justify-content:center;margin-top:-2px}
         .ifqm-particles .link{font-size:12.5px;color:var(--primary);text-decoration:none;cursor:pointer;
           background:none;border:none;padding:0;font-family:inherit}
         .ifqm-particles .link:hover{text-decoration:underline}
@@ -543,10 +557,10 @@ export default function LoginPage() {
         .ifqm-particles .foot.hint{margin-top:2px;text-align:center;font-size:11.5px}
 
         .ifqm-particles .id-row{
-          display:flex;align-items:center;justify-content:space-between;gap:10px;
+          display:flex;align-items:center;justify-content:center;gap:10px;
           font-size:13px;color:var(--text-muted);
         }
-        .ifqm-particles .id-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--heading)}
+        .ifqm-particles .id-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;font-weight:600;color:var(--heading)}
         .ifqm-particles .phone-chip{
           display:flex;align-items:center;gap:10px;background:var(--panel-bg,var(--surface));
           border:1px solid var(--border);border-radius:12px;padding:12px 14px;
