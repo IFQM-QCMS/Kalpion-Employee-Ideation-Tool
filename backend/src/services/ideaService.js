@@ -788,18 +788,14 @@ export async function submitOrDraft(db, user, action, b) {
   const impLvl = b.impact_level ?? 'Medium';
   const tangible = String(b.tangible_benefit ?? '').trim();
   const intang = String(b.intangible_benefit ?? '').trim();
-
-  // Whether this organisation has opted into these two steps at all - both off by default.
-  // A tenant that has not switched a step on must not receive it through a direct API call
-  // once the wizard stops showing it - the setting is enforced here, not only in the form.
-  const orgSettings = await getOrgSettings(db);
-  const businessCaseEnabled = orgSettings.business_case_enabled === '1';
-  const coSuggestersEnabled = orgSettings.co_suggesters_enabled === '1';
-
-  // Co-suggesters: accept a full array (co_suggester_ids) OR the two legacy fields.
-  const rawCoIds = coSuggestersEnabled
-    ? (Array.isArray(b.co_suggester_ids) ? b.co_suggester_ids : [b.co_suggester_1_id, b.co_suggester_2_id])
-    : [];
+  // Co-suggesters: accept a full array (co_suggester_ids) OR the two legacy fields. Whether
+  // this step appears in the wizard is a UI concern (SubmitPage reads business_case_enabled /
+  // co_suggesters_enabled itself) - once submitted, a co-suggester or business case is stored
+  // the same way any other idea data is, for every other write path (bulk import, an edit,
+  // an org that later turns the step back on) to keep working.
+  const rawCoIds = Array.isArray(b.co_suggester_ids)
+    ? b.co_suggester_ids
+    : [b.co_suggester_1_id, b.co_suggester_2_id];
   const coIds = [...new Set(rawCoIds.map((v) => Number(v)).filter((n) => n && n !== Number(user.id)))];
   const editId = b.id ? Number(b.id) : null;
   // An idea an approver sent back re-enters the chain where it was sent back from, not at the
@@ -828,36 +824,33 @@ export async function submitOrDraft(db, user, action, b) {
   }
   const templateType = String(b.template_type ?? '').trim() || null;
 
-  // MOM §14.5 / §14.6, both part of the Business Case step. Validated against a fixed list
-  // rather than stored as typed: an unrecognised value becomes NULL instead of creating a
-  // fourth time band or a one-off tag that every filter would then miss.
-  const timeRequired = businessCaseEnabled && TIME_REQUIRED_BANDS.includes(String(b.time_required ?? ''))
+  // MOM §14.5 / §14.6. Both validated against a fixed list rather than stored as typed: an
+  // unrecognised value becomes NULL instead of creating a fourth time band or a one-off tag
+  // that every filter would then miss.
+  const timeRequired = TIME_REQUIRED_BANDS.includes(String(b.time_required ?? ''))
     ? String(b.time_required) : null;
   // Anyone may raise the flag - the submitter who thinks their idea is novel, or a senior
   // reviewing it.
   const patentableFlag = (b.patentable_flag === true || b.patentable_flag === 1
     || b.patentable_flag === '1') ? 1 : 0;
-  const solutionTags = businessCaseEnabled ? [...new Set(
+  const solutionTags = [...new Set(
     (Array.isArray(b.solution_tags) ? b.solution_tags : String(b.solution_tags ?? '').split(','))
       .map((x) => String(x).trim())
       .filter((x) => SOLUTION_TAGS.includes(x))
-  )].join(',') || null : null;
+  )].join(',') || null;
 
-  // Business case. Every field is optional - a half-formed idea is still worth capturing, and
-  // the reviewer can ask for the rest. An organisation that has switched the step off never
-  // stores any of it, whatever a direct API call sends.
-  const investment = businessCaseEnabled
-    ? (String(b.investment_required ?? '').trim().slice(0, 255) || null) : null;
-  const feasibilityIn = businessCaseEnabled ? String(b.feasibility ?? '').trim() : '';
+  // Business case. Every field is optional - a half-formed idea is still worth capturing,
+  // and the reviewer can ask for the rest.
+  const investment = String(b.investment_required ?? '').trim().slice(0, 255) || null;
+  const feasibilityIn = String(b.feasibility ?? '').trim();
   const feasibility = ['Low', 'Medium', 'High'].includes(feasibilityIn) ? feasibilityIn : null;
-  const implDuration = businessCaseEnabled
-    ? (String(b.implementation_duration ?? '').trim().slice(0, 120) || null) : null;
+  const implDuration = String(b.implementation_duration ?? '').trim().slice(0, 120) || null;
   // A malformed date would be written as 0000-00-00 (or rejected outright in strict mode);
   // anything that is not a plain YYYY-MM-DD is simply not a date.
-  const expectedDateIn = businessCaseEnabled ? String(b.expected_implementation_date ?? '').trim() : '';
+  const expectedDateIn = String(b.expected_implementation_date ?? '').trim();
   const expectedDate = /^\d{4}-\d{2}-\d{2}$/.test(expectedDateIn) ? expectedDateIn : null;
-  const benefitsExpected = businessCaseEnabled ? (String(b.benefits_expected ?? '').trim() || null) : null;
-  const supportRequired = businessCaseEnabled ? (String(b.support_required ?? '').trim() || null) : null;
+  const benefitsExpected = String(b.benefits_expected ?? '').trim() || null;
+  const supportRequired = String(b.support_required ?? '').trim() || null;
 
   // The title column is VARCHAR(255) and only its PRESENCE was checked, so a longer one
   // travelled all the way to MySQL and came back as "Data too long for column 'title'".
