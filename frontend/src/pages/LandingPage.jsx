@@ -93,10 +93,8 @@ function Estimator() {
           <span className="co-l">annual value, on your own numbers</span>
         </div>
         <p className="calc-note">
-          Assumes each contributor raises {IDEAS_PER_PARTICIPANT} ideas a year and{' '}
-          {Math.round(IMPLEMENT_RATE * 100)}% survive review. These are your inputs,
-          not our claims - the platform's job is to make the first two numbers
-          measurable instead of anecdotal.
+          Assumes {IDEAS_PER_PARTICIPANT} ideas per contributor a year, {Math.round(IMPLEMENT_RATE * 100)}%
+          surviving review. Your inputs, not our claims.
         </p>
       </div>
     </div>
@@ -574,10 +572,9 @@ export default function LandingPage() {
           <div className="rv in">
             <h1>The best ideas in your business are already <span className="em">inside your team.</span></h1>
             <p className="lede">
-              Your machine operator knows which changeover wastes an hour. Your billing
-              clerk knows which step is done twice. IFQM gives them one place to say so -
-              and gives you a scored, routed, tracked pipeline instead of a dusty
-              suggestion box.
+              Your operators already know what wastes an hour. IFQM gives them one place
+              to say so - and gives you a scored, routed, tracked pipeline instead of a
+              dusty suggestion box.
             </p>
             <div className="hero-cta">
               <Link to="/signup" className="btn-lp b-primary b-lg">Start free <IcoArrow /></Link>
@@ -623,37 +620,28 @@ export default function LandingPage() {
             <span className="kicker">Why suggestion boxes die</span>
             <h2>You didn't have an idea problem. You had a follow-up problem.</h2>
             <p className="sec-sub">
-              Most MSMEs have already tried this once - a box on the wall, a WhatsApp
-              group, a form nobody filled twice. They fail for the same three reasons,
-              and each one is a workflow gap, not a motivation gap.
+              A box on the wall, a WhatsApp group, a form nobody filled twice - most
+              MSMEs have tried this. They fail for three reasons, and none of them is
+              motivation.
             </p>
           </div>
           <div className="grid3">
             <div className="prob rv">
               <span className="x">The silence problem</span>
               <h3>Nobody hears back</h3>
-              <p>
-                An idea goes in and nothing visible happens. After two of those, the
-                most useful person on your floor stops bothering.
-              </p>
+              <p>An idea goes in, nothing visible happens, and after two of those your best people stop bothering.</p>
               <p className="fix"><b>Fixed</b> Every idea has a status the submitter can see, with the reviewer and the clock on it.</p>
             </div>
             <div className="prob rv">
               <span className="x">The pile problem</span>
               <h3>Everything lands on one desk</h3>
-              <p>
-                Fifty suggestions arrive at the owner's desk unsorted - half duplicates,
-                half impossible - so none get read properly.
-              </p>
-              <p className="fix"><b>Fixed</b> Ideas are scored on six dimensions, deduplicated on entry, and routed to whoever should actually decide.</p>
+              <p>Fifty suggestions arrive unsorted - half duplicates, half impossible - so none get read properly.</p>
+              <p className="fix"><b>Fixed</b> Ideas are scored, deduplicated on entry, and routed to whoever should actually decide.</p>
             </div>
             <div className="prob rv">
               <span className="x">The proof problem</span>
               <h3>No one can show it worked</h3>
-              <p>
-                Improvements happen, but nothing links them back to the person who
-                suggested it - so the programme feels like goodwill, not a result.
-              </p>
+              <p>Improvements happen, but nothing links them back to the idea - so the programme feels like goodwill, not results.</p>
               <p className="fix"><b>Fixed</b> Implementation and savings are tracked per idea, with an audit trail and exportable reports.</p>
             </div>
           </div>
@@ -667,19 +655,18 @@ export default function LandingPage() {
             <span className="kicker">How it works</span>
             <h2>Four steps, and only one of them is yours</h2>
             <p className="sec-sub">
-              The point is that ideas keep moving without anyone chasing them. You set
-              the rules once; the platform runs the loop.
+              You set the rules once; the platform runs the loop, and nobody has to chase it.
             </p>
           </div>
           <div className="steps">
             <div className="step rv"><div className="n">1</div><h3>Your team submits</h3>
-              <p>A guided wizard turns a rough thought into a real proposal: the situation, the fix, the business case, photos. In their own language, from their own phone.</p></div>
+              <p>A guided wizard turns a rough thought into a real proposal - situation, fix, business case, photos. Their own language, their own phone.</p></div>
             <div className="step rv"><div className="n">2</div><h3>The platform scores</h3>
-              <p>Each idea gets a 0-100 quality score across six dimensions and a duplicate check, so the good ones surface instead of drowning.</p></div>
+              <p>Each idea gets a 0-100 quality score and a duplicate check, so the good ones surface instead of drowning.</p></div>
             <div className="step rv"><div className="n">3</div><h3>The right person reviews</h3>
-              <p>Ideas escalate up your hierarchy or go to a review committee with your own approval threshold. Overdue reviews are flagged, not forgotten.</p></div>
+              <p>Ideas escalate up your hierarchy or to a review committee, on your own threshold. Overdue reviews are flagged, not forgotten.</p></div>
             <div className="step rv"><div className="n">4</div><h3>Results come back</h3>
-              <p>Approved ideas get owners and implementation tracking; contributors get points and a place on the leaderboard. Everyone sees the loop close.</p></div>
+              <p>Approved ideas get owners and tracking; contributors get points and a leaderboard spot. Everyone sees the loop close.</p></div>
           </div>
         </div>
       </section>
@@ -691,29 +678,29 @@ export default function LandingPage() {
             <span className="kicker">What you get</span>
             <h2>Everything the programme needs, nothing you have to maintain</h2>
             <p className="sec-sub">
-              One workspace for your organisation - your logo, your categories, your
-              approval rules, your data in its own database.
+              One workspace for your organisation - your logo, categories, approval
+              rules, and data, in its own database.
             </p>
           </div>
           <div className="feats">
             <div className="feat rv"><div className="ic"><IcoBulb /></div><h3>Guided idea capture</h3>
-              <p>Multi-step submission with attachments, co-suggesters and live duplicate detection - so proposals arrive complete the first time.</p></div>
+              <p>Attachments, co-suggesters and live duplicate detection, so proposals arrive complete the first time.</p></div>
             <div className="feat rv"><div className="ic"><IcoSpark /></div><h3>Automatic quality scoring</h3>
-              <p>Every idea rated 0-100 on six dimensions. Works out of the box with a built-in scorer; plug in OpenAI or Gemini if you want more.</p></div>
+              <p>Every idea rated 0-100 across six dimensions, out of the box; plug in OpenAI or Gemini for more.</p></div>
             <div className="feat rv"><div className="ic"><IcoRoute /></div><h3>Approval workflow you configure</h3>
               <p>Hierarchy escalation or a review committee, your own stages and thresholds, SLA timers on every pending decision.</p></div>
             <div className="feat rv"><div className="ic"><IcoTrophy /></div><h3>Points, leaderboards, challenges</h3>
-              <p>10 points to submit, 25 when approved, 65 when implemented. Run themed challenges when you need ideas on one specific problem.</p></div>
+              <p>10 points to submit, 25 when approved, 65 when implemented - plus themed challenges for a specific problem.</p></div>
             <div className="feat rv"><div className="ic"><IcoGlobe /></div><h3>Seven Indian languages</h3>
-              <p>English, हिन्दी, मराठी, ಕನ್ನಡ, తెలుగు, தமிழ் and മലയാളം - because your shop floor and your office rarely share one language.</p></div>
+              <p>English, हिन्दी, मराठी, ಕನ್ನಡ, తెలుగు, தமிழ் and മലയാളം - your floor and your office rarely share one.</p></div>
             <div className="feat rv"><div className="ic"><IcoChart /></div><h3>Analytics and ROI tracking</h3>
-              <p>Participation by department, pipeline health, implementation value, and an append-only audit log. Export to Excel or PDF for your review meeting.</p></div>
+              <p>Participation, pipeline health and implementation value, with an audit log that exports to Excel or PDF.</p></div>
             <div className="feat rv"><div className="ic"><IcoUsers /></div><h3>Onboard the whole team at once</h3>
-              <p>Bulk-import staff from a spreadsheet, assign roles, and let people sign in with the email or phone number they already use.</p></div>
+              <p>Bulk-import staff from a spreadsheet; they sign in with the email or phone they already use.</p></div>
             <div className="feat rv"><div className="ic"><IcoClip /></div><h3>Push approved ideas onward</h3>
-              <p>An integration API hands approved ideas to your quality or CAPA system, so an accepted idea becomes a tracked action item.</p></div>
+              <p>An integration API hands approved ideas to your quality or CAPA system as a tracked action item.</p></div>
             <div className="feat rv"><div className="ic"><IcoShield /></div><h3>Your data, isolated</h3>
-              <p>Each organisation gets its own database, its own branding and its own admin. Even platform operators see aggregate counts, never your idea content.</p></div>
+              <p>Its own database, branding and admin per organisation. Platform staff see counts, never idea content.</p></div>
           </div>
         </div>
       </section>
@@ -725,8 +712,7 @@ export default function LandingPage() {
             <span className="kicker">The business case</span>
             <h2>What is one unheard idea a month costing you?</h2>
             <p className="sec-sub">
-              Move the sliders to your own numbers. No industry averages, no borrowed
-              case studies - just the arithmetic you would do on paper anyway.
+              Move the sliders to your own numbers - no industry averages, no borrowed case studies.
             </p>
           </div>
           <div className="rv"><Estimator /></div>
@@ -740,15 +726,15 @@ export default function LandingPage() {
             <span className="kicker">Built to be handed over</span>
             <h2>Safe enough for HR data, simple enough for a 30-person firm</h2>
             <p className="sec-sub">
-              You should not need a systems administrator to run an ideation programme,
-              and you should not have to trust a vendor with your staff list on faith.
+              No systems administrator needed, and no trusting a vendor with your staff
+              list on faith.
             </p>
           </div>
           <div className="sec-list">
-            <div className="sl rv"><IcoShield /><span><b>Separate database per organisation</b>Your ideas and your people are not in a shared table with another company's.</span></div>
-            <div className="sl rv"><IcoUsers /><span><b>Roles that match a real org</b>Employee, reviewer, admin and super admin - people see what their job needs, and nothing else.</span></div>
-            <div className="sl rv"><IcoClip /><span><b>Append-only audit log</b>Every status change is recorded with who did it and when. Useful for ISO and quality audits.</span></div>
-            <div className="sl rv"><IcoGlobe /><span><b>Nothing to install</b>Runs in the browser your team already has. No app store, no laptops required, no rollout project.</span></div>
+            <div className="sl rv"><IcoShield /><span><b>Separate database per organisation</b>Your data is never in a shared table with another company's.</span></div>
+            <div className="sl rv"><IcoUsers /><span><b>Roles that match a real org</b>Employee, reviewer, admin, super admin - people see what their job needs, nothing else.</span></div>
+            <div className="sl rv"><IcoClip /><span><b>Append-only audit log</b>Every status change recorded with who and when - useful for ISO and quality audits.</span></div>
+            <div className="sl rv"><IcoGlobe /><span><b>Nothing to install</b>Runs in the browser your team already has. No app store, no rollout project.</span></div>
           </div>
         </div>
       </section>
@@ -762,21 +748,21 @@ export default function LandingPage() {
           </div>
           <div className="faq">
             <details className="rv"><summary>How long does setup take?</summary>
-              <p>A working day is typical. You create your organisation, import your staff list from a spreadsheet, pick your categories and approval rule, and you are live. There is no server to buy and nothing to install on anyone's machine.</p></details>
+              <p>A working day, typically: create your organisation, import staff from a spreadsheet, pick categories and an approval rule, and you're live. Nothing to install.</p></details>
             <details className="rv"><summary>Will people on the shop floor actually use it?</summary>
-              <p>That is the real risk, and it is why the design pushes back on it in three ways: the interface is available in seven Indian languages, an idea can be submitted from a phone in a few minutes, and every submitter can see exactly where their idea has reached. Points, leaderboards and time-boxed challenges exist to make the first month of habit-building easier.</p></details>
+              <p>Seven Indian languages, a phone-first submission flow, and a visible status on every idea. Points, leaderboards and time-boxed challenges help the first month stick.</p></details>
             <details className="rv"><summary>What does it cost?</summary>
-              <p>Every organisation starts with a 14-day free trial - the whole product, no card, nothing withheld. After that you go onto a plan sized to your business, quoted when we approve your application. Plans are priced per organisation rather than per seat, so inviting the whole shop floor does not change the bill. GST is shown separately on every quote.</p></details>
+              <p>A 14-day free trial, full product, no card. After that, a plan sized to your business and priced per organisation, not per seat - so inviting the whole floor doesn't change the bill.</p></details>
             <details className="rv"><summary>What happens when the trial ends?</summary>
-              <p>We tell you before it does, not after. Access pauses if a plan is not in place, but nothing is deleted - your ideas, your people and your history stay exactly as they are, and everything resumes the moment payment is arranged. You can export your data at any point, including while access is paused.</p></details>
+              <p>We tell you before it does. Access pauses without a plan, but nothing is deleted - everything resumes the moment payment is arranged, and you can export your data any time, paused or not.</p></details>
             <details className="rv"><summary>How quickly do you reply to support?</summary>
-              <p>Within one working day for any ticket, and within four working hours for anything marked urgent - Monday to Saturday, 9am to 6pm IST. Support is raised from inside the app, so we can see which organisation is asking without you explaining it first. Support stays reachable even if your access has paused for payment.</p></details>
+              <p>Within one working day for any ticket, four hours for anything urgent - Monday to Friday, 9am-6pm IST. Raised from inside the app, so we already know which organisation is asking.</p></details>
             <details className="rv"><summary>Who can see our ideas?</summary>
-              <p>Only your own people, according to the role you give them. Each organisation runs on its own database with its own admin. IFQM's own staff can see counts - how many people, how many ideas - for support and billing, and never the content of an idea.</p></details>
+              <p>Only your own people, by role. Each organisation has its own database and admin. IFQM staff see counts for support and billing - never idea content.</p></details>
             <details className="rv"><summary>Do we need an IT person to run it?</summary>
-              <p>No. Everything an administrator needs - users, categories, approval stages, branding, exports - is a screen in the app. Bulk user import takes a spreadsheet.</p></details>
+              <p>No. Users, categories, approval stages, branding and exports are all screens in the app. Bulk import takes a spreadsheet.</p></details>
             <details className="rv"><summary>Can we get our data out?</summary>
-              <p>Yes. Ideas, reviews and analytics export to Excel and PDF, and an integration API can push approved ideas into a quality or CAPA system you already run.</p></details>
+              <p>Yes - Excel and PDF exports, plus an integration API to push approved ideas into a quality or CAPA system you already run.</p></details>
           </div>
         </div>
       </section>
@@ -788,7 +774,7 @@ export default function LandingPage() {
             <h2>Start listening to your team this week</h2>
             <p>
               Set up your organisation, invite ten people, and see what comes back in
-              the first fortnight. If nothing useful arrives, you have lost an afternoon.
+              a fortnight. Worst case, you've lost an afternoon.
             </p>
             <div className="row">
               <Link to="/signup" className="btn-lp b-white b-lg">Create your workspace <IcoArrow /></Link>

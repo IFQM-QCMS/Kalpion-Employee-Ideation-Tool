@@ -394,6 +394,9 @@ export const brandingApi = {
   updateName: (org_name) => api.put('/branding', { org_name }),
   // No hand-written Content-Type - see the FormData note on uploadApi.
   updateLogo: (formData) => api.post('/branding/logo', formData),
+  // The server fetches the image itself and stores it the same way an upload is stored - the
+  // logo keeps working even if that link moves or goes offline later.
+  updateLogoFromUrl: (url) => api.post('/branding/logo-url', { url }),
   removeLogo: () => api.delete('/branding/logo'),
 };
 

@@ -31,6 +31,7 @@ const router = Router();
 router.get('/', requireAuth, branding.get);
 router.put('/', requireRole('admin', 'super_admin'), branding.updateName);
 router.post('/logo', requireRole('admin', 'super_admin'), handleLogo, branding.updateLogo);
+router.post('/logo-url', requireRole('admin', 'super_admin'), branding.updateLogoFromUrl);
 router.delete('/logo', requireRole('admin', 'super_admin'), branding.removeLogo);
 
 export default router;

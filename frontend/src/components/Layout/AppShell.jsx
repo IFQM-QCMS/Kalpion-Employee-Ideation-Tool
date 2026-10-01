@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import MobileTabBar from './MobileTabBar';
+import PageNav from './PageNav';
 import { useIsMobile } from '../../utils/useIsMobile';
 import { watchTables } from '../../utils/responsiveTables';
 import ContentProtection from '../ContentProtection';
@@ -80,6 +81,8 @@ export default function AppShell({ children }) {
           <BillingBanner />
           {/* Renders nothing on a top-level screen - see Breadcrumbs. */}
           <Breadcrumbs />
+          {/* Renders nothing on a page outside the main nav order - see PageNav. */}
+          <PageNav />
           {children}
         </div>
         {mobile && <MobileTabBar menuOpen={drawerOpen} onMore={() => setDrawerOpen(v => !v)} />}

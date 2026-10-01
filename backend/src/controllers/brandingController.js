@@ -18,9 +18,14 @@ export const updateLogo = asyncHandler(async (req, res) => {
   return respond(res, await brandingService.updateLogo(req.tenant, req.file));
 });
 
+/** POST /api/branding/logo-url - admin only. JSON body { url }. */
+export const updateLogoFromUrl = asyncHandler(async (req, res) => {
+  return respond(res, await brandingService.updateLogoFromUrl(req.tenant, req.body?.url));
+});
+
 /** DELETE /api/branding/logo - admin only. */
 export const removeLogo = asyncHandler(async (req, res) => {
   return respond(res, await brandingService.removeLogo(req.tenant));
 });
 
-export default { get, updateName, updateLogo, removeLogo };
+export default { get, updateName, updateLogo, updateLogoFromUrl, removeLogo };

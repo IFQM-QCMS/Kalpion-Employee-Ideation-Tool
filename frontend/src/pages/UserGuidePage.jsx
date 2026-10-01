@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { guideForRole } from '../content/userGuides';
@@ -69,15 +70,28 @@ function Block({ block }) {
             <tr>{block.table.head.map((h, i) => <th key={i}>{h}</th>)}</tr>
           </thead>
           <tbody>
-            {block.table.rows.map((row, i) => (
-              <tr key={i}>
-                {row.map((cell, j) => (
-                  <td key={j} style={j === 0 ? { fontWeight:600, whiteSpace:'normal' } : undefined}>
-                    <RichText>{cell}</RichText>
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {/* A row longer than the header carries one extra element: the route its "Go
+                to" cell actually takes you to - the Quick Reference tables are meant to
+                be jumped from, not just read. */}
+            {block.table.rows.map((row, i) => {
+              const hasLink = row.length > block.table.head.length;
+              const cells = hasLink ? row.slice(0, -1) : row;
+              const to = hasLink ? row[row.length - 1] : null;
+              return (
+                <tr key={i}>
+                  {cells.map((cell, j) => {
+                    const isLast = j === cells.length - 1;
+                    return (
+                      <td key={j} style={j === 0 ? { fontWeight:600, whiteSpace:'normal' } : undefined}>
+                        {isLast && to
+                          ? <Link to={to} style={{ color:'var(--primary)', fontWeight:600 }}><RichText>{cell}</RichText></Link>
+                          : <RichText>{cell}</RichText>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

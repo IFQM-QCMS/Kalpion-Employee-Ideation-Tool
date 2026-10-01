@@ -1006,7 +1006,7 @@ export async function submitOrDraft(db, user, action, b) {
     const stageLabel = cfgLabels[currentStage] || currentStage || 'review';
     try {
       await addWorkflow(db, ideaId, user.id, 'Resubmitted',
-        `[Resubmitted after being sent back - now with ${stageLabel}]`, 'originator');
+        `[Resubmitted after being sent back -> now with ${stageLabel}]`, 'originator');
     } catch {}
     if (currentReviewerId) {
       try {
@@ -1464,7 +1464,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment, forwardTo
         );
 
         await addWorkflow(db, ideaId, user.id, 'Approved',
-          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} - waiting for ${label(blockedAt)}, which nobody holds]`.trim(),
+          `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} -> waiting for ${label(blockedAt)}, which nobody holds]`.trim(),
           stageKey);
         await reportChainGap(db, idea,
           `Idea ${idea.idea_code} was approved at ${label(stageKey)} and is now waiting for `
@@ -1504,7 +1504,7 @@ async function reviewActionLocked(db, user, ideaId, decision, comment, forwardTo
       // addWorkflow.
       const withWhom = assignee ? `${assignee.name} as ${label(nextStageKey)}` : label(nextStageKey);
       await addWorkflow(db, ideaId, user.id, 'Approved',
-        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} - now with ${withWhom}]${skipNote}`.trim(),
+        `${comment ? comment + ' ' : ''}[Approved at ${label(stageKey)} -> now with ${withWhom}]${skipNote}`.trim(),
         stageKey);
 
       if (assignee) {
@@ -1675,7 +1675,7 @@ export async function reopenRejected(db, user, b) {
 
     const withWhom = assignee ? `${assignee.name} as ${label(stage)}` : label(stage);
     await addWorkflow(db, ideaId, user.id, 'Reopened',
-      `${comment ? comment + ' ' : ''}[Rejection reversed - back in review with ${withWhom}]`.trim(),
+      `${comment ? comment + ' ' : ''}[Rejection reversed -> back in review with ${withWhom}]`.trim(),
       stage);
 
     await addNotification(db, idea.submitter_id, 'Your idea is back in review',

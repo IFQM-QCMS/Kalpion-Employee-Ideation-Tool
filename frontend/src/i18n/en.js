@@ -4,6 +4,9 @@ export default {
 
   // Navigation
   'nav.dashboard':'Dashboard',
+  'nav.page_nav_label':'Page navigation',
+  'nav.page_nav_prev_to':'Go to {page}',
+  'nav.page_nav_next_to':'Go to {page}',
   'nav.my_ideas':'My Ideas',
   'nav.submit':'Submit Idea',
   'nav.challenges':'Challenges',
@@ -640,6 +643,13 @@ export default {
   'admin.logo_not_png':'The logo must be a PNG image.',
   'admin.logo_too_big':'The logo must be 1MB or smaller.',
   'admin.logo_pick_first':'Choose a PNG file first.',
+  'admin.logo_mode_file':'Upload a file',
+  'admin.logo_mode_url':'Use an image link',
+  'admin.logo_url_ph':'https://example.com/logo.png',
+  'admin.logo_url_hint':'The server fetches the image itself - a direct link to a PNG, not a page that merely shows one.',
+  'admin.logo_url_required':'Enter an image URL first.',
+  'admin.logo_fetch':'Fetch & Save',
+  'admin.logo_fetching':'Fetching...',
   'admin.sending_test':'Sending test email...',
   'admin.test_sent':'Test email sent!',
   'admin.ai_scoring':'AI Scoring',

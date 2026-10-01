@@ -557,9 +557,10 @@ export default function LoginPage() {
         .ifqm-particles .foot.hint{margin-top:2px;text-align:center;font-size:11.5px}
 
         .ifqm-particles .id-row{
-          display:flex;align-items:center;justify-content:center;gap:10px;
+          display:flex;align-items:center;justify-content:center;gap:8px 10px;flex-wrap:wrap;
           font-size:13px;color:var(--text-muted);
         }
+        @media (max-width:360px){ .ifqm-particles .id-row span{ max-width:160px } }
         .ifqm-particles .id-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;font-weight:600;color:var(--heading)}
         .ifqm-particles .phone-chip{
           display:flex;align-items:center;gap:10px;background:var(--panel-bg,var(--surface));

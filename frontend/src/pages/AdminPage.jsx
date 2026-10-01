@@ -617,6 +617,11 @@ function BrandingCard({ t, showToast }) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview]   = useState(null);
   const fileRef                  = useRef(null);
+  // The second way to set a logo: a direct link, fetched and stored server-side rather than
+  // referenced live - see admin.logo_url_hint.
+  const [logoMode, setLogoMode] = useState('file'); // 'file' | 'url'
+  const [logoUrl, setLogoUrl]   = useState('');
+  const [fetchingUrl, setFetchingUrl] = useState(false);
 
   // Seed the field once branding has loaded, but never clobber what the admin is actively
   // typing.
@@ -683,6 +688,25 @@ function BrandingCard({ t, showToast }) {
     setUploading(false);
   }
 
+  async function fetchLogoFromUrl() {
+    const url = logoUrl.trim();
+    if (!url) { showToast(t('admin.logo_url_required'), 'warning'); return; }
+    setFetchingUrl(true);
+    try {
+      const res = await brandingApi.updateLogoFromUrl(url);
+      if (res.data?.success) {
+        await refresh();
+        setLogoUrl('');
+        showToast(t('admin.logo_saved'), 'success');
+      } else {
+        showToast(res.data?.error || t('msg.server_error'), 'danger');
+      }
+    } catch (err) {
+      showToast(err?.response?.data?.error || t('msg.network_error'), 'danger');
+    }
+    setFetchingUrl(false);
+  }
+
   async function removeLogo() {
     setUploading(true);
     try {
@@ -730,7 +754,7 @@ function BrandingCard({ t, showToast }) {
         <label>{t('admin.org_logo')}</label>
         <div style={{ fontSize:12,color:'var(--text-muted)',marginBottom:10 }}>{t('admin.logo_hint')}</div>
 
-        <div style={{ display:'flex',alignItems:'center',gap:14,marginBottom:12 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:14,marginBottom:12,flexWrap:'wrap' }}>
           <div style={{
             width:120,height:56,display:'flex',alignItems:'center',justifyContent:'center',
             background:'#fff',border:'1px solid var(--border)',borderRadius:8,padding:6,
@@ -749,19 +773,46 @@ function BrandingCard({ t, showToast }) {
           </div>
         </div>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/png"
-          className="form-control"
-          onChange={pickFile}
-        />
+        {/* Two ways in: a file from this device, or a direct link the server fetches itself. */}
+        <div style={{ display:'flex',gap:8,marginBottom:10,flexWrap:'wrap' }}>
+          <button type="button" className={`btn btn-sm ${logoMode==='file' ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setLogoMode('file')}>{t('admin.logo_mode_file')}</button>
+          <button type="button" className={`btn btn-sm ${logoMode==='url' ? 'btn-primary' : 'btn-outline'}`}
+            onClick={() => setLogoMode('url')}>{t('admin.logo_mode_url')}</button>
+        </div>
+
+        {logoMode === 'file' ? (
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png"
+            className="form-control"
+            onChange={pickFile}
+          />
+        ) : (
+          <>
+            <input
+              type="url"
+              className="form-control"
+              value={logoUrl}
+              placeholder={t('admin.logo_url_ph')}
+              onChange={(e) => setLogoUrl(e.target.value)}
+            />
+            <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.logo_url_hint')}</div>
+          </>
+        )}
       </div>
 
-      <div style={{ display:'flex',gap:8 }}>
-        <button type="button" className="btn btn-primary" onClick={uploadLogo} disabled={uploading || !preview}>
-          {uploading ? t('admin.saving') : t('admin.logo_upload')}
-        </button>
+      <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+        {logoMode === 'file' ? (
+          <button type="button" className="btn btn-primary" onClick={uploadLogo} disabled={uploading || !preview}>
+            {uploading ? t('admin.saving') : t('admin.logo_upload')}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary" onClick={fetchLogoFromUrl} disabled={fetchingUrl || !logoUrl.trim()}>
+            {fetchingUrl ? t('admin.logo_fetching') : t('admin.logo_fetch')}
+          </button>
+        )}
         {hasCustomLogo && (
           <button type="button" className="btn btn-outline" onClick={removeLogo} disabled={uploading}>
             {t('admin.logo_remove')}

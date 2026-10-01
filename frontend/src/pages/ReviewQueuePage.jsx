@@ -120,7 +120,8 @@ export default function ReviewQueuePage() {
       {selected.size > 0 && user?.role !== 'admin' && (
         <div id="bulk-action-bar" style={{
           position:'fixed',bottom:24,left:'50%',transform:'translateX(-50%)',
-          display:'flex',alignItems:'center',gap:12,
+          display:'flex',alignItems:'center',justifyContent:'center',gap:12,flexWrap:'wrap',
+          maxWidth:'calc(100vw - 24px)',
           background:'var(--sidebar-bg)',color:'#fff',
           padding:'12px 20px',borderRadius:12,boxShadow:'0 4px 24px rgba(0,0,0,.3)',zIndex:999
         }}>
