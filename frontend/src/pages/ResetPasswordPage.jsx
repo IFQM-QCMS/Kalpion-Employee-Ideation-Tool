@@ -119,9 +119,8 @@ export default function ResetPasswordPage() {
           box-shadow: 0 16px 36px rgba(0, 0, 0, 0.08);
           display: flex; flex-direction: column; gap: 16px;
         }
-        .reset-card .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; margin-bottom: 4px; }
-        .reset-card .brand img { height: 42px; background: #fff; border-radius: 10px; padding: 6px 10px; object-fit: contain; }
-        .reset-card .brand span { font-size: 19px; font-weight: 800; color: var(--heading); }
+        .reset-card .brand { display: flex; align-items: center; text-decoration: none; margin-bottom: 4px; }
+        .reset-card .brand img { height: 48px; width: auto; object-fit: contain; }
         .reset-card h1 { font-size: 22px; font-weight: 800; color: var(--heading); margin: 0; }
         .reset-card p.sub { font-size: 13.5px; color: var(--text-muted); margin: 0; }
         .reset-card form { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
@@ -147,9 +146,8 @@ export default function ResetPasswordPage() {
       `}</style>
 
       <div className="reset-card">
-        <Link to="/" className="brand">
-          <img src="/assets/ifqm-logo.png" alt="IFQM" onError={e => { e.target.style.display = 'none'; }} />
-          <span>Kalpion</span>
+        <Link to="/" className="brand" aria-label="Kalpion home">
+          <img src="/assets/kalpion-logo.png" alt="Kalpion" onError={e => { e.target.style.display = 'none'; }} />
         </Link>
 
         {success ? (

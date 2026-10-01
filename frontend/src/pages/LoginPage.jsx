@@ -487,24 +487,12 @@ export default function LoginPage() {
           animation:ip-in .6s cubic-bezier(.16,.84,.44,1) both}
         @keyframes ip-in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 
-        .ifqm-particles .brand{display:flex;align-items:center;justify-content:center;gap:14px;text-decoration:none}
-        .ifqm-particles .brand img{height:52px;background:#fff;border-radius:12px;padding:7px 12px;
-          object-fit:contain;box-shadow:0 8px 26px rgba(79,70,229,.20);flex:none}
-        /*
-         * "Kalpion" gets the same creative treatment as the landing page's own wordmark
-         * (Sora, weight 700, tight tracking - see LandingPage.jsx) rather than a second,
-         * unrelated typeface: one brand mark, used consistently. Sized to stand level with
-         * the 52px logo plate beside it instead of reading as a caption under it.
-         */
-        .ifqm-particles .brand .wm{
-          font-family:'Sora','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
-          font-size:42px;font-weight:700;letter-spacing:-.03em;line-height:1;color:var(--heading);
-        }
-        .ifqm-particles .brand .wm small{display:block;font-size:11.5px;font-weight:500;letter-spacing:.02em;color:var(--text-muted);font-family:'Inter',system-ui,sans-serif}
+        /* The finalized Kalpion lockup (icon + wordmark, one file) - drawn for a light
+           ground, which this card is, so it needs no plate or shadow behind it. */
+        .ifqm-particles .brand{display:flex;align-items:center;justify-content:center;text-decoration:none}
+        .ifqm-particles .brand img{height:84px;width:auto;object-fit:contain}
         @media (max-width:420px){
-          .ifqm-particles .brand{gap:10px}
-          .ifqm-particles .brand img{height:40px}
-          .ifqm-particles .brand .wm{font-size:30px}
+          .ifqm-particles .brand img{height:60px}
         }
 
         .ifqm-particles h1{font-size:26px;font-weight:800;letter-spacing:-.02em;color:var(--heading);margin:6px 0 2px;
@@ -624,9 +612,8 @@ export default function LoginPage() {
       <div className="glow glow-b" aria-hidden="true" />
 
       <div className="auth-col">
-        <Link to="/" className="brand" aria-label="IFQM home">
-          <img src="/assets/ifqm-logo.png" alt="IFQM" onError={e => { e.target.style.display='none'; }} />
-          <span className="wm">Kalpion</span>
+        <Link to="/" className="brand" aria-label="Kalpion home">
+          <img src="/assets/kalpion-logo.png" alt="Kalpion" onError={e => { e.target.style.display='none'; }} />
         </Link>
 
         <div>

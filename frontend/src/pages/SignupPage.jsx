@@ -355,11 +355,8 @@ export default function SignupPage() {
         .ifqm-signup .reqnote{font-size:11.5px;color:var(--subtle);line-height:1.5;
           margin:18px 0 0;padding-top:12px;border-top:1px solid var(--border)}
         .ifqm-signup a{text-decoration:none}
-        .ifqm-signup .brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:24px}
-        .ifqm-signup .brand img{height:42px;background:#fff;border-radius:11px;padding:6px 10px;object-fit:contain;
-          box-shadow:0 8px 26px rgba(79,70,229,.18)}
-        .ifqm-signup .brand b{font-size:17px;font-weight:800;color:var(--heading);letter-spacing:-.02em}
-        .ifqm-signup .brand small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted)}
+        .ifqm-signup .brand{display:flex;align-items:center;justify-content:center;margin-bottom:24px}
+        .ifqm-signup .brand img{height:48px;width:auto;object-fit:contain}
 
         .ifqm-signup h1{font-size:25px;font-weight:820;color:var(--heading);letter-spacing:-.025em;margin:0 0 8px}
         .ifqm-signup .lede{font-size:14px;color:var(--text-muted);line-height:1.6;margin:0 0 22px}
@@ -414,9 +411,8 @@ export default function SignupPage() {
       `}</style>
 
       <div className="wrap">
-        <Link to="/" className="brand">
-          <img src="/assets/ifqm-logo.png" alt="" onError={(e) => { e.target.style.display = 'none'; }} />
-          <span><b>Kalpion</b></span>
+        <Link to="/" className="brand" aria-label="Kalpion home">
+          <img src="/assets/kalpion-logo.png" alt="Kalpion" onError={(e) => { e.target.style.display = 'none'; }} />
         </Link>
 
         {done ? (
