@@ -221,26 +221,26 @@ export default function LandingPage() {
         .ifqm-lp .logo-mark{display:inline-flex;border-radius:9px;transition:opacity .15s ease}
         .ifqm-lp .logo-mark:hover{opacity:.85}
         /*
-         * The Kalpion wordmark is dark green, drawn for a light ground - which this
+         * The Kalpion lockup is dark green, drawn for a light ground - which this
          * page is not. ifqm-lockup.png gets away with no plate because its own navy
          * is baked into the file; this mark has none, so it gets the same small
          * white tile treatment the product's own light-mode screens already use
          * around the brand icon, rather than going invisible on navy.
          */
         .ifqm-lp .logo-name{
-          display:inline-flex;align-items:center;background:#fff;border-radius:9px;
-          padding:7px 12px;box-shadow:0 6px 18px rgba(0,0,0,.18);
+          display:inline-flex;align-items:center;background:#fff;border-radius:10px;
+          padding:8px 14px;box-shadow:0 6px 18px rgba(0,0,0,.18);
           transition:opacity .15s ease;
         }
         .ifqm-lp .logo-name:hover{opacity:.85}
-        .ifqm-lp .logo-name img{height:22px;display:block;object-fit:contain}
+        .ifqm-lp .logo-name img{height:30px;display:block;object-fit:contain}
         .ifqm-lp .logo small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted);letter-spacing:0}
-        /* The plate grows with the name so the two stay in proportion - a
+        /* The plate grows with the mark so the two stay in proportion - a
            bigger word beside the old 34px mark reads as a mismatch. */
         @media (max-width:640px){
           .ifqm-lp .logo img{height:38px}
-          .ifqm-lp .logo-name img{height:18px}
-          .ifqm-lp .logo-name{padding:6px 10px}
+          .ifqm-lp .logo-name img{height:24px}
+          .ifqm-lp .logo-name{padding:7px 11px}
         }
         .ifqm-lp .nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--text-muted);font-weight:500}
         .ifqm-lp .nav-links a:hover{color:var(--text)}
@@ -547,7 +547,7 @@ export default function LandingPage() {
                 onError={(e) => { e.target.style.display = 'none'; }} />
             </a>
             <Link to="/" className="logo-name">
-              <img src="/assets/kalpion-name.png" alt="Kalpion" />
+              <img src="/assets/kalpion-logo.png" alt="Kalpion" />
             </Link>
           </div>
           <div className="nav-links">
