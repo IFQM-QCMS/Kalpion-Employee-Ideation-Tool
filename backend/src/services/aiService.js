@@ -4,11 +4,26 @@ import logger from '../utils/logger.js';
 
 // Heuristic helpers
 
-/** Numbers paired with a unit/suffix, or a stand-alone multi-digit number. */
+/*
+ * Spelled-out counts are how most people actually write ("two hours a week", "three
+ * operators", "a dozen pieces"). The digit-only check below used to treat these identically
+ * to no number at all, which meant a perfectly quantified benefit in plain English scored
+ * as if nothing had been measured.
+ */
+const WORD_NUMBER = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
+  + 'dozen|couple|few|several|half|quarter|double|triple)';
+const WORD_NUMBER_RE = new RegExp(
+  `\\b${WORD_NUMBER}\\b\\s+\\w*\\s*(hours?|hrs?|days?|minutes?|mins?|weeks?|months?|years?|`
+  + 'people|employees|workers|operators|staff|units?|pieces?|items?|times?|percent|%|'
+  + 'rupees?|lakh|crore|batches?|shifts?|complaints?)', 'i'
+);
+
+/** Numbers paired with a unit/suffix, a stand-alone multi-digit number, or a spelled-out count. */
 export function isQuantified(text) {
   if (!text) return false;
   if (/\d+\s*(%|percent|rs\.?|inr|₹|\$|hr|hour|day|min|unit|piece|time|x\b)/i.test(text)) return true;
   if (/\b\d{2,}\b/.test(text)) return true;
+  if (WORD_NUMBER_RE.test(text)) return true;
   return false;
 }
 
@@ -29,17 +44,27 @@ export function lexicalDiversity(text) {
   return new Set(words).size / total;
 }
 
-/** True if the solution describes HOW (implementation-oriented language). */
+/*
+ * True if the solution describes HOW - not only "we will implement X", but the plain,
+ * instruction-style phrasing most shop-floor submissions actually use ("Install a lid and
+ * close it each shift"). The original patterns all required a future-tense auxiliary verb or
+ * a numbered-step structure, so a perfectly actionable one-line fix written as a plain
+ * imperative sentence matched none of them.
+ */
 export function hasActionableSteps(text) {
   if (!text) return false;
   const patterns = [
-    /\b(will|can|shall)\s+(be\s+)?(implement|introduc|deploy|install|replac|creat|establish|develop|train|monitor|audit|track|measur|digitiz|automat)/i,
-    /\bby\s+(implement|introduc|deploy|install|using|integrat|conduct|establish|train)/i,
+    /\b(will|can|shall|should|would|to|we'll)\s+(be\s+)?(implement|introduc|deploy|install|replac|creat|establish|develop|train|monitor|audit|track|measur|digitiz|automat|add|fit|fix|move|place|relocat|mark|label|cover|seal|clean|separat|standardi[sz]e|assign|rotate|schedule|provid)/i,
+    /\bby\s+(implement|introduc|deploy|install|using|integrat|conduct|establish|train|add|fit|mov|clean|mark|label)/i,
     /\bthrough\s+\w+/i,
     /\bpropos(e|ed|ing)\s+to\s+\w+/i,
-    /\b(step\s*\d|phase\s*\d|first[,\s]|second[,\s]|then[,\s]|next[,\s]|finally[,\s])/i,
+    /\b(step\s*\d|phase\s*\d|first[,\s]|second[,\s]|then[,\s]|next[,\s]|finally[,\s]|once\s+(a|per)|(every|each)\s+(shift|day|week|batch|time|morning|night))/i,
+    // Imperative-mood openers: "Install a...", "Add a...", "Fit a...", "Replace the...",
+    // "Move the...", "Use a...", "Create a...", "Mark the..." - a plain instruction given
+    // directly, no auxiliary verb needed.
+    /^(install|add|fit|replace|move|relocat|use|creat|mark|label|cover|separat|provid|assign|introduc|place|attach|mount|build|set\s*up|clean|train|rotate|schedule)\w*\b/i,
   ];
-  return patterns.some((p) => p.test(text));
+  return patterns.some((p) => p.test(text.trim()));
 }
 
 /** Penalty (0-9) for generic low-value phrases; each hit +3, capped at 9. */
@@ -63,95 +88,126 @@ export function wordCount(text) {
 }
 
 // Dimension scorers
+//
+// Rebalanced after real, sensible shop-floor ideas were scoring in single digits. Each
+// scorer used to start every submission at zero and demand several independent keyword
+// hits before awarding any credit at all - workable for a long, jargon-filled essay, but it
+// meant a short, clear, perfectly legitimate idea ("a hinged lid on the bench, closed at the
+// end of each shift") lost marks on almost every dimension simultaneously, compounding into
+// an unfairly low total. Every dimension below now gives a baseline for genuinely answering
+// the question it asks, and reserves the harsh penalties for the cases that actually deserve
+// them - near-empty text, or openly generic filler ("make it better"). The keyword lists
+// were also IT/office-skewed (system, dashboard, ERP...) and gave zero credit to the
+// physical and process fixes a shop floor actually proposes (a guard, a lid, a jig, a label,
+// a checklist, 5S/poka-yoke language) - those are now recognised on equal footing.
 
 /** Dimension 1 - Problem Clarity (0-20). */
 export function scoreProblemClarity(sit) {
-  if (String(sit).trim() === '') return 0;
-  let score = 0;
+  const text = String(sit).trim();
+  if (text === '') return 0;
 
-  const sentences = countSentences(sit);
-  if (sentences >= 4) score += 5;
-  else if (sentences >= 2) score += 3;
-  else score += 1;
+  // Baseline for describing a real situation at all, so the signals below move the score
+  // up and down from a credible starting point rather than from zero.
+  let score = 7;
 
-  const ttr = lexicalDiversity(sit);
-  if (ttr >= 0.70) score += 5;
-  else if (ttr >= 0.55) score += 3;
-  else if (ttr >= 0.40) score += 1;
+  const words = wordCount(text);
+  if (words >= 35) score += 5;
+  else if (words >= 20) score += 4;
+  else if (words >= 10) score += 2;
+  else if (words < 6) score -= 5; // too thin to describe any real situation
 
-  if (isQuantified(sit)) score += 5;
+  const ttr = lexicalDiversity(text);
+  if (ttr >= 0.70) score += 3;
+  else if (ttr >= 0.50) score += 2;
+  else if (ttr >= 0.35) score += 1;
 
-  const lower = String(sit).toLowerCase();
+  if (isQuantified(text)) score += 3;
+
+  const lower = text.toLowerCase();
   const causeWords = ['because', 'due to', 'results in', 'causing', 'leads to', 'result of',
-    'currently', 'at present', 'since', 'therefore', 'consequently', 'as a result'];
-  let causalHits = 0;
-  for (const w of causeWords) if (lower.includes(w)) causalHits++;
-  if (causalHits >= 3) score += 5;
-  else if (causalHits >= 1) score += 3;
+    'currently', 'at present', 'since', 'therefore', 'consequently', 'as a result',
+    'every', 'each time', 'whenever', 'often', 'repeatedly', 'frequently',
+    'lack of', 'without', 'missing', 'overnight', 'has no', 'does not have'];
+  const causalHits = causeWords.filter((w) => lower.includes(w)).length;
+  if (causalHits >= 2) score += 2;
+  else if (causalHits >= 1) score += 1;
 
-  score -= Math.ceil(genericPhrasePenalty(sit) / 3);
-  if (wordCount(sit) < 15) score -= 5;
+  score -= Math.ceil(genericPhrasePenalty(text) / 3);
 
   return Math.max(0, Math.min(20, score));
 }
 
 /** Dimension 2 - Solution Quality (0-20). */
 export function scoreSolutionQuality(sol) {
-  if (String(sol).trim() === '') return 0;
-  let score = 0;
+  const text = String(sol).trim();
+  if (text === '') return 0;
 
-  const sentences = countSentences(sol);
-  if (sentences >= 4) score += 5;
-  else if (sentences >= 2) score += 3;
-  else score += 1;
+  let score = 7; // baseline for proposing something concrete at all
 
-  if (hasActionableSteps(sol)) score += 6;
+  const words = wordCount(text);
+  if (words >= 35) score += 4;
+  else if (words >= 20) score += 3;
+  else if (words >= 10) score += 2;
+  else if (words < 6) score -= 5;
 
-  const ttr = lexicalDiversity(sol);
-  if (ttr >= 0.65) score += 5;
-  else if (ttr >= 0.50) score += 3;
-  else if (ttr >= 0.35) score += 1;
+  if (hasActionableSteps(text)) score += 3;
 
-  const lower = String(sol).toLowerCase();
-  const mechanisms = ['system', 'software', 'database', 'dashboard', 'checklist', 'form',
+  const ttr = lexicalDiversity(text);
+  if (ttr >= 0.65) score += 3;
+  else if (ttr >= 0.45) score += 2;
+  else if (ttr >= 0.30) score += 1;
+
+  const lower = text.toLowerCase();
+  const mechanisms = [
+    // digital / systems
+    'system', 'software', 'database', 'dashboard', 'checklist', 'form',
     'procedure', 'protocol', 'template', 'sensor', 'scanner', 'camera',
     'algorithm', 'workflow', 'portal', 'module', 'report', 'alert', 'erp',
-    'application', 'barcode', 'rfid', 'qr code', 'spreadsheet'];
-  for (const m of mechanisms) {
-    if (lower.includes(m)) { score += 4; break; }
-  }
+    'application', 'barcode', 'rfid', 'qr code', 'spreadsheet',
+    // physical / mechanical / process - a shop floor's own vocabulary, previously worth
+    // nothing here however concrete the fix was.
+    'guard', 'lid', 'cover', 'tray', 'bin', 'rack', 'shelf', 'jig', 'fixture',
+    'clamp', 'bracket', 'shield', 'barrier', 'stopper', 'stand', 'holder',
+    'label', 'tag', 'colour-code', 'color-code', 'marking', 'signage', 'sign',
+    'layout', 'poka-yoke', 'mistake-proof', 'fail-safe', 'interlock', 'lock',
+    'rota', 'rotation', 'schedule', 'routine', 'sop', 'instruction', 'training',
+    'handle', 'hinge', 'valve', 'gauge', 'filter', 'drain', 'vent', 'chute',
+    'trolley', 'cart', 'pallet', 'crate', 'box',
+  ];
+  if (mechanisms.some((m) => lower.includes(m))) score += 3;
 
-  score -= Math.ceil(genericPhrasePenalty(sol) / 2);
-  if (wordCount(sol) < 15) score -= 5;
+  score -= Math.ceil(genericPhrasePenalty(text) / 2);
 
   return Math.max(0, Math.min(20, score));
 }
 
 /** Dimension 3 - Feasibility (0-15). */
 export function scoreFeasibility(sol, sit, impactLevel) {
-  let score = 0;
-  const combined = `${String(sol)} ${String(sit)}`.toLowerCase();
+  const solText = String(sol).trim();
+  if (solText === '') return 0;
+  const combined = `${solText} ${String(sit)}`.toLowerCase();
+
+  // Most shop-floor fixes ARE feasible by default - simple and cheap is a feasibility
+  // strength, not something that only earns points once it is spelled out at length.
+  let score = 8;
 
   const resourceWords = ['team', 'department', 'manager', 'operator', 'staff', 'vendor',
     'supplier', 'month', 'week', 'quarter', 'phase', 'pilot', 'trial',
     'budget', 'cost', 'investment', 'existing', 'available', 'current system'];
-  let resourceHits = 0;
-  for (const w of resourceWords) if (combined.includes(w)) resourceHits++;
-  if (resourceHits >= 4) score += 6;
-  else if (resourceHits >= 2) score += 4;
-  else if (resourceHits >= 1) score += 2;
+  const resourceHits = resourceWords.filter((w) => combined.includes(w)).length;
+  // A bonus for naming resources or a timeline, never a requirement for credit in the
+  // first place - most short, obviously-doable fixes never need to spell that out.
+  score += Math.min(4, resourceHits * 2);
 
   const overreach = ['completely eliminate', 'zero defect', 'fully automate everything',
-    'no human error', '100% accuracy', 'eliminate all errors', 'perfect system'];
-  let overreachHits = 0;
-  for (const w of overreach) if (combined.includes(w)) overreachHits++;
-  score += overreachHits === 0 ? 4 : (overreachHits === 1 ? 2 : 0);
+    'no human error', '100% accuracy', 'eliminate all errors', 'perfect system',
+    'entire organisation', 'company-wide overnight', 'overnight transformation'];
+  const overreachHits = overreach.filter((w) => combined.includes(w)).length;
+  score -= overreachHits * 3;
 
-  const solWords = wordCount(sol);
-  if (impactLevel === 'High' && solWords >= 40) score += 5;
-  else if (impactLevel === 'Medium' && solWords >= 20) score += 4;
-  else if (impactLevel === 'Low') score += 3;
-  else if (solWords >= 20) score += 2;
+  // A genuinely bare answer ("automate it") cannot be judged feasible, whatever the impact
+  // level claims - this is the one case left that still marks the dimension down hard.
+  if (wordCount(solText) < 4) score -= 6;
 
   return Math.max(0, Math.min(15, score));
 }
@@ -160,14 +216,15 @@ export function scoreFeasibility(sol, sit, impactLevel) {
 export function scoreBusinessImpact(impactLevel, impAreas, tangible) {
   let score = 0;
 
-  const levelMap = { High: 9, Medium: 6, Low: 3 };
-  score += levelMap[impactLevel] ?? 6;
+  const levelMap = { High: 11, Medium: 8, Low: 5 };
+  score += levelMap[impactLevel] ?? 8;
 
+  // One clearly-named area is a specific, real answer - the old ladder treated it as barely
+  // better than none, which rewarded ticking extra boxes over naming the one that mattered.
   const areaCount = impAreas.length;
-  if (areaCount >= 5) score += 7;
-  else if (areaCount >= 3) score += 5;
-  else if (areaCount >= 2) score += 3;
-  else if (areaCount === 1) score += 1;
+  if (areaCount >= 4) score += 5;
+  else if (areaCount >= 2) score += 4;
+  else if (areaCount === 1) score += 3;
 
   if (String(tangible).trim() !== '') {
     score += 2;
@@ -182,13 +239,13 @@ export function scoreMeasurability(tangible, sit, sol) {
   let score = 0;
 
   if (isQuantified(tangible)) score += 5;
-  else if (String(tangible).trim() !== '') score += 2;
+  else if (String(tangible).trim() !== '') score += 3;
 
-  if (isQuantified(sit)) score += 3;
+  if (isQuantified(sit)) score += 2;
 
   const combined = `${String(sol)} ${String(tangible)}`.toLowerCase();
-  if (/\bfrom\s+\d+.*?to\s+\d+|\bby\s+\d+\s*(%|percent)|\btarget\b|\bgoal\b|\bbenchmark\b/i.test(combined)) {
-    score += 2;
+  if (/\bfrom\s+\d+.*?to\s+\d+|\bby\s+\d+\s*(%|percent)|\btarget\b|\bgoal\b|\bbenchmark\b|\bsave[sd]?\b|\breduc|\bcut\s+(down|back)/i.test(combined)) {
+    score += 3;
   }
 
   return Math.max(0, Math.min(10, score));
@@ -196,33 +253,38 @@ export function scoreMeasurability(tangible, sit, sol) {
 
 /** Dimension 6 - Innovation / Uniqueness (0-15). */
 export function scoreInnovation(sol, sit, impAreas) {
-  let score = 0;
-  const combined = `${String(sol)} ${String(sit)}`.toLowerCase();
+  const solText = String(sol).trim();
+  if (solText === '') return 0;
+
+  // Proposing any concrete change over the status quo has baseline novelty value - this
+  // dimension used to require a technology buzzword or an explicit "new process" phrase to
+  // earn anything at all, which meant an ordinary mechanical fix scored zero on innovation
+  // no matter how sensible it was.
+  let score = 4;
+  const combined = `${solText} ${String(sit)}`.toLowerCase();
 
   const techWords = ['digital', 'software', 'app', 'application', 'automation', 'automated',
     'sensor', 'iot', 'barcode', 'qr', 'rfid', 'ai', 'machine learning',
     'real-time', 'cloud', 'dashboard', 'analytics', 'erp', 'api', 'database'];
-  let techHits = 0;
-  for (const w of techWords) if (combined.includes(w)) techHits++;
-  if (techHits >= 3) score += 5;
-  else if (techHits >= 1) score += 3;
+  const techHits = techWords.filter((w) => combined.includes(w)).length;
+  if (techHits >= 2) score += 4;
+  else if (techHits >= 1) score += 2;
 
-  const newProcess = ['new process', 'new procedure', 'redesign', 'restructure', 'new workflow',
+  const changeWords = ['new process', 'new procedure', 'redesign', 'restructure', 'new workflow',
     'new system', 'new approach', 'novel', 'innovative', 'introduce a',
-    'establish a', 'create a', 'develop a'];
-  for (const w of newProcess) {
-    if (combined.includes(w)) { score += 4; break; }
-  }
+    'establish a', 'create a', 'develop a', 'instead of', 'rather than', 'replac',
+    'eliminat', 'prevent', 'avoid', 'simple', 'low-cost', 'low cost', 'inexpensive',
+    'quick fix', 'easy to', 'no longer', 'move the', 'relocat'];
+  if (changeWords.some((w) => combined.includes(w))) score += 3;
 
   const areaCount = impAreas.length;
-  if (areaCount >= 3) score += 3;
+  if (areaCount >= 3) score += 2;
   else if (areaCount >= 2) score += 1;
 
   const rootWords = ['root cause', 'underlying', 'fundamental', 'source of the',
-    'prevent recurrence', 'prevent future', 'systemic', 'recurring'];
-  for (const w of rootWords) {
-    if (combined.includes(w)) { score += 3; break; }
-  }
+    'prevent recurrence', 'prevent future', 'systemic', 'recurring',
+    'every shift', 'every time', 'each shift', 'repeatedly'];
+  if (rootWords.some((w) => combined.includes(w))) score += 2;
 
   return Math.max(0, Math.min(15, score));
 }
