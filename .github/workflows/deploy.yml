@@ -22,6 +22,18 @@ jobs:
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      # Baseline, taken before we touch anything, so the check after the deploy
+      # has something to compare against. These sites share the VPS and its
+      # reverse proxy with Kalpion but are owned by other teams - this deploy
+      # must never be the reason one of them goes down.
+      - name: Record sibling sites' health before deploying
+        run: |
+          for site in skills.ifqm.org.in dwm.ifqm.org.in octaqube.ifqm.org.in; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$site/" || echo 000)
+            echo "$site -> $code"
+            echo "BEFORE_$(echo "$site" | tr '.-' '__')=$code" >> "$GITHUB_ENV"
+          done
+
       - name: Create deployment package
         run: |
           tar \
@@ -123,25 +135,15 @@ jobs:
               exit 1
             fi
 
-            # Recreating a container gives it a new address on the shared proxy network.
-            # An nginx in front that names the containers in proxy_pass resolves those
-            # names only when its configuration loads, so after a deploy it keeps
-            # sending traffic to the old addresses and answers 502 for everything.
-            # Asking every nginx on that network to reload makes it resolve again. A
-            # proxy that resolves dynamically is unaffected; one that is not nginx is
-            # skipped. Nothing here can fail the deploy - the website check below is
-            # the judge.
-            echo "Refreshing the reverse proxy..."
-            docker network inspect ifqm-new-sites --format '{{range .Containers}}{{println .Name .IPv4Address}}{{end}}' || true
-            for c in $(docker network inspect ifqm-new-sites --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
-              case "$c" in kalpion-*) continue;; esac
-              if docker exec "$c" nginx -t >/dev/null 2>&1; then
-                echo "  reloading nginx in $c"
-                docker exec "$c" nginx -s reload || true
-              fi
-            done
-            sleep 3
-
+            # kalpion-api and kalpion-web both have a fixed address on
+            # ifqm-new-sites (docker-compose.yml), so recreating them never
+            # changes the address the shared proxy sends traffic to - nothing
+            # on that proxy needs to re-resolve anything because of this
+            # deploy. That proxy, and every other site behind it, belongs to
+            # IFQM's server administrator (DEPLOYMENT_SETTINGS.md), not to
+            # this repository: a Kalpion deploy must not reach into it, reload
+            # it, or touch any container that is not one of the three listed
+            # above.
             echo "Checking website..."
             for i in {1..10}; do
               code=$(curl -s -o /dev/null -w '%{http_code}' https://kalpion.ifqm.org.in/api/health || echo 000)
@@ -162,3 +164,28 @@ jobs:
             echo "Kalpion deployment successful."
 
             rm -f /tmp/kalpion-deploy.tar.gz
+
+      # This deploy no longer touches anything outside the three Kalpion
+      # containers (see the comment in the step above), but the shared VPS
+      # and proxy are still shared, so this is a smoke detector, not a
+      # guarantee: if a sibling site that was healthy before this run is not
+      # healthy now, something about this deploy or its timing affected
+      # shared infrastructure, and that must be investigated immediately
+      # rather than discovered later from a user report.
+      - name: Verify sibling sites were not affected by this deploy
+        if: always()
+        run: |
+          failed=0
+          for site in skills.ifqm.org.in dwm.ifqm.org.in octaqube.ifqm.org.in; do
+            key="BEFORE_$(echo "$site" | tr '.-' '__')"
+            before="${!key}"
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$site/" || echo 000)
+            echo "$site -> before=$before now=$code"
+            if [ "$before" = "200" ] && [ "$code" != "200" ]; then
+              echo "::error::$site was healthy before this deploy and is not now ($code). This deploy may have affected shared infrastructure - investigate immediately."
+              failed=1
+            fi
+          done
+          if [ "$failed" = "1" ]; then
+            exit 1
+          fi
