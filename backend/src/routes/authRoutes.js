@@ -14,8 +14,9 @@ router.get('/me', optionalAuth, auth.me);
 // it asks this before anyone has a session.
 router.get('/maintenance', auth.maintenance);
 // The sign-in screen's first step: given an identifier, where should this person go next.
-// identifyLimiter, not authLimiter - see its own comment for why.
-router.post('/identify', identifyLimiter, auth.identify);
+// identifyLimiter, not authLimiter - see its own comment for why. It is an array of two
+// limiters (per-identifier and per-IP), spread as separate middleware.
+router.post('/identify', ...identifyLimiter, auth.identify);
 // The real password rule this deployment enforces, so the sign-in/activation screens can
 // show it rather than guess. No account-specific data in it, so the global limiter is enough.
 router.get('/password-policy', auth.passwordPolicy);

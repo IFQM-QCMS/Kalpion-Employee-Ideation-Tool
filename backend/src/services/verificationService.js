@@ -40,6 +40,14 @@ export const PURPOSES = {
     subject: (code) => `${code} is your Kalpion password-change verification code`,
     lead: 'Use this code to confirm it is you changing your Kalpion password:',
   },
+  // KAL-034: the email-only fallback of change_password, used solely when the account has no
+  // phone on file at all - never offered as an alternative to a user who has a phone, which
+  // would reopen the "shared mailbox" weakening the SMS-only purpose above exists to avoid.
+  change_password_email: {
+    channel: 'email',
+    subject: (code) => `${code} is your Kalpion password-change verification code`,
+    lead: 'Use this code to confirm it is you changing your Kalpion password:',
+  },
 
   // A new IFQM staff account proving it holds both the address and the number.
   platform_admin_email: {

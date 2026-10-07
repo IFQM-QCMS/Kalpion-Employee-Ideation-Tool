@@ -698,24 +698,34 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
 /*
  * The self-service alternative to changePassword(): any signed-in user, any role, any
  * organisation, may change their own password by proving they hold their own registered
- * phone instead of already knowing their current password. The phone is always the one on
- * the account's own row - never one the caller supplies - so this can never be used to send
- * a code to somebody else's number.
+ * phone (or, lacking one, their own registered email - KAL-034) instead of already knowing
+ * their current password. The identifier is always the one on the account's own row - never
+ * one the caller supplies - so this can never be used to send a code to somebody else's
+ * address or number. Phone is preferred whenever the account has one; email is only ever the
+ * fallback for an account that does not, never an alternative offered to one that does.
  */
 export async function requestPasswordChangeOtp(db, user) {
   const [[row] = []] = await db.execute(
-    "SELECT phone FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
+    "SELECT phone, email FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
   );
   const phone = String(row?.phone || '').trim();
-  if (!phone) {
-    throw badRequest('Your account has no mobile number on file. Ask your organisation admin to add one.');
+  const email = String(row?.email || '').trim();
+  if (!phone && !email) {
+    throw badRequest('Your account has no mobile number or email on file. Ask your organisation admin to add one.');
   }
 
+  if (phone) {
+    const sent = await verification.sendCode({
+      identifier: phone, purpose: 'change_password', name: user.name,
+      tenantSlug: user.org_slug, userId: user.id,
+    });
+    return { ...sent, channel: 'sms', masked_phone: maskPhone(phone) };
+  }
   const sent = await verification.sendCode({
-    identifier: phone, purpose: 'change_password', name: user.name,
+    identifier: email, purpose: 'change_password_email', name: user.name,
     tenantSlug: user.org_slug, userId: user.id,
   });
-  return { ...sent, masked_phone: maskPhone(phone) };
+  return { ...sent, channel: 'email', masked_email: maskEmail(email) };
 }
 
 /** Accept the code from requestPasswordChangeOtp and set the new password in one step. */
@@ -726,15 +736,19 @@ export async function confirmPasswordChangeOtp(db, user, { code, newPassword, or
   assertPasswordStrength(newPassword, { label: 'New password' });
 
   const [[row] = []] = await db.execute(
-    "SELECT id, phone, password_hash FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
+    "SELECT id, phone, email, password_hash FROM users WHERE id = ? AND status = 'active' LIMIT 1", [user.id]
   );
   if (!row) throw unauthorized('Your account is no longer active.');
   const phone = String(row.phone || '').trim();
-  if (!phone) throw badRequest('Your account has no mobile number on file.');
+  const email = String(row.email || '').trim();
+  if (!phone && !email) throw badRequest('Your account has no mobile number or email on file.');
 
   // The code itself is the proof of identity here - there is no current password to check
-  // first, which is the entire point of this path.
-  await verification.verifyCode({ identifier: phone, code, purpose: 'change_password' });
+  // first, which is the entire point of this path. Same phone-first priority as the request
+  // side, so this checks the code against whichever channel actually sent it.
+  await verification.verifyCode({
+    identifier: phone || email, code, purpose: phone ? 'change_password' : 'change_password_email',
+  });
 
   if (await bcrypt.compare(newPassword, row.password_hash)) {
     throw badRequest('The new password must be different from your current one.');
@@ -754,7 +768,7 @@ export async function confirmPasswordChangeOtp(db, user, { code, newPassword, or
   );
   const pwdTs = Number(after[0]?.pwd_ts) || 0;
 
-  logger.info(`auth: password changed via phone verification for user ${row.id}`);
+  logger.info(`auth: password changed via ${phone ? 'phone' : 'email'} verification for user ${row.id}`);
 
   const session = { ...user, must_change_password: false };
   const token = signToken({ user: session, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });

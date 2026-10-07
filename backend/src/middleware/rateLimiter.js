@@ -24,18 +24,39 @@ export const authLimiter = rateLimit({
 
 /*
  * Account-identify (the sign-in screen's "does this exist, and does it have a password"
- * check). Every attempt counts against the budget, successful or not - unlike authLimiter,
- * a lookup that resolves to a real account is not a "failure" to skip, and this endpoint's
- * whole job is answering a question that is otherwise deliberately never answered elsewhere
- * in this app.
+ * check). Every attempt counts against the budget, successful or not - this endpoint answers
+ * 200 for all three outcomes (see authService.identifyAccount), so "skip successful requests"
+ * (status < 400) would skip nearly everything and remove the budget entirely. That still has
+ * to coexist with many real employees sharing one office/plant IP, so this is two budgets
+ * rather than one flat per-IP cap:
+ *
+ *  - identifyPerIdentifierLimiter: per (IP, identifier) - catches a script hammering ONE
+ *    identifier from one address. Low ceiling, because a real person never submits the same
+ *    identifier 20+ times in 15 minutes.
+ *  - identifyPerIpLimiter: per IP only, much higher ceiling - the backstop against sweeping
+ *    many different identifiers from one address (enumeration), sized so a few hundred
+ *    distinct employees behind one NAT in one window never trip it.
+ *
+ * Both run on every request; either one tripping is enough to reject it.
  */
-export const identifyLimiter = rateLimit({
+const identifyPerIdentifierLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.IDENTIFY_RATE_LIMIT) || 20,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => `${req.ip}:${String(req.body?.identifier || '').trim().toLowerCase()}`,
   message: { success: false, error: 'Too many attempts. Please try again later.' },
 });
+
+const identifyPerIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.IDENTIFY_RATE_LIMIT_PER_IP) || 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many attempts. Please try again later.' },
+});
+
+export const identifyLimiter = [identifyPerIpLimiter, identifyPerIdentifierLimiter];
 
 /** Expensive endpoints (AI rescoring, exports) - cheap to ask for, costly to serve. */
 export const heavyLimiter = rateLimit({

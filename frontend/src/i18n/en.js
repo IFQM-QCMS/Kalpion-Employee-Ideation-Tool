@@ -1728,8 +1728,10 @@ export default {
   // every role, every organisation, no need to already know the current password.
   'profile.change_password':'Change password',
   'profile.pw_otp_hint':'We will send a one-time code to the mobile number on your account. Enter it along with your new password to confirm it is you.',
+  // KAL-034: shown instead of pw_otp_hint for an account with no phone on file.
+  'profile.pw_otp_hint_email':'Your account has no mobile number on file, so we will send a one-time code to your email instead. Enter it along with your new password to confirm it is you.',
   'profile.pw_send_code':'Send verification code',
-  'profile.pw_code_to':'Code sent to {phone}',
+  'profile.pw_code_to':'Code sent to {target}',
   'profile.pw_submit':'Update password',
   'profile.pw_changed':'Your password has been updated.',
   'profile.pw_rule_len':'At least {n} characters',
@@ -1818,6 +1820,9 @@ export default {
   'hier.stage_holders':'{n} person(s) can act here',
   'hier.gap_warning':'Nobody in this organisation holds: {stages}. Ideas reaching those stages are stepped over - recorded on the idea, but not the approval you configured. Give somebody those roles, or remove the stages.',
   'admin.uf_phone_hint':'Required. Sign-in codes and password resets are sent here.',
+  'admin.uf_phone_hint_optional':'This account has no phone on file. Sign-in codes and password resets are sent here if you add one.',
+  'admin.no_phone':'No phone',
+  'admin.no_phone_hint':'This account has no mobile number on file. It can still sign in, but cannot receive OTPs by SMS - password changes fall back to email instead.',
   'review.admin_readonly':'You can see everything here, but administrators do not approve or reject ideas - that is kept independent of administration. Use View to read an idea.',
 
   // Send back / forward / reopen (Sept 2026 change requests)

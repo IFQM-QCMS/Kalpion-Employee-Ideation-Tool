@@ -348,7 +348,7 @@ export async function updateUser(db, actor, id, body, tenant = null) {
   if (!id) throw badRequest('Missing user ID.');
 
   const [tgtRows] = await db.execute(
-    'SELECT id, role, email, username FROM users WHERE id=? LIMIT 1', [id]
+    'SELECT id, role, email, username, phone FROM users WHERE id=? LIMIT 1', [id]
   );
   const target = tgtRows[0];
   if (!target) throw notFound('User not found.');
@@ -386,10 +386,15 @@ export async function updateUser(db, actor, id, body, tenant = null) {
       throw new ApiError(409, `The username "${username}" is already taken.`);
     }
   }
-  // Same rule as creation, applied on the way out too: an edit must not be able to remove
-  // the only number the account can be recovered through.
-  if (!phone) throw badRequest('A mobile number is required for every user.');
-  if (!isValidPhone(phone)) {
+  // Same rule as creation, applied on the way out too, but only when there is a number to
+  // protect: an edit must not be able to remove the only number an account can be recovered
+  // through. An account that was created with no phone (KAL-034 - no-phone users could not be
+  // edited or reactivated at all, since every edit re-submits this field) has nothing to
+  // protect, so a status change or any other edit is not blocked on a phone that was never
+  // there; typing one in is still validated like any other explicit phone edit.
+  if (!phone) {
+    if (target.phone) throw badRequest('A mobile number is required for every user.');
+  } else if (!isValidPhone(phone)) {
     throw badRequest('Enter a valid mobile number, including the country or area code.');
   }
 

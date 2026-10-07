@@ -370,6 +370,16 @@ export default function AdminPage() {
                             </span>
                           </div>
                         )}
+                        {/* KAL-034: an active account with no phone can sign in but cannot receive an
+                            OTP by SMS - flagged here so an admin notices without opening every row. */}
+                        {u.status !== 'inactive' && !u.phone && (
+                          <div style={{ marginTop:3 }}>
+                            <span title={t('admin.no_phone_hint')} style={{ fontSize:10,padding:'1px 8px',borderRadius:99,
+                              background:'var(--warning-light)',color:'var(--warning)',border:'1px solid var(--warning-dim)' }}>
+                              {t('admin.no_phone')}
+                            </span>
+                          </div>
+                        )}
                       </td>
                       <td>
                         {isProtected
@@ -1415,6 +1425,13 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
   const [saving,  setSaving]  = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
 
+  // Mandatory for a brand-new account, and for an existing one that already has a number on
+  // file (clearing out the only recovery number is not allowed). An existing account that was
+  // created without one - no phone, no way to send an OTP - can still be saved (e.g. just to
+  // flip active/inactive) without forcing a number in; typing one in anyway still has to be
+  // a real one.
+  const phoneRequired = !isEdit || !!(editUser?.phone);
+
   // A no-email employee who has never signed in yet has no password anyone knows - if the
   // SMS OTP cannot reach them, this is the only other way in.
   const showGenLink = isEdit && !editUser.email && !editUser.activated_at;
@@ -1445,12 +1462,16 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
 
   async function handleSubmit() {
     setError('');
-    // A mobile number is required of every account, however it is created.
+    // Required for a new account, for an account that already has a number on file, or
+    // whenever the admin has actually typed one in - never for an untouched blank field on an
+    // account that never had a phone (phoneRequired, above).
     // \D, not D. This stripped literal capital Ds and counted everything else, so "abcdefghij"
     // was accepted as a ten-digit mobile number.
-    const digits = phone.replace(/\D/g, '');
-    if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
-    if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
+    if (phoneRequired || phone.trim()) {
+      const digits = phone.replace(/\D/g, '');
+      if (!phone.trim()) { setError(t('admin.uf_phone_required')); return; }
+      if (digits.length < 10) { setError(t('admin.uf_phone_invalid')); return; }
+    }
     setSaving(true);
     const payload = { name, email, username: uname.trim().toLowerCase(), employee_id: empId,
       role, manager_id: mgr||null, department: dept, business_unit: bu, location: loc, phone };
@@ -1577,11 +1598,13 @@ function UserFormModal({ user: editUser, managers, roleList = [], takenRoles = {
           </div>
           <div className="form-row">
             <div className="form-group">
-              <label>{t('admin.uf_phone')} <span style={{ color:'var(--danger)' }}>*</span></label>
-              <input className="form-control" type="tel" value={phone} id="uf-phone" required
+              <label>{t('admin.uf_phone')} {phoneRequired && <span style={{ color:'var(--danger)' }}>*</span>}</label>
+              <input className="form-control" type="tel" value={phone} id="uf-phone" required={phoneRequired}
                 onChange={e => setPhone(e.target.value)} placeholder={t('admin.uf_phone_ph')} />
               {/* The placeholder read "Optional" under a field marked required. */}
-              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>{t('admin.uf_phone_hint')}</div>
+              <div style={{ fontSize:11,color:'var(--subtle)',marginTop:4 }}>
+                {t(phoneRequired ? 'admin.uf_phone_hint' : 'admin.uf_phone_hint_optional')}
+              </div>
             </div>
             <div className="form-group" />
           </div>

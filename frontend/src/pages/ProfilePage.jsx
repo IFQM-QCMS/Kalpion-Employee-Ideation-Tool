@@ -98,14 +98,14 @@ function PhoneChange({ current, onChanged, t }) {
  * instead of already knowing your current one - the same door for every role, in every
  * organisation. Mirrors PhoneChange's start/verify shape above.
  */
-function PasswordChange({ t }) {
+function PasswordChange({ t, hasPhone }) {
   const { confirmPasswordChangeOtp } = useAuth();
   const { showToast } = useToast();
   const [open, setOpen]     = useState(false);   // has a code actually been sent yet
   const [sending, setSending] = useState(false);
   const [busy, setBusy]     = useState(false);
   const [error, setError]   = useState('');
-  const [maskedPhone, setMaskedPhone] = useState('');
+  const [maskedTarget, setMaskedTarget] = useState('');
   const [code, setCode]     = useState('');
   const [otpLen, setOtpLen] = useState(6);
   const [newPw, setNewPw]   = useState('');
@@ -135,14 +135,14 @@ function PasswordChange({ t }) {
 
   function reset() {
     setOpen(false); setCode(''); setNewPw(''); setConfirmPw('');
-    setShowPw(false); setError(''); setMaskedPhone(''); setResendIn(0);
+    setShowPw(false); setError(''); setMaskedTarget(''); setResendIn(0);
   }
 
   async function sendCode() {
     setError(''); setSending(true);
     try {
       const res = await authApi.requestChangePasswordOtp();
-      setMaskedPhone(res.data?.masked_phone || '');
+      setMaskedTarget(res.data?.masked_phone || res.data?.masked_email || '');
       setResendIn(60);
       setOpen(true);
     } catch (err) {
@@ -165,7 +165,9 @@ function PasswordChange({ t }) {
   if (!open) {
     return (
       <>
-        <p className="hint" style={{ marginBottom: 10 }}>{t('profile.pw_otp_hint')}</p>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          {t(hasPhone ? 'profile.pw_otp_hint' : 'profile.pw_otp_hint_email')}
+        </p>
         {error && <div className="alert alert-danger" style={{ marginBottom: 10 }}>{error}</div>}
         <button className="btn btn-primary btn-sm" disabled={sending} onClick={sendCode}>
           {sending ? t('msg.loading') : t('profile.pw_send_code')}
@@ -179,7 +181,7 @@ function PasswordChange({ t }) {
       {error && <div className="alert alert-danger">{error}</div>}
 
       <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-          {maskedPhone && <span className="hint">{t('profile.pw_code_to', { phone: maskedPhone })}</span>}
+          {maskedTarget && <span className="hint">{t('profile.pw_code_to', { target: maskedTarget })}</span>}
 
           <OtpInput value={code} onChange={setCode} length={otpLen} disabled={busy}
             error={!!error} label={t('login.otp_code_ph')} />
@@ -347,12 +349,13 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Every role, every organisation - the same self-service door, proved by phone. */}
+      {/* Every role, every organisation - the same self-service door, proved by phone, or by
+          email for the (KAL-034) accounts that have no phone on file. */}
       <div className="card" style={{ marginTop: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--heading)', marginBottom: 14 }}>
           {t('profile.change_password')}
         </div>
-        <PasswordChange t={t} />
+        <PasswordChange t={t} hasPhone={!!user.phone} />
       </div>
     </div>
   );
