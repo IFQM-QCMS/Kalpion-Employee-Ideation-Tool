@@ -212,35 +212,24 @@ export default function LandingPage() {
         .ifqm-lp .nav.on{background:var(--topbar-bg);backdrop-filter:blur(12px);border-bottom-color:var(--topbar-border)}
         .ifqm-lp .nav-in{max-width:var(--lp-max);margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:26px}
         .ifqm-lp .logo{display:flex;align-items:center;gap:11px;color:var(--heading)}
-        /* The lockup carries its own navy ground, so it needs no plate behind
-           it - a white one would just frame the tile. */
-        /* Tall enough for the second line of the lockup to be readable - at the
-           old 38px the foundation's name was there but not legible. */
-        .ifqm-lp .logo img{height:46px;border-radius:9px;object-fit:contain;display:block;
-          box-shadow:0 6px 18px rgba(0,0,0,.18)}
-        .ifqm-lp .logo-mark{display:inline-flex;border-radius:9px;transition:opacity .15s ease}
-        .ifqm-lp .logo-mark:hover{opacity:.85}
         /*
          * The Kalpion lockup is dark green, drawn for a light ground - which this
-         * page is not. ifqm-lockup.png gets away with no plate because its own navy
-         * is baked into the file; this mark has none, so it gets the same small
-         * white tile treatment the product's own light-mode screens already use
-         * around the brand icon, rather than going invisible on navy.
+         * page is not, so it gets a small white tile rather than going invisible
+         * on navy. The image itself is now cropped tight to its own content (no
+         * baked-in margin), so this padding is the only whitespace around it -
+         * kept small enough that the mark reads as filling the tile, not framed
+         * by it.
          */
         .ifqm-lp .logo-name{
           display:inline-flex;align-items:center;background:#fff;border-radius:8px;
-          padding:4px 9px;box-shadow:0 6px 18px rgba(0,0,0,.18);
+          padding:3px 8px;box-shadow:0 6px 18px rgba(0,0,0,.18);
           transition:opacity .15s ease;
         }
         .ifqm-lp .logo-name:hover{opacity:.85}
         .ifqm-lp .logo-name img{height:34px;display:block;object-fit:contain}
-        .ifqm-lp .logo small{display:block;font-size:10.5px;font-weight:500;color:var(--text-muted);letter-spacing:0}
-        /* The plate grows with the mark so the two stay in proportion - a
-           bigger word beside the old 34px mark reads as a mismatch. */
         @media (max-width:640px){
-          .ifqm-lp .logo img{height:38px}
           .ifqm-lp .logo-name img{height:27px}
-          .ifqm-lp .logo-name{padding:3px 7px}
+          .ifqm-lp .logo-name{padding:2px 6px}
         }
         .ifqm-lp .nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--text-muted);font-weight:500}
         .ifqm-lp .nav-links a:hover{color:var(--text)}
@@ -431,7 +420,6 @@ export default function LandingPage() {
           .ifqm-lp .hero{padding:48px 0 44px}
           .ifqm-lp .sec{padding:54px 0}
           .ifqm-lp .cta{padding:38px 22px}
-          .ifqm-lp .logo small{display:none}
           .ifqm-lp .calc-out{grid-template-columns:1fr}
           /* One button in the bar; the hero underneath already carries "Start free". */
           .ifqm-lp .nav-cta{margin-left:auto;gap:6px}
@@ -538,14 +526,10 @@ export default function LandingPage() {
       {/* NAV */}
       <nav className={`nav${scrolled ? ' on' : ''}`}>
         <div className="nav-in">
-          {/* The mark belongs to IFQM and leads to their site; the product name
-              leads home. Two destinations, so they cannot be one link. */}
+          {/* Kalpion is the sole mark in the nav now - the IFQM lockup used to sit beside
+              it, linking out to ifqm.org.in, but the product's own brand is the one
+              identity this page leads with. */}
           <div className="logo">
-            <a href="https://ifqm.org.in/" className="logo-mark"
-              aria-label="Indian Foundation for Quality Management">
-              <img src="/assets/ifqm-lockup.png" alt="Indian Foundation for Quality Management"
-                onError={(e) => { e.target.style.display = 'none'; }} />
-            </a>
             <Link to="/" className="logo-name">
               <img src="/assets/kalpion-logo.png" alt="Kalpion" />
             </Link>
