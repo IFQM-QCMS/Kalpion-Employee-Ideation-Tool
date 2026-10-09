@@ -139,7 +139,7 @@ export default function LandingPage() {
          * fixed, the way the corporate site is fixed.
          */
         .ifqm-lp{
-          min-height:100vh;overflow-x:hidden;
+          position:relative;min-height:100vh;overflow-x:hidden;
           font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
           --lp-max:1120px;
 
@@ -187,13 +187,23 @@ export default function LandingPage() {
 
           background:
             radial-gradient(1200px 620px at 72% -10%,#164079 0%,transparent 62%),
+            radial-gradient(900px 540px at 8% 78%,rgba(201,169,97,.07) 0%,transparent 60%),
             linear-gradient(180deg,#0b2545 0%,#0a2140 58%,#081c37 100%);
           background-attachment:fixed;
           color:var(--text);
         }
 
+        /* A near-invisible grain so the flat navy reads as a surface rather
+           than a flat fill - the same trick a printed brand book uses on an
+           ink wash. Pure CSS, no image request. */
+        .ifqm-lp::before{
+          content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.035;
+          background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+        .ifqm-lp > *{position:relative;z-index:1}
+
         .ifqm-lp *{box-sizing:border-box}
-        .ifqm-lp section{position:relative}
+        .ifqm-lp section{position:relative;scroll-margin-top:84px}
         .ifqm-lp .wrap{max-width:var(--lp-max);margin:0 auto;padding:0 22px}
         .ifqm-lp h1,.ifqm-lp h2,.ifqm-lp h3{color:var(--heading);letter-spacing:-.025em;margin:0}
         .ifqm-lp p{margin:0}
@@ -209,27 +219,44 @@ export default function LandingPage() {
         /* ── nav ──────────────────────────────────────────────────────────── */
         .ifqm-lp .nav{position:sticky;top:0;z-index:40;transition:background .2s,border-color .2s,backdrop-filter .2s;
           border-bottom:1px solid transparent}
-        .ifqm-lp .nav.on{background:var(--topbar-bg);backdrop-filter:blur(12px);border-bottom-color:var(--topbar-border)}
+        .ifqm-lp .nav.on{background:var(--topbar-bg);backdrop-filter:blur(12px);border-bottom-color:var(--topbar-border);
+          box-shadow:0 1px 0 rgba(255,255,255,.05),0 16px 32px -24px rgba(0,0,0,.6)}
+        /* The two "something is live" dots on this page (this badge, and the
+           mock panel's own) share one gentle pulse - a status indicator that
+           never moves is just a coloured dot. */
+        @keyframes lp-pulse{
+          0%,100%{box-shadow:0 0 0 3px rgba(95,207,148,.22),0 0 0 0 rgba(95,207,148,.4)}
+          50%{box-shadow:0 0 0 3px rgba(95,207,148,.22),0 0 0 7px rgba(95,207,148,0)}
+        }
+        @media (prefers-reduced-motion:reduce){.ifqm-lp .hero-badge i,.ifqm-lp .mock-bar em::before{animation:none}}
         .ifqm-lp .nav-in{max-width:var(--lp-max);margin:0 auto;padding:12px 22px;display:flex;align-items:center;gap:26px}
         .ifqm-lp .logo{display:flex;align-items:center;gap:11px;color:var(--heading)}
         /*
          * The Kalpion lockup is dark green, drawn for a light ground - which this
-         * page is not, so it gets a small white tile rather than going invisible
-         * on navy. The image itself is now cropped tight to its own content (no
-         * baked-in margin), so this padding is the only whitespace around it -
-         * kept small enough that the mark reads as filling the tile, not framed
-         * by it.
+         * page is not, so it gets a small white chip rather than going invisible
+         * on navy. The image is cropped tight to its own content and fully
+         * transparent around the glyphs (verified against a solid test
+         * background, not assumed), so flat white here is the ONLY white in
+         * play - a two-tone sheen was tried and read as a seam against the
+         * image's own true-white glyphs. A full pill rather than a rounded
+         * square, and a hairline gold ring tie it to the page's one accent
+         * colour instead of it reading as a plain sticker dropped on the bar.
          */
         .ifqm-lp .logo-name{
-          display:inline-flex;align-items:center;background:#fff;border-radius:8px;
-          padding:3px 8px;box-shadow:0 6px 18px rgba(0,0,0,.18);
-          transition:opacity .15s ease;
+          display:inline-flex;align-items:center;border-radius:999px;
+          background:#ffffff;
+          padding:5px 14px 5px 11px;
+          box-shadow:0 10px 24px -8px rgba(0,0,0,.4),0 0 0 1px var(--primary-dim);
+          transition:transform .18s ease,box-shadow .18s ease;
         }
-        .ifqm-lp .logo-name:hover{opacity:.85}
-        .ifqm-lp .logo-name img{height:34px;display:block;object-fit:contain}
+        .ifqm-lp .logo-name:hover{
+          transform:translateY(-1px);
+          box-shadow:0 14px 30px -8px rgba(0,0,0,.46),0 0 0 1px var(--primary);
+        }
+        .ifqm-lp .logo-name img{height:30px;display:block;object-fit:contain}
         @media (max-width:640px){
-          .ifqm-lp .logo-name img{height:27px}
-          .ifqm-lp .logo-name{padding:2px 6px}
+          .ifqm-lp .logo-name img{height:24px}
+          .ifqm-lp .logo-name{padding:4px 11px 4px 9px}
         }
         .ifqm-lp .nav-links{display:flex;gap:22px;margin-left:auto;font-size:13.5px;color:var(--text-muted);font-weight:500}
         .ifqm-lp .nav-links a:hover{color:var(--text)}
@@ -240,8 +267,17 @@ export default function LandingPage() {
           border-radius:11px;font-weight:650;font-size:14px;cursor:pointer;border:1px solid transparent;
           padding:11px 18px;transition:filter .16s,transform .16s,box-shadow .16s,background .16s,border-color .16s;white-space:nowrap}
         .ifqm-lp .btn-lp:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-        .ifqm-lp .b-primary{background:var(--primary);color:var(--on-primary)}
+        .ifqm-lp .b-primary{background:var(--primary);color:var(--on-primary);position:relative;overflow:hidden}
         .ifqm-lp .b-primary:hover{filter:brightness(1.06);transform:translateY(-1px);box-shadow:0 12px 26px -8px var(--primary-glow)}
+        /* A light sweep on hover, the one bit of showmanship on the page's one
+           most-clicked element. Pure CSS: a skewed highlight sliding across on
+           a transform transition, nothing looping or drawing attention when
+           the button isn't being looked at. */
+        .ifqm-lp .b-primary::after{content:'';position:absolute;top:0;left:-65%;width:45%;height:100%;
+          background:linear-gradient(115deg,transparent,rgba(255,255,255,.5),transparent);
+          transform:skewX(-18deg);transition:left .5s ease}
+        .ifqm-lp .b-primary:hover::after{left:130%}
+        @media (prefers-reduced-motion:reduce){.ifqm-lp .b-primary::after{display:none}}
         .ifqm-lp .b-ghost{background:var(--surface);color:var(--text);border-color:var(--border)}
         .ifqm-lp .b-ghost:hover{border-color:var(--border-strong);transform:translateY(-1px)}
         .ifqm-lp .b-sm{padding:8px 14px;font-size:13px;border-radius:10px}
@@ -255,19 +291,35 @@ export default function LandingPage() {
         .ifqm-lp .glow-b{top:-160px;left:20%;width:420px;height:820px;transform:translateX(-50%) rotate(-38deg);
           background:radial-gradient(50% 50% at 50% 50%,rgba(168,85,247,.10),transparent 78%)}
         .ifqm-lp .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:52px;align-items:center}
+        .ifqm-lp .hero-badge{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 11px;border-radius:999px;
+          background:var(--primary-light);border:1px solid var(--primary-dim);color:var(--primary);
+          font-size:12.5px;font-weight:700;letter-spacing:.01em}
+        .ifqm-lp .hero-badge i{width:6px;height:6px;border-radius:50%;background:var(--success);flex:none;
+          box-shadow:0 0 0 3px rgba(95,207,148,.22);animation:lp-pulse 2.2s ease-in-out infinite}
         .ifqm-lp h1{font-size:clamp(34px,4.6vw,53px);line-height:1.06;margin:20px 0 0;font-weight:820}
         .ifqm-lp h1 .em{background:linear-gradient(96deg,var(--primary),#a855f7);-webkit-background-clip:text;
           background-clip:text;color:transparent}
         .ifqm-lp .lede{font-size:17px;line-height:1.62;color:var(--subtext);margin-top:18px;max-width:37em}
         .ifqm-lp .hero-cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
         .ifqm-lp .hero-note{margin-top:16px;font-size:12.5px;color:var(--text-muted)}
-        .ifqm-lp .ticks{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:26px;font-size:13px;color:var(--subtext)}
-        .ifqm-lp .ticks span{display:inline-flex;align-items:center;gap:7px}
+        .ifqm-lp .ticks{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+        .ifqm-lp .ticks span{display:inline-flex;align-items:center;gap:7px;font-size:12.8px;color:var(--subtext);
+          background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:999px;
+          padding:6px 13px 6px 10px;transition:border-color .18s,background .18s}
+        .ifqm-lp .ticks span:hover{background:rgba(255,255,255,.08);border-color:var(--border-strong)}
         .ifqm-lp .ticks svg{color:var(--success)}
 
         /* ── hero pipeline mock ───────────────────────────────────────────── */
+        .ifqm-lp .mock-wrap{position:relative}
+        /* A soft two-tone glow behind the panel, so it reads as a raised object
+           floating above the page rather than another flat card in a column. */
+        .ifqm-lp .mock-wrap::before{content:'';position:absolute;inset:-22px;z-index:0;border-radius:30px;
+          background:radial-gradient(60% 60% at 75% 15%,var(--primary-dim),transparent 72%);
+          filter:blur(8px);opacity:.6}
+        .ifqm-lp .mock-wrap::after{content:'';position:absolute;right:-18px;bottom:-22px;width:150px;height:150px;z-index:0;
+          border-radius:50%;background:radial-gradient(circle,rgba(168,85,247,.28),transparent 72%);filter:blur(14px)}
         .ifqm-lp .mock{background:var(--surface);border:1px solid var(--border);border-radius:18px;
-          box-shadow:0 26px 60px -30px rgba(12,14,20,.32);padding:16px;position:relative;overflow:hidden}
+          box-shadow:0 26px 60px -30px rgba(12,14,20,.32);padding:16px;position:relative;z-index:1;overflow:hidden}
         /*
          * The panel header.
          *
@@ -282,7 +334,8 @@ export default function LandingPage() {
         .ifqm-lp .mock-bar span{font-size:12px;color:var(--heading);font-weight:650}
         .ifqm-lp .mock-bar em{margin-left:auto;font-style:normal;display:inline-flex;align-items:center;gap:6px;
           font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--success)}
-        .ifqm-lp .mock-bar em::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success)}
+        .ifqm-lp .mock-bar em::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--success);
+          box-shadow:0 0 0 3px rgba(95,207,148,.22);animation:lp-pulse 2.2s ease-in-out infinite}
         .ifqm-lp .lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
         /* Equal columns with their content aligned to the top. A min-height
            alone let a lane with one card centre it against a lane with two,
@@ -319,15 +372,34 @@ export default function LandingPage() {
         /* ── generic section furniture ────────────────────────────────────── */
         .ifqm-lp .sec{padding:72px 0}
         .ifqm-lp .sec.alt{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+        /* A faint dot grid, faded at both edges, so the alternating section
+           reads as a distinct surface rather than only a flat colour swap. */
+        .ifqm-lp .sec.alt::before{content:'';position:absolute;inset:0;z-index:0;pointer-events:none;
+          background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:24px 24px;
+          -webkit-mask-image:linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent);
+          mask-image:linear-gradient(180deg,transparent,#000 12%,#000 88%,transparent)}
+        .ifqm-lp .sec.alt .wrap{position:relative;z-index:1}
         .ifqm-lp .kicker{font-size:12px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--primary)}
         .ifqm-lp h2{font-size:clamp(25px,3vw,35px);line-height:1.16;margin-top:11px;font-weight:800}
         .ifqm-lp .sec-sub{font-size:15.5px;color:var(--text-muted);margin-top:13px;max-width:60ch;line-height:1.62}
         .ifqm-lp .head-c{text-align:center}
         .ifqm-lp .head-c .sec-sub{margin-left:auto;margin-right:auto}
 
+        /* A thin gradient bar that wipes in on hover, shared by all three card
+           kinds below - one consistent "this is interactive" tell instead of
+           three different hover treatments. */
+        .ifqm-lp .prob,.ifqm-lp .step,.ifqm-lp .feat{position:relative;overflow:hidden}
+        .ifqm-lp .prob::before,.ifqm-lp .step::before,.ifqm-lp .feat::before{
+          content:'';position:absolute;top:0;left:0;right:0;height:3px;
+          background:linear-gradient(90deg,var(--primary),#a855f7);
+          transform:scaleX(0);transform-origin:left;transition:transform .25s ease}
+        .ifqm-lp .prob:hover::before,.ifqm-lp .step:hover::before,.ifqm-lp .feat:hover::before{transform:scaleX(1)}
+
         /* ── problem cards ────────────────────────────────────────────────── */
         .ifqm-lp .grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:18px;margin-top:38px}
-        .ifqm-lp .prob{background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:22px}
+        .ifqm-lp .prob{background:var(--surface);border:1px solid var(--border);border-radius:15px;padding:22px;
+          transition:transform .18s,box-shadow .18s,border-color .18s}
+        .ifqm-lp .prob:hover{transform:translateY(-3px);border-color:var(--border-strong);box-shadow:0 18px 38px -24px rgba(12,14,20,.4)}
         .ifqm-lp .sec.alt .prob{background:var(--panel-bg)}
         .ifqm-lp .prob .x{font-size:12px;font-weight:750;color:var(--danger);letter-spacing:.02em}
         .ifqm-lp .prob h3{font-size:16.5px;margin:9px 0 8px;font-weight:720}
@@ -338,7 +410,9 @@ export default function LandingPage() {
 
         /* ── steps ────────────────────────────────────────────────────────── */
         .ifqm-lp .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(212px,1fr));gap:16px;margin-top:40px;counter-reset:s}
-        .ifqm-lp .step{position:relative;padding:22px 18px;background:var(--surface);border:1px solid var(--border);border-radius:15px}
+        .ifqm-lp .step{padding:22px 18px;background:var(--surface);border:1px solid var(--border);border-radius:15px;
+          transition:transform .18s,box-shadow .18s,border-color .18s}
+        .ifqm-lp .step:hover{transform:translateY(-3px);border-color:var(--border-strong);box-shadow:0 18px 38px -24px rgba(12,14,20,.4)}
         .ifqm-lp .sec.alt .step{background:var(--panel-bg)}
         .ifqm-lp .step .n{width:31px;height:31px;border-radius:9px;background:var(--primary-light);color:var(--primary);
           display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
@@ -351,8 +425,9 @@ export default function LandingPage() {
           transition:transform .18s,box-shadow .18s,border-color .18s}
         .ifqm-lp .feat:hover{transform:translateY(-3px);border-color:var(--border-strong);box-shadow:0 18px 38px -24px rgba(12,14,20,.4)}
         .ifqm-lp .sec.alt .feat{background:var(--panel-bg)}
-        .ifqm-lp .feat .ic{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;
-          background:var(--primary-light);color:var(--primary)}
+        .ifqm-lp .feat .ic{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+          background:linear-gradient(135deg,var(--primary),#a855f7);color:#fff;
+          box-shadow:0 8px 18px -6px var(--primary-glow)}
         .ifqm-lp .feat h3{font-size:15.5px;margin:14px 0 7px;font-weight:720}
         .ifqm-lp .feat p{font-size:13.4px;color:var(--text-muted);line-height:1.6}
 
@@ -383,18 +458,35 @@ export default function LandingPage() {
 
         /* ── faq ──────────────────────────────────────────────────────────── */
         .ifqm-lp .faq{margin-top:34px;display:flex;flex-direction:column;gap:10px;max-width:790px}
-        .ifqm-lp details{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:0 18px}
+        .ifqm-lp details{background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:0 18px;
+          transition:border-color .2s,background .2s}
+        .ifqm-lp details:hover{border-color:var(--border-strong)}
+        .ifqm-lp details[open]{border-color:var(--primary-dim)}
         .ifqm-lp .sec.alt details{background:var(--panel-bg)}
         .ifqm-lp summary{cursor:pointer;list-style:none;padding:16px 0;font-size:14.6px;font-weight:650;color:var(--heading);
           display:flex;justify-content:space-between;align-items:center;gap:16px}
         .ifqm-lp summary::-webkit-details-marker{display:none}
-        .ifqm-lp summary::after{content:'+';font-size:20px;font-weight:400;color:var(--text-muted);flex:none;line-height:1}
-        .ifqm-lp details[open] summary::after{content:'−'}
+        /* A rotating + rather than a swap to − - the same glyph turning into a
+           close mark reads as one continuous motion instead of a content jump. */
+        .ifqm-lp summary::after{content:'+';font-size:20px;font-weight:400;color:var(--text-muted);flex:none;line-height:1;
+          display:inline-block;transition:transform .25s ease,color .25s ease}
+        .ifqm-lp summary:hover::after{color:var(--primary)}
+        .ifqm-lp details[open] summary::after{transform:rotate(45deg);color:var(--primary)}
         .ifqm-lp details p{padding:0 0 17px;font-size:13.8px;color:var(--text-muted);line-height:1.68;max-width:70ch}
 
         /* ── final cta ────────────────────────────────────────────────────── */
         .ifqm-lp .cta{background:linear-gradient(135deg,var(--primary),#7c3aed);border-radius:22px;padding:52px 40px;
           text-align:center;position:relative;overflow:hidden}
+        /* Two soft blobs so the band has depth rather than reading as a flat
+           gradient fill - clipped by the band's own overflow:hidden, and kept
+           behind the real content with an explicit z-index. Coloured from the
+           page's own tokens so they stay right under the brand override below
+           rather than needing their own navy-specific redeclaration. */
+        .ifqm-lp .cta::before{content:'';position:absolute;top:-90px;right:-60px;width:280px;height:280px;z-index:0;
+          border-radius:50%;background:radial-gradient(circle,var(--primary-dim),transparent 70%);filter:blur(10px)}
+        .ifqm-lp .cta::after{content:'';position:absolute;bottom:-110px;left:-70px;width:260px;height:260px;z-index:0;
+          border-radius:50%;background:radial-gradient(circle,rgba(90,140,210,.28),transparent 70%);filter:blur(10px)}
+        .ifqm-lp .cta > *{position:relative;z-index:1}
         .ifqm-lp .cta h2{color:#fff;max-width:19ch;margin:0 auto}
         .ifqm-lp .cta p{color:rgba(255,255,255,.9);font-size:15.5px;margin:15px auto 0;max-width:56ch;line-height:1.6}
         .ifqm-lp .cta .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:28px}
@@ -554,6 +646,7 @@ export default function LandingPage() {
         <div className="glow glow-b" aria-hidden="true" />
         <div className="wrap hero-grid">
           <div className="rv in">
+            <span className="hero-badge"><i aria-hidden="true" /> Built for Indian MSMEs</span>
             <h1>The best ideas in your business are already <span className="em">inside your team.</span></h1>
             <p className="lede">
               Your operators already know what wastes an hour. IFQM gives them one place
@@ -572,25 +665,27 @@ export default function LandingPage() {
             <p className="hero-note">Free while in preview - no card, no commitment.</p>
           </div>
 
-          <div className="rv in mock" aria-hidden="true">
-            <div className="mock-bar"><span>Idea pipeline</span><em>Live</em></div>
-            <div className="lanes">
-              <div className="lane l1">
-                <h4><i />Submitted</h4>
-                <div className="card-m">
-                  <b>Cut die-change time with a pre-staged trolley</b>
-                  <span className="score"><IcoSpark />Score 82</span>
-                  <u>Ravi · Production</u>
+          <div className="rv in mock-wrap">
+            <div className="mock" aria-hidden="true">
+              <div className="mock-bar"><span>Idea pipeline</span><em>Live</em></div>
+              <div className="lanes">
+                <div className="lane l1">
+                  <h4><i />Submitted</h4>
+                  <div className="card-m">
+                    <b>Cut die-change time with a pre-staged trolley</b>
+                    <span className="score"><IcoSpark />Score 82</span>
+                    <u>Ravi · Production</u>
+                  </div>
+                  <div className="card-m"><b>Reuse packing cartons for internal transfers</b><u>Sunita · Stores</u></div>
                 </div>
-                <div className="card-m"><b>Reuse packing cartons for internal transfers</b><u>Sunita · Stores</u></div>
-              </div>
-              <div className="lane l2">
-                <h4><i />In review</h4>
-                <div className="card-m"><b>Second QR scan point at dispatch</b><u>Supervisor · 2 of 3 approvals</u></div>
-              </div>
-              <div className="lane l3">
-                <h4><i />Implemented</h4>
-                <div className="card-m"><b>Shift-handover checklist on the floor</b><u>Saved 40 min/day</u></div>
+                <div className="lane l2">
+                  <h4><i />In review</h4>
+                  <div className="card-m"><b>Second QR scan point at dispatch</b><u>Supervisor · 2 of 3 approvals</u></div>
+                </div>
+                <div className="lane l3">
+                  <h4><i />Implemented</h4>
+                  <div className="card-m"><b>Shift-handover checklist on the floor</b><u>Saved 40 min/day</u></div>
+                </div>
               </div>
             </div>
           </div>
