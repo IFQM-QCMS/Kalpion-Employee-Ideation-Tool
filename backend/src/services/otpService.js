@@ -405,8 +405,11 @@ export async function verifyOtp({ identifier, code, meta = {} } = {}) {
     org_slug: tenant.slug,
   };
 
+  // KAL-032: id only, not the rest of `session` - authService.login's token carries the same
+  // minimal shape, for the same reason (the auth middleware re-reads the live row on every
+  // request; nothing reads these fields back out of the token).
   const token = signToken({
-    user: session,
+    user: { id: session.id },
     org_slug: tenant.slug,
     pwd_ts: Number(user.password_changed_ts) || 0,
   });

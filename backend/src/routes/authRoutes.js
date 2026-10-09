@@ -27,7 +27,9 @@ router.get('/otp/status', auth.otpStatus);
 router.post('/otp/request', authLimiter, auth.otpRequest);
 router.post('/otp/verify', authLimiter, auth.otpVerify);
 
-router.post('/logout', auth.logout);
+// KAL-032: requireAuth, so logout can actually revoke the token presented, not just tell the
+// browser to forget it. requireAuth's own maintenance-mode check already carves this path out.
+router.post('/logout', requireAuth, auth.logout);
 router.post('/forgot-password', authLimiter, auth.forgotPassword);
 // Reset by code rather than by emailed link - for somebody who cannot reach the mailbox
 // the link would land in. Ends at the same /reset-password below.

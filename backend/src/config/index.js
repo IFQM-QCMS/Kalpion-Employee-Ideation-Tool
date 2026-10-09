@@ -124,12 +124,15 @@ const config = {
     password: process.env.APP_DB_PASS ?? process.env.MASTER_DB_PASS ?? '',
   },
 
-  // Auth (replaces PHP sessions) SESSION_LIFETIME in PHP = 28800 (8h).
+  // Auth (replaces PHP sessions). Was SESSION_LIFETIME in PHP = 28800 (8h); shortened to 4h
+  // (KAL-032) now that logout actually revokes the token server-side (session_invalidated_at)
+  // rather than this default being the only thing standing between a leaked token and 8 hours
+  // of access - still generous for a single shop-floor shift, not the whole working day.
   jwt: {
     secret: process.env.JWT_SECRET || INSECURE_JWT_DEFAULT,
-    expiresIn: int(process.env.JWT_EXPIRES_IN, 28800),
+    expiresIn: int(process.env.JWT_EXPIRES_IN, 14400),
   },
-  sessionLifetime: int(process.env.JWT_EXPIRES_IN, 28800),
+  sessionLifetime: int(process.env.JWT_EXPIRES_IN, 14400),
 
   // Minimum length for any password the app accepts (NIST 800-63B leans on length over
   // composition rules).

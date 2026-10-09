@@ -139,7 +139,11 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
           } : {}),
         };
         await clearFailedAttempts(loginId);
-        const token = signToken({ user: session, platform_admin: true });
+        // KAL-032: the token carries only an id, not email/phone/name/etc - the auth
+        // middleware re-reads the live row on every request anyway (loadLivePlatformAdmin),
+        // so nothing ever reads these fields back out of the token itself, and a token that
+        // leaked used to be a copy of the account's personal data along with it.
+        const token = signToken({ user: { id: session.id }, platform_admin: true });
         logger.info(pending.length
           ? `auth: platform admin login ok, awaiting ${pending.join(' and ')} verification (${email})`
           : `auth: platform admin login ok (${email})`);
@@ -282,8 +286,10 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
       .execute('UPDATE tenants SET last_login_at = NOW() WHERE id = ?', [tenant.id])
       .catch((e) => logger.warn('tenant last_login_at update failed', e.message));
   }
+  // KAL-032: id only, not the rest of `session` - see the matching comment on the platform
+  // admin token above.
   const token = signToken({
-    user: session,
+    user: { id: session.id },
     org_slug: tenant.slug,
     pwd_ts: Number(user.password_changed_ts) || 0,
   });
@@ -294,6 +300,31 @@ export async function login({ email, password, orgSlug, host, meta = {} }) {
     ip: meta.ip, userAgent: meta.userAgent, timeZone: meta.timeZone,
   });
   return { user: session, token };
+}
+
+/*
+ * KAL-032: logout used to be stateless - the server never heard about it, and the token the
+ * browser discarded kept working against the API for the rest of its 8-hour life. Stamping
+ * session_invalidated_at means the auth middleware now rejects that same token on its very
+ * next request (see loadLiveUser / loadLivePlatformAdmin), everywhere it might still be held -
+ * a second tab, a copy-pasted Authorization header, anything.
+ */
+export async function logout(req) {
+  if (req.isPlatformAdmin) {
+    const id = Number(String(req.user?.id || '').replace(/^pa_/, ''));
+    if (id) {
+      await masterDb().execute(
+        'UPDATE platform_admins SET session_invalidated_at = NOW() WHERE id = ?', [id]
+      );
+    }
+    return { success: true };
+  }
+  if (req.db && req.user?.id) {
+    await req.db.execute(
+      'UPDATE users SET session_invalidated_at = NOW() WHERE id = ?', [req.user.id]
+    );
+  }
+  return { success: true };
 }
 
 /** Forgot-password: always returns a generic success (anti-enumeration). */
@@ -690,7 +721,8 @@ export async function changePassword(db, user, { currentPassword, newPassword, o
   // caller used to make this request - so without a fresh token the user would be logged out
   // by the very act of securing their account.
   const session = { ...user, must_change_password: false };
-  const token = signToken({ user: session, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
+  // KAL-032: id only - see the comment on the login token above.
+  const token = signToken({ user: { id: session.id }, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
 
   return { success: true, message: 'Password updated.', token, user: session };
 }
@@ -771,7 +803,8 @@ export async function confirmPasswordChangeOtp(db, user, { code, newPassword, or
   logger.info(`auth: password changed via ${phone ? 'phone' : 'email'} verification for user ${row.id}`);
 
   const session = { ...user, must_change_password: false };
-  const token = signToken({ user: session, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
+  // KAL-032: id only - see the comment on the login token above.
+  const token = signToken({ user: { id: session.id }, org_slug: orgSlug || user.org_slug, pwd_ts: pwdTs });
 
   return { success: true, message: 'Password updated.', token, user: session };
 }
@@ -841,7 +874,7 @@ function escapeHtml(s) {
 }
 
 export default {
-  login, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
+  login, logout, forgotPassword, resetPassword, checkResetToken, changePassword, assertPasswordStrength,
   requestPasswordResetCode, verifyPasswordResetCode, issueActivationLink,
   identifyAccount, passwordPolicy,
   requestPasswordChangeOtp, confirmPasswordChangeOtp,

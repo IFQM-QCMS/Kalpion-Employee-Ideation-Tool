@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS users (
   -- writes it on the org's first admin, so a tenant born without this column cannot be
   -- created at all.
   password_changed_at DATETIME NULL DEFAULT NULL,
+  -- KAL-032: stamped on logout (and available for any future "sign out everywhere" action).
+  -- The auth middleware rejects a token whose issued-at is at or before this moment, so the
+  -- token a browser still holds stops working the instant logout is called, rather than
+  -- staying valid for the rest of its 8-hour life.
+  session_invalidated_at DATETIME NULL DEFAULT NULL,
   deactivated_at      DATETIME NULL DEFAULT NULL,
   -- from migration 002 (bulk user import)
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,

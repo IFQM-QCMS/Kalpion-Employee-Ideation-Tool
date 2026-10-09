@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS platform_admins (
   -- Both proofs, as timestamps (migration 039).
   email_verified_at DATETIME NULL,
   phone_verified_at DATETIME NULL,
+  -- KAL-032: same purpose as users.session_invalidated_at in the tenant schema - stamped on
+  -- logout, checked by the auth middleware against the token's issued-at.
+  session_invalidated_at DATETIME NULL,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -66,6 +66,7 @@ async function loadLiveUser(req, payload) {
             u.location, u.role, u.manager_id, u.points, u.avatar_initials, u.status,
             u.must_change_password,
             UNIX_TIMESTAMP(u.password_changed_at) AS password_changed_ts,
+            UNIX_TIMESTAMP(u.session_invalidated_at) AS session_invalidated_ts,
             m.name AS manager_name
        FROM users u
        LEFT JOIN users m ON m.id = u.manager_id
@@ -81,6 +82,15 @@ async function loadLiveUser(req, payload) {
   const rowPwdTs = Number(row.password_changed_ts) || 0;
   const tokenPwdTs = Number(payload.pwd_ts) || 0;
   if (rowPwdTs !== tokenPwdTs) {
+    throw new ApiError(401, 'Session expired', { expired: true });
+  }
+
+  // KAL-032: logout stamps session_invalidated_at, so a token issued before that moment (or
+  // at the very same second - logout and the token it is revoking cannot be the same instant)
+  // is dead too, rather than remaining valid for the rest of its 8-hour life. payload.iat is a
+  // standard JWT claim (seconds since epoch), added automatically when the token was signed.
+  const invalidatedTs = Number(row.session_invalidated_ts) || 0;
+  if (invalidatedTs && Number(payload.iat) <= invalidatedTs) {
     throw new ApiError(401, 'Session expired', { expired: true });
   }
 
@@ -201,12 +211,19 @@ async function loadLivePlatformAdmin(req, payload) {
 
   // Read fresh on every request, not taken from the token.
   const [rows] = await req.master.execute(
-    `SELECT id, name, email, phone, email_verified_at, phone_verified_at
+    `SELECT id, name, email, phone, email_verified_at, phone_verified_at,
+            UNIX_TIMESTAMP(session_invalidated_at) AS session_invalidated_ts
        FROM platform_admins WHERE id = ? LIMIT 1`,
     [id]
   );
   const row = rows[0];
   if (!row) throw unauthorized('Your account no longer exists.');
+
+  // KAL-032 - see the matching check in loadLiveUser for tenant users.
+  const invalidatedTs = Number(row.session_invalidated_ts) || 0;
+  if (invalidatedTs && Number(payload.iat) <= invalidatedTs) {
+    throw new ApiError(401, 'Session expired', { expired: true });
+  }
 
   const pending = [];
   if (!row.email_verified_at) pending.push('email');

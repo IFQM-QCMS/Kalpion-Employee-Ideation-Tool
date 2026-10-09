@@ -87,9 +87,11 @@ export const otpVerify = asyncHandler(async (req, res) => {
   return respond(res, { success: true, user: result.user, token: result.token });
 });
 
-/** POST /api/auth/logout - stateless; client discards the token. */
-export const logout = asyncHandler(async (_req, res) => {
-  return respond(res, { success: true });
+/** POST /api/auth/logout - requireAuth, so this revokes the presented token server-side
+ *  (KAL-032), not just tells the browser to forget it. */
+export const logout = asyncHandler(async (req, res) => {
+  const result = await authService.logout(req);
+  return respond(res, result);
 });
 
 /** POST /api/auth/forgot-password */

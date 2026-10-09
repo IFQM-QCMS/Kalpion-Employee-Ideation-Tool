@@ -70,6 +70,31 @@ test('a token with a stale pwd_ts is rejected (password change revokes sessions)
   assert.equal(r.status, 401);
 });
 
+// KAL-032: logout used to be stateless - the token a browser discarded kept working against
+// the API for the rest of its life. logout now stamps session_invalidated_at, and the auth
+// middleware rejects any token issued at or before that moment.
+test('logout revokes the token server-side - it stops working immediately, not after 8 hours', async () => {
+  const session = await login('user@orga.test', PASSWORDS.orgaUser, 'orga');
+  assert.ok(session.token, 'must be able to sign in first');
+
+  // Works right up until logout.
+  const before = await api('GET', '/api/notifications', { token: session.token });
+  assert.equal(before.status, 200);
+
+  const out = await api('POST', '/api/auth/logout', { token: session.token });
+  assert.equal(out.status, 200);
+
+  // The exact same token, never discarded by this test - must now be dead.
+  const after = await api('GET', '/api/notifications', { token: session.token });
+  assert.equal(after.status, 401);
+  assert.equal(after.data.expired, true);
+});
+
+test('logout without a token is rejected, not a silent no-op', async () => {
+  const r = await api('POST', '/api/auth/logout', {});
+  assert.equal(r.status, 401);
+});
+
 // Cross-tenant isolation
 
 test('a ticket raised in org A is invisible to org B - list and direct read', async () => {

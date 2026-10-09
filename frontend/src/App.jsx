@@ -1,55 +1,71 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { BrandingProvider } from './context/BrandingContext';
 import { ToastProvider } from './context/ToastContext';
 import { LangProvider } from './context/LangContext';
 import { NotifProvider } from './context/NotifContext';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import ForcePasswordChangePage from './pages/ForcePasswordChangePage';
 import AppShell from './components/Layout/AppShell';
-import DashboardPage from './pages/DashboardPage';
-import MyIdeasPage from './pages/MyIdeasPage';
-import SubmitPage from './pages/SubmitPage';
-import ReviewQueuePage from './pages/ReviewQueuePage';
-import AllIdeasPage from './pages/AllIdeasPage';
-import RejectedIdeasPage from './pages/RejectedIdeasPage';
-import BoardPage from './pages/BoardPage';
-import ChallengesPage from './pages/ChallengesPage';
-import AuditPage from './pages/AuditPage';
-import LeaderboardPage from './pages/LeaderboardPage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import AdminPage from './pages/AdminPage';
-import SuperAdminPage from './pages/SuperAdminPage';
-import ProfilePage from './pages/ProfilePage';
-import PlatformDashPage from './pages/PlatformDashPage';
-import PlatformTenantsPage from './pages/PlatformTenantsPage';
-import PlatformTicketsPage from './pages/PlatformTicketsPage';
-import PlatformRegistrationsPage from './pages/PlatformRegistrationsPage';
-import PlatformSettingsPage from './pages/PlatformSettingsPage';
-import PlatformLoginsPage from './pages/PlatformLoginsPage';
-import PlatformBillingPage from './pages/PlatformBillingPage';
-import BillingPage from './pages/BillingPage';
-import PlatformPlansPage from './pages/PlatformPlansPage';
-import SupportPage from './pages/SupportPage';
-import NotFoundPage from './pages/NotFoundPage';
-import HelpPage from './pages/HelpPage';
-import UserGuidePage from './pages/UserGuidePage';
-import RewardsPage from './pages/RewardsPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import PlatformVerifyPage from './pages/PlatformVerifyPage';
 import PageMeta from './components/PageMeta';
+import NotFoundPage from './pages/NotFoundPage';
 
-function PrivateRoute({ children }) {
-  const { user, loading } = useAuth();
-  const location = useLocation();
-  if (loading) return (
+/*
+ * KAL-033: every page used to be a static import, so the landing page and the sign-in screen -
+ * the two screens an unauthenticated, first-time visitor actually loads - shipped the entire
+ * platform in one bundle: Admin, every Platform screen, Analytics, the lot. Routed through
+ * React.lazy instead, so a visitor only ever downloads the chunk for the page they're on; the
+ * one shared Suspense boundary below the providers covers all of them. NotFoundPage stays a
+ * static import - small, and a mistyped URL should not wait on a network round trip to say so.
+ */
+const LandingPage               = lazy(() => import('./pages/LandingPage'));
+const LoginPage                 = lazy(() => import('./pages/LoginPage'));
+const SignupPage                = lazy(() => import('./pages/SignupPage'));
+const ResetPasswordPage         = lazy(() => import('./pages/ResetPasswordPage'));
+const ForcePasswordChangePage   = lazy(() => import('./pages/ForcePasswordChangePage'));
+const DashboardPage             = lazy(() => import('./pages/DashboardPage'));
+const MyIdeasPage               = lazy(() => import('./pages/MyIdeasPage'));
+const SubmitPage                = lazy(() => import('./pages/SubmitPage'));
+const ReviewQueuePage           = lazy(() => import('./pages/ReviewQueuePage'));
+const AllIdeasPage              = lazy(() => import('./pages/AllIdeasPage'));
+const RejectedIdeasPage         = lazy(() => import('./pages/RejectedIdeasPage'));
+const BoardPage                 = lazy(() => import('./pages/BoardPage'));
+const ChallengesPage            = lazy(() => import('./pages/ChallengesPage'));
+const AuditPage                 = lazy(() => import('./pages/AuditPage'));
+const LeaderboardPage           = lazy(() => import('./pages/LeaderboardPage'));
+const AnalyticsPage             = lazy(() => import('./pages/AnalyticsPage'));
+const AdminPage                 = lazy(() => import('./pages/AdminPage'));
+const SuperAdminPage            = lazy(() => import('./pages/SuperAdminPage'));
+const ProfilePage               = lazy(() => import('./pages/ProfilePage'));
+const PlatformDashPage          = lazy(() => import('./pages/PlatformDashPage'));
+const PlatformTenantsPage       = lazy(() => import('./pages/PlatformTenantsPage'));
+const PlatformTicketsPage       = lazy(() => import('./pages/PlatformTicketsPage'));
+const PlatformRegistrationsPage = lazy(() => import('./pages/PlatformRegistrationsPage'));
+const PlatformSettingsPage      = lazy(() => import('./pages/PlatformSettingsPage'));
+const PlatformLoginsPage        = lazy(() => import('./pages/PlatformLoginsPage'));
+const PlatformBillingPage       = lazy(() => import('./pages/PlatformBillingPage'));
+const BillingPage               = lazy(() => import('./pages/BillingPage'));
+const PlatformPlansPage         = lazy(() => import('./pages/PlatformPlansPage'));
+const SupportPage               = lazy(() => import('./pages/SupportPage'));
+const HelpPage                  = lazy(() => import('./pages/HelpPage'));
+const UserGuidePage             = lazy(() => import('./pages/UserGuidePage'));
+const RewardsPage               = lazy(() => import('./pages/RewardsPage'));
+const PlatformVerifyPage        = lazy(() => import('./pages/PlatformVerifyPage'));
+
+// Same spinner PrivateRoute/PublicRoute already show while auth is resolving, reused here so a
+// lazy chunk loading looks identical rather than like a second, different kind of wait.
+function RouteFallback() {
+  return (
     <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg)' }}>
       <div className="spinner" style={{ width:36,height:36,borderWidth:3 }}></div>
     </div>
   );
+}
+
+function PrivateRoute({ children }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <RouteFallback />;
   // "/" is the public marketing page now, so an expired session belongs on the sign-in
   // screen rather than back at the pitch.
   if (!user) return <Navigate to="/login" replace />;
@@ -85,11 +101,7 @@ function PrivateRoute({ children }) {
 
 function PublicRoute({ children }) {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg)' }}>
-      <div className="spinner" style={{ width:36,height:36,borderWidth:3 }}></div>
-    </div>
-  );
+  if (loading) return <RouteFallback />;
   if (user) {
     const role = user.role;
     if (role === 'platform_admin') return <Navigate to="/platform" replace />;
@@ -114,46 +126,48 @@ function AppRoutes() {
   return (
     <>
       <PageMeta />
-      <Routes>
-        <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
-      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-      <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
-      <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
-      <Route path="/app" element={<PrivateRoute><AppShell /></PrivateRoute>}>
-        <Route index element={<Navigate to="/dashboard" replace />} />
-      </Route>
-      <Route path="/dashboard"       element={<PrivateRoute><AppShell><DashboardPage /></AppShell></PrivateRoute>} />
-      <Route path="/my-ideas"        element={<PrivateRoute><AppShell><MyIdeasPage /></AppShell></PrivateRoute>} />
-      <Route path="/submit"          element={<PrivateRoute><AppShell><SubmitPage /></AppShell></PrivateRoute>} />
-      <Route path="/review"          element={<PrivateRoute><AppShell><ReviewQueuePage /></AppShell></PrivateRoute>} />
-      <Route path="/all-ideas"       element={<PrivateRoute><AppShell><AllIdeasPage /></AppShell></PrivateRoute>} />
-      <Route path="/rejected"        element={<PrivateRoute><AppShell><RejectedIdeasPage /></AppShell></PrivateRoute>} />
-      <Route path="/board"           element={<PrivateRoute><AppShell><BoardPage /></AppShell></PrivateRoute>} />
-      <Route path="/challenges"      element={<PrivateRoute><AppShell><ChallengesPage /></AppShell></PrivateRoute>} />
-      <Route path="/audit"           element={<PrivateRoute><AppShell><AuditPage /></AppShell></PrivateRoute>} />
-      <Route path="/leaderboard"     element={<PrivateRoute><AppShell><LeaderboardPage /></AppShell></PrivateRoute>} />
-      {/* Rewards & Recognition - the leaderboard as a document HR can act on. */}
-      <Route path="/rewards"         element={<PrivateRoute><AppShell><RewardsPage /></AppShell></PrivateRoute>} />
-      <Route path="/analytics"       element={<PrivateRoute><AppShell><AnalyticsPage /></AppShell></PrivateRoute>} />
-      <Route path="/admin"           element={<PrivateRoute><RoleRoute allow={['admin','super_admin']}><AppShell><AdminPage /></AppShell></RoleRoute></PrivateRoute>} />
-      <Route path="/super-admin"     element={<PrivateRoute><RoleRoute allow={['super_admin']}><AppShell><SuperAdminPage /></AppShell></RoleRoute></PrivateRoute>} />
-      <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
-      <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
-      <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
-      {/* One route for all three manuals - the page picks by role, so nobody has to work out which of them is theirs. */}
-      <Route path="/user-guide"      element={<PrivateRoute><AppShell><UserGuidePage /></AppShell></PrivateRoute>} />
-      <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/tickets" element={<PrivateRoute><AppShell><PlatformTicketsPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/logins"   element={<PrivateRoute><AppShell><PlatformLoginsPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/plans"    element={<PrivateRoute><AppShell><PlatformPlansPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/billing"  element={<PrivateRoute><AppShell><PlatformBillingPage /></AppShell></PrivateRoute>} />
-      <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
-      {/* A page, not a silent redirect. */}
-      <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/" element={<PublicRoute><LandingPage /></PublicRoute>} />
+        <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+        <Route path="/app" element={<PrivateRoute><AppShell /></PrivateRoute>}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+        </Route>
+        <Route path="/dashboard"       element={<PrivateRoute><AppShell><DashboardPage /></AppShell></PrivateRoute>} />
+        <Route path="/my-ideas"        element={<PrivateRoute><AppShell><MyIdeasPage /></AppShell></PrivateRoute>} />
+        <Route path="/submit"          element={<PrivateRoute><AppShell><SubmitPage /></AppShell></PrivateRoute>} />
+        <Route path="/review"          element={<PrivateRoute><AppShell><ReviewQueuePage /></AppShell></PrivateRoute>} />
+        <Route path="/all-ideas"       element={<PrivateRoute><AppShell><AllIdeasPage /></AppShell></PrivateRoute>} />
+        <Route path="/rejected"        element={<PrivateRoute><AppShell><RejectedIdeasPage /></AppShell></PrivateRoute>} />
+        <Route path="/board"           element={<PrivateRoute><AppShell><BoardPage /></AppShell></PrivateRoute>} />
+        <Route path="/challenges"      element={<PrivateRoute><AppShell><ChallengesPage /></AppShell></PrivateRoute>} />
+        <Route path="/audit"           element={<PrivateRoute><AppShell><AuditPage /></AppShell></PrivateRoute>} />
+        <Route path="/leaderboard"     element={<PrivateRoute><AppShell><LeaderboardPage /></AppShell></PrivateRoute>} />
+        {/* Rewards & Recognition - the leaderboard as a document HR can act on. */}
+        <Route path="/rewards"         element={<PrivateRoute><AppShell><RewardsPage /></AppShell></PrivateRoute>} />
+        <Route path="/analytics"       element={<PrivateRoute><AppShell><AnalyticsPage /></AppShell></PrivateRoute>} />
+        <Route path="/admin"           element={<PrivateRoute><RoleRoute allow={['admin','super_admin']}><AppShell><AdminPage /></AppShell></RoleRoute></PrivateRoute>} />
+        <Route path="/super-admin"     element={<PrivateRoute><RoleRoute allow={['super_admin']}><AppShell><SuperAdminPage /></AppShell></RoleRoute></PrivateRoute>} />
+        <Route path="/profile"         element={<PrivateRoute><AppShell><ProfilePage /></AppShell></PrivateRoute>} />
+        <Route path="/billing"        element={<PrivateRoute><AppShell><BillingPage /></AppShell></PrivateRoute>} />
+        <Route path="/support"         element={<PrivateRoute><AppShell><SupportPage /></AppShell></PrivateRoute>} />
+        {/* One route for all three manuals - the page picks by role, so nobody has to work out which of them is theirs. */}
+        <Route path="/user-guide"      element={<PrivateRoute><AppShell><UserGuidePage /></AppShell></PrivateRoute>} />
+        <Route path="/help"            element={<PrivateRoute><AppShell><HelpPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform"        element={<PrivateRoute><AppShell><PlatformDashPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/registrations" element={<PrivateRoute><AppShell><PlatformRegistrationsPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/tickets" element={<PrivateRoute><AppShell><PlatformTicketsPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/settings" element={<PrivateRoute><AppShell><PlatformSettingsPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/logins"   element={<PrivateRoute><AppShell><PlatformLoginsPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/plans"    element={<PrivateRoute><AppShell><PlatformPlansPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/billing"  element={<PrivateRoute><AppShell><PlatformBillingPage /></AppShell></PrivateRoute>} />
+        <Route path="/platform/tenants/:id" element={<PrivateRoute><AppShell><PlatformTenantsPage /></AppShell></PrivateRoute>} />
+        {/* A page, not a silent redirect. */}
+        <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Suspense>
     </>
   );
 }
