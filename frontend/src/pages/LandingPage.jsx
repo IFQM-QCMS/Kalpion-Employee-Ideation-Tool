@@ -246,12 +246,15 @@ export default function LandingPage() {
           display:inline-flex;align-items:center;border-radius:999px;
           background:#ffffff;
           padding:5px 14px 5px 11px;
-          box-shadow:0 10px 24px -8px rgba(0,0,0,.4),0 0 0 1px var(--primary-dim);
+          /* One colour, full stop - no ring, no border, just white and a plain
+             drop shadow for lift. A hairline gold ring was here and, however
+             thin in the CSS, read as a second colour framing the white. */
+          box-shadow:0 10px 24px -8px rgba(0,0,0,.4);
           transition:transform .18s ease,box-shadow .18s ease;
         }
         .ifqm-lp .logo-name:hover{
           transform:translateY(-1px);
-          box-shadow:0 14px 30px -8px rgba(0,0,0,.46),0 0 0 1px var(--primary);
+          box-shadow:0 14px 30px -8px rgba(0,0,0,.46);
         }
         .ifqm-lp .logo-name img{height:30px;display:block;object-fit:contain}
         @media (max-width:640px){
