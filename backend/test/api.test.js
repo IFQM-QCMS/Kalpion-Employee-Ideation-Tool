@@ -74,7 +74,18 @@ test('a token with a stale pwd_ts is rejected (password change revokes sessions)
 // the API for the rest of its life. logout now stamps session_invalidated_at, and the auth
 // middleware rejects any token issued at or before that moment.
 test('logout revokes the token server-side - it stops working immediately, not after 8 hours', async () => {
-  const session = await login('user@orga.test', PASSWORDS.orgaUser, 'orga');
+  // A throwaway account, not AUSER/user@orga.test - invalidation is per account, and logging
+  // out the suite's own shared fixture here would revoke it for every later test too.
+  const created = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      name: 'Logout Probe', email: 'logoutprobe@orga.test', password: 'LogoutProbe123',
+      role: 'employee', department: 'Ops', employee_id: 'LOGOUTPROBE', phone: '+919812340099',
+    },
+  });
+  assert.equal(created.data.success, true,
+    `throwaway account must be creatable - server said: ${JSON.stringify(created.data)}`);
+  const session = await login('logoutprobe@orga.test', 'LogoutProbe123', 'orga');
   assert.ok(session.token, 'must be able to sign in first');
 
   // Works right up until logout.
