@@ -161,6 +161,30 @@ jobs:
               exit 1
             fi
 
+            # /api/health is served by kalpion-api, not kalpion-web, so the check above never
+            # actually exercises the web container's own nginx (frontend/nginx.conf) - a mistake
+            # there (bad syntax, a broken location block) could leave kalpion-web crash-looping
+            # or serving something wrong while /api/health still answers fine through the proxy.
+            # Checking the real homepage, and that it looks like the app rather than an nginx
+            # error page or something empty, closes that gap.
+            echo "Checking the web container itself (not just the API)..."
+            for i in {1..10}; do
+              home=$(curl -s https://kalpion.ifqm.org.in/ || echo "")
+              home_code=$(curl -s -o /dev/null -w '%{http_code}' https://kalpion.ifqm.org.in/ || echo 000)
+              if [ "$home_code" = "200" ] && echo "$home" | grep -q '<div id="root">'; then
+                echo "Homepage answers 200 and looks like the app."
+                home_ok=1
+                break
+              fi
+              echo "Homepage answered $home_code and did not look right yet. Waiting..."
+              sleep 5
+            done
+            if [ "${home_ok:-0}" != "1" ]; then
+              echo "The API is healthy but the website itself is not answering correctly."
+              echo "Check kalpion-web specifically: docker logs kalpion-web, and frontend/nginx.conf for a mistake in the change just deployed."
+              exit 1
+            fi
+
             echo "Kalpion deployment successful."
 
             rm -f /tmp/kalpion-deploy.tar.gz
