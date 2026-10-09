@@ -8,6 +8,19 @@ import { SUPPORTED_LANGS, LANG_LABELS, LANG_NAMES } from '../../i18n/translation
 import { formatRole, timeAgo } from '../../utils/helpers';
 import { isDarkTheme, toggleTheme } from '../../utils/theme';
 import IdeaDetailModal from '../IdeaDetailModal';
+import PixelSwap from '../PixelSwap';
+
+const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="4"/>
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+  </svg>
+);
+const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+);
 
 const PAGE_TITLES = {
   '/dashboard':    'nav.dashboard',
@@ -122,10 +135,42 @@ export default function Topbar({ onToggleSidebar, mobile = false }) {
       </div>
 
       <div className="topbar-right">
-        {/* Dark mode toggle and language picker - in the drawer on a phone. */}
+        {/*
+          * Dark mode toggle and language picker - in the drawer on a phone.
+          *
+          * Previous version of the toggle below (plain text label, no icon), in case this
+          * needs to come straight back out - not pushed to production yet, so this comment is
+          * the fallback, not git history three commits back:
+          *   <div className="dm-toggle" onClick={toggleDark} title={t('topbar.toggle_dark')}>
+          *     <div className={`dm-track${isDark ? ' on' : ''}`}><div className="dm-thumb"></div></div>
+          *     <span>{isDark ? t('topbar.light') : t('topbar.dark')}</span>
+          *   </div>
+          * Below: the same control, with the text label's spot taken by a small pixel-dissolve
+          * icon swap (react-bits' PixelSwap) between a sun and a moon. Driven as a controlled
+          * element off the real `isDark` state (trigger="none"; this outer div's own onClick is
+          * what actually flips the theme) - PixelSwap only ever animates this one small icon
+          * box, never the page around it.
+          */}
         {!mobile && (
         <div className="dm-toggle" onClick={toggleDark} title={t('topbar.toggle_dark')}>
           <div className={`dm-track${isDark ? ' on' : ''}`}><div className="dm-thumb"></div></div>
+          <PixelSwap
+            className="dm-icon-swap"
+            style={{ width: 14, height: 14 }}
+            aspectRatio="1 / 1"
+            firstContent={<SunIcon />}
+            secondContent={<MoonIcon />}
+            active={isDark}
+            trigger="none"
+            pixelSize={5}
+            gap={0}
+            pixelRadius={0}
+            pixelScale={0.4}
+            duration={650}
+            pixelDuration={220}
+            pattern="random"
+            fade
+          />
           <span>{isDark ? t('topbar.light') : t('topbar.dark')}</span>
         </div>
         )}
