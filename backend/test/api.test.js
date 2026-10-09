@@ -1182,9 +1182,22 @@ test('messaging: the DLT template is filled from the registered wording, not fro
 test('maintenance: tenants are locked out, IFQM staff are not, and it reverses cleanly', async () => {
   const pa = (await login('platform@ifqm.io', PASSWORDS.platform)).token;
 
+  // A throwaway account, not the shared admin@orga.test/AADMIN fixture: this test logs it out
+  // further down, and logout now actually revokes the account's sessions (KAL-032) - doing
+  // that to AADMIN here would break every later test in the file that relies on it.
+  const created = await api('POST', '/api/users', {
+    token: AADMIN,
+    body: {
+      name: 'Maintenance Probe', email: 'maintenanceprobe@orga.test', password: 'MaintenanceProbe123',
+      role: 'employee', department: 'Ops', employee_id: 'MAINTPROBE', phone: '+919812340098',
+    },
+  });
+  assert.equal(created.data.success, true,
+    `throwaway account must be creatable - server said: ${JSON.stringify(created.data)}`);
+
   // A tenant session taken out BEFORE the switch, to prove existing sessions stop working
   // rather than merely new logins being refused.
-  const before = await login('admin@orga.test', PASSWORDS.orgaAdmin, 'orga');
+  const before = await login('maintenanceprobe@orga.test', 'MaintenanceProbe123', 'orga');
   assert.ok(before.token, 'tenant should be able to sign in before maintenance');
 
   // Off by default: nothing here should be on until somebody turns it on.
